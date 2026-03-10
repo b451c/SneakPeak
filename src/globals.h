@@ -58,6 +58,15 @@ extern MediaItem* (*g_SplitMediaItem)(MediaItem* item, double position);
 extern bool (*g_DeleteTrackMediaItem)(MediaTrack* tr, MediaItem* it);
 extern MediaTrack* (*g_GetMediaItem_Track)(MediaItem* item);
 
+// Track items (for track follow)
+extern int (*g_GetTrackNumMediaItems)(MediaTrack* tr);
+extern MediaItem* (*g_GetTrackMediaItem)(MediaTrack* tr, int itemidx);
+extern MediaTrack* (*g_GetSelectedTrack)(ReaProject* proj, int seltrackidx);
+extern int (*g_CountSelectedTracks)(ReaProject* proj);
+
+// Track properties
+extern void* (*g_GetSetMediaTrackInfo)(MediaTrack* tr, const char* parmname, void* setNewValue);
+
 // Source / destructive editing
 extern PCM_source* (*g_PCM_Source_CreateFromFile)(const char* filename);
 extern bool (*g_SetMediaItemTake_Source)(MediaItem_Take* take, PCM_source* source);

@@ -13,6 +13,16 @@ struct WaveformSelection {
   bool active = false;
 };
 
+struct ItemSegment {
+  MediaItem* item = nullptr;
+  MediaItem_Take* take = nullptr;
+  double position = 0.0;       // absolute timeline position
+  double duration = 0.0;
+  double relativeOffset = 0.0; // offset within concatenated view
+  int audioStartFrame = 0;
+  int audioFrameCount = 0;
+};
+
 class WaveformView {
 public:
   WaveformView();
@@ -20,9 +30,12 @@ public:
 
   // Item binding
   void SetItem(MediaItem* item);
+  void SetItems(const std::vector<MediaItem*>& items);
   void ClearItem();
   bool HasItem() const { return m_item != nullptr; }
   MediaItem* GetItem() const { return m_item; }
+  bool IsMultiItem() const { return m_segments.size() > 1; }
+  const std::vector<ItemSegment>& GetSegments() const { return m_segments; }
 
   // Geometry
   void SetRect(int x, int y, int w, int h);
@@ -64,6 +77,10 @@ public:
   // Cursor
   void SetCursorTime(double time) { m_cursorTime = time; }
   double GetCursorTime() const { return m_cursorTime; }
+
+  // Snap to zero-crossing
+  void SetSnapToZero(bool snap) { m_snapToZero = snap; }
+  bool GetSnapToZero() const { return m_snapToZero; }
 
   // Fade drag feedback
   void SetFadeDragInfo(int dragType, int shape);
@@ -109,12 +126,17 @@ private:
   void DrawDbScale(HDC hdc, int channel, int yTop, int height);
   void DrawFadeBackground(HDC hdc);
   void DrawFadeEnvelope(HDC hdc);
+  void DrawClipIndicators(HDC hdc);
+  void DrawItemBoundaries(HDC hdc);
+  double SnapToZeroCrossing(double time) const;
   int GetChannelTop(int channel) const;
   int GetChannelHeight() const;
+  void LoadMultiItemAudio();
 
   // Item data
   MediaItem* m_item = nullptr;
   MediaItem_Take* m_take = nullptr;
+  std::vector<ItemSegment> m_segments;
   double m_itemPosition = 0.0;
   double m_itemDuration = 0.0;
   double m_takeOffset = 0.0;
@@ -134,10 +156,13 @@ private:
   // Selection
   WaveformSelection m_selection;
   bool m_selecting = false;
+  bool m_snapToZero = false;
 
   // Peaks cache (computed from m_audioData, no API calls)
   std::vector<double> m_peakMax;
   std::vector<double> m_peakMin;
+  std::vector<double> m_peakRMS;  // RMS per column per channel
+  std::vector<int> m_clipColumns;  // column indices where signal clips
   bool m_peaksValid = false;
   double m_peaksCachedStart = 0.0;
   double m_peaksCachedDuration = 0.0;

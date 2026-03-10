@@ -15,6 +15,7 @@ inline constexpr int MIN_WINDOW_HEIGHT = 200;
 inline constexpr int SPLITTER_HEIGHT = 5;
 inline constexpr int MIN_WAVEFORM_HEIGHT = 80;
 inline constexpr int MIN_SPECTRAL_HEIGHT = 60;
+inline constexpr int MINIMAP_HEIGHT = 20;
 
 // Waveform
 inline constexpr int WAVEFORM_PADDING_TOP = 4;

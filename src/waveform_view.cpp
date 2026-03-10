@@ -33,10 +33,19 @@ static double ApplyFadeShape(double t, int shape)
 
 void WaveformView::SetItem(MediaItem* item)
 {
+  // Don't let single-item loads overwrite multi-item view
+  // To go back to single item, caller must ClearItem() first
+  if (m_segments.size() > 1) {
+    DBG("[WaveformView] SetItem BLOCKED: multi-item active (%d segments)\n",
+        (int)m_segments.size());
+    return;
+  }
+
   if (m_item == item) return;
 
   m_item = item;
   m_take = nullptr;
+  m_segments.clear();
   m_peaksValid = false;
   m_selection = {};
   m_audioData.clear();
@@ -114,10 +123,121 @@ void WaveformView::SetItem(MediaItem* item)
       m_itemPosition, m_itemDuration, m_takeOffset, m_numChannels, m_sampleRate, m_audioSampleCount);
 }
 
+void WaveformView::SetItems(const std::vector<MediaItem*>& items)
+{
+  if (items.size() <= 1) {
+    if (!items.empty()) SetItem(items[0]);
+    return;
+  }
+
+  m_item = items[0];
+  m_take = nullptr;
+  m_peaksValid = false;
+  m_selection = {};
+  m_audioData.clear();
+  m_audioSampleCount = 0;
+  m_segments.clear();
+
+  if (!g_GetActiveTake || !g_GetMediaItemInfo_Value || !g_GetMediaItemTake_Source) {
+    DBG("[EditView] SetItems: missing API functions\n");
+    return;
+  }
+  if (!g_CreateTakeAudioAccessor || !g_GetAudioAccessorSamples || !g_DestroyAudioAccessor) {
+    DBG("[EditView] SetItems: missing audio accessor API\n");
+    return;
+  }
+
+  // Determine sample rate and channel count from first item
+  m_take = g_GetActiveTake(items[0]);
+  if (!m_take) { DBG("[EditView] SetItems: no active take on first item\n"); m_item = nullptr; return; }
+
+  PCM_source* src0 = g_GetMediaItemTake_Source(m_take);
+  if (!src0) { DBG("[EditView] SetItems: no source on first take\n"); m_item = nullptr; m_take = nullptr; return; }
+  m_sampleRate = (int)src0->GetSampleRate();
+  m_numChannels = src0->GetNumChannels();
+  if (m_numChannels < 1) m_numChannels = 1;
+  if (m_numChannels > 2) m_numChannels = 2;
+  DBG("[EditView] SetItems: first item sr=%d nch=%d\n", m_sampleRate, m_numChannels);
+
+  m_itemPosition = g_GetMediaItemInfo_Value(items[0], "D_POSITION");
+
+  // Load audio from each item and concatenate
+  double totalDuration = 0.0;
+  for (MediaItem* item : items) {
+    MediaItem_Take* take = g_GetActiveTake(item);
+    if (!take) continue;
+
+    double pos = g_GetMediaItemInfo_Value(item, "D_POSITION");
+    double dur = g_GetMediaItemInfo_Value(item, "D_LENGTH");
+
+    ItemSegment seg;
+    seg.item = item;
+    seg.take = take;
+    seg.position = pos;
+    seg.duration = dur;
+    seg.relativeOffset = totalDuration;
+    seg.audioStartFrame = m_audioSampleCount;
+
+    // Load this item's audio
+    int frames = (int)(dur * (double)m_sampleRate);
+    if (frames <= 0) continue;
+
+    AudioAccessor* accessor = g_CreateTakeAudioAccessor(take);
+    if (!accessor) {
+      DBG("[EditView] SetItems: failed to create accessor for item at pos=%.3f\n", pos);
+      continue;
+    }
+
+    size_t prevSize = m_audioData.size();
+    m_audioData.resize(prevSize + (size_t)frames * m_numChannels, 0.0);
+
+    // Take accessor time 0 = start of take (offset already applied internally)
+    // Read in chunks like LoadAudioData does for reliability
+    static const int CHUNK_FRAMES = 65536;
+    int framesLoaded = 0;
+    while (framesLoaded < frames) {
+      int chunk = std::min(CHUNK_FRAMES, frames - framesLoaded);
+      double chunkTime = (double)framesLoaded / (double)m_sampleRate;
+      g_GetAudioAccessorSamples(accessor, m_sampleRate, m_numChannels,
+                                chunkTime, chunk,
+                                m_audioData.data() + prevSize + (size_t)framesLoaded * m_numChannels);
+      framesLoaded += chunk;
+    }
+    g_DestroyAudioAccessor(accessor);
+
+    // Apply item volume (D_VOL) so EditView matches REAPER's arrange view
+    double itemVol = g_GetMediaItemInfo_Value(item, "D_VOL");
+    if (itemVol != 1.0 && itemVol > 0.0) {
+      size_t sampleCount = (size_t)frames * m_numChannels;
+      for (size_t s = 0; s < sampleCount; s++)
+        m_audioData[prevSize + s] *= itemVol;
+      DBG("[EditView] SetItems: applied D_VOL=%.3f to %d frames at pos=%.3f\n", itemVol, frames, pos);
+    }
+
+    seg.audioFrameCount = frames;
+    m_audioSampleCount += frames;
+    totalDuration += dur;
+    m_segments.push_back(seg);
+
+    DBG("[EditView] SetItems seg[%d]: pos=%.3f dur=%.3f offset=%.3f frames=%d\n",
+        (int)m_segments.size() - 1, pos, dur, seg.relativeOffset, frames);
+  }
+
+  m_itemDuration = totalDuration;
+  m_takeOffset = 0.0;
+  m_viewStartTime = 0.0;
+  m_viewDuration = totalDuration;
+  m_cursorTime = 0.0;
+
+  DBG("[EditView] SetItems: %d items, total dur=%.3f frames=%d\n",
+      (int)items.size(), totalDuration, m_audioSampleCount);
+}
+
 void WaveformView::ClearItem()
 {
   m_item = nullptr;
   m_take = nullptr;
+  m_segments.clear();
   m_peaksValid = false;
   m_selection = {};
   m_numChannels = 0;
@@ -292,7 +412,42 @@ void WaveformView::UpdateSelection(double time) { if (m_selecting) m_selection.e
 void WaveformView::EndSelection() {
   m_selecting = false;
   if (m_selection.startTime > m_selection.endTime) std::swap(m_selection.startTime, m_selection.endTime);
+  if (m_snapToZero && m_audioSampleCount > 0 && m_numChannels > 0) {
+    m_selection.startTime = SnapToZeroCrossing(m_selection.startTime);
+    m_selection.endTime = SnapToZeroCrossing(m_selection.endTime);
+  }
 }
+
+double WaveformView::SnapToZeroCrossing(double time) const {
+  if (m_audioData.empty() || m_numChannels <= 0 || m_sampleRate <= 0) return time;
+
+  int frame = (int)(time * (double)m_sampleRate);
+  frame = std::max(0, std::min(frame, m_audioSampleCount - 1));
+
+  // Search outward ±512 samples on channel 0 for sign change
+  int bestDist = 513;
+  int bestFrame = frame;
+  int searchRange = std::min(512, m_audioSampleCount - 1);
+
+  for (int d = 0; d <= searchRange; d++) {
+    for (int sign = -1; sign <= 1; sign += 2) {
+      int f = frame + sign * d;
+      if (f < 0 || f >= m_audioSampleCount - 1) continue;
+      double s0 = m_audioData[(size_t)f * m_numChannels];
+      double s1 = m_audioData[(size_t)(f + 1) * m_numChannels];
+      if (s0 * s1 <= 0.0) {  // zero crossing (or exact zero)
+        if (d < bestDist) {
+          bestDist = d;
+          bestFrame = f;
+        }
+      }
+    }
+    if (bestDist <= d) break;  // found closest
+  }
+
+  return (double)bestFrame / (double)m_sampleRate;
+}
+
 void WaveformView::ClearSelection() { m_selection = {}; m_selecting = false; }
 
 // --- Coordinate conversion ---
@@ -332,6 +487,7 @@ void WaveformView::UpdatePeaks()
 
   m_peakMax.resize((size_t)(w * nch));
   m_peakMin.resize((size_t)(w * nch));
+  m_peakRMS.resize((size_t)(w * nch));
 
   double timePerPixel = m_viewDuration / (double)w;
   for (int col = 0; col < w; col++) {
@@ -346,6 +502,8 @@ void WaveformView::UpdatePeaks()
     for (int ch = 0; ch < nch; ch++) {
       double maxVal = -2.0;
       double minVal = 2.0;
+      double sumSq = 0.0;
+      int count = 0;
 
       // For very zoomed out views, subsample to keep it fast
       // Use conservative step to avoid missing peaks
@@ -357,6 +515,8 @@ void WaveformView::UpdatePeaks()
         double v = m_audioData[(size_t)s * nch + ch];
         if (v > maxVal) maxVal = v;
         if (v < minVal) minVal = v;
+        sumSq += v * v;
+        count++;
       }
 
       if (maxVal < -1.5) { maxVal = 0.0; minVal = 0.0; }
@@ -364,6 +524,19 @@ void WaveformView::UpdatePeaks()
       size_t idx = (size_t)(col * nch + ch);
       m_peakMax[idx] = maxVal;
       m_peakMin[idx] = minVal;
+      m_peakRMS[idx] = (count > 0) ? sqrt(sumSq / (double)count) : 0.0;
+    }
+  }
+
+  // Build clip column list
+  m_clipColumns.clear();
+  for (int col = 0; col < w; col++) {
+    for (int ch = 0; ch < nch; ch++) {
+      size_t idx = (size_t)(col * nch + ch);
+      if (fabs(m_peakMax[idx]) >= 1.0 || fabs(m_peakMin[idx]) >= 1.0) {
+        m_clipColumns.push_back(col);
+        break;  // one entry per column
+      }
     }
   }
 
@@ -435,9 +608,13 @@ void WaveformView::Paint(HDC hdc)
     DrawDbScale(hdc, ch, GetChannelTop(ch), GetChannelHeight());
   }
 
+  // Item boundaries for multi-item view
+  if (m_segments.size() > 1) DrawItemBoundaries(hdc);
+
   // Selection edges and cursor
   if (hasSel) DrawSelection(hdc);
   DrawCursor(hdc);
+  DrawClipIndicators(hdc);
   DrawFadeEnvelope(hdc);
 
   // Channel separator on top of everything
@@ -467,13 +644,17 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   int fadeInShape = m_fadeCache.fadeInShape;
   int fadeOutShape = m_fadeCache.fadeOutShape;
 
-  // Two pens: normal (green) and selected (dark green)
+  // Pens: normal (green) and selected (dark green), plus RMS (darker variants)
   // Dim channel if muted (inactive)
   bool dimmed = (m_numChannels > 1 && !m_channelActive[channel]);
   COLORREF normColor = dimmed ? RGB(40, 50, 40) : g_theme.waveform;
   COLORREF selColor = dimmed ? RGB(50, 60, 50) : g_theme.waveformSel;
+  COLORREF rmsNormColor = dimmed ? RGB(30, 40, 30) : g_theme.waveformRms;
+  COLORREF rmsSelColor = dimmed ? RGB(40, 50, 40) : g_theme.waveformRmsSel;
   HPEN normalPen = CreatePen(PS_SOLID, 1, normColor);
   HPEN selPen = CreatePen(PS_SOLID, 1, selColor);
+  HPEN rmsNormPen = CreatePen(PS_SOLID, 1, rmsNormColor);
+  HPEN rmsSelPen = CreatePen(PS_SOLID, 1, rmsSelColor);
 
   // Precompute selection pixel range
   bool hasSel = HasSelection();
@@ -526,9 +707,45 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     LineTo(hdc, x, yMin + 1);
   }
 
+  // Draw RMS overlay (narrower, darker)
+  curPen = rmsNormPen;
+  SelectObject(hdc, curPen);
+  for (int col = 0; col < w; col++) {
+    size_t idx = (size_t)(col * nch + channel);
+    if (idx >= m_peakRMS.size()) break;
+
+    int x = m_rect.left + col;
+    HPEN wantPen = (hasSel && x >= selX1 && x < selX2) ? rmsSelPen : rmsNormPen;
+    if (wantPen != curPen) {
+      SelectObject(hdc, wantPen);
+      curPen = wantPen;
+    }
+
+    double colTime = XToTime(x);
+    double fadeGain = 1.0;
+    if (fadeInLen > 0.0 && colTime < fadeInLen)
+      fadeGain *= ApplyFadeShape(colTime / fadeInLen, fadeInShape);
+    if (fadeOutLen > 0.0 && colTime > m_itemDuration - fadeOutLen)
+      fadeGain *= ApplyFadeShape((m_itemDuration - colTime) / fadeOutLen, fadeOutShape);
+    if (fadeGain < 0.0) fadeGain = 0.0;
+
+    double vol = itemVol * fadeGain;
+    double rmsVal = std::min(1.0, m_peakRMS[idx] * vol);
+
+    int yRmsTop = centerY - (int)(rmsVal * (double)halfH);
+    int yRmsBot = centerY + (int)(rmsVal * (double)halfH);
+    yRmsTop = std::max(yTop, std::min(yTop + height - 1, yRmsTop));
+    yRmsBot = std::max(yTop, std::min(yTop + height - 1, yRmsBot));
+
+    MoveToEx(hdc, x, yRmsTop, nullptr);
+    LineTo(hdc, x, yRmsBot + 1);
+  }
+
   SelectObject(hdc, oldPen);
   DeleteObject(normalPen);
   DeleteObject(selPen);
+  DeleteObject(rmsNormPen);
+  DeleteObject(rmsSelPen);
 }
 
 void WaveformView::DrawCenterLine(HDC hdc, int yCenter)
@@ -537,6 +754,49 @@ void WaveformView::DrawCenterLine(HDC hdc, int yCenter)
   HPEN oldPen = (HPEN)SelectObject(hdc, pen);
   MoveToEx(hdc, m_rect.left, yCenter, nullptr);
   LineTo(hdc, m_rect.right - DB_SCALE_WIDTH, yCenter);
+  SelectObject(hdc, oldPen);
+  DeleteObject(pen);
+}
+
+void WaveformView::DrawClipIndicators(HDC hdc)
+{
+  if (m_clipColumns.empty()) return;
+
+  HPEN pen = CreatePen(PS_SOLID, 1, g_theme.clipIndicator);
+  HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+
+  for (int ch = 0; ch < m_numChannels; ch++) {
+    int chTop = GetChannelTop(ch);
+    int chH = GetChannelHeight();
+
+    for (int col : m_clipColumns) {
+      int x = m_rect.left + col;
+      // 3px red tick at top
+      MoveToEx(hdc, x, chTop, nullptr);
+      LineTo(hdc, x, chTop + 3);
+      // 3px red tick at bottom
+      MoveToEx(hdc, x, chTop + chH - 3, nullptr);
+      LineTo(hdc, x, chTop + chH);
+    }
+  }
+
+  SelectObject(hdc, oldPen);
+  DeleteObject(pen);
+}
+
+void WaveformView::DrawItemBoundaries(HDC hdc)
+{
+  HPEN pen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
+  HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+
+  for (size_t i = 1; i < m_segments.size(); i++) {
+    int x = TimeToX(m_segments[i].relativeOffset);
+    if (x >= m_rect.left && x < m_rect.right) {
+      MoveToEx(hdc, x, m_rect.top, nullptr);
+      LineTo(hdc, x, m_rect.bottom);
+    }
+  }
+
   SelectObject(hdc, oldPen);
   DeleteObject(pen);
 }
@@ -808,10 +1068,13 @@ void WaveformView::DrawCursor(HDC hdc)
     isPlaying = (playState & 1) != 0;
   }
 
+  // Limit cursor drawing to waveform area (exclude dB scale)
+  int waveRight = m_rect.right - DB_SCALE_WIDTH;
+
   if (!isPlaying) {
     // Stopped: solid red line at edit cursor position
     int cx = TimeToX(m_cursorTime);
-    if (cx >= m_rect.left && cx <= m_rect.right) {
+    if (cx >= m_rect.left && cx <= waveRight) {
       HPEN curPen = CreatePen(PS_SOLID, 2, g_theme.editCursor);
       HPEN oldPen = (HPEN)SelectObject(hdc, curPen);
       MoveToEx(hdc, cx, m_rect.top, nullptr);
@@ -824,7 +1087,7 @@ void WaveformView::DrawCursor(HDC hdc)
 
     // 1) Edit cursor — dashed red line (manual dash since SWELL lacks PS_DOT)
     int cx = TimeToX(m_cursorTime);
-    if (cx >= m_rect.left && cx <= m_rect.right) {
+    if (cx >= m_rect.left && cx <= waveRight) {
       HPEN dashPen = CreatePen(PS_SOLID, 1, g_theme.editCursor);
       HPEN oldPen = (HPEN)SelectObject(hdc, dashPen);
       for (int dy = m_rect.top; dy < m_rect.bottom; dy += 6) {
@@ -835,11 +1098,13 @@ void WaveformView::DrawCursor(HDC hdc)
       DeleteObject(dashPen);
     }
 
-    // 2) Playhead — solid red line moving with playback
+    // 2) Playhead — solid red line moving with playback, clamped to item bounds
     if (g_GetPlayPosition2) {
       double relPos = g_GetPlayPosition2() - m_itemPosition;
+      // Don't draw playhead outside item bounds
+      if (relPos < 0.0 || relPos > m_itemDuration) relPos = -1.0;
       int px = TimeToX(relPos);
-      if (px >= m_rect.left && px <= m_rect.right) {
+      if (relPos >= 0.0 && px >= m_rect.left && px <= waveRight) {
         HPEN playPen = CreatePen(PS_SOLID, 2, g_theme.playhead);
         HPEN oldPen = (HPEN)SelectObject(hdc, playPen);
         MoveToEx(hdc, px, m_rect.top, nullptr);

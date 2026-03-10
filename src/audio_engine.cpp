@@ -239,3 +239,18 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
   // Refresh arrange view
   if (g_UpdateArrange) g_UpdateArrange();
 }
+
+std::string AudioEngine::WriteTempWav(const double* samples, int numFrames,
+                                       int numChannels, int sampleRate)
+{
+  // Generate unique temp path
+  char tmpPath[512];
+  snprintf(tmpPath, sizeof(tmpPath), "/tmp/editview_export_%d.wav", (int)getpid());
+
+  if (!WriteWavFile(tmpPath, samples, numFrames, numChannels, sampleRate, 16, 1)) {
+    DBG("[AudioEngine] WriteTempWav failed\n");
+    return {};
+  }
+
+  return std::string(tmpPath);
+}

@@ -10,6 +10,8 @@ struct ThemeColors {
   COLORREF waveformSelBg;    // selection background (white/very light)
   COLORREF waveform;         // waveform stroke color (green, normal areas)
   COLORREF waveformSel;      // waveform stroke in selection (dark green)
+  COLORREF waveformRms;      // RMS overlay (darker green, normal)
+  COLORREF waveformRmsSel;   // RMS overlay in selection
   COLORREF centerLine;       // zero-crossing line
   COLORREF dbScaleText;      // dB scale labels
 
@@ -45,6 +47,9 @@ struct ThemeColors {
   // Markers
   COLORREF markerLine;
   COLORREF markerText;
+
+  // Clip indicators
+  COLORREF clipIndicator;
 
   // General
   COLORREF border;

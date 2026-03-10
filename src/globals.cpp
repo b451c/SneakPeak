@@ -44,6 +44,15 @@ MediaItem* (*g_SplitMediaItem)(MediaItem*, double) = nullptr;
 bool (*g_DeleteTrackMediaItem)(MediaTrack*, MediaItem*) = nullptr;
 MediaTrack* (*g_GetMediaItem_Track)(MediaItem*) = nullptr;
 
+// Track items (for track follow)
+int (*g_GetTrackNumMediaItems)(MediaTrack*) = nullptr;
+MediaItem* (*g_GetTrackMediaItem)(MediaTrack*, int) = nullptr;
+MediaTrack* (*g_GetSelectedTrack)(ReaProject*, int) = nullptr;
+int (*g_CountSelectedTracks)(ReaProject*) = nullptr;
+
+// Track properties
+void* (*g_GetSetMediaTrackInfo)(MediaTrack*, const char*, void*) = nullptr;
+
 // Source / destructive editing
 PCM_source* (*g_PCM_Source_CreateFromFile)(const char*) = nullptr;
 bool (*g_SetMediaItemTake_Source)(MediaItem_Take*, PCM_source*) = nullptr;

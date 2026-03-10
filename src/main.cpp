@@ -63,6 +63,15 @@
 #define REAPERAPI_WANT_DeleteTrackMediaItem
 #define REAPERAPI_WANT_GetMediaItem_Track
 
+// Track items (for track follow)
+#define REAPERAPI_WANT_GetTrackNumMediaItems
+#define REAPERAPI_WANT_GetTrackMediaItem
+#define REAPERAPI_WANT_GetSelectedTrack
+#define REAPERAPI_WANT_CountSelectedTracks
+
+// Track properties (solo)
+#define REAPERAPI_WANT_GetSetMediaTrackInfo
+
 // Time selection
 #define REAPERAPI_WANT_GetSet_LoopTimeRange2
 
@@ -87,6 +96,7 @@ static std::unique_ptr<EditView> g_editView;
 static int g_cmdToggle = 0;
 static int g_cmdLoadItem = 0;
 static MediaItem* g_lastSelectedItem = nullptr;
+static int g_lastSelectedCount = 0;
 
 // Keyboard accelerator for docked window — intercepts Ctrl+Z/X/C/V etc.
 static int translateAccelEditView(MSG* msg, accelerator_register_t* ctx)
@@ -101,7 +111,7 @@ static int translateAccelEditView(MSG* msg, accelerator_register_t* ctx)
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
     WPARAM k = msg->wParam;
     bool handled = false;
-    if (k == VK_HOME || k == VK_END || k == VK_SPACE || k == VK_ESCAPE) handled = true;
+    if (k == VK_HOME || k == VK_END || k == VK_SPACE || k == VK_ESCAPE || k == VK_TAB) handled = true;
     else if (k == VK_DELETE) handled = true;
     else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A')) handled = true;
     else if (!ctrl && (k == 'M' || k == 'G')) handled = true;
@@ -129,8 +139,9 @@ static void pollSelectionTimer()
       !ValidatePtr2(nullptr, (void*)g_lastSelectedItem, "MediaItem*"))
     g_lastSelectedItem = nullptr;
 
-  if (item != g_lastSelectedItem) {
+  if (item != g_lastSelectedItem || count != g_lastSelectedCount) {
     g_lastSelectedItem = item;
+    g_lastSelectedCount = count;
     g_editView->LoadSelectedItem();
   }
 }
@@ -255,6 +266,13 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_SplitMediaItem = SplitMediaItem;
   g_DeleteTrackMediaItem = DeleteTrackMediaItem;
   g_GetMediaItem_Track = GetMediaItem_Track;
+
+  g_GetTrackNumMediaItems = GetTrackNumMediaItems;
+  g_GetTrackMediaItem = GetTrackMediaItem;
+  g_GetSelectedTrack = GetSelectedTrack;
+  g_CountSelectedTracks = CountSelectedTracks;
+
+  g_GetSetMediaTrackInfo = GetSetMediaTrackInfo;
 
   g_PCM_Source_CreateFromFile = PCM_Source_CreateFromFile;
   g_SetMediaItemTake_Source = SetMediaItemTake_Source;

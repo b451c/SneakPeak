@@ -10,7 +10,9 @@
 #include "marker_manager.h"
 #include "levels_panel.h"
 #include "spectral_view.h"
+#include "minimap_view.h"
 #include <vector>
+#include <string>
 
 // Audio clipboard for cut/copy/paste
 struct AudioClipboard {
@@ -50,6 +52,8 @@ enum ContextMenuID {
   CM_GAIN_PANEL,
   CM_MONO_DOWNMIX,
   CM_TOGGLE_SPECTRAL,
+  CM_SNAP_ZERO,
+  CM_MINIMAP,
   CM_SUPPORT_KOFI,
   CM_SUPPORT_BMAC,
   CM_SUPPORT_PAYPAL,
@@ -107,6 +111,10 @@ private:
   void DoGain(double factor);
   void DoDCRemove();
 
+  // Navigation
+  void NavigateToMarker(bool forward);
+  void DoLoopSelection();
+
   // Helpers for destructive ops
   void GetSelectionSampleRange(int& startFrame, int& endFrame) const;
   void WriteAndRefresh();
@@ -119,6 +127,7 @@ private:
   RECT m_waveformRect = {};
   RECT m_splitterRect = {};
   RECT m_spectralRect = {};
+  RECT m_minimapRect = {};
   RECT m_scrollbarRect = {};
   RECT m_bottomPanelRect = {};
 
@@ -142,12 +151,38 @@ private:
   GainPanel m_gainPanel;
   LevelsPanel m_levels;
   SpectralView m_spectral;
+  MinimapView m_minimap;
   bool m_spectralVisible = false;
+  bool m_minimapVisible = false;
+  int m_minimapHeight = MINIMAP_HEIGHT;
+  bool m_minimapDragging = false;
   float m_splitterRatio = 0.55f; // waveform gets 55% of content area
   bool m_splitterDragging = false;
   bool m_spectralFreqDragging = false;
   int m_spectralFreqDragChTop = 0;
   int m_spectralFreqDragChH = 0;
+
+  // Playback tracking
+  bool m_startedPlayback = false;  // true when we initiated playback
+  bool m_wasPlaying = false;       // previous play state for edge detection
+  bool m_autoStopped = false;      // true after auto-stop, prevents re-trigger loop
+  int m_playGraceTicks = 0;        // skip auto-stop for N ticks after play start
+
+  // Drag & drop export
+  bool m_dragExportPending = false;
+  int m_dragStartX = 0;
+  int m_dragStartY = 0;
+  std::string m_dragTempPath;
+  void InitiateDragExport();
+  void CleanupDragTemp();
+
+  // Solo button
+  bool m_trackSoloed = false;
+  RECT m_soloBtnRect = {};
+  void DrawSoloButton(HDC hdc);
+  bool ClickSoloButton(int x, int y);
+  void ToggleTrackSolo();
+  void UpdateSoloState();
 
   // Undo state
   bool m_hasUndo = false;

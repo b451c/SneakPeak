@@ -83,6 +83,8 @@ void Theme_Refresh()
   g_theme.waveformSelBg = RGB(230, 230, 230);         // white/light selection background
   g_theme.waveform      = RGB(80, 220, 140);          // green waveform (normal)
   g_theme.waveformSel   = RGB(30, 80, 50);            // dark green waveform (in selection)
+  g_theme.waveformRms   = RGB(40, 160, 90);            // RMS overlay (darker green)
+  g_theme.waveformRmsSel = RGB(20, 55, 35);            // RMS overlay in selection
   g_theme.centerLine    = RGB(30, 60, 40);             // subtle dark green center line
   g_theme.dbScaleText   = RGB(160, 160, 160);          // light gray dB labels
 
@@ -118,6 +120,9 @@ void Theme_Refresh()
   // Markers (bright yellow default — visible on dark bg)
   g_theme.markerLine    = RGB(220, 200, 60);
   g_theme.markerText    = RGB(220, 200, 60);
+
+  // Clip indicators
+  g_theme.clipIndicator = RGB(255, 50, 50);
 
   // General
   g_theme.border        = grid1;
