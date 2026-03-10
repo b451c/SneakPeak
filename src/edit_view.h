@@ -50,6 +50,9 @@ enum ContextMenuID {
   CM_GAIN_PANEL,
   CM_MONO_DOWNMIX,
   CM_TOGGLE_SPECTRAL,
+  CM_SUPPORT_KOFI,
+  CM_SUPPORT_BMAC,
+  CM_SUPPORT_PAYPAL,
 };
 
 class EditView {

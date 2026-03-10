@@ -373,7 +373,7 @@ INT_PTR EditView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_COMMAND: {
       int id = LOWORD(wParam);
-      if (id >= CM_UNDO && id <= CM_TOGGLE_SPECTRAL) {
+      if (id >= CM_UNDO && id <= CM_SUPPORT_PAYPAL) {
         OnContextMenuCommand(id);
         return 0;
       }
@@ -1236,10 +1236,17 @@ void EditView::OnRightClick(int x, int y)
   MenuAppend(viewMenu, MF_STRING, CM_TOGGLE_SPECTRAL,
              m_spectralVisible ? "Spectral View  \xE2\x9C\x93" : "Spectral View");
 
+  HMENU supportMenu = CreatePopupMenu();
+  MenuAppend(supportMenu, MF_STRING, CM_SUPPORT_KOFI, "Ko-fi");
+  MenuAppend(supportMenu, MF_STRING, CM_SUPPORT_BMAC, "Buy Me a Coffee");
+  MenuAppend(supportMenu, MF_STRING, CM_SUPPORT_PAYPAL, "PayPal");
+
   MenuAppendSubmenu(menu, editMenu, "Edit");
   MenuAppendSubmenu(menu, procMenu, "Process");
   MenuAppendSubmenu(menu, markerMenu, "Markers");
   MenuAppendSubmenu(menu, viewMenu, "View");
+  MenuAppendSeparator(menu);
+  MenuAppendSubmenu(menu, supportMenu, "Support EditView");
 
   POINT pt = { x, y };
   ClientToScreen(m_hwnd, &pt);
@@ -1337,6 +1344,27 @@ void EditView::OnContextMenuCommand(int id)
         m_waveform.Invalidate();
         m_spectral.Invalidate();
       }
+      break;
+    case CM_SUPPORT_KOFI:
+#ifdef _WIN32
+      ShellExecute(nullptr, "open", "https://ko-fi.com/quickmd", nullptr, nullptr, SW_SHOWNORMAL);
+#else
+      system("open 'https://ko-fi.com/quickmd'");
+#endif
+      break;
+    case CM_SUPPORT_BMAC:
+#ifdef _WIN32
+      ShellExecute(nullptr, "open", "https://buymeacoffee.com/bsroczynskh", nullptr, nullptr, SW_SHOWNORMAL);
+#else
+      system("open 'https://buymeacoffee.com/bsroczynskh'");
+#endif
+      break;
+    case CM_SUPPORT_PAYPAL:
+#ifdef _WIN32
+      ShellExecute(nullptr, "open", "https://www.paypal.com/paypalme/b451c", nullptr, nullptr, SW_SHOWNORMAL);
+#else
+      system("open 'https://www.paypal.com/paypalme/b451c'");
+#endif
       break;
   }
   InvalidateRect(m_hwnd, nullptr, FALSE);
