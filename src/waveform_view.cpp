@@ -528,14 +528,16 @@ void WaveformView::UpdatePeaks()
     }
   }
 
-  // Build clip column list
+  // Build clip column list — scale peaks by item volume (D_VOL)
+  double vol = m_fadeCache.itemVol;
+  if (vol <= 0.0) vol = 1.0;
   m_clipColumns.clear();
   for (int col = 0; col < w; col++) {
     for (int ch = 0; ch < nch; ch++) {
       size_t idx = (size_t)(col * nch + ch);
-      if (fabs(m_peakMax[idx]) >= 1.0 || fabs(m_peakMin[idx]) >= 1.0) {
+      if (fabs(m_peakMax[idx] * vol) >= 1.0 || fabs(m_peakMin[idx] * vol) >= 1.0) {
         m_clipColumns.push_back(col);
-        break;  // one entry per column
+        break;
       }
     }
   }
@@ -1122,11 +1124,17 @@ void WaveformView::UpdateFadeCache()
     m_fadeCache = {};
     return;
   }
+  double oldVol = m_fadeCache.itemVol;
   m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
   m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
   m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
   m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
   m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
+
+  // If volume changed, invalidate peaks so clip indicators update
+  if (oldVol != m_fadeCache.itemVol) {
+    m_peaksValid = false;
+  }
 }
 
 void WaveformView::SetFadeDragInfo(int dragType, int shape)

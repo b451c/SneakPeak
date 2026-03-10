@@ -66,22 +66,60 @@ void MinimapView::Paint(HDC hdc, const WaveformView& wv)
   int h = m_rect.bottom - m_rect.top;
   if (w <= 0 || h <= 0) return;
 
-  // Background
-  HBRUSH bgBrush = CreateSolidBrush(RGB(15, 15, 15));
+  // Background — slightly warmer dark than main waveform bg
+  HBRUSH bgBrush = CreateSolidBrush(RGB(12, 14, 18));
   FillRect(hdc, &m_rect, bgBrush);
   DeleteObject(bgBrush);
+
+  // Subtle top border to separate from waveform
+  HPEN sepPen = CreatePen(PS_SOLID, 1, RGB(40, 44, 52));
+  HPEN oldSep = (HPEN)SelectObject(hdc, sepPen);
+  MoveToEx(hdc, m_rect.left, m_rect.top, nullptr);
+  LineTo(hdc, m_rect.right, m_rect.top);
+  SelectObject(hdc, oldSep);
+  DeleteObject(sepPen);
 
   if (!wv.HasItem()) return;
 
   ComputePeaks(wv);
   if (!m_peaksValid) return;
 
-  // Draw waveform
-  int centerY = m_rect.top + h / 2;
-  float halfH = (float)(h / 2);
+  // Minimap uses a cool blue/steel tone to differentiate from green main waveform
+  // Active (in-view) area: brighter steel blue
+  // Out-of-view area: very dim blue-gray
+  COLORREF activeColor = RGB(90, 130, 160);   // steel blue
+  COLORREF dimColor    = RGB(30, 42, 52);      // muted navy
+  COLORREF dimBgColor  = RGB(6, 8, 12);        // near-black for out-of-view
 
-  HPEN wavePen = CreatePen(PS_SOLID, 1, ColorDarken(g_theme.waveform, 0.3f));
-  HPEN oldPen = (HPEN)SelectObject(hdc, wavePen);
+  double itemDur = wv.GetItemDuration();
+  int vx1 = m_rect.left, vx2 = m_rect.right;
+  if (itemDur > 0.0) {
+    double viewStart = wv.GetViewStart();
+    double viewEnd = viewStart + wv.GetViewDuration();
+    vx1 = m_rect.left + (int)((viewStart / itemDur) * (double)w);
+    vx2 = m_rect.left + (int)((viewEnd / itemDur) * (double)w);
+    vx1 = std::max((int)m_rect.left, std::min((int)m_rect.right, vx1));
+    vx2 = std::max((int)m_rect.left, std::min((int)m_rect.right, vx2));
+  }
+
+  // Draw dim background for out-of-view areas
+  HBRUSH dimBrush = CreateSolidBrush(dimBgColor);
+  if (vx1 > m_rect.left) {
+    RECT leftDim = { m_rect.left, m_rect.top + 1, vx1, m_rect.bottom };
+    FillRect(hdc, &leftDim, dimBrush);
+  }
+  if (vx2 < m_rect.right) {
+    RECT rightDim = { vx2, m_rect.top + 1, m_rect.right, m_rect.bottom };
+    FillRect(hdc, &rightDim, dimBrush);
+  }
+  DeleteObject(dimBrush);
+
+  // Draw waveform peaks — bright in view, dim outside
+  int centerY = m_rect.top + h / 2;
+  float halfH = (float)(h / 2) * 0.85f;  // slight vertical margin
+
+  HPEN activePen = CreatePen(PS_SOLID, 1, activeColor);
+  HPEN dimPen = CreatePen(PS_SOLID, 1, dimColor);
 
   for (int col = 0; col < w; col++) {
     double maxVal = std::max(-1.0, std::min(1.0, m_peakMax[col]));
@@ -90,38 +128,20 @@ void MinimapView::Paint(HDC hdc, const WaveformView& wv)
     int yMin = centerY - (int)(minVal * halfH);
     if (yMax > yMin) std::swap(yMax, yMin);
     int x = m_rect.left + col;
+
+    bool inView = (x >= vx1 && x < vx2);
+    SelectObject(hdc, inView ? activePen : dimPen);
     MoveToEx(hdc, x, yMax, nullptr);
     LineTo(hdc, x, yMin + 1);
   }
 
-  SelectObject(hdc, oldPen);
-  DeleteObject(wavePen);
+  SelectObject(hdc, (HGDIOBJ)activePen); // restore before delete
+  DeleteObject(activePen);
+  DeleteObject(dimPen);
 
-  // Draw view bounds overlay
-  double itemDur = wv.GetItemDuration();
-  if (itemDur > 0.0) {
-    double viewStart = wv.GetViewStart();
-    double viewEnd = viewStart + wv.GetViewDuration();
-
-    int vx1 = m_rect.left + (int)((viewStart / itemDur) * (double)w);
-    int vx2 = m_rect.left + (int)((viewEnd / itemDur) * (double)w);
-    vx1 = std::max((int)m_rect.left, std::min((int)m_rect.right, vx1));
-    vx2 = std::max((int)m_rect.left, std::min((int)m_rect.right, vx2));
-
-    // Semi-transparent: draw dimmed areas outside view
-    HBRUSH dimBrush = CreateSolidBrush(RGB(0, 0, 0));
-    if (vx1 > m_rect.left) {
-      RECT leftDim = { m_rect.left, m_rect.top, vx1, m_rect.bottom };
-      FillRect(hdc, &leftDim, dimBrush);
-    }
-    if (vx2 < m_rect.right) {
-      RECT rightDim = { vx2, m_rect.top, m_rect.right, m_rect.bottom };
-      FillRect(hdc, &rightDim, dimBrush);
-    }
-    DeleteObject(dimBrush);
-
-    // View boundary lines
-    HPEN boundPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
+  // View boundary lines — subtle bright accents
+  if (itemDur > 0.0 && (vx1 > m_rect.left || vx2 < m_rect.right)) {
+    HPEN boundPen = CreatePen(PS_SOLID, 1, RGB(120, 160, 190));
     HPEN oldP = (HPEN)SelectObject(hdc, boundPen);
     MoveToEx(hdc, vx1, m_rect.top, nullptr);
     LineTo(hdc, vx1, m_rect.bottom);

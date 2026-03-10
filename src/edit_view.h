@@ -155,7 +155,8 @@ private:
   bool m_spectralVisible = false;
   bool m_minimapVisible = false;
   int m_minimapHeight = MINIMAP_HEIGHT;
-  bool m_minimapDragging = false;
+  bool m_minimapDragging = false;       // resize drag (top edge)
+  bool m_minimapScrollDragging = false; // click-drag to scroll view
   float m_splitterRatio = 0.55f; // waveform gets 55% of content area
   bool m_splitterDragging = false;
   bool m_spectralFreqDragging = false;

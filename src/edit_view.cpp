@@ -74,6 +74,13 @@ void EditView::Create()
     }
   }
 
+  // Recalc layout after restoring settings (minimap visibility etc.)
+  {
+    RECT cr;
+    GetClientRect(m_hwnd, &cr);
+    RecalcLayout(cr.right, cr.bottom);
+  }
+
   DBG("[EditView] Window created: hwnd=%p\n", (void*)m_hwnd);
 }
 
@@ -513,6 +520,10 @@ INT_PTR EditView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_TIMER:
       if (wParam == TIMER_REFRESH) OnTimer();
       return 0;
+
+    case WM_SETCURSOR:
+      // Let OnMouseMove handle cursor — prevent system from resetting it
+      return TRUE;
 
     case WM_CLOSE:
       // Docker [x] button or undock — hide window instead of destroying
@@ -1025,8 +1036,10 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
     return;
   }
 
-  // Minimap click — scroll to that position
+  // Minimap click — start scroll drag
   if (m_minimapVisible && y >= m_minimapRect.top && y < m_minimapRect.bottom && m_waveform.HasItem()) {
+    m_minimapScrollDragging = true;
+    SetCapture(m_hwnd);
     double clickTime = m_minimap.XToTime(x, m_waveform.GetItemDuration());
     double halfView = m_waveform.GetViewDuration() / 2.0;
     double newStart = clickTime - halfView;
@@ -1205,6 +1218,11 @@ void EditView::OnMouseUp(int x, int y)
     }
     return;
   }
+  if (m_minimapScrollDragging) {
+    m_minimapScrollDragging = false;
+    ReleaseCapture();
+    return;
+  }
   if (m_splitterDragging) {
     m_splitterDragging = false;
     ReleaseCapture();
@@ -1258,6 +1276,18 @@ void EditView::OnMouseMove(int x, int y, WPARAM wParam)
     }
     m_lastMouseX = x;
     m_lastMouseY = y;
+    return;
+  }
+
+  // Minimap scroll dragging — continuously scroll waveform
+  if (m_minimapScrollDragging && m_waveform.HasItem()) {
+    double clickTime = m_minimap.XToTime(x, m_waveform.GetItemDuration());
+    double halfView = m_waveform.GetViewDuration() / 2.0;
+    double newStart = clickTime - halfView;
+    newStart = std::max(0.0, std::min(m_waveform.GetItemDuration() - m_waveform.GetViewDuration(), newStart));
+    m_waveform.ScrollH(newStart - m_waveform.GetViewStart());
+    m_waveform.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
 
@@ -1364,6 +1394,57 @@ void EditView::OnMouseMove(int x, int y, WPARAM wParam)
       m_waveform.ScrollH(deltaTime);
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
+  }
+
+  // Update mouse cursor based on what's under pointer
+  {
+    HCURSOR cur = LoadCursor(nullptr, IDC_ARROW);
+
+    // Minimap resize edge
+    if (m_minimapVisible && y >= m_minimapRect.top - 3 && y < m_minimapRect.top + 3) {
+      cur = LoadCursor(nullptr, IDC_SIZENS);
+    }
+    // Splitter
+    else if (m_spectralVisible && y >= m_splitterRect.top && y < m_splitterRect.bottom) {
+      cur = LoadCursor(nullptr, IDC_SIZENS);
+    }
+    // Fade handles
+    else if (m_waveform.HasItem() && y >= m_waveformRect.top && y < m_waveformRect.bottom) {
+      // Solo button
+      if (x >= m_soloBtnRect.left && x < m_soloBtnRect.right &&
+          y >= m_soloBtnRect.top && y < m_soloBtnRect.bottom) {
+        cur = LoadCursor(nullptr, IDC_HAND);
+      }
+      // Channel buttons (dB scale area, stereo only)
+      else if (m_waveform.GetNumChannels() > 1 &&
+               x >= m_waveformRect.right - DB_SCALE_WIDTH) {
+        cur = LoadCursor(nullptr, IDC_HAND);
+      }
+      // Gain panel
+      else if (m_gainPanel.IsVisible() && m_gainPanel.HitTest(x, y, m_waveformRect)) {
+        cur = LoadCursor(nullptr, IDC_HAND);
+      }
+      // Fade handles (near item edges)
+      else if (m_fadeDragging != FADE_NONE) {
+        cur = LoadCursor(nullptr, IDC_SIZEWE);
+      }
+    }
+    // Markers in ruler
+    else if (y >= m_rulerRect.top && y < m_rulerRect.bottom && m_waveform.HasItem()) {
+      if (m_markers.HitTestMarker(x, m_waveform) >= 0) {
+        cur = LoadCursor(nullptr, IDC_SIZEWE);
+      }
+    }
+    // Minimap click area
+    else if (m_minimapVisible && y >= m_minimapRect.top && y < m_minimapRect.bottom) {
+      cur = LoadCursor(nullptr, IDC_HAND);
+    }
+    // Scrollbar
+    else if (y >= m_scrollbarRect.top && y < m_scrollbarRect.bottom) {
+      cur = LoadCursor(nullptr, IDC_HAND);
+    }
+
+    SetCursor(cur);
   }
 
   m_lastMouseX = x;
@@ -1577,16 +1658,10 @@ void EditView::OnRightClick(int x, int y)
   MenuAppendSeparator(viewMenu);
   MenuAppend(viewMenu, MF_STRING, CM_TOGGLE_SPECTRAL,
              m_spectralVisible ? "Spectral View  \xE2\x9C\x93" : "Spectral View");
-  {
-    UINT snapFlags = MF_STRING;
-    if (m_waveform.GetSnapToZero()) snapFlags |= MF_CHECKED;
-    MenuAppend(viewMenu, snapFlags, CM_SNAP_ZERO, "Snap to Zero-Crossing");
-  }
-  {
-    UINT mmFlags = MF_STRING;
-    if (m_minimapVisible) mmFlags |= MF_CHECKED;
-    MenuAppend(viewMenu, mmFlags, CM_MINIMAP, "Minimap");
-  }
+  MenuAppend(viewMenu, MF_STRING, CM_SNAP_ZERO,
+             m_waveform.GetSnapToZero() ? "Snap to Zero-Crossing  \xE2\x9C\x93" : "Snap to Zero-Crossing");
+  MenuAppend(viewMenu, MF_STRING, CM_MINIMAP,
+             m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
 
   HMENU supportMenu = CreatePopupMenu();
   MenuAppend(supportMenu, MF_STRING, CM_SUPPORT_KOFI, "Ko-fi");
@@ -1699,6 +1774,7 @@ void EditView::OnContextMenuCommand(int id)
       break;
     case CM_MINIMAP:
       m_minimapVisible = !m_minimapVisible;
+      DBG("[EditView] Minimap toggled: visible=%d\n", m_minimapVisible);
       if (g_SetExtState)
         g_SetExtState("EditView", "minimap", m_minimapVisible ? "1" : "0", true);
       m_minimap.Invalidate();
