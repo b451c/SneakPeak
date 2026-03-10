@@ -14,6 +14,32 @@
 #include <vector>
 #include <string>
 
+// Standalone file state — preserved when switching tabs
+struct StandaloneFileState {
+  std::string filePath;
+  std::vector<double> audioData;
+  std::vector<std::vector<double>> undoStack;
+  int numChannels = 0;
+  int sampleRate = 44100;
+  int audioSampleCount = 0;
+  int bitsPerSample = 16;
+  int audioFormat = 1;
+  double itemDuration = 0.0;
+  double cursorTime = 0.0;
+  double viewStartTime = 0.0;
+  double viewDuration = 1.0;
+  WaveformSelection selection;
+  bool dirty = false;
+};
+
+// Tab hit-test cache for mode bar
+struct ModeBarTab {
+  RECT rect;
+  RECT closeRect;
+  int fileIdx;
+  bool isReaper;
+};
+
 // Audio clipboard for cut/copy/paste
 struct AudioClipboard {
   std::vector<double> samples;
@@ -74,6 +100,10 @@ public:
   void LoadSelectedItem();
   void OnTimer();
 
+  // Mode bar / standalone tab management
+  void SaveCurrentStandaloneState();
+  void AddStandaloneFile(const char* path);
+
   static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 private:
@@ -123,6 +153,7 @@ private:
   void UndoSave();
   void UndoRestore();
 
+  RECT m_modeBarRect = {};
   RECT m_toolbarRect = {};
   RECT m_rulerRect = {};
   RECT m_waveformRect = {};
@@ -169,6 +200,14 @@ private:
   bool m_wasPlaying = false;       // previous play state for edge detection
   bool m_autoStopped = false;      // true after auto-stop, prevents re-trigger loop
   int m_playGraceTicks = 0;        // skip auto-stop for N ticks after play start
+
+  // Mode bar
+  void DrawModeBar(HDC hdc);
+  void RestoreStandaloneState(int idx);
+  void OnModeBarCloseTab(int idx);
+  std::vector<StandaloneFileState> m_standaloneFiles;
+  int m_activeFileIdx = -1;
+  std::vector<ModeBarTab> m_modeBarTabs;
 
   // Standalone file mode (drag & drop from disk)
   void LoadStandaloneFile(const char* path);

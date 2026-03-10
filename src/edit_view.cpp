@@ -601,11 +601,14 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_DROPFILES: {
       DBG("[SneakPeak] WM_DROPFILES received\n");
       HDROP hDrop = (HDROP)wParam;
-      char path[2048] = {};
-      DragQueryFile(hDrop, 0, path, sizeof(path));
+      int n = DragQueryFile(hDrop, 0xFFFFFFFF, nullptr, 0);
+      for (int i = 0; i < n && i < MAX_STANDALONE_FILES; i++) {
+        char path[2048] = {};
+        DragQueryFile(hDrop, i, path, sizeof(path));
+        DBG("[SneakPeak] Drop file[%d]: %s\n", i, path);
+        if (path[0]) AddStandaloneFile(path);
+      }
       DragFinish(hDrop);
-      DBG("[SneakPeak] Drop file: %s\n", path);
-      if (path[0]) LoadStandaloneFile(path);
       return 0;
     }
 
@@ -627,13 +630,14 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 void SneakPeak::RecalcLayout(int w, int h)
 {
   m_toolbarRect      = { 0, 0, w, TOOLBAR_HEIGHT };
-  m_rulerRect        = { 0, TOOLBAR_HEIGHT, w, TOOLBAR_HEIGHT + RULER_HEIGHT };
+  m_modeBarRect      = { 0, TOOLBAR_HEIGHT, w, TOOLBAR_HEIGHT + MODE_BAR_HEIGHT };
+  m_rulerRect        = { 0, TOOLBAR_HEIGHT + MODE_BAR_HEIGHT, w, TOOLBAR_HEIGHT + MODE_BAR_HEIGHT + RULER_HEIGHT };
   m_bottomPanelRect  = { 0, h - BOTTOM_PANEL_HEIGHT, w, h };
   int minimapH = m_minimapVisible ? m_minimapHeight : 0;
   m_scrollbarRect    = { 0, h - BOTTOM_PANEL_HEIGHT - SCROLLBAR_HEIGHT, w, h - BOTTOM_PANEL_HEIGHT };
   m_minimapRect      = { 0, m_scrollbarRect.top - minimapH, w, m_scrollbarRect.top };
 
-  int contentTop = TOOLBAR_HEIGHT + RULER_HEIGHT;
+  int contentTop = TOOLBAR_HEIGHT + MODE_BAR_HEIGHT + RULER_HEIGHT;
   int contentBot = m_minimapRect.top;
   int contentH = contentBot - contentTop;
 
@@ -682,6 +686,7 @@ void SneakPeak::OnPaint(HDC hdc)
 {
   if (!hdc) return;
 
+  DrawModeBar(hdc);
   DrawRuler(hdc);
   m_waveform.Paint(hdc);
   if (m_markers.m_showMarkers) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
@@ -714,6 +719,242 @@ void SneakPeak::DrawSplitter(HDC hdc)
     FillRect(hdc, &d, dot);
   }
   DeleteObject(dot);
+}
+
+// Helper: extract filename from path
+static const char* FileNameFromPath(const char* path)
+{
+  const char* slash = strrchr(path, '/');
+  if (!slash) slash = strrchr(path, '\\');
+  return slash ? slash + 1 : path;
+}
+
+void SneakPeak::DrawModeBar(HDC hdc)
+{
+  int w = m_modeBarRect.right - m_modeBarRect.left;
+  int h = m_modeBarRect.bottom - m_modeBarRect.top;
+  if (w <= 0 || h <= 0) return;
+
+  // Background
+  HBRUSH bgBrush = CreateSolidBrush(g_theme.modeBarBg);
+  FillRect(hdc, &m_modeBarRect, bgBrush);
+  DeleteObject(bgBrush);
+
+  // Bottom border
+  HPEN borderPen = CreatePen(PS_SOLID, 1, g_theme.border);
+  HPEN oldPen = (HPEN)SelectObject(hdc, borderPen);
+  MoveToEx(hdc, m_modeBarRect.left, m_modeBarRect.bottom - 1, nullptr);
+  LineTo(hdc, m_modeBarRect.right, m_modeBarRect.bottom - 1);
+  SelectObject(hdc, oldPen);
+  DeleteObject(borderPen);
+
+  SetBkMode(hdc, TRANSPARENT);
+  HFONT font = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                          DEFAULT_CHARSET, 0, 0, DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
+  HFONT oldFont = (HFONT)SelectObject(hdc, font);
+
+  m_modeBarTabs.clear();
+  int xPos = 6;
+  int yMid = m_modeBarRect.top + h / 2;
+
+  bool isStandalone = m_waveform.IsStandaloneMode() || !m_standaloneFiles.empty();
+  bool isReaper = m_waveform.HasItem() && !m_waveform.IsStandaloneMode();
+  bool isEmpty = !m_waveform.HasItem() && m_standaloneFiles.empty();
+
+  if (isEmpty) {
+    // Empty state
+    SetTextColor(hdc, g_theme.emptyText);
+    RECT textR = { xPos, m_modeBarRect.top, m_modeBarRect.right - 4, m_modeBarRect.bottom };
+    DrawText(hdc, "SneakPeak - Drop audio file or select item", -1, &textR,
+             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  } else {
+    // Mode indicator
+    COLORREF accent = isStandalone && !isReaper ? g_theme.modeBarStandaloneAccent : g_theme.modeBarReaperAccent;
+    const char* modeLabel = isStandalone && !isReaper ? "STANDALONE" : "REAPER";
+
+    // Draw indicator dot/diamond
+    HBRUSH accentBrush = CreateSolidBrush(accent);
+    if (isStandalone && !isReaper) {
+      // Orange filled circle (small rounded rect)
+      RECT dot = { xPos, yMid - 3, xPos + 7, yMid + 4 };
+      FillRect(hdc, &dot, accentBrush);
+    } else {
+      // Blue diamond — draw as small rotated square using lines
+      int cx = xPos + 3, cy = yMid;
+      POINT diamond[4] = { {cx, cy-4}, {cx+4, cy}, {cx, cy+4}, {cx-4, cy} };
+      HPEN acPen = CreatePen(PS_SOLID, 1, accent);
+      HPEN prevPen = (HPEN)SelectObject(hdc, acPen);
+      HBRUSH prevBr = (HBRUSH)SelectObject(hdc, accentBrush);
+      Polygon(hdc, diamond, 4);
+      SelectObject(hdc, prevPen);
+      SelectObject(hdc, prevBr);
+      DeleteObject(acPen);
+    }
+    DeleteObject(accentBrush);
+    xPos += 12;
+
+    // Mode label
+    SetTextColor(hdc, accent);
+    RECT labelR = { xPos, m_modeBarRect.top, xPos + 80, m_modeBarRect.bottom };
+    DrawText(hdc, modeLabel, -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    RECT labelMeasure = { 0, 0, 200, 20 };
+    DrawText(hdc, modeLabel, -1, &labelMeasure, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+    xPos += (labelMeasure.right - labelMeasure.left) + 8;
+
+    // Separator
+    HPEN sepPen = CreatePen(PS_SOLID, 1, g_theme.border);
+    HPEN sPrev = (HPEN)SelectObject(hdc, sepPen);
+    MoveToEx(hdc, xPos, m_modeBarRect.top + 3, nullptr);
+    LineTo(hdc, xPos, m_modeBarRect.bottom - 3);
+    SelectObject(hdc, sPrev);
+    DeleteObject(sepPen);
+    xPos += 8;
+
+    // Switch to normal weight for tabs
+    SelectObject(hdc, oldFont);
+    DeleteObject(font);
+    font = CreateFont(11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                      DEFAULT_CHARSET, 0, 0, DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
+    oldFont = (HFONT)SelectObject(hdc, font);
+
+    int tabAreaRight = m_modeBarRect.right - 8;
+
+    // REAPER pseudo-tab (if we have standalone files and we're in REAPER mode, or for switching back)
+    if (isReaper && !m_standaloneFiles.empty()) {
+      // Active REAPER tab
+      char reaperLabel[256] = "REAPER item";
+      if (m_waveform.HasItem()) {
+        const char* fp = m_waveform.GetStandaloneFilePath().c_str();
+        if (fp[0]) {
+          snprintf(reaperLabel, sizeof(reaperLabel), "%s", FileNameFromPath(fp));
+        } else {
+          // Get item name from waveform
+          char buf[256];
+          GetItemTitle(buf, sizeof(buf));
+          if (buf[0]) snprintf(reaperLabel, sizeof(reaperLabel), "%s", buf);
+        }
+      }
+      RECT tsR = { 0, 0, 300, 20 };
+      DrawText(hdc, reaperLabel, -1, &tsR, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+      int tw = std::min((int)(tsR.right - tsR.left) + 12, MODE_TAB_MAX_W);
+
+      RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
+      HBRUSH tabBg = CreateSolidBrush(g_theme.modeBarActiveTab);
+      FillRect(hdc, &tabR, tabBg);
+      DeleteObject(tabBg);
+
+      // Blue accent underline
+      HPEN ulPen = CreatePen(PS_SOLID, 2, g_theme.modeBarReaperAccent);
+      HPEN ulPrev = (HPEN)SelectObject(hdc, ulPen);
+      MoveToEx(hdc, tabR.left, tabR.bottom - 1, nullptr);
+      LineTo(hdc, tabR.right, tabR.bottom - 1);
+      SelectObject(hdc, ulPrev);
+      DeleteObject(ulPen);
+
+      SetTextColor(hdc, RGB(220, 220, 220));
+      RECT textR = { tabR.left + 6, tabR.top, tabR.right - 6, tabR.bottom };
+      DrawText(hdc, reaperLabel, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+
+      ModeBarTab mbt;
+      mbt.rect = tabR;
+      mbt.closeRect = {};
+      mbt.fileIdx = -1;
+      mbt.isReaper = true;
+      m_modeBarTabs.push_back(mbt);
+      xPos = tabR.right + 2;
+    }
+
+    // Standalone file tabs
+    for (int i = 0; i < (int)m_standaloneFiles.size() && xPos < tabAreaRight; i++) {
+      const auto& fs = m_standaloneFiles[i];
+      const char* fname = FileNameFromPath(fs.filePath.c_str());
+      bool isDirty = (m_waveform.IsStandaloneMode() && i == m_activeFileIdx) ? m_dirty : fs.dirty;
+      char label[160];
+      if (isDirty)
+        snprintf(label, sizeof(label), "*%s", fname);
+      else
+        snprintf(label, sizeof(label), "%s", fname);
+
+      RECT tsR2 = { 0, 0, 300, 20 };
+      DrawText(hdc, label, -1, &tsR2, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+      bool isActive = (m_waveform.IsStandaloneMode() && i == m_activeFileIdx);
+      int closeW = isActive ? MODE_TAB_CLOSE_SIZE : 0;
+      int tw = std::min((int)(tsR2.right - tsR2.left) + 12 + closeW, MODE_TAB_MAX_W);
+      if (xPos + tw > tabAreaRight) tw = tabAreaRight - xPos;
+      if (tw < 20) break;
+
+      RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
+      HBRUSH tabBg = CreateSolidBrush(isActive ? g_theme.modeBarActiveTab : g_theme.modeBarInactiveTab);
+      FillRect(hdc, &tabR, tabBg);
+      DeleteObject(tabBg);
+
+      if (isActive) {
+        // Orange accent underline for active standalone tab
+        HPEN ulPen = CreatePen(PS_SOLID, 2, g_theme.modeBarStandaloneAccent);
+        HPEN ulPrev = (HPEN)SelectObject(hdc, ulPen);
+        MoveToEx(hdc, tabR.left, tabR.bottom - 1, nullptr);
+        LineTo(hdc, tabR.right, tabR.bottom - 1);
+        SelectObject(hdc, ulPrev);
+        DeleteObject(ulPen);
+      }
+
+      SetTextColor(hdc, isActive ? RGB(220, 220, 220) : g_theme.modeBarText);
+      int textRight = tabR.right - 4 - closeW;
+      RECT textR = { tabR.left + 6, tabR.top, textRight, tabR.bottom };
+      DrawText(hdc, label, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+
+      // Close button on active tab
+      RECT closeR = {};
+      if (isActive) {
+        int csz = MODE_TAB_CLOSE_SIZE - 4;
+        int cx = tabR.right - MODE_TAB_CLOSE_SIZE + 1;
+        int cy = yMid - csz / 2;
+        closeR = { cx, cy, cx + csz, cy + csz };
+        SetTextColor(hdc, g_theme.modeBarText);
+        DrawText(hdc, "x", -1, &closeR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      }
+
+      ModeBarTab mbt;
+      mbt.rect = tabR;
+      mbt.closeRect = closeR;
+      mbt.fileIdx = i;
+      mbt.isReaper = false;
+      m_modeBarTabs.push_back(mbt);
+      xPos = tabR.right + 2;
+    }
+
+    // If in standalone mode with no REAPER item showing, but we had a REAPER item before,
+    // show a "REAPER" pseudo-tab for switching back
+    if (!isReaper && !m_standaloneFiles.empty()) {
+      // Check if there's a REAPER item available
+      if (g_CountSelectedMediaItems && g_CountSelectedMediaItems(nullptr) > 0) {
+        const char* rl = "REAPER";
+        RECT tsR3 = { 0, 0, 300, 20 };
+        DrawText(hdc, rl, -1, &tsR3, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+        int tw = std::min((int)(tsR3.right - tsR3.left) + 12, MODE_TAB_MAX_W);
+        if (xPos + tw <= tabAreaRight) {
+          RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
+          HBRUSH tabBg = CreateSolidBrush(g_theme.modeBarInactiveTab);
+          FillRect(hdc, &tabR, tabBg);
+          DeleteObject(tabBg);
+
+          SetTextColor(hdc, g_theme.modeBarReaperAccent);
+          RECT textR = { tabR.left + 6, tabR.top, tabR.right - 4, tabR.bottom };
+          DrawText(hdc, rl, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+          ModeBarTab mbt;
+          mbt.rect = tabR;
+          mbt.closeRect = {};
+          mbt.fileIdx = -1;
+          mbt.isReaper = true;
+          m_modeBarTabs.push_back(mbt);
+        }
+      }
+    }
+  }
+
+  SelectObject(hdc, oldFont);
+  DeleteObject(font);
 }
 
 void SneakPeak::DrawRuler(HDC hdc)
@@ -1147,6 +1388,34 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   if (y >= m_toolbarRect.top && y < m_toolbarRect.bottom) {
     int btn = m_toolbar.HitTest(x, y);
     if (btn >= 0) OnToolbarClick(btn);
+    return;
+  }
+
+  // Mode bar click
+  if (y >= m_modeBarRect.top && y < m_modeBarRect.bottom) {
+    for (const auto& tab : m_modeBarTabs) {
+      if (x >= tab.rect.left && x < tab.rect.right &&
+          y >= tab.rect.top && y < tab.rect.bottom) {
+        // Check close button first
+        if (tab.closeRect.right > tab.closeRect.left &&
+            x >= tab.closeRect.left && x < tab.closeRect.right &&
+            y >= tab.closeRect.top && y < tab.closeRect.bottom) {
+          OnModeBarCloseTab(tab.fileIdx);
+          return;
+        }
+        if (tab.isReaper) {
+          // Switch to REAPER mode
+          if (m_waveform.IsStandaloneMode()) SaveCurrentStandaloneState();
+          LoadSelectedItem();
+        } else {
+          // Switch to standalone tab
+          if (m_waveform.IsStandaloneMode() && tab.fileIdx == m_activeFileIdx) return;
+          if (m_waveform.IsStandaloneMode()) SaveCurrentStandaloneState();
+          RestoreStandaloneState(tab.fileIdx);
+        }
+        return;
+      }
+    }
     return;
   }
 
@@ -2187,6 +2456,110 @@ void SneakPeak::DoLoopSelection()
 
 // --- Standalone file mode ---
 
+void SneakPeak::SaveCurrentStandaloneState()
+{
+  if (m_activeFileIdx < 0 || m_activeFileIdx >= (int)m_standaloneFiles.size()) return;
+  if (!m_waveform.IsStandaloneMode()) return;
+
+  auto& fs = m_standaloneFiles[m_activeFileIdx];
+  fs.audioData = m_waveform.GetAudioData(); // copy
+  fs.undoStack = m_standaloneUndoStack;
+  fs.numChannels = m_waveform.GetNumChannels();
+  fs.sampleRate = m_waveform.GetSampleRate();
+  fs.audioSampleCount = m_waveform.GetAudioSampleCount();
+  fs.bitsPerSample = m_wavBitsPerSample;
+  fs.audioFormat = m_wavAudioFormat;
+  fs.itemDuration = m_waveform.GetItemDuration();
+  fs.cursorTime = m_waveform.GetCursorTime();
+  fs.viewStartTime = m_waveform.GetViewStart();
+  fs.viewDuration = m_waveform.GetViewDuration();
+  fs.selection = m_waveform.GetSelection();
+  fs.dirty = m_dirty;
+
+  DBG("[SneakPeak] Saved state for tab %d: %s\n", m_activeFileIdx, fs.filePath.c_str());
+}
+
+void SneakPeak::RestoreStandaloneState(int idx)
+{
+  if (idx < 0 || idx >= (int)m_standaloneFiles.size()) return;
+
+  StandaloneCleanupPreview();
+
+  auto& fs = m_standaloneFiles[idx];
+  // Move audio data into waveform (we'll copy it back on save)
+  std::vector<double> audioCopy = fs.audioData;
+  m_waveform.RestoreFromMemory(fs.filePath, std::move(audioCopy),
+                                fs.numChannels, fs.sampleRate, fs.audioSampleCount,
+                                fs.bitsPerSample, fs.audioFormat, fs.itemDuration);
+  m_waveform.SetViewStart(fs.viewStartTime);
+  m_waveform.SetViewDuration(fs.viewDuration);
+  m_waveform.SetCursorTime(fs.cursorTime);
+  m_waveform.SetSelection(fs.selection);
+  m_waveform.Invalidate();
+
+  m_standaloneUndoStack = fs.undoStack;
+  m_dirty = fs.dirty;
+  m_hasUndo = !m_standaloneUndoStack.empty();
+  m_wavBitsPerSample = fs.bitsPerSample;
+  m_wavAudioFormat = fs.audioFormat;
+  m_activeFileIdx = idx;
+
+  m_gainPanel.ShowStandalone();
+  m_spectral.ClearSpectrum();
+  m_spectral.Invalidate();
+  m_minimap.Invalidate();
+
+  if (m_hwnd) {
+    const char* fname = FileNameFromPath(fs.filePath.c_str());
+    char title[512];
+    snprintf(title, sizeof(title), "SneakPeak: %s%s", fs.dirty ? "*" : "", fname);
+    SetWindowText(m_hwnd, title);
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+
+  DBG("[SneakPeak] Restored state for tab %d: %s\n", idx, fs.filePath.c_str());
+}
+
+void SneakPeak::OnModeBarCloseTab(int idx)
+{
+  if (idx < 0 || idx >= (int)m_standaloneFiles.size()) return;
+
+  // Dirty check
+  if (m_standaloneFiles[idx].dirty) {
+    int result = MessageBox(m_hwnd, "This file has unsaved changes. Close anyway?",
+                            "SneakPeak", MB_YESNO | MB_ICONQUESTION);
+    if (result != IDYES) return;
+  }
+
+  bool wasActive = (m_waveform.IsStandaloneMode() && idx == m_activeFileIdx);
+  m_standaloneFiles.erase(m_standaloneFiles.begin() + idx);
+
+  // Adjust active index
+  if (wasActive) {
+    if (m_standaloneFiles.empty()) {
+      m_activeFileIdx = -1;
+      // Switch to REAPER mode or empty
+      if (g_CountSelectedMediaItems && g_CountSelectedMediaItems(nullptr) > 0) {
+        LoadSelectedItem();
+      } else {
+        m_waveform.ClearItem();
+        m_dirty = false;
+        if (m_hwnd) {
+          SetWindowText(m_hwnd, "SneakPeak");
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+        }
+      }
+    } else {
+      int newIdx = (idx < (int)m_standaloneFiles.size()) ? idx : (int)m_standaloneFiles.size() - 1;
+      RestoreStandaloneState(newIdx);
+    }
+  } else {
+    // Adjust index if the removed tab was before the active one
+    if (idx < m_activeFileIdx) m_activeFileIdx--;
+    if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+}
+
 void SneakPeak::LoadStandaloneFile(const char* path)
 {
   if (!path || !path[0]) return;
@@ -2227,6 +2600,66 @@ void SneakPeak::LoadStandaloneFile(const char* path)
   DBG("[SneakPeak] Loaded standalone file: %s\n", path);
 }
 
+void SneakPeak::AddStandaloneFile(const char* path)
+{
+  if (!path || !path[0]) return;
+
+  std::string spath(path);
+
+  // Check for duplicate — activate existing tab
+  for (int i = 0; i < (int)m_standaloneFiles.size(); i++) {
+    if (m_standaloneFiles[i].filePath == spath) {
+      if (m_waveform.IsStandaloneMode() && m_activeFileIdx == i) return; // already active
+      if (m_waveform.IsStandaloneMode()) SaveCurrentStandaloneState();
+      RestoreStandaloneState(i);
+      return;
+    }
+  }
+
+  // Save current standalone state before switching
+  if (m_waveform.IsStandaloneMode() && m_activeFileIdx >= 0) {
+    SaveCurrentStandaloneState();
+  }
+
+  // Evict if at max
+  if ((int)m_standaloneFiles.size() >= MAX_STANDALONE_FILES) {
+    // Find oldest non-dirty, or oldest if all dirty
+    int evictIdx = 0;
+    for (int i = 0; i < (int)m_standaloneFiles.size(); i++) {
+      if (!m_standaloneFiles[i].dirty) { evictIdx = i; break; }
+    }
+    m_standaloneFiles.erase(m_standaloneFiles.begin() + evictIdx);
+    if (m_activeFileIdx > evictIdx) m_activeFileIdx--;
+    else if (m_activeFileIdx == evictIdx) m_activeFileIdx = -1;
+  }
+
+  // Load the file via existing logic
+  LoadStandaloneFile(path);
+  if (!m_waveform.IsStandaloneMode()) return; // load failed
+
+  // Create state entry
+  StandaloneFileState fs;
+  fs.filePath = spath;
+  fs.audioData = m_waveform.GetAudioData();
+  fs.numChannels = m_waveform.GetNumChannels();
+  fs.sampleRate = m_waveform.GetSampleRate();
+  fs.audioSampleCount = m_waveform.GetAudioSampleCount();
+  fs.bitsPerSample = m_wavBitsPerSample;
+  fs.audioFormat = m_wavAudioFormat;
+  fs.itemDuration = m_waveform.GetItemDuration();
+  fs.cursorTime = 0.0;
+  fs.viewStartTime = m_waveform.GetViewStart();
+  fs.viewDuration = m_waveform.GetViewDuration();
+  fs.selection = m_waveform.GetSelection();
+  fs.dirty = false;
+
+  m_standaloneFiles.push_back(std::move(fs));
+  m_activeFileIdx = (int)m_standaloneFiles.size() - 1;
+
+  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  DBG("[SneakPeak] Added standalone tab %d: %s\n", m_activeFileIdx, path);
+}
+
 void SneakPeak::SaveStandaloneFile()
 {
   if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
@@ -2258,6 +2691,9 @@ void SneakPeak::SaveStandaloneFile()
                                 m_wavBitsPerSample, m_wavAudioFormat)) {
     DBG("[SneakPeak] Saved standalone file: %s\n", path.c_str());
     m_dirty = false;
+    // Update tab dirty state
+    if (m_activeFileIdx >= 0 && m_activeFileIdx < (int)m_standaloneFiles.size())
+      m_standaloneFiles[m_activeFileIdx].dirty = false;
     ShowToast("Saved!");
   } else {
     MessageBox(m_hwnd, "Failed to save file.", "SneakPeak", MB_OK | MB_ICONERROR);

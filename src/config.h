@@ -17,6 +17,12 @@ inline constexpr int MIN_WAVEFORM_HEIGHT = 80;
 inline constexpr int MIN_SPECTRAL_HEIGHT = 60;
 inline constexpr int MINIMAP_HEIGHT = 20;
 
+// Mode bar
+inline constexpr int MODE_BAR_HEIGHT = 20;
+inline constexpr int MAX_STANDALONE_FILES = 8;
+inline constexpr int MODE_TAB_MAX_W = 140;
+inline constexpr int MODE_TAB_CLOSE_SIZE = 14;
+
 // Waveform
 inline constexpr int WAVEFORM_PADDING_TOP = 4;
 inline constexpr int WAVEFORM_PADDING_BOTTOM = 4;

@@ -51,6 +51,14 @@ struct ThemeColors {
   // Clip indicators
   COLORREF clipIndicator;
 
+  // Mode bar
+  COLORREF modeBarBg;
+  COLORREF modeBarText;
+  COLORREF modeBarActiveTab;
+  COLORREF modeBarInactiveTab;
+  COLORREF modeBarStandaloneAccent;
+  COLORREF modeBarReaperAccent;
+
   // General
   COLORREF border;
   COLORREF emptyText;

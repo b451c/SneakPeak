@@ -320,6 +320,30 @@ bool WaveformView::LoadFromFile(const std::string& path)
   return true;
 }
 
+void WaveformView::RestoreFromMemory(const std::string& path, std::vector<double>&& audio,
+                                     int nch, int sr, int frames, int bps, int fmt, double dur)
+{
+  ClearItem();
+
+  m_standaloneMode = true;
+  m_standaloneFilePath = path;
+  m_standaloneBitsPerSample = bps;
+  m_standaloneAudioFormat = fmt;
+  m_sampleRate = sr;
+  m_numChannels = nch;
+  if (m_numChannels < 1) m_numChannels = 1;
+  if (m_numChannels > 2) m_numChannels = 2;
+  m_audioSampleCount = frames;
+  m_audioData = std::move(audio);
+  m_itemDuration = dur;
+  m_itemPosition = 0.0;
+  m_takeOffset = 0.0;
+  m_peaksValid = false;
+
+  DBG("[SneakPeak] RestoreFromMemory: %s (%d frames, %dch, %dHz, %.3fs)\n",
+      path.c_str(), frames, m_numChannels, m_sampleRate, m_itemDuration);
+}
+
 // Load ALL audio samples into memory — called once per item
 void WaveformView::LoadAudioData()
 {

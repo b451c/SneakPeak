@@ -141,7 +141,9 @@ static void pollSelectionTimer()
   // In standalone mode, only exit when user selects items in REAPER
   if (g_sneakPeak->IsStandaloneMode()) {
     if (count <= 0) return; // no items selected — stay in standalone
-    // Items selected — fall through to load them (exits standalone via ClearItem)
+    // Items selected — save standalone state before switching to REAPER
+    g_sneakPeak->SaveCurrentStandaloneState();
+    // Fall through to load them (exits standalone via ClearItem)
   }
 
   // Validate cached pointer — item may have been deleted

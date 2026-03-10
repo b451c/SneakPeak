@@ -124,6 +124,14 @@ void Theme_Refresh()
   // Clip indicators
   g_theme.clipIndicator = RGB(255, 50, 50);
 
+  // Mode bar
+  g_theme.modeBarBg               = RGB(20, 20, 20);
+  g_theme.modeBarText             = RGB(160, 160, 160);
+  g_theme.modeBarActiveTab        = RGB(55, 55, 55);
+  g_theme.modeBarInactiveTab      = RGB(35, 35, 35);
+  g_theme.modeBarStandaloneAccent = RGB(230, 160, 50);
+  g_theme.modeBarReaperAccent     = RGB(80, 160, 230);
+
   // General
   g_theme.border        = grid1;
   g_theme.emptyText     = RGB(100, 100, 100);

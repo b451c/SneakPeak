@@ -89,6 +89,13 @@ public:
   void Invalidate() { m_peaksValid = false; }
   void ReloadAudio();  // re-read samples from source (after normalize etc.)
 
+  // State setters (for tab restore)
+  void SetViewStart(double t) { m_viewStartTime = t; }
+  void SetViewDuration(double d) { m_viewDuration = d; }
+  void SetSelection(const WaveformSelection& sel) { m_selection = sel; }
+  void RestoreFromMemory(const std::string& path, std::vector<double>&& audio,
+                         int nch, int sr, int frames, int bps, int fmt, double dur);
+
   // Cursor
   void SetCursorTime(double time) { m_cursorTime = time; }
   double GetCursorTime() const { return m_cursorTime; }
