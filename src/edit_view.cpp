@@ -1139,19 +1139,36 @@ void SneakPeak::ToggleTrackSolo()
 {
   if (!g_GetMediaItem_Track || !g_GetSetMediaTrackInfo) return;
 
-  MediaItem* item = m_waveform.GetItem();
-  if (!item) return;
+  // Collect unique tracks from all segments (multi-item cross-track support)
+  std::vector<MediaTrack*> tracks;
+  const auto& segs = m_waveform.GetSegments();
+  if (segs.size() > 1) {
+    for (const auto& seg : segs) {
+      if (!seg.item) continue;
+      MediaTrack* tr = g_GetMediaItem_Track(seg.item);
+      if (!tr) continue;
+      bool found = false;
+      for (auto* t : tracks) { if (t == tr) { found = true; break; } }
+      if (!found) tracks.push_back(tr);
+    }
+  } else {
+    MediaItem* item = m_waveform.GetItem();
+    if (!item) return;
+    MediaTrack* tr = g_GetMediaItem_Track(item);
+    if (tr) tracks.push_back(tr);
+  }
+  if (tracks.empty()) return;
 
-  MediaTrack* track = g_GetMediaItem_Track(item);
-  if (!track) return;
+  // Check if any track is currently soloed — toggle all together
+  bool anySoloed = false;
+  for (auto* tr : tracks) {
+    int* pSolo = (int*)g_GetSetMediaTrackInfo(tr, "I_SOLO", nullptr);
+    if (pSolo && *pSolo != 0) { anySoloed = true; break; }
+  }
 
-  // Read current solo state
-  int* pSolo = (int*)g_GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
-  int solo = pSolo ? *pSolo : 0;
-
-  // Toggle: 0 = off, 2 = solo-in-place (SIP)
-  int newSolo = (solo == 0) ? 2 : 0;
-  g_GetSetMediaTrackInfo(track, "I_SOLO", &newSolo);
+  int newSolo = anySoloed ? 0 : 2;  // 2 = solo-in-place (SIP)
+  for (auto* tr : tracks)
+    g_GetSetMediaTrackInfo(tr, "I_SOLO", &newSolo);
 
   m_trackSoloed = (newSolo != 0);
   if (g_UpdateArrange) g_UpdateArrange();
@@ -1164,18 +1181,35 @@ void SneakPeak::UpdateSoloState()
     return;
   }
 
-  // Validate item pointer — may be dangling after split/snap/delete in arrange
-  MediaItem* item = m_waveform.GetItem();
-  if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)item, "MediaItem*")) {
-    m_trackSoloed = false;
-    return;
+  // Collect unique tracks from all segments
+  std::vector<MediaTrack*> tracks;
+  const auto& segs = m_waveform.GetSegments();
+  if (segs.size() > 1) {
+    for (const auto& seg : segs) {
+      if (!seg.item) continue;
+      if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)seg.item, "MediaItem*")) continue;
+      MediaTrack* tr = g_GetMediaItem_Track(seg.item);
+      if (!tr) continue;
+      bool found = false;
+      for (auto* t : tracks) { if (t == tr) { found = true; break; } }
+      if (!found) tracks.push_back(tr);
+    }
+  } else {
+    MediaItem* item = m_waveform.GetItem();
+    if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)item, "MediaItem*")) {
+      m_trackSoloed = false;
+      return;
+    }
+    MediaTrack* tr = g_GetMediaItem_Track(item);
+    if (tr) tracks.push_back(tr);
   }
 
-  MediaTrack* track = g_GetMediaItem_Track(item);
-  if (!track) { m_trackSoloed = false; return; }
-
-  int* pSolo = (int*)g_GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
-  m_trackSoloed = (pSolo && *pSolo != 0);
+  // Soloed if any of our tracks is soloed
+  m_trackSoloed = false;
+  for (auto* tr : tracks) {
+    int* pSolo = (int*)g_GetSetMediaTrackInfo(tr, "I_SOLO", nullptr);
+    if (pSolo && *pSolo != 0) { m_trackSoloed = true; break; }
+  }
 }
 
 void SneakPeak::DrawBottomPanel(HDC hdc)
