@@ -155,6 +155,10 @@ void SneakPeak::LoadSelectedItem()
       m_hasUndo = false;
       m_dirty = false;
       if (m_hwnd) {
+        RECT cr;
+        GetClientRect(m_hwnd, &cr);
+        RecalcLayout(cr.right, cr.bottom);
+        m_waveform.Invalidate();
         char title[512];
         snprintf(title, sizeof(title), "SneakPeak [%d items]", (int)items.size());
         SetWindowText(m_hwnd, title);
@@ -174,6 +178,12 @@ void SneakPeak::LoadSelectedItem()
   m_spectral.ClearSpectrum();
   m_spectral.Invalidate();
   m_minimap.Invalidate();
+  if (m_hwnd) {
+    RECT cr;
+    GetClientRect(m_hwnd, &cr);
+    RecalcLayout(cr.right, cr.bottom);
+    m_waveform.Invalidate();
+  }
 
   // Gain panel — always visible, follows current item
   m_gainPanel.Show(item);
@@ -322,8 +332,9 @@ void SneakPeak::OnTimer()
   }
 
   // Keep repainting while spectral is computing (progress bar update)
-  if (m_spectralVisible && m_spectral.IsLoading()) {
+  if (m_spectralVisible && (m_spectral.IsLoading() || (m_spectral.IsReady() && !m_spectralPainted))) {
     InvalidateRect(m_hwnd, &m_spectralRect, FALSE);
+    if (m_spectral.IsReady()) m_spectralPainted = true;
   }
 
   // Update fade/volume cache for paint (not in standalone mode)
@@ -2358,6 +2369,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       break;
     case CM_TOGGLE_SPECTRAL:
       m_spectralVisible = !m_spectralVisible;
+      m_spectralPainted = false;
       {
         RECT cr;
         GetClientRect(m_hwnd, &cr);

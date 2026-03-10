@@ -191,6 +191,7 @@ private:
   SpectralView m_spectral;
   MinimapView m_minimap;
   bool m_spectralVisible = false;
+  bool m_spectralPainted = false;  // triggers one repaint after FFT completes
   bool m_minimapVisible = false;
   int m_minimapHeight = MINIMAP_HEIGHT;
   bool m_minimapDragging = false;       // resize drag (top edge)
