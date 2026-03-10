@@ -86,7 +86,6 @@ private:
   void OnContextMenuCommand(int id);
 
   void DrawRuler(HDC hdc);
-  void DrawRegions(HDC hdc);
   void DrawBottomPanel(HDC hdc);
   void DrawScrollbar(HDC hdc);
   void DrawSplitter(HDC hdc);
@@ -150,11 +149,14 @@ private:
   int m_spectralFreqDragChTop = 0;
   int m_spectralFreqDragChH = 0;
 
-  // Internal undo (1 level)
-  std::vector<double> m_undoBuffer;
-  int m_undoSampleCount = 0;
-  double m_undoDuration = 0.0;
+  // Undo state
   bool m_hasUndo = false;
+
+  // Dirty indicator (destructive edit pending)
+  bool m_dirty = false;
+
+  // Cached file size (avoid stat() every paint)
+  double m_cachedFileSizeMB = 0.0;
 
   // WAV format info (preserved for writing back)
   int m_wavBitsPerSample = 16;

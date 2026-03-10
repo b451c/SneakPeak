@@ -460,17 +460,12 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   int centerY = yTop + height / 2;
   float halfH = (float)(height / 2) * m_verticalZoom;
 
-  // Apply item volume (D_VOL) and fades so waveform reflects changes
-  double itemVol = 1.0;
-  double fadeInLen = 0.0, fadeOutLen = 0.0;
-  int fadeInShape = 0, fadeOutShape = 0;
-  if (m_item && g_GetMediaItemInfo_Value) {
-    itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
-    fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
-    fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
-    fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
-    fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
-  }
+  // Apply item volume (D_VOL) and fades so waveform reflects changes (from cache)
+  double itemVol = m_fadeCache.itemVol;
+  double fadeInLen = m_fadeCache.fadeInLen;
+  double fadeOutLen = m_fadeCache.fadeOutLen;
+  int fadeInShape = m_fadeCache.fadeInShape;
+  int fadeOutShape = m_fadeCache.fadeOutShape;
 
   // Two pens: normal (green) and selected (dark green)
   // Dim channel if muted (inactive)
@@ -856,6 +851,19 @@ void WaveformView::DrawCursor(HDC hdc)
   }
 }
 
+void WaveformView::UpdateFadeCache()
+{
+  if (!m_item || !g_GetMediaItemInfo_Value) {
+    m_fadeCache = {};
+    return;
+  }
+  m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
+  m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
+  m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
+  m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
+  m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
+}
+
 void WaveformView::SetFadeDragInfo(int dragType, int shape)
 {
   m_fadeDragType = dragType;
@@ -903,14 +911,14 @@ bool WaveformView::ClickChannelButton(int x, int y)
 
 void WaveformView::DrawFadeBackground(HDC hdc)
 {
-  if (!m_item || !g_GetMediaItemInfo_Value) return;
+  if (!m_item) return;
 
-  double fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
-  double fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
+  double fadeInLen = m_fadeCache.fadeInLen;
+  double fadeOutLen = m_fadeCache.fadeOutLen;
   if (fadeInLen < 0.001 && fadeOutLen < 0.001) return;
 
-  int fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
-  int fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
+  int fadeInShape = m_fadeCache.fadeInShape;
+  int fadeOutShape = m_fadeCache.fadeOutShape;
 
   int waveL = m_rect.left;
   int waveR = m_rect.right - DB_SCALE_WIDTH;
@@ -931,9 +939,9 @@ void WaveformView::DrawFadeBackground(HDC hdc)
       // Curve Y position (gain=1 at top, gain=0 at bottom)
       int curveY = yBot - (int)(gain * yRange);
       // Fill from top down to the curve — the attenuated zone
-      for (int y = yTop; y < curveY; y++) {
-        MoveToEx(hdc, px, y, nullptr);
-        LineTo(hdc, px + 1, y);
+      if (curveY > yTop) {
+        MoveToEx(hdc, px, yTop, nullptr);
+        LineTo(hdc, px, curveY);
       }
     }
   }
@@ -945,9 +953,9 @@ void WaveformView::DrawFadeBackground(HDC hdc)
       double t = (x1 > x0) ? (double)(px - x0) / (double)(x1 - x0) : 0.0;
       double gain = ApplyFadeShape(1.0 - t, fadeOutShape);
       int curveY = yBot - (int)(gain * yRange);
-      for (int y = yTop; y < curveY; y++) {
-        MoveToEx(hdc, px, y, nullptr);
-        LineTo(hdc, px + 1, y);
+      if (curveY > yTop) {
+        MoveToEx(hdc, px, yTop, nullptr);
+        LineTo(hdc, px, curveY);
       }
     }
   }
@@ -958,14 +966,14 @@ void WaveformView::DrawFadeBackground(HDC hdc)
 
 void WaveformView::DrawFadeEnvelope(HDC hdc)
 {
-  if (!m_item || !g_GetMediaItemInfo_Value) return;
+  if (!m_item) return;
 
-  double fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
-  double fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
+  double fadeInLen = m_fadeCache.fadeInLen;
+  double fadeOutLen = m_fadeCache.fadeOutLen;
   if (fadeInLen < 0.001 && fadeOutLen < 0.001) return;
 
-  int fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
-  int fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
+  int fadeInShape = m_fadeCache.fadeInShape;
+  int fadeOutShape = m_fadeCache.fadeOutShape;
 
   int waveL = m_rect.left;
   int waveR = m_rect.right - DB_SCALE_WIDTH;

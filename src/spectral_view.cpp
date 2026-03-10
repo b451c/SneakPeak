@@ -7,20 +7,21 @@
 #include <cmath>
 #include <algorithm>
 #include <cstring>
+#include <mutex>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 static float s_hann[SpectralView::FFT_SIZE];
-static bool s_hannReady = false;
+static std::once_flag s_hannFlag;
 
 static void InitHann()
 {
-  if (s_hannReady) return;
-  for (int i = 0; i < SpectralView::FFT_SIZE; i++)
-    s_hann[i] = (float)(0.5 * (1.0 - cos(2.0 * M_PI * i / (SpectralView::FFT_SIZE - 1))));
-  s_hannReady = true;
+  std::call_once(s_hannFlag, []() {
+    for (int i = 0; i < SpectralView::FFT_SIZE; i++)
+      s_hann[i] = (float)(0.5 * (1.0 - cos(2.0 * M_PI * i / (SpectralView::FFT_SIZE - 1))));
+  });
 }
 
 static void DoFFT(float* re, float* im, int N)
@@ -73,7 +74,7 @@ void SpectralView::SetRect(int x, int y, int w, int h)
   RECT r = { x, y, x + w, y + h };
   if (memcmp(&r, &m_rect, sizeof(RECT)) != 0) {
     m_rect = r;
-    m_renderValid = false;
+    m_renderValid.store(false);
   }
 }
 
@@ -109,7 +110,7 @@ void SpectralView::ClearSpectrum()
   m_specValid.store(false);
   m_computing.store(false);
   m_progress.store(0.0f);
-  m_renderValid = false;
+  m_renderValid.store(false);
 }
 
 // Launch async spectrogram computation — returns immediately
@@ -194,7 +195,7 @@ void SpectralView::ComputeThreadFunc(std::vector<double> audio, int nch, int sr,
 
   m_specValid.store(true);
   m_computing.store(false);
-  m_renderValid = false;
+  m_renderValid.store(false);
 }
 
 // Render visible portion from pre-computed data (optimized)
@@ -207,7 +208,7 @@ void SpectralView::RenderView(const WaveformView& waveform)
   double viewStart = waveform.GetViewStart();
   double viewDur = waveform.GetViewDuration();
 
-  if (m_renderValid && m_cachedViewStart == viewStart &&
+  if (m_renderValid.load() && m_cachedViewStart == viewStart &&
       m_cachedViewDuration == viewDur &&
       m_cachedWidth == width && m_cachedHeight == height) return;
 
@@ -274,7 +275,7 @@ void SpectralView::RenderView(const WaveformView& waveform)
   }
 
 done:
-  m_renderValid = true;
+  m_renderValid.store(true);
   m_cachedViewStart = viewStart;
   m_cachedViewDuration = viewDur;
   m_cachedWidth = width;

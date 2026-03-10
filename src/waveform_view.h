@@ -68,6 +68,17 @@ public:
   // Fade drag feedback
   void SetFadeDragInfo(int dragType, int shape);
 
+  // Cache fade parameters (avoid per-paint API calls)
+  struct FadeCache {
+    double fadeInLen = 0.0;
+    double fadeOutLen = 0.0;
+    int fadeInShape = 0;
+    int fadeOutShape = 0;
+    double itemVol = 1.0;
+  };
+  void UpdateFadeCache();
+  FadeCache GetFadeCache() const { return m_fadeCache; }
+
   // Channel active state (mute buttons: both on by default)
   bool IsChannelActive(int ch) const { return m_channelActive[ch]; } // ch: 0=L, 1=R
   int GetChanMode() const; // returns I_CHANMODE value based on active state
@@ -138,6 +149,9 @@ private:
 
   // Channel active (mute buttons)
   bool m_channelActive[2] = { true, true };
+
+  // Cached fade/volume parameters
+  FadeCache m_fadeCache;
 
   // Geometry
   RECT m_rect = {0, 0, 0, 0};

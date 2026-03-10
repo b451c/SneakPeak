@@ -145,7 +145,12 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
 
   int bytesPerSample = bitsPerSample / 8;
   int bytesPerFrame = bytesPerSample * numChannels;
-  uint32_t dataSize = (uint32_t)numFrames * (uint32_t)bytesPerFrame;
+  int64_t dataSizeCheck = (int64_t)numFrames * (int64_t)bytesPerFrame;
+  if (dataSizeCheck > UINT32_MAX) {
+    DBG("[AudioEngine] WAV size overflow: %lld bytes\n", (long long)dataSizeCheck);
+    fclose(f); remove(tmpPath.c_str()); return false;
+  }
+  uint32_t dataSize = (uint32_t)dataSizeCheck;
 
   // RIFF header
   RiffHeader riff;

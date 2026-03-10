@@ -32,7 +32,7 @@ extern PCM_source* (*g_GetMediaItemTake_Source)(MediaItem_Take* take);
 extern double (*g_GetMediaItemInfo_Value)(MediaItem* item, const char* parmname);
 extern void* (*g_GetSetMediaItemTakeInfo)(MediaItem_Take* tk, const char* parmname, void* setNewValue);
 extern bool (*g_GetSetMediaItemTakeInfo_String)(MediaItem_Take* tk, const char* parmname, char* stringNeedBig, bool setNewValue);
-extern int (*g_GetMediaItemTake_Peaks)(MediaItem_Take* take, double peakrate, double starttime, int numchannels, int numsamplesperchannel, int want_extra_type, double* buf);
+
 
 // Audio accessor API
 extern AudioAccessor* (*g_CreateTakeAudioAccessor)(MediaItem_Take* take);
@@ -48,7 +48,6 @@ extern void (*g_OnPlayButton)();
 extern void (*g_OnStopButton)();
 
 // Markers
-extern int (*g_CountProjectMarkers)(ReaProject* proj, int* num_markersOut, int* num_regionsOut);
 extern int (*g_EnumProjectMarkers3)(ReaProject* proj, int idx, bool* isrgnOut, double* posOut, double* rgnendOut, const char** nameOut, int* markrgnindexnumberOut, int* colorOut);
 extern int (*g_AddProjectMarker2)(ReaProject* proj, bool isrgn, double pos, double rgnend, const char* name, int wantidx, int color);
 extern bool (*g_DeleteProjectMarkerByIndex)(ReaProject* proj, int markrgnidx);
@@ -57,12 +56,10 @@ extern bool (*g_SetProjectMarkerByIndex2)(ReaProject* proj, int markrgnidx, bool
 // Item manipulation (non-destructive)
 extern MediaItem* (*g_SplitMediaItem)(MediaItem* item, double position);
 extern bool (*g_DeleteTrackMediaItem)(MediaTrack* tr, MediaItem* it);
-extern MediaTrack* (*g_GetMediaItemTrack)(MediaItem* item);
 extern MediaTrack* (*g_GetMediaItem_Track)(MediaItem* item);
 
 // Source / destructive editing
 extern PCM_source* (*g_PCM_Source_CreateFromFile)(const char* filename);
-extern void (*g_PCM_Source_Destroy)(PCM_source* src);
 extern bool (*g_SetMediaItemTake_Source)(MediaItem_Take* take, PCM_source* source);
 extern void (*g_GetMediaSourceFileName)(PCM_source* source, char* filenamebuf, int filenamebuf_sz);
 extern bool (*g_SetMediaItemInfo_Value)(MediaItem* item, const char* parmname, double newvalue);
@@ -80,15 +77,6 @@ extern void (*g_GetSet_LoopTimeRange2)(ReaProject* proj, bool isSet, bool isLoop
 
 // UI / dialogs
 extern bool (*g_GetUserInputs)(const char* title, int num_inputs, const char* captions_csv, char* retvals_csv, int retvals_csv_sz);
-
-// LICE bitmap API
-class LICE_IBitmap;
-extern LICE_IBitmap* (*g_LICE_CreateBitmap)(int mode, int w, int h);
-extern void (*g_LICE__Destroy)(LICE_IBitmap* bm);
-extern void* (*g_LICE__GetBits)(LICE_IBitmap* bm);
-extern int (*g_LICE__GetRowSpan)(LICE_IBitmap* bm);
-extern bool (*g_LICE__resize)(LICE_IBitmap* bm, int w, int h);
-extern HDC (*g_LICE__GetDC)(LICE_IBitmap* bm);
 
 // Utility
 inline void safe_strncpy(char* dst, const char* src, size_t dst_size) {

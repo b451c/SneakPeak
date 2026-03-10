@@ -23,7 +23,7 @@
 #define REAPERAPI_WANT_GetMediaItemInfo_Value
 #define REAPERAPI_WANT_GetSetMediaItemTakeInfo
 #define REAPERAPI_WANT_GetSetMediaItemTakeInfo_String
-#define REAPERAPI_WANT_GetMediaItemTake_Peaks
+
 
 // Audio accessor
 #define REAPERAPI_WANT_CreateTakeAudioAccessor
@@ -39,7 +39,6 @@
 #define REAPERAPI_WANT_OnStopButton
 
 // Markers
-#define REAPERAPI_WANT_CountProjectMarkers
 #define REAPERAPI_WANT_EnumProjectMarkers3
 #define REAPERAPI_WANT_AddProjectMarker2
 #define REAPERAPI_WANT_DeleteProjectMarkerByIndex
@@ -47,7 +46,6 @@
 
 // Source / destructive editing
 #define REAPERAPI_WANT_PCM_Source_CreateFromFile
-#define REAPERAPI_WANT_PCM_Source_Destroy
 #define REAPERAPI_WANT_SetMediaItemTake_Source
 #define REAPERAPI_WANT_GetMediaSourceFileName
 #define REAPERAPI_WANT_SetMediaItemInfo_Value
@@ -63,7 +61,6 @@
 // Item manipulation
 #define REAPERAPI_WANT_SplitMediaItem
 #define REAPERAPI_WANT_DeleteTrackMediaItem
-#define REAPERAPI_WANT_GetMediaItemTrack
 #define REAPERAPI_WANT_GetMediaItem_Track
 
 // Time selection
@@ -75,13 +72,8 @@
 // Theme
 #define REAPERAPI_WANT_GetThemeColor
 
-// LICE (bitmap rendering)
-#define REAPERAPI_WANT_LICE_CreateBitmap
-#define REAPERAPI_WANT_LICE__Destroy
-#define REAPERAPI_WANT_LICE__GetBits
-#define REAPERAPI_WANT_LICE__GetRowSpan
-#define REAPERAPI_WANT_LICE__resize
-#define REAPERAPI_WANT_LICE__GetDC
+// Pointer validation
+#define REAPERAPI_WANT_ValidatePtr2
 
 #include "reaper_plugin.h"
 #include "reaper_plugin_functions.h"
@@ -106,9 +98,17 @@ static int translateAccelEditView(MSG* msg, accelerator_register_t* ctx)
   if (focus != ourHwnd && GetParent(focus) != ourHwnd) return 0;
 
   if (msg->message == WM_KEYDOWN) {
-    // Forward to our window's WM_KEYDOWN handler
-    SendMessage(ourHwnd, WM_KEYDOWN, msg->wParam, msg->lParam);
-    return 1; // eat the keystroke
+    bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    WPARAM k = msg->wParam;
+    bool handled = false;
+    if (k == VK_HOME || k == VK_END || k == VK_SPACE || k == VK_ESCAPE) handled = true;
+    else if (k == VK_DELETE) handled = true;
+    else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A')) handled = true;
+    else if (!ctrl && (k == 'M' || k == 'G')) handled = true;
+    if (handled) {
+      SendMessage(ourHwnd, WM_KEYDOWN, msg->wParam, msg->lParam);
+      return 1;
+    }
   }
 
   return 0;
@@ -123,6 +123,11 @@ static void pollSelectionTimer()
 
   int count = g_CountSelectedMediaItems(nullptr);
   MediaItem* item = (count > 0) ? g_GetSelectedMediaItem(nullptr, 0) : nullptr;
+
+  // Validate cached pointer — item may have been deleted
+  if (g_lastSelectedItem && ValidatePtr2 &&
+      !ValidatePtr2(nullptr, (void*)g_lastSelectedItem, "MediaItem*"))
+    g_lastSelectedItem = nullptr;
 
   if (item != g_lastSelectedItem) {
     g_lastSelectedItem = item;
@@ -229,7 +234,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_GetMediaItemInfo_Value = GetMediaItemInfo_Value;
   g_GetSetMediaItemTakeInfo = GetSetMediaItemTakeInfo;
   g_GetSetMediaItemTakeInfo_String = GetSetMediaItemTakeInfo_String;
-  g_GetMediaItemTake_Peaks = GetMediaItemTake_Peaks;
+
 
   g_CreateTakeAudioAccessor = CreateTakeAudioAccessor;
   g_DestroyAudioAccessor = DestroyAudioAccessor;
@@ -242,7 +247,6 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_OnPlayButton = OnPlayButton;
   g_OnStopButton = OnStopButton;
 
-  g_CountProjectMarkers = CountProjectMarkers;
   g_EnumProjectMarkers3 = EnumProjectMarkers3;
   g_AddProjectMarker2 = AddProjectMarker2;
   g_DeleteProjectMarkerByIndex = DeleteProjectMarkerByIndex;
@@ -250,11 +254,9 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
 
   g_SplitMediaItem = SplitMediaItem;
   g_DeleteTrackMediaItem = DeleteTrackMediaItem;
-  g_GetMediaItemTrack = GetMediaItemTrack;
   g_GetMediaItem_Track = GetMediaItem_Track;
 
   g_PCM_Source_CreateFromFile = PCM_Source_CreateFromFile;
-  g_PCM_Source_Destroy = PCM_Source_Destroy;
   g_SetMediaItemTake_Source = SetMediaItemTake_Source;
   g_GetMediaSourceFileName = GetMediaSourceFileName;
   g_SetMediaItemInfo_Value = SetMediaItemInfo_Value;
@@ -268,14 +270,6 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_GetSet_LoopTimeRange2 = GetSet_LoopTimeRange2;
 
   g_GetUserInputs = GetUserInputs;
-
-  // LICE
-  g_LICE_CreateBitmap = LICE_CreateBitmap;
-  g_LICE__Destroy = LICE__Destroy;
-  g_LICE__GetBits = LICE__GetBits;
-  g_LICE__GetRowSpan = LICE__GetRowSpan;
-  g_LICE__resize = LICE__resize;
-  g_LICE__GetDC = LICE__GetDC;
 
   // Theme colors
   Theme_SetGetThemeColor((void*)GetThemeColor);

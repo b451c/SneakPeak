@@ -106,7 +106,8 @@ void EditView::LoadSelectedItem()
   // Gain panel — always visible, follows current item
   m_gainPanel.Show(item);
 
-  // Read WAV format info for write-back
+  // Read WAV format info for write-back + cache file size
+  m_cachedFileSizeMB = 0.0;
   MediaItem_Take* take = m_waveform.GetTake();
   if (take) {
     std::string path = AudioEngine::GetSourceFilePath(take);
@@ -116,10 +117,14 @@ void EditView::LoadSelectedItem()
         m_wavBitsPerSample = info.bitsPerSample;
         m_wavAudioFormat = info.audioFormat;
       }
+      struct stat st;
+      if (stat(path.c_str(), &st) == 0)
+        m_cachedFileSizeMB = static_cast<double>(st.st_size) / (1024.0 * 1024.0);
     }
   }
 
   m_hasUndo = false;
+  m_dirty = false;
   m_lastChanMode = 0;
   if (g_GetSetMediaItemTakeInfo && m_waveform.GetTake()) {
     int* pCM = (int*)g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "I_CHANMODE", nullptr);
@@ -180,6 +185,9 @@ void EditView::OnTimer()
     InvalidateRect(m_hwnd, &m_spectralRect, FALSE);
   }
 
+  // Update fade/volume cache for paint
+  if (m_waveform.HasItem()) m_waveform.UpdateFadeCache();
+
   if (m_waveform.HasItem() && g_GetMediaItemInfo_Value) {
     // Refresh item position/duration in case item was moved on timeline
     double pos = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_POSITION");
@@ -238,19 +246,20 @@ void EditView::OnTimer()
 
 void EditView::GetItemTitle(char* buf, int bufSize)
 {
+  const char* prefix = m_dirty ? "* " : "";
   if (!m_waveform.HasItem()) {
-    snprintf(buf, bufSize, "EditView");
+    snprintf(buf, bufSize, "%sEditView", prefix);
     return;
   }
   MediaItem_Take* take = g_GetActiveTake ? g_GetActiveTake(m_waveform.GetItem()) : nullptr;
   if (take && g_GetSetMediaItemTakeInfo_String) {
     char nameBuf[256] = {};
     if (g_GetSetMediaItemTakeInfo_String(take, "P_NAME", nameBuf, false)) {
-      snprintf(buf, bufSize, "EditView: %s", nameBuf);
+      snprintf(buf, bufSize, "%sEditView: %s", prefix, nameBuf);
       return;
     }
   }
-  snprintf(buf, bufSize, "EditView");
+  snprintf(buf, bufSize, "%sEditView", prefix);
 }
 
 // --- Dialog Procedure ---
@@ -512,6 +521,11 @@ void EditView::DrawRuler(HDC hdc)
   SetBkMode(hdc, TRANSPARENT);
   SetTextColor(hdc, g_theme.rulerText);
 
+  HFONT rulerFont = CreateFont(11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
+  HFONT oldFont = (HFONT)SelectObject(hdc, rulerFont);
+
   HPEN tickPen = CreatePen(PS_SOLID, 1, g_theme.rulerTick);
   HPEN minorPen = CreatePen(PS_SOLID, 1, g_theme.rulerTickMinor);
 
@@ -519,6 +533,7 @@ void EditView::DrawRuler(HDC hdc)
   int y = m_rulerRect.top;
 
   for (double t = firstTick; t < viewStart + viewDur; t += tickInterval) {
+    if (t < 0) continue;
     int tx = m_waveform.TimeToX(t);
     if (tx < m_rulerRect.left || tx >= m_rulerRect.right) continue;
 
@@ -564,6 +579,8 @@ void EditView::DrawRuler(HDC hdc)
 
   DeleteObject(tickPen);
   DeleteObject(minorPen);
+  SelectObject(hdc, oldFont);
+  DeleteObject(rulerFont);
 }
 
 void EditView::DrawScrollbar(HDC hdc)
@@ -685,18 +702,7 @@ void EditView::DrawBottomPanel(HDC hdc)
   {
     RECT r = { infoLeft, panelTop + rowH * 2, infoRight, panelBot };
 
-    // File size
-    double fileSizeMB = 0.0;
-    if (m_waveform.GetTake() && g_GetMediaSourceFileName) {
-      char srcPath[1024] = {};
-      g_GetMediaSourceFileName(g_GetMediaItemTake_Source(m_waveform.GetTake()), srcPath, sizeof(srcPath));
-      if (srcPath[0]) {
-        struct stat st;
-        if (stat(srcPath, &st) == 0) {
-          fileSizeMB = static_cast<double>(st.st_size) / (1024.0 * 1024.0);
-        }
-      }
-    }
+    double fileSizeMB = m_cachedFileSizeMB;
 
     char tTotal[16];
     FormatTimeHMS(m_waveform.GetItemDuration(), tTotal, sizeof(tTotal));
@@ -870,7 +876,7 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
         double fadeOutLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEOUTLEN");
         int fiX = m_waveform.TimeToX(fadeInLen);
         int foX = m_waveform.TimeToX(m_waveform.GetItemDuration() - fadeOutLen);
-        if (fadeInLen >= 0.001 && abs(x - fiX) <= 8 && y < m_waveformRect.top + m_waveformRect.bottom / 2) {
+        if (fadeInLen >= 0.001 && abs(x - fiX) <= 8 && y < (m_waveformRect.top + m_waveformRect.bottom) / 2) {
           m_fadeDragging = FADE_IN;
           m_fadeDragStartY = y;
           m_fadeDragStartShape = (int)g_GetMediaItemInfo_Value(m_waveform.GetItem(), "C_FADEINSHAPE");
@@ -878,7 +884,7 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
         }
-        if (fadeOutLen >= 0.001 && abs(x - foX) <= 8 && y < m_waveformRect.top + m_waveformRect.bottom / 2) {
+        if (fadeOutLen >= 0.001 && abs(x - foX) <= 8 && y < (m_waveformRect.top + m_waveformRect.bottom) / 2) {
           m_fadeDragging = FADE_OUT;
           m_fadeDragStartY = y;
           m_fadeDragStartShape = (int)g_GetMediaItemInfo_Value(m_waveform.GetItem(), "C_FADEOUTSHAPE");
@@ -941,6 +947,7 @@ void EditView::OnMouseUp(int x, int y)
   if (m_scrollbarDragging) {
     m_scrollbarDragging = false;
     ReleaseCapture();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
   }
   if (m_markers.IsDragging()) {
     m_markers.EndDrag();
@@ -1246,12 +1253,19 @@ void EditView::OnRightClick(int x, int y)
   MenuAppendSubmenu(menu, markerMenu, "Markers");
   MenuAppendSubmenu(menu, viewMenu, "View");
   MenuAppendSeparator(menu);
-  MenuAppendSubmenu(menu, supportMenu, "Support EditView");
+  MenuAppendSubmenu(menu, supportMenu, "Support");
 
   POINT pt = { x, y };
   ClientToScreen(m_hwnd, &pt);
   TrackPopupMenu(menu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
 
+#ifndef _WIN32
+  DestroyMenu(editMenu);
+  DestroyMenu(procMenu);
+  DestroyMenu(markerMenu);
+  DestroyMenu(viewMenu);
+  DestroyMenu(supportMenu);
+#endif
   DestroyMenu(menu);
 }
 
@@ -1335,8 +1349,6 @@ void EditView::OnContextMenuCommand(int id)
       break;
     case CM_TOGGLE_SPECTRAL:
       m_spectralVisible = !m_spectralVisible;
-      if (m_spectralVisible)
-        m_spectral.EnableOnItem(); // tell REAPER to generate spectral peaks
       {
         RECT cr;
         GetClientRect(m_hwnd, &cr);
@@ -1349,21 +1361,21 @@ void EditView::OnContextMenuCommand(int id)
 #ifdef _WIN32
       ShellExecute(nullptr, "open", "https://ko-fi.com/quickmd", nullptr, nullptr, SW_SHOWNORMAL);
 #else
-      system("open 'https://ko-fi.com/quickmd'");
+      system("/usr/bin/open 'https://ko-fi.com/quickmd'");
 #endif
       break;
     case CM_SUPPORT_BMAC:
 #ifdef _WIN32
       ShellExecute(nullptr, "open", "https://buymeacoffee.com/bsroczynskh", nullptr, nullptr, SW_SHOWNORMAL);
 #else
-      system("open 'https://buymeacoffee.com/bsroczynskh'");
+      system("/usr/bin/open 'https://buymeacoffee.com/bsroczynskh'");
 #endif
       break;
     case CM_SUPPORT_PAYPAL:
 #ifdef _WIN32
       ShellExecute(nullptr, "open", "https://www.paypal.com/paypalme/b451c", nullptr, nullptr, SW_SHOWNORMAL);
 #else
-      system("open 'https://www.paypal.com/paypalme/b451c'");
+      system("/usr/bin/open 'https://www.paypal.com/paypalme/b451c'");
 #endif
       break;
   }
@@ -1424,15 +1436,12 @@ void EditView::GetSelectionSampleRange(int& startFrame, int& endFrame) const
 
 void EditView::UndoSave()
 {
-  m_undoBuffer = m_waveform.GetAudioData();
-  m_undoSampleCount = m_waveform.GetAudioSampleCount();
-  m_undoDuration = m_waveform.GetItemDuration();
   m_hasUndo = true;
 }
 
 void EditView::UndoRestore()
 {
-  // First try REAPER's native undo (works for non-destructive ops)
+  // Trigger REAPER's native undo
   // Action 40029 = Edit: Undo
   if (g_Main_OnCommand) {
     g_Main_OnCommand(40029, 0);
@@ -1440,27 +1449,7 @@ void EditView::UndoRestore()
     m_waveform.ClearItem();
     LoadSelectedItem();
     InvalidateRect(m_hwnd, nullptr, FALSE);
-    return;
   }
-
-  // Fallback: internal undo for destructive ops
-  if (!m_hasUndo || !m_waveform.HasItem()) return;
-
-  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-
-  m_waveform.GetAudioData() = m_undoBuffer;
-  m_waveform.SetAudioSampleCount(m_undoSampleCount);
-  m_waveform.SetItemDuration(m_undoDuration);
-  m_hasUndo = false;
-
-  WriteAndRefresh();
-
-  if (g_SetMediaItemInfo_Value)
-    g_SetMediaItemInfo_Value(m_waveform.GetItem(), "D_LENGTH", m_undoDuration);
-
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Undo", -1);
-
-  InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
 // --- Write back to disk and refresh ---
@@ -1472,6 +1461,20 @@ void EditView::WriteAndRefresh()
   std::string path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
   if (path.empty()) return;
 
+  // Block non-WAV destructive editing
+  {
+    std::string ext;
+    auto dotPos = path.find_last_of('.');
+    if (dotPos != std::string::npos)
+      ext = path.substr(dotPos + 1);
+    for (auto& c : ext) c = (char)tolower((unsigned char)c);
+    if (ext != "wav" && ext != "wave") {
+      MessageBox(m_hwnd, "Destructive editing only supports WAV files.\nConvert source to WAV first.",
+                 "EditView", MB_OK | MB_ICONWARNING);
+      return;
+    }
+  }
+
   const auto& data = m_waveform.GetAudioData();
   int nch = m_waveform.GetNumChannels();
   int sr = m_waveform.GetSampleRate();
@@ -1482,6 +1485,14 @@ void EditView::WriteAndRefresh()
   AudioEngine::RefreshItemSource(m_waveform.GetItem(), m_waveform.GetTake());
 
   m_waveform.Invalidate();
+  m_dirty = true;
+
+  // Update title bar with dirty indicator
+  if (m_hwnd) {
+    char title[512];
+    GetItemTitle(title, sizeof(title));
+    SetWindowText(m_hwnd, title);
+  }
 }
 
 // --- Sync EditView selection to REAPER time selection ---

@@ -28,7 +28,6 @@ public:
   bool IsReady() const { return m_specValid.load(); }
   float GetProgress() const { return m_progress.load(); }
 
-  void EnableOnItem() {}
 
   // FFT parameters
   static const int FFT_SIZE = 2048;
@@ -85,7 +84,7 @@ private:
   std::vector<unsigned char> m_pixels;
   int m_pixW = 0;
   int m_pixH = 0;
-  bool m_renderValid = false;
+  std::atomic<bool> m_renderValid{false};
   double m_cachedViewStart = 0.0;
   double m_cachedViewDuration = 0.0;
   int m_cachedWidth = 0;
