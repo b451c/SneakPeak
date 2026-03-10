@@ -1562,8 +1562,33 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         return;
       }
 
-      // Check fade handles first (8px hit zone around handle)
-      if (g_GetMediaItemInfo_Value) {
+      // Standalone fade handles — always visible at top corners
+      if (m_waveform.IsStandaloneMode() && y < m_waveformRect.top + 20) {
+        int waveL = m_waveformRect.left;
+        int waveR = m_waveformRect.right - DB_SCALE_WIDTH;
+        auto sf = m_waveform.GetStandaloneFade();
+        int fiX = (sf.fadeInLen >= 0.001) ? m_waveform.TimeToX(sf.fadeInLen) : waveL;
+        int foX = (sf.fadeOutLen >= 0.001) ? m_waveform.TimeToX(m_waveform.GetItemDuration() - sf.fadeOutLen) : waveR;
+        if (abs(x - fiX) <= 8) {
+          m_fadeDragging = FADE_IN;
+          m_standaloneFadeDrag = true;
+          m_fadeDragStartY = y;
+          m_fadeDragStartShape = sf.fadeInShape;
+          SetCapture(m_hwnd);
+          return;
+        }
+        if (abs(x - foX) <= 8) {
+          m_fadeDragging = FADE_OUT;
+          m_standaloneFadeDrag = true;
+          m_fadeDragStartY = y;
+          m_fadeDragStartShape = sf.fadeOutShape;
+          SetCapture(m_hwnd);
+          return;
+        }
+      }
+
+      // Check REAPER fade handles (8px hit zone around handle)
+      if (!m_waveform.IsStandaloneMode() && g_GetMediaItemInfo_Value) {
         double fadeInLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEINLEN");
         double fadeOutLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEOUTLEN");
         int fiX = m_waveform.TimeToX(fadeInLen);
@@ -1660,10 +1685,44 @@ void SneakPeak::OnMouseUp(int x, int y)
     return;
   }
   if (m_fadeDragging != FADE_NONE) {
+    FadeDragType wasType = m_fadeDragging;
+    bool wasStandalone = m_standaloneFadeDrag;
     m_fadeDragging = FADE_NONE;
+    m_standaloneFadeDrag = false;
     m_waveform.SetFadeDragInfo(0, 0);
     ReleaseCapture();
-    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Adjust fade", -1);
+
+    if (wasStandalone) {
+      // Bake standalone fade into audio data
+      auto sf = m_waveform.GetStandaloneFade();
+      auto& data = m_waveform.GetAudioData();
+      int nch = m_waveform.GetNumChannels();
+      int sr = m_waveform.GetSampleRate();
+      int totalFrames = m_waveform.GetAudioSampleCount();
+
+      if (wasType == FADE_IN && sf.fadeInLen >= 0.001) {
+        int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
+        if (fadeFrames > 0) {
+          StandaloneUndoSave();
+          AudioOps::FadeInShaped(data.data(), fadeFrames, nch, sf.fadeInShape);
+          m_dirty = true;
+          UpdateTitle();
+        }
+      } else if (wasType == FADE_OUT && sf.fadeOutLen >= 0.001) {
+        int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
+        if (fadeFrames > 0) {
+          StandaloneUndoSave();
+          int startFrame = totalFrames - fadeFrames;
+          AudioOps::FadeOutShaped(data.data() + (size_t)startFrame * nch, fadeFrames, nch, sf.fadeOutShape);
+          m_dirty = true;
+          UpdateTitle();
+        }
+      }
+      m_waveform.ClearStandaloneFade();
+      m_waveform.Invalidate();
+    } else {
+      if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Adjust fade", -1);
+    }
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
@@ -1801,34 +1860,47 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     m_toolbar.SetHover(-1);
   }
 
-  if (m_fadeDragging != FADE_NONE && m_waveform.HasItem() && g_SetMediaItemInfo_Value) {
+  if (m_fadeDragging != FADE_NONE && m_waveform.HasItem()) {
     double time = m_waveform.XToTime(x);
-    MediaItem* item = m_waveform.GetItem();
-
-    // Horizontal = fade length
-    if (m_fadeDragging == FADE_IN) {
-      double fadeLen = std::max(0.0, std::min(time, m_waveform.GetItemDuration()));
-      g_SetMediaItemInfo_Value(item, "D_FADEINLEN", fadeLen);
-    } else {
-      double fadeLen = std::max(0.0, m_waveform.GetItemDuration() - time);
-      fadeLen = std::min(fadeLen, m_waveform.GetItemDuration());
-      g_SetMediaItemInfo_Value(item, "D_FADEOUTLEN", fadeLen);
-    }
+    double dur = m_waveform.GetItemDuration();
 
     // Vertical = fade shape: down = higher number (more curve), up = lower (more linear)
-    // Dead zone of 6px before first shape change, then 12px per step
     int dy = y - m_fadeDragStartY;
     int shapeOffset = 0;
     if (dy > 6) shapeOffset = (dy - 6) / 12 + 1;
     else if (dy < -6) shapeOffset = (dy + 6) / 12 - 1;
     int newShape = std::max(0, std::min(6, m_fadeDragStartShape + shapeOffset));
-    const char* shapeParam = (m_fadeDragging == FADE_IN) ? "C_FADEINSHAPE" : "C_FADEOUTSHAPE";
-    g_SetMediaItemInfo_Value(item, shapeParam, (double)newShape);
 
-    // Pass drag info to waveform for label display
-    m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2, newShape);
+    if (m_standaloneFadeDrag) {
+      // Standalone: update preview fade state
+      auto sf = m_waveform.GetStandaloneFade();
+      if (m_fadeDragging == FADE_IN) {
+        sf.fadeInLen = std::max(0.0, std::min(time, dur));
+        sf.fadeInShape = newShape;
+      } else {
+        sf.fadeOutLen = std::max(0.0, dur - time);
+        sf.fadeOutLen = std::min(sf.fadeOutLen, dur);
+        sf.fadeOutShape = newShape;
+      }
+      m_waveform.SetStandaloneFade(sf);
+      m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2, newShape);
+    } else if (g_SetMediaItemInfo_Value) {
+      // REAPER: update item parameters
+      MediaItem* item = m_waveform.GetItem();
+      if (m_fadeDragging == FADE_IN) {
+        double fadeLen = std::max(0.0, std::min(time, dur));
+        g_SetMediaItemInfo_Value(item, "D_FADEINLEN", fadeLen);
+      } else {
+        double fadeLen = std::max(0.0, dur - time);
+        fadeLen = std::min(fadeLen, dur);
+        g_SetMediaItemInfo_Value(item, "D_FADEOUTLEN", fadeLen);
+      }
+      const char* shapeParam = (m_fadeDragging == FADE_IN) ? "C_FADEINSHAPE" : "C_FADEOUTSHAPE";
+      g_SetMediaItemInfo_Value(item, shapeParam, (double)newShape);
+      m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2, newShape);
+      if (g_UpdateArrange) g_UpdateArrange();
+    }
 
-    if (g_UpdateArrange) g_UpdateArrange();
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
@@ -2092,20 +2164,32 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppendSeparator(editMenu);
   MenuAppend(editMenu, hasItem ? MF_STRING : MF_GRAYED, CM_SELECT_ALL, "Select All\tCtrl+A");
 
-  // Process submenu
+  // Process submenu — organized by category
   HMENU procMenu = CreatePopupMenu();
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE, "Normalize");
-  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE_LUFS,
-             "Normalize to -14 LUFS");
-  MenuAppend(procMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_IN, "Fade In");
-  MenuAppend(procMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_OUT, "Fade Out");
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_REVERSE, "Reverse (destructive)");
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_UP, "Gain +3dB");
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_DOWN, "Gain -3dB");
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_DC_REMOVE, "DC Offset Remove (destructive)");
+
+  // Normalization
+  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE, "Normalize (Peak)");
+  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE_LUFS, "Normalize to -14 LUFS");
+  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE_LUFS_16, "Normalize to -16 LUFS");
   MenuAppendSeparator(procMenu);
+
+  // Gain
+  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_UP, "Gain +3 dB");
+  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_DOWN, "Gain -3 dB");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_PANEL, "Gain Control...\tG");
   MenuAppendSeparator(procMenu);
+
+  // Fades
+  MenuAppend(procMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_IN, "Fade In");
+  MenuAppend(procMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_OUT, "Fade Out");
+  MenuAppendSeparator(procMenu);
+
+  // Destructive
+  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_REVERSE, "Reverse");
+  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_DC_REMOVE, "DC Offset Remove");
+  MenuAppendSeparator(procMenu);
+
+  // Channel
   {
     // Mono downmix toggle
     bool isMono = false;
@@ -2188,7 +2272,8 @@ void SneakPeak::OnContextMenuCommand(int id)
       }
       break;
     case CM_NORMALIZE:      DoNormalize(); break;
-    case CM_NORMALIZE_LUFS: DoNormalizeLUFS(); break;
+    case CM_NORMALIZE_LUFS: DoNormalizeLUFS(-14.0); break;
+    case CM_NORMALIZE_LUFS_16: DoNormalizeLUFS(-16.0); break;
     case CM_FADE_IN:   DoFadeIn(); break;
     case CM_FADE_OUT:  DoFadeOut(); break;
     case CM_REVERSE:   DoReverse(); break;
@@ -2545,6 +2630,11 @@ void SneakPeak::OnModeBarCloseTab(int idx)
 {
   if (idx < 0 || idx >= (int)m_standaloneFiles.size()) return;
 
+  // Sync current dirty state to array before checking
+  bool isActiveTab = (m_waveform.IsStandaloneMode() && idx == m_activeFileIdx);
+  if (isActiveTab)
+    m_standaloneFiles[idx].dirty = m_dirty;
+
   // Dirty check
   if (m_standaloneFiles[idx].dirty) {
     int result = MessageBox(m_hwnd, "This file has unsaved changes. Close anyway?",
@@ -2565,8 +2655,8 @@ void SneakPeak::OnModeBarCloseTab(int idx)
       } else {
         m_waveform.ClearItem();
         m_dirty = false;
+        UpdateTitle();
         if (m_hwnd) {
-          SetWindowText(m_hwnd, "SneakPeak");
           InvalidateRect(m_hwnd, nullptr, FALSE);
         }
       }
@@ -3314,7 +3404,7 @@ void SneakPeak::DoDCRemove()
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void SneakPeak::DoNormalizeLUFS()
+void SneakPeak::DoNormalizeLUFS(double targetLufs)
 {
   if (!m_waveform.HasItem()) return;
   if (m_waveform.IsStandaloneMode()) return;
@@ -3326,8 +3416,8 @@ void SneakPeak::DoNormalizeLUFS()
   PCM_source* src = g_GetMediaItemTake_Source ? g_GetMediaItemTake_Source(take) : nullptr;
   if (!src) return;
 
-  // normalizeTo=0 (LUFS-I), target=-14.0 LUFS (streaming standard)
-  double gainDb = g_CalculateNormalization(src, 0, -14.0, 0.0, 0.0);
+  // normalizeTo=0 (LUFS-I)
+  double gainDb = g_CalculateNormalization(src, 0, targetLufs, 0.0, 0.0);
 
   double gainLin = pow(10.0, gainDb / 20.0);
   if (gainLin < 0.001 || gainLin > 100.0) return; // sanity
@@ -3341,7 +3431,9 @@ void SneakPeak::DoNormalizeLUFS()
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   g_SetMediaItemInfo_Value(item, "D_VOL", newVol);
   if (g_UpdateArrange) g_UpdateArrange();
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Normalize to -14 LUFS", -1);
+  char desc[64];
+  snprintf(desc, sizeof(desc), "SneakPeak: Normalize to %.0f LUFS", targetLufs);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }

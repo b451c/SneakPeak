@@ -84,6 +84,7 @@ enum ContextMenuID {
   CM_SUPPORT_BMAC,
   CM_SUPPORT_PAYPAL,
   CM_NORMALIZE_LUFS,
+  CM_NORMALIZE_LUFS_16,
 };
 
 class SneakPeak {
@@ -142,7 +143,7 @@ private:
   void DoReverse();
   void DoGain(double factor);
   void DoDCRemove();
-  void DoNormalizeLUFS();
+  void DoNormalizeLUFS(double targetLufs = -14.0);
 
   // Navigation
   void NavigateToMarker(bool forward);
@@ -175,11 +176,12 @@ private:
   int m_lastMouseX = 0;
   int m_lastMouseY = 0;
 
-  // Fade handle dragging
+  // Fade handle dragging (REAPER non-destructive + standalone destructive)
   enum FadeDragType { FADE_NONE, FADE_IN, FADE_OUT };
   FadeDragType m_fadeDragging = FADE_NONE;
   int m_fadeDragStartY = 0;
   int m_fadeDragStartShape = 0;
+  bool m_standaloneFadeDrag = false; // true when dragging standalone fade handle
 
   MarkerManager m_markers;
 

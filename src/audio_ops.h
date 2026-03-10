@@ -14,6 +14,12 @@ void FadeIn(double* samples, int numFrames, int numChannels);
 // Linear fade out over the given samples
 void FadeOut(double* samples, int numFrames, int numChannels);
 
+// Shaped fade in (shape: 0=linear, 1=fast start, 2=slow start, 3=fast steep, 4=slow steep, 5=S-curve, 6=S-curve steep)
+void FadeInShaped(double* samples, int numFrames, int numChannels, int shape);
+
+// Shaped fade out (same shape codes)
+void FadeOutShaped(double* samples, int numFrames, int numChannels, int shape);
+
 // Reverse samples in place
 void Reverse(double* samples, int numFrames, int numChannels);
 

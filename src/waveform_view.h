@@ -119,6 +119,18 @@ public:
   FadeCache GetFadeCache() const { return m_fadeCache; }
   void SetItemVol(double vol) { m_fadeCache.itemVol = vol; }
 
+  // Standalone fade preview (visual, applied during drag — baked on release)
+  struct StandaloneFade {
+    double fadeInLen = 0.0;
+    double fadeOutLen = 0.0;
+    int fadeInShape = 0;
+    int fadeOutShape = 0;
+  };
+  void SetStandaloneFade(const StandaloneFade& f) { m_standaloneFade = f; }
+  StandaloneFade GetStandaloneFade() const { return m_standaloneFade; }
+  void ClearStandaloneFade() { m_standaloneFade = {}; }
+  bool HasStandaloneFade() const { return m_standaloneFade.fadeInLen > 0.001 || m_standaloneFade.fadeOutLen > 0.001; }
+
   // Standalone gain preview (visual only, applied per-column in draw)
   void SetStandaloneGain(double gainLinear, double selStart, double selEnd) {
     m_standaloneGain = gainLinear;
@@ -161,6 +173,7 @@ private:
   void DrawDbScale(HDC hdc, int channel, int yTop, int height);
   void DrawFadeBackground(HDC hdc);
   void DrawFadeEnvelope(HDC hdc);
+  void DrawStandaloneFadeHandles(HDC hdc);
   void DrawClipIndicators(HDC hdc);
   void DrawItemBoundaries(HDC hdc);
   double SnapToZeroCrossing(double time) const;
@@ -221,6 +234,7 @@ private:
   std::string m_standaloneFilePath;
   int m_standaloneBitsPerSample = 16;
   int m_standaloneAudioFormat = 1;
+  StandaloneFade m_standaloneFade;     // fade preview during drag
   double m_standaloneGain = 1.0;       // visual gain preview
   double m_standaloneGainStart = -1.0; // selection start (-1 = full file)
   double m_standaloneGainEnd = -1.0;   // selection end

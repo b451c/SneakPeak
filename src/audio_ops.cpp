@@ -58,6 +58,45 @@ void FadeOut(double* samples, int numFrames, int numChannels)
   }
 }
 
+// Apply fade shape curve to linear 0..1 ratio
+static double ApplyFadeShapeOps(double t, int shape)
+{
+  t = std::max(0.0, std::min(1.0, t));
+  switch (shape) {
+    default:
+    case 0: return t;                                       // linear
+    case 1: return sqrt(t);                                 // fast start
+    case 2: return t * t;                                   // slow start
+    case 3: return pow(t, 0.25);                            // fast start steep
+    case 4: return t * t * t * t;                           // slow start steep
+    case 5: return 0.5 - 0.5 * cos(M_PI * t);              // S-curve
+    case 6: { double s = 0.5 - 0.5 * cos(M_PI * t);       // S-curve steep
+              return s * s * (3.0 - 2.0 * s); }
+  }
+}
+
+void FadeInShaped(double* samples, int numFrames, int numChannels, int shape)
+{
+  if (!samples || numFrames <= 0 || numChannels <= 0) return;
+  for (int f = 0; f < numFrames; f++) {
+    double t = (double)f / (double)numFrames;
+    double gain = ApplyFadeShapeOps(t, shape);
+    for (int ch = 0; ch < numChannels; ch++)
+      samples[(size_t)f * numChannels + ch] *= gain;
+  }
+}
+
+void FadeOutShaped(double* samples, int numFrames, int numChannels, int shape)
+{
+  if (!samples || numFrames <= 0 || numChannels <= 0) return;
+  for (int f = 0; f < numFrames; f++) {
+    double t = (double)f / (double)numFrames;
+    double gain = ApplyFadeShapeOps(1.0 - t, shape);
+    for (int ch = 0; ch < numChannels; ch++)
+      samples[(size_t)f * numChannels + ch] *= gain;
+  }
+}
+
 void Reverse(double* samples, int numFrames, int numChannels)
 {
   if (!samples || numFrames <= 0 || numChannels <= 0) return;

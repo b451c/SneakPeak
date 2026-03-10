@@ -800,6 +800,7 @@ void WaveformView::Paint(HDC hdc)
   DrawCursor(hdc);
   DrawClipIndicators(hdc);
   DrawFadeEnvelope(hdc);
+  DrawStandaloneFadeHandles(hdc);
 
   // Channel separator on top of everything
   if (m_numChannels == 2) {
@@ -1380,14 +1381,23 @@ bool WaveformView::ClickChannelButton(int x, int y)
 
 void WaveformView::DrawFadeBackground(HDC hdc)
 {
-  if (!m_item || m_standaloneMode) return;
+  double fadeInLen, fadeOutLen;
+  int fadeInShape, fadeOutShape;
 
-  double fadeInLen = m_fadeCache.fadeInLen;
-  double fadeOutLen = m_fadeCache.fadeOutLen;
+  if (m_standaloneMode) {
+    fadeInLen = m_standaloneFade.fadeInLen;
+    fadeOutLen = m_standaloneFade.fadeOutLen;
+    fadeInShape = m_standaloneFade.fadeInShape;
+    fadeOutShape = m_standaloneFade.fadeOutShape;
+  } else if (m_item) {
+    fadeInLen = m_fadeCache.fadeInLen;
+    fadeOutLen = m_fadeCache.fadeOutLen;
+    fadeInShape = m_fadeCache.fadeInShape;
+    fadeOutShape = m_fadeCache.fadeOutShape;
+  } else {
+    return;
+  }
   if (fadeInLen < 0.001 && fadeOutLen < 0.001) return;
-
-  int fadeInShape = m_fadeCache.fadeInShape;
-  int fadeOutShape = m_fadeCache.fadeOutShape;
 
   int waveL = m_rect.left;
   int waveR = m_rect.right - DB_SCALE_WIDTH;
@@ -1435,14 +1445,23 @@ void WaveformView::DrawFadeBackground(HDC hdc)
 
 void WaveformView::DrawFadeEnvelope(HDC hdc)
 {
-  if (!m_item || m_standaloneMode) return;
+  double fadeInLen, fadeOutLen;
+  int fadeInShape, fadeOutShape;
 
-  double fadeInLen = m_fadeCache.fadeInLen;
-  double fadeOutLen = m_fadeCache.fadeOutLen;
+  if (m_standaloneMode) {
+    fadeInLen = m_standaloneFade.fadeInLen;
+    fadeOutLen = m_standaloneFade.fadeOutLen;
+    fadeInShape = m_standaloneFade.fadeInShape;
+    fadeOutShape = m_standaloneFade.fadeOutShape;
+  } else if (m_item) {
+    fadeInLen = m_fadeCache.fadeInLen;
+    fadeOutLen = m_fadeCache.fadeOutLen;
+    fadeInShape = m_fadeCache.fadeInShape;
+    fadeOutShape = m_fadeCache.fadeOutShape;
+  } else {
+    return;
+  }
   if (fadeInLen < 0.001 && fadeOutLen < 0.001) return;
-
-  int fadeInShape = m_fadeCache.fadeInShape;
-  int fadeOutShape = m_fadeCache.fadeOutShape;
 
   int waveL = m_rect.left;
   int waveR = m_rect.right - DB_SCALE_WIDTH;
@@ -1530,4 +1549,32 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
     SetBkMode(hdc, TRANSPARENT);
     SelectObject(hdc, oldFont);
   }
+}
+
+void WaveformView::DrawStandaloneFadeHandles(HDC hdc)
+{
+  if (!m_standaloneMode) return;
+
+  int waveL = m_rect.left;
+  int waveR = m_rect.right - DB_SCALE_WIDTH;
+  int yTop = m_rect.top + 2;
+
+  COLORREF handleColor = RGB(255, 200, 50);
+  HBRUSH hb = CreateSolidBrush(handleColor);
+
+  // Fade-in handle: at top-left (or at fade-in end if active)
+  int fiX = waveL;
+  if (m_standaloneFade.fadeInLen >= 0.001)
+    fiX = std::min(waveR, TimeToX(m_standaloneFade.fadeInLen));
+  RECT fiHandle = { fiX - 5, yTop - 5, fiX + 5, yTop + 5 };
+  FillRect(hdc, &fiHandle, hb);
+
+  // Fade-out handle: at top-right (or at fade-out start if active)
+  int foX = waveR;
+  if (m_standaloneFade.fadeOutLen >= 0.001)
+    foX = std::max(waveL, TimeToX(m_itemDuration - m_standaloneFade.fadeOutLen));
+  RECT foHandle = { foX - 5, yTop - 5, foX + 5, yTop + 5 };
+  FillRect(hdc, &foHandle, hb);
+
+  DeleteObject(hb);
 }
