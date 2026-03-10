@@ -400,6 +400,9 @@ void WaveformView::Paint(HDC hdc)
   FillRect(hdc, &m_rect, bgBrush);
   DeleteObject(bgBrush);
 
+  // Tint fade regions with slightly darker background
+  DrawFadeBackground(hdc);
+
   bool hasSel = HasSelection();
   if (hasSel) {
     double selStart = std::min(m_selection.startTime, m_selection.endTime);
@@ -438,13 +441,11 @@ void WaveformView::Paint(HDC hdc)
 
   // Channel separator on top of everything
   if (m_numChannels == 2) {
-    int sepY = GetChannelTop(1) - 1;
-    HPEN sepPen = CreatePen(PS_SOLID, 1, g_theme.border);
-    HPEN oldPen = (HPEN)SelectObject(hdc, sepPen);
-    MoveToEx(hdc, m_rect.left, sepY, nullptr);
-    LineTo(hdc, m_rect.right, sepY);
-    SelectObject(hdc, oldPen);
-    DeleteObject(sepPen);
+    int sepY = GetChannelTop(1) - CHANNEL_SEPARATOR_HEIGHT;
+    RECT sepRect = { m_rect.left, sepY, m_rect.right, sepY + CHANNEL_SEPARATOR_HEIGHT };
+    HBRUSH sepBrush = CreateSolidBrush(RGB(60, 60, 60));
+    FillRect(hdc, &sepRect, sepBrush);
+    DeleteObject(sepBrush);
   }
 }
 
@@ -471,8 +472,12 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   }
 
   // Two pens: normal (green) and selected (dark green)
-  HPEN normalPen = CreatePen(PS_SOLID, 1, g_theme.waveform);
-  HPEN selPen = CreatePen(PS_SOLID, 1, g_theme.waveformSel);
+  // Dim channel if muted (inactive)
+  bool dimmed = (m_numChannels > 1 && !m_channelActive[channel]);
+  COLORREF normColor = dimmed ? RGB(40, 50, 40) : g_theme.waveform;
+  COLORREF selColor = dimmed ? RGB(50, 60, 50) : g_theme.waveformSel;
+  HPEN normalPen = CreatePen(PS_SOLID, 1, normColor);
+  HPEN selPen = CreatePen(PS_SOLID, 1, selColor);
 
   // Precompute selection pixel range
   bool hasSel = HasSelection();
@@ -667,17 +672,40 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
 
   DeleteObject(tickPen);
 
-  // Channel number in green
+  // Channel button — centered vertically, clickable for solo
   if (m_numChannels > 1) {
-    HFONT chFont = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+    char chLabel[4];
+    snprintf(chLabel, sizeof(chLabel), "%d", channel + 1);
+
+    int btnW = 18, btnH = 16;
+    int btnX = scaleLeft + (DB_SCALE_WIDTH - btnW) / 2;
+    int btnY = centerY - btnH / 2;
+    RECT btnRect = { btnX, btnY, btnX + btnW, btnY + btnH };
+
+    // Active = green (pressed), Inactive = gray (muted)
+    bool active = m_channelActive[channel];
+    HBRUSH btnBg = CreateSolidBrush(active ? RGB(0, 160, 60) : RGB(50, 50, 50));
+    FillRect(hdc, &btnRect, btnBg);
+    DeleteObject(btnBg);
+
+    // Border
+    HPEN btnBorder = CreatePen(PS_SOLID, 1, active ? RGB(0, 200, 80) : RGB(80, 80, 80));
+    HPEN prevPen = (HPEN)SelectObject(hdc, btnBorder);
+    MoveToEx(hdc, btnRect.left, btnRect.top, nullptr);
+    LineTo(hdc, btnRect.right - 1, btnRect.top);
+    LineTo(hdc, btnRect.right - 1, btnRect.bottom - 1);
+    LineTo(hdc, btnRect.left, btnRect.bottom - 1);
+    LineTo(hdc, btnRect.left, btnRect.top);
+    SelectObject(hdc, prevPen);
+    DeleteObject(btnBorder);
+
+    // Label
+    HFONT chFont = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
     HFONT prevFont = (HFONT)SelectObject(hdc, chFont);
-    char chLabel[4];
-    snprintf(chLabel, sizeof(chLabel), "%d", channel + 1);
-    SetTextColor(hdc, RGB(0, 200, 80));
-    RECT chRect = { scaleLeft, yTop + height - 18, m_rect.right - 3, yTop + height - 2 };
-    DrawText(hdc, chLabel, -1, &chRect, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SetTextColor(hdc, active ? RGB(255, 255, 255) : RGB(100, 100, 100));
+    DrawText(hdc, chLabel, -1, &btnRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, prevFont);
     DeleteObject(chFont);
   }
@@ -737,6 +765,106 @@ void WaveformView::DrawCursor(HDC hdc)
   }
 }
 
+void WaveformView::SetFadeDragInfo(int dragType, int shape)
+{
+  m_fadeDragType = dragType;
+  m_fadeDragShape = shape;
+}
+
+int WaveformView::GetChanMode() const
+{
+  if (m_numChannels < 2) return 0;
+  bool L = m_channelActive[0], R = m_channelActive[1];
+  if (L && R) return 0;   // stereo
+  if (L && !R) return 3;  // left only
+  if (!L && R) return 4;  // right only
+  return 0; // both off shouldn't happen
+}
+
+bool WaveformView::ClickChannelButton(int x, int y)
+{
+  if (m_numChannels < 2) return false;
+
+  int scaleLeft = m_rect.right - DB_SCALE_WIDTH;
+  if (x < scaleLeft || x > m_rect.right) return false;
+
+  int btnW = 18, btnH = 16;
+  int btnX = scaleLeft + (DB_SCALE_WIDTH - btnW) / 2;
+
+  for (int ch = 0; ch < m_numChannels; ch++) {
+    int chTop = GetChannelTop(ch);
+    int chH = GetChannelHeight();
+    int centerY = chTop + chH / 2;
+    int btnY = centerY - btnH / 2;
+
+    if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
+      // Toggle this channel — but don't allow both off
+      bool newState = !m_channelActive[ch];
+      int other = 1 - ch;
+      if (!newState && !m_channelActive[other])
+        return false; // would mute both — disallow
+      m_channelActive[ch] = newState;
+      return true;
+    }
+  }
+  return false;
+}
+
+void WaveformView::DrawFadeBackground(HDC hdc)
+{
+  if (!m_item || !g_GetMediaItemInfo_Value) return;
+
+  double fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
+  double fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
+  if (fadeInLen < 0.001 && fadeOutLen < 0.001) return;
+
+  int fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
+  int fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
+
+  int waveL = m_rect.left;
+  int waveR = m_rect.right - DB_SCALE_WIDTH;
+  int yTop = m_rect.top;
+  int yBot = m_rect.bottom;
+  int yRange = yBot - yTop;
+
+  // Tint only the area outside the fade curve (where gain < 1.0)
+  HPEN tintPen = CreatePen(PS_SOLID, 1, RGB(30, 25, 45));
+  HPEN oldPen = (HPEN)SelectObject(hdc, tintPen);
+
+  if (fadeInLen >= 0.001) {
+    int x0 = std::max(waveL, TimeToX(0.0));
+    int x1 = std::min(waveR, TimeToX(fadeInLen));
+    for (int px = x0; px <= x1; px++) {
+      double t = (x1 > x0) ? (double)(px - x0) / (double)(x1 - x0) : 1.0;
+      double gain = ApplyFadeShape(t, fadeInShape);
+      // Curve Y position (gain=1 at top, gain=0 at bottom)
+      int curveY = yBot - (int)(gain * yRange);
+      // Fill from top down to the curve — the attenuated zone
+      for (int y = yTop; y < curveY; y++) {
+        MoveToEx(hdc, px, y, nullptr);
+        LineTo(hdc, px + 1, y);
+      }
+    }
+  }
+  if (fadeOutLen >= 0.001) {
+    double foStart = m_itemDuration - fadeOutLen;
+    int x0 = std::max(waveL, TimeToX(foStart));
+    int x1 = std::min(waveR, TimeToX(m_itemDuration));
+    for (int px = x0; px <= x1; px++) {
+      double t = (x1 > x0) ? (double)(px - x0) / (double)(x1 - x0) : 0.0;
+      double gain = ApplyFadeShape(1.0 - t, fadeOutShape);
+      int curveY = yBot - (int)(gain * yRange);
+      for (int y = yTop; y < curveY; y++) {
+        MoveToEx(hdc, px, y, nullptr);
+        LineTo(hdc, px + 1, y);
+      }
+    }
+  }
+
+  SelectObject(hdc, oldPen);
+  DeleteObject(tintPen);
+}
+
 void WaveformView::DrawFadeEnvelope(HDC hdc)
 {
   if (!m_item || !g_GetMediaItemInfo_Value) return;
@@ -756,45 +884,10 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
   int yZero = m_rect.bottom - 2;        // gain = 0.0
   int yRange = yZero - yFull;
 
-  // Subtle tint following fade curve shape (area where gain < 1.0)
-  // Draw every-other-pixel dark dots in the "attenuated" region above/below the curve
-  HPEN dimPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
-  HPEN oldPen = (HPEN)SelectObject(hdc, dimPen);
-  if (fadeInLen >= 0.001) {
-    int x0 = std::max(waveL, TimeToX(0.0));
-    int x1 = std::min(waveR, TimeToX(fadeInLen));
-    for (int px = x0; px <= x1; px++) {
-      double t = (x1 > x0) ? (double)(px - x0) / (double)(x1 - x0) : 1.0;
-      double gain = ApplyFadeShape(t, fadeInShape);
-      int curveY = yZero - (int)(gain * yRange);
-      // Tint from top down to curve (the "cut" area)
-      for (int y = yFull; y < curveY; y += 3) {
-        MoveToEx(hdc, px, y, nullptr);
-        LineTo(hdc, px + 1, y);
-      }
-    }
-  }
-  if (fadeOutLen >= 0.001) {
-    double foStart = m_itemDuration - fadeOutLen;
-    int x0 = std::max(waveL, TimeToX(foStart));
-    int x1 = std::min(waveR, TimeToX(m_itemDuration));
-    for (int px = x0; px <= x1; px++) {
-      double t = (x1 > x0) ? (double)(px - x0) / (double)(x1 - x0) : 0.0;
-      double gain = ApplyFadeShape(1.0 - t, fadeOutShape);
-      int curveY = yZero - (int)(gain * yRange);
-      for (int y = yFull; y < curveY; y += 3) {
-        MoveToEx(hdc, px, y, nullptr);
-        LineTo(hdc, px + 1, y);
-      }
-    }
-  }
-  SelectObject(hdc, oldPen);
-  DeleteObject(dimPen);
-
   // Fade envelope curves
   COLORREF envColor = RGB(255, 200, 50);
   HPEN envPen = CreatePen(PS_SOLID, 2, envColor);
-  oldPen = (HPEN)SelectObject(hdc, envPen);
+  HPEN oldPen = (HPEN)SelectObject(hdc, envPen);
 
   // Fade In curve
   if (fadeInLen >= 0.001) {
@@ -838,4 +931,38 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
 
   SelectObject(hdc, oldPen);
   DeleteObject(envPen);
+
+  // Draw shape label during fade drag
+  if (m_fadeDragType != 0) {
+    static const char* shapeNames[] = {
+      "Linear", "Fast Start", "Slow Start",
+      "Fast Steep", "Slow Steep", "S-Curve", "S-Curve Steep"
+    };
+    int shapeIdx = std::max(0, std::min(6, m_fadeDragShape));
+    char label[64];
+    snprintf(label, sizeof(label), "%d: %s", shapeIdx, shapeNames[shapeIdx]);
+
+    // Position label near the relevant handle
+    int labelX;
+    if (m_fadeDragType == 1) { // fade in — label near right handle
+      labelX = std::min(waveR, TimeToX(fadeInLen)) + 8;
+    } else { // fade out — label near left handle
+      double foStart = m_itemDuration - fadeOutLen;
+      labelX = std::max(waveL, TimeToX(foStart)) - 100;
+    }
+    int labelY = yFull + 4;
+
+    // Draw label with semi-transparent bg
+    HFONT font = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                            ANSI_CHARSET, 0, 0, 0, 0, "Arial");
+    HFONT oldFont = (HFONT)SelectObject(hdc, font);
+    SetBkMode(hdc, OPAQUE);
+    SetBkColor(hdc, RGB(30, 30, 30));
+    SetTextColor(hdc, envColor);
+    RECT labelRect = { labelX, labelY, labelX + 150, labelY + 16 };
+    DrawText(hdc, label, -1, &labelRect, DT_LEFT | DT_SINGLELINE | DT_NOCLIP);
+    SetBkMode(hdc, TRANSPARENT);
+    SelectObject(hdc, oldFont);
+    DeleteObject(font);
+  }
 }

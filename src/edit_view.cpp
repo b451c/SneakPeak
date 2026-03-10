@@ -185,7 +185,9 @@ void EditView::OnTimer()
     }
 
     // Detect take channel mode change (e.g. mono downmix on multitrack)
-    if (g_GetSetMediaItemTakeInfo && m_waveform.GetTake()) {
+    // Skip reload when a channel is muted (we set I_CHANMODE ourselves)
+    bool bothActive = m_waveform.IsChannelActive(0) && m_waveform.IsChannelActive(1);
+    if (g_GetSetMediaItemTakeInfo && m_waveform.GetTake() && bothActive) {
       int* pChanMode = (int*)g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "I_CHANMODE", nullptr);
       int chanMode = pChanMode ? *pChanMode : 0;
       if (chanMode != m_lastChanMode) {
@@ -223,7 +225,8 @@ void EditView::OnTimer()
         endFrame = static_cast<int>(m_waveform.GetViewEnd() * sr);
       }
       double itemVol = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_VOL");
-      m_levels.Update(m_waveform.GetAudioData(), startFrame, endFrame, sr, nch, itemVol, playing);
+      const bool chActive[2] = { m_waveform.IsChannelActive(0), m_waveform.IsChannelActive(1) };
+      m_levels.Update(m_waveform.GetAudioData(), startFrame, endFrame, sr, nch, itemVol, playing, chActive);
     }
   }
 }
@@ -747,6 +750,18 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
 
   if (y >= m_waveformRect.top && y < m_waveformRect.bottom) {
     if (m_waveform.HasItem()) {
+      // Channel mute button — visual dimming + audio via I_CHANMODE
+      if (m_waveform.ClickChannelButton(x, y)) {
+        int chanMode = m_waveform.GetChanMode();
+        if (m_waveform.GetTake() && g_GetSetMediaItemTakeInfo) {
+          g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "I_CHANMODE", &chanMode);
+          m_lastChanMode = chanMode;
+          if (g_UpdateArrange) g_UpdateArrange();
+        }
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+        return;
+      }
+
       // Check fade handles first (8px hit zone around handle)
       if (g_GetMediaItemInfo_Value) {
         double fadeInLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEINLEN");
@@ -791,6 +806,7 @@ void EditView::OnMouseUp(int x, int y)
 {
   if (m_fadeDragging != FADE_NONE) {
     m_fadeDragging = FADE_NONE;
+    m_waveform.SetFadeDragInfo(0, 0);
     ReleaseCapture();
     if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Adjust fade", -1);
     InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -843,12 +859,18 @@ void EditView::OnMouseMove(int x, int y, WPARAM wParam)
       g_SetMediaItemInfo_Value(item, "D_FADEOUTLEN", fadeLen);
     }
 
-    // Vertical = fade shape (every 20px of vertical movement = 1 shape step)
+    // Vertical = fade shape: down = higher number (more curve), up = lower (more linear)
+    // Dead zone of 6px before first shape change, then 12px per step
     int dy = y - m_fadeDragStartY;
-    int shapeOffset = dy / 20;
+    int shapeOffset = 0;
+    if (dy > 6) shapeOffset = (dy - 6) / 12 + 1;
+    else if (dy < -6) shapeOffset = (dy + 6) / 12 - 1;
     int newShape = std::max(0, std::min(6, m_fadeDragStartShape + shapeOffset));
     const char* shapeParam = (m_fadeDragging == FADE_IN) ? "C_FADEINSHAPE" : "C_FADEOUTSHAPE";
     g_SetMediaItemInfo_Value(item, shapeParam, (double)newShape);
+
+    // Pass drag info to waveform for label display
+    m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2, newShape);
 
     if (g_UpdateArrange) g_UpdateArrange();
     InvalidateRect(m_hwnd, nullptr, FALSE);

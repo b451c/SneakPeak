@@ -174,39 +174,11 @@ void MarkerManager::EditMarkerDialog(int enumIdx)
   if (!g_EnumProjectMarkers3(nullptr, enumIdx, &isrgn, &pos, &rgnend, &name, &markrgnidx, &color))
     return;
 
-  if (g_GetUserInputs) {
-    // Use REAPER's built-in input dialog: "Name,Color (R,G,B)"
-    char retvals[512];
-    snprintf(retvals, sizeof(retvals), "%s,%d,%d,%d",
-             name ? name : "",
-             (color != 0) ? GetRValue(color & 0xFFFFFF) : 160,
-             (color != 0) ? GetGValue(color & 0xFFFFFF) : 160,
-             (color != 0) ? GetBValue(color & 0xFFFFFF) : 160);
-
-    const char* title = isrgn ? "Edit Region" : "Edit Marker";
-    if (g_GetUserInputs(title, 4, "Name,Red (0-255),Green (0-255),Blue (0-255)", retvals, sizeof(retvals))) {
-      // Parse comma-separated results
-      char newName[256] = {};
-      int r = 160, g = 160, b = 160;
-      char* p = retvals;
-      char* comma = strchr(p, ',');
-      if (comma) {
-        *comma = '\0';
-        safe_strncpy(newName, p, sizeof(newName));
-        p = comma + 1;
-        sscanf(p, "%d,%d,%d", &r, &g, &b);
-      } else {
-        safe_strncpy(newName, retvals, sizeof(newName));
-      }
-      r = std::max(0, std::min(255, r));
-      g = std::max(0, std::min(255, g));
-      b = std::max(0, std::min(255, b));
-      int newColor = RGB(r, g, b) | 0x1000000; // REAPER color format
-
-      g_SetProjectMarkerByIndex2(nullptr, enumIdx, isrgn, pos, rgnend, markrgnidx, newName, newColor, 0);
-      if (g_UpdateTimeline) g_UpdateTimeline();
-      if (g_UpdateArrange) g_UpdateArrange();
-    }
+  // Move edit cursor to marker position, then invoke REAPER's native edit dialog
+  if (g_SetEditCurPos && g_Main_OnCommand) {
+    g_SetEditCurPos(pos, false, false);
+    // 40614 = "Markers: Edit marker near cursor"
+    g_Main_OnCommand(40614, 0);
   }
 }
 

@@ -5,7 +5,8 @@
 #include <algorithm>
 
 void LevelsPanel::Update(const std::vector<double>& audio, int startFrame,
-                         int endFrame, int sampleRate, int nch, double itemVol, bool playing)
+                         int endFrame, int sampleRate, int nch, double itemVol, bool playing,
+                         const bool* channelActive)
 {
   // When not playing, decay all meters to silence
   if (!playing) {
@@ -73,6 +74,12 @@ void LevelsPanel::Update(const std::vector<double>& audio, int startFrame,
   } else {
     targetRmsR = targetRmsL;
     targetPeakR = targetPeakL;
+  }
+
+  // Zero out muted channels
+  if (channelActive) {
+    if (!channelActive[0]) { targetRmsL = -60.0; targetPeakL = -60.0; }
+    if (nch >= 2 && !channelActive[1]) { targetRmsR = -60.0; targetPeakR = -60.0; }
   }
 
   // Clamp

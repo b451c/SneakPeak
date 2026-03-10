@@ -7,7 +7,8 @@
 class LevelsPanel {
 public:
   void Update(const std::vector<double>& audio, int startFrame,
-              int endFrame, int sampleRate, int nch, double itemVol, bool playing);
+              int endFrame, int sampleRate, int nch, double itemVol, bool playing,
+              const bool* channelActive = nullptr);
   void Draw(HDC hdc, RECT rect, int nch);
   bool IsDecaying() const { return m_rmsL > -59.0 || m_rmsR > -59.0 || m_peakHoldL > -59.0 || m_peakHoldR > -59.0; }
 

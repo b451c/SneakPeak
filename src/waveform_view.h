@@ -65,6 +65,14 @@ public:
   void SetCursorTime(double time) { m_cursorTime = time; }
   double GetCursorTime() const { return m_cursorTime; }
 
+  // Fade drag feedback
+  void SetFadeDragInfo(int dragType, int shape);
+
+  // Channel active state (mute buttons: both on by default)
+  bool IsChannelActive(int ch) const { return m_channelActive[ch]; } // ch: 0=L, 1=R
+  int GetChanMode() const; // returns I_CHANMODE value based on active state
+  bool ClickChannelButton(int x, int y); // returns true if hit
+
   // Audio data access (for destructive editing)
   std::vector<double>& GetAudioData() { return m_audioData; }
   const std::vector<double>& GetAudioData() const { return m_audioData; }
@@ -86,6 +94,7 @@ private:
   void DrawCenterLine(HDC hdc, int yCenter);
   void DrawDbGridLines(HDC hdc, int channel, int yTop, int height);
   void DrawDbScale(HDC hdc, int channel, int yTop, int height);
+  void DrawFadeBackground(HDC hdc);
   void DrawFadeEnvelope(HDC hdc);
   int GetChannelTop(int channel) const;
   int GetChannelHeight() const;
@@ -120,6 +129,13 @@ private:
   double m_peaksCachedStart = 0.0;
   double m_peaksCachedDuration = 0.0;
   int m_peaksCachedWidth = 0;
+
+  // Fade drag feedback
+  int m_fadeDragType = 0;  // 0=none, 1=fadeIn, 2=fadeOut
+  int m_fadeDragShape = 0;
+
+  // Channel active (mute buttons)
+  bool m_channelActive[2] = { true, true };
 
   // Geometry
   RECT m_rect = {0, 0, 0, 0};
