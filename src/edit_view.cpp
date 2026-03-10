@@ -125,35 +125,12 @@ void SneakPeak::LoadSelectedItem()
   MediaItem* item = g_GetSelectedMediaItem(nullptr, 0);
   if (!item) return;
 
-  // Multi-item: show selected items from same track as one continuous waveform
-  // Pick the track with the most selected items (not just the first item's track)
-  if (count > 1 && g_GetMediaItemInfo_Value && g_GetMediaItem_Track) {
-    // Collect all selected items grouped by track, find track with most items
-    MediaTrack* track0 = nullptr;
-    int maxOnTrack = 0;
-    {
-      // First pass: count items per track
-      std::vector<std::pair<MediaTrack*, int>> trackCounts;
-      for (int i = 0; i < count; i++) {
-        MediaItem* mi = g_GetSelectedMediaItem(nullptr, i);
-        if (!mi) continue;
-        MediaTrack* tr = g_GetMediaItem_Track(mi);
-        bool found = false;
-        for (auto& tc : trackCounts) {
-          if (tc.first == tr) { tc.second++; found = true; break; }
-        }
-        if (!found) trackCounts.push_back({tr, 1});
-      }
-      for (const auto& tc : trackCounts) {
-        if (tc.second > maxOnTrack) { maxOnTrack = tc.second; track0 = tc.first; }
-      }
-    }
-    if (!track0) track0 = g_GetMediaItem_Track(item);
-
+  // Multi-item: show all selected items as one continuous waveform (cross-track)
+  if (count > 1 && g_GetMediaItemInfo_Value) {
     std::vector<MediaItem*> items;
     for (int i = 0; i < count; i++) {
       MediaItem* mi = g_GetSelectedMediaItem(nullptr, i);
-      if (mi && g_GetMediaItem_Track(mi) == track0) items.push_back(mi);
+      if (mi) items.push_back(mi);
     }
 
     // Sort by timeline position
@@ -170,6 +147,7 @@ void SneakPeak::LoadSelectedItem()
 
     if (items.size() > 1) {
       m_waveform.SetItems(items);
+      m_spectralVisible = false;  // spectral is per-item, reset on switch
       m_spectral.ClearSpectrum();
       m_spectral.Invalidate();
       m_minimap.Invalidate();
@@ -192,6 +170,7 @@ void SneakPeak::LoadSelectedItem()
   // Clear first to exit multi-item mode if active
   if (m_waveform.IsMultiItem()) m_waveform.ClearItem();
   m_waveform.SetItem(item);
+  m_spectralVisible = false;  // spectral is per-item, reset on switch
   m_spectral.ClearSpectrum();
   m_spectral.Invalidate();
   m_minimap.Invalidate();
