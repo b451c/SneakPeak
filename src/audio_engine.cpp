@@ -377,7 +377,8 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
 }
 
 std::string AudioEngine::WriteTempWav(const double* samples, int numFrames,
-                                       int numChannels, int sampleRate)
+                                       int numChannels, int sampleRate,
+                                       int bitsPerSample, int audioFormat)
 {
   // Generate unique temp path (use $TMPDIR if available)
   const char* tmpDir = getenv("TMPDIR");
@@ -385,7 +386,8 @@ std::string AudioEngine::WriteTempWav(const double* samples, int numFrames,
   char tmpPath[512];
   snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_export_%d.wav", tmpDir, (int)getpid());
 
-  if (!WriteWavFile(tmpPath, samples, numFrames, numChannels, sampleRate, 16, 1)) {
+  if (!WriteWavFile(tmpPath, samples, numFrames, numChannels, sampleRate,
+                    bitsPerSample, audioFormat)) {
     DBG("[AudioEngine] WriteTempWav failed\n");
     return {};
   }

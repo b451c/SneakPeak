@@ -38,6 +38,8 @@ extern bool (*g_GetSetMediaItemTakeInfo_String)(MediaItem_Take* tk, const char* 
 extern AudioAccessor* (*g_CreateTakeAudioAccessor)(MediaItem_Take* take);
 extern void (*g_DestroyAudioAccessor)(AudioAccessor* accessor);
 extern int (*g_GetAudioAccessorSamples)(AudioAccessor* accessor, int samplerate, int numchannels, double starttime_sec, int numsamplesperchannel, double* samplebuffer);
+extern bool (*g_AudioAccessorStateChanged)(AudioAccessor*);
+extern bool (*g_AudioAccessorValidateState)(AudioAccessor*);
 
 // Transport / playback
 extern int (*g_GetPlayState)();
@@ -54,6 +56,7 @@ typedef struct _REAPER_preview_register_t preview_register_t;
 #endif
 extern int (*g_PlayPreview)(preview_register_t* preview);
 extern int (*g_StopPreview)(preview_register_t* preview);
+extern int (*g_StartPreviewFade)(ReaProject*, preview_register_t*, double, int);
 
 // Markers
 extern int (*g_EnumProjectMarkers3)(ReaProject* proj, int idx, bool* isrgnOut, double* posOut, double* rgnendOut, const char** nameOut, int* markrgnindexnumberOut, int* colorOut);
@@ -97,6 +100,9 @@ extern bool (*g_ValidatePtr2)(ReaProject* proj, void* pointer, const char* ctype
 
 // UI / dialogs
 extern bool (*g_GetUserInputs)(const char* title, int num_inputs, const char* captions_csv, char* retvals_csv, int retvals_csv_sz);
+
+// Normalization
+extern double (*g_CalculateNormalization)(PCM_source*, int, double, double, double);
 
 // Utility
 inline void safe_strncpy(char* dst, const char* src, size_t dst_size) {

@@ -263,6 +263,8 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_CreateTakeAudioAccessor = CreateTakeAudioAccessor;
   g_DestroyAudioAccessor = DestroyAudioAccessor;
   g_GetAudioAccessorSamples = GetAudioAccessorSamples;
+  g_AudioAccessorStateChanged = (bool(*)(AudioAccessor*))rec->GetFunc("AudioAccessorStateChanged");
+  g_AudioAccessorValidateState = (bool(*)(AudioAccessor*))rec->GetFunc("AudioAccessorValidateState");
 
   g_GetPlayState = GetPlayState;
   g_GetPlayPosition2 = GetPlayPosition2;
@@ -272,6 +274,8 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_OnStopButton = OnStopButton;
   g_PlayPreview = PlayPreview;
   g_StopPreview = StopPreview;
+  g_StartPreviewFade = (int(*)(ReaProject*, preview_register_t*, double, int))
+      rec->GetFunc("StartPreviewFade");
 
   g_EnumProjectMarkers3 = EnumProjectMarkers3;
   g_AddProjectMarker2 = AddProjectMarker2;
@@ -304,6 +308,8 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
 
   g_GetUserInputs = GetUserInputs;
   g_ValidatePtr2 = ValidatePtr2;
+  g_CalculateNormalization = (double(*)(PCM_source*, int, double, double, double))
+      rec->GetFunc("CalculateNormalization");
 
   // Theme colors
   Theme_SetGetThemeColor((void*)GetThemeColor);

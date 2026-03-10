@@ -91,6 +91,11 @@ void WaveformView::SetItem(MediaItem* item)
   // Load all audio samples at source channel count
   LoadAudioData();
 
+  // Create live accessor for external change detection
+  if (m_take && g_CreateTakeAudioAccessor) {
+    m_liveAccessor = g_CreateTakeAudioAccessor(m_take);
+  }
+
   // Apply take channel mode (mono downmix) after loading
   if (g_GetSetMediaItemTakeInfo && m_take && srcChannels == 2 &&
       (int)m_audioData.size() >= m_audioSampleCount * 2) {
@@ -270,6 +275,10 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
 
 void WaveformView::ClearItem()
 {
+  if (m_liveAccessor && g_DestroyAudioAccessor) {
+    g_DestroyAudioAccessor(m_liveAccessor);
+    m_liveAccessor = nullptr;
+  }
   m_item = nullptr;
   m_take = nullptr;
   m_segments.clear();
@@ -286,6 +295,20 @@ void WaveformView::ClearItem()
   m_standaloneGainEnd = -1.0;
   m_fadeCache = {};
   m_fadeCache.itemVol = 1.0;
+}
+
+bool WaveformView::CheckAudioChanged()
+{
+  if (!m_liveAccessor || !g_AudioAccessorStateChanged) return false;
+  return g_AudioAccessorStateChanged(m_liveAccessor);
+}
+
+void WaveformView::ReloadAfterExternalChange()
+{
+  if (m_liveAccessor && g_AudioAccessorValidateState)
+    g_AudioAccessorValidateState(m_liveAccessor);
+  LoadAudioData();
+  m_peaksValid = false;
 }
 
 bool WaveformView::LoadFromFile(const std::string& path)

@@ -83,6 +83,7 @@ enum ContextMenuID {
   CM_SUPPORT_KOFI,
   CM_SUPPORT_BMAC,
   CM_SUPPORT_PAYPAL,
+  CM_NORMALIZE_LUFS,
 };
 
 class SneakPeak {
@@ -141,6 +142,7 @@ private:
   void DoReverse();
   void DoGain(double factor);
   void DoDCRemove();
+  void DoNormalizeLUFS();
 
   // Navigation
   void NavigateToMarker(bool forward);
@@ -150,6 +152,7 @@ private:
   void GetSelectionSampleRange(int& startFrame, int& endFrame) const;
   void WriteAndRefresh();
   void SyncSelectionToReaper();
+  void UpdateTitle();
   void UndoSave();
   void UndoRestore();
 
@@ -255,6 +258,7 @@ private:
   int m_wavBitsPerSample = 16;
   int m_wavAudioFormat = 1; // 1=PCM, 3=float
   int m_lastChanMode = -1;  // tracks I_CHANMODE for change detection
+  int m_audioChangeCheckCounter = 0;  // poll counter for external audio changes
 
   // Standalone preview playback
   bool m_previewActive = false;

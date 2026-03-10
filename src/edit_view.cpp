@@ -226,9 +226,7 @@ void SneakPeak::LoadSelectedItem()
   }
 
   if (m_hwnd) {
-    char title[512];
-    GetItemTitle(title, sizeof(title));
-    SetWindowText(m_hwnd, title);
+    UpdateTitle();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 }
@@ -394,6 +392,21 @@ void SneakPeak::OnTimer()
     }
   }
 
+  // External audio change detection (every 30 ticks ≈ 1 second)
+  if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+    if (++m_audioChangeCheckCounter >= 30) {
+      m_audioChangeCheckCounter = 0;
+      if (m_waveform.CheckAudioChanged()) {
+        DBG("[SneakPeak] External audio change detected, reloading\n");
+        m_waveform.ReloadAfterExternalChange();
+        m_spectral.ClearSpectrum();
+        m_spectral.Invalidate();
+        m_minimap.Invalidate();
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+      }
+    }
+  }
+
   // Cursor + RMS levels — works for both single and multi-item
   if (m_waveform.HasItem()) {
     if (m_waveform.IsStandaloneMode() && m_previewActive && m_previewReg) {
@@ -445,6 +458,8 @@ void SneakPeak::OnTimer()
   }
 }
 
+static const char* FileNameFromPath(const char* path);
+
 void SneakPeak::GetItemTitle(char* buf, int bufSize)
 {
   const char* prefix = m_dirty ? "* " : "";
@@ -461,6 +476,21 @@ void SneakPeak::GetItemTitle(char* buf, int bufSize)
     }
   }
   snprintf(buf, bufSize, "%sSneakPeak", prefix);
+}
+
+void SneakPeak::UpdateTitle()
+{
+  if (!m_hwnd) return;
+  char title[512];
+  if (m_waveform.IsStandaloneMode()) {
+    const std::string& fp = m_waveform.GetStandaloneFilePath();
+    const char* name = FileNameFromPath(fp.c_str());
+    snprintf(title, sizeof(title), "%sSneakPeak: %s",
+             m_dirty ? "* " : "", name);
+  } else {
+    GetItemTitle(title, sizeof(title));
+  }
+  SetWindowText(m_hwnd, title);
 }
 
 // --- Dialog Procedure ---
@@ -1672,6 +1702,7 @@ void SneakPeak::OnMouseUp(int x, int y)
         m_waveform.ClearStandaloneGain();
         m_waveform.Invalidate(); // recalc peaks
         m_dirty = true;
+        UpdateTitle();
         DBG("[SneakPeak] Standalone gain baked: %.1f dB\n", db);
       }
     }
@@ -2063,12 +2094,14 @@ void SneakPeak::OnRightClick(int x, int y)
 
   // Process submenu
   HMENU procMenu = CreatePopupMenu();
-  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE, "Normalize");
-  MenuAppend(procMenu, (hasReaperItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_IN, "Fade In");
-  MenuAppend(procMenu, (hasReaperItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_OUT, "Fade Out");
+  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE, "Normalize");
+  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE_LUFS,
+             "Normalize to -14 LUFS");
+  MenuAppend(procMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_IN, "Fade In");
+  MenuAppend(procMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_OUT, "Fade Out");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_REVERSE, "Reverse (destructive)");
-  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_GAIN_UP, "Gain +3dB");
-  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_GAIN_DOWN, "Gain -3dB");
+  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_UP, "Gain +3dB");
+  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_DOWN, "Gain -3dB");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_DC_REMOVE, "DC Offset Remove (destructive)");
   MenuAppendSeparator(procMenu);
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_PANEL, "Gain Control...\tG");
@@ -2154,7 +2187,8 @@ void SneakPeak::OnContextMenuCommand(int id)
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
       break;
-    case CM_NORMALIZE: DoNormalize(); break;
+    case CM_NORMALIZE:      DoNormalize(); break;
+    case CM_NORMALIZE_LUFS: DoNormalizeLUFS(); break;
     case CM_FADE_IN:   DoFadeIn(); break;
     case CM_FADE_OUT:  DoFadeOut(); break;
     case CM_REVERSE:   DoReverse(); break;
@@ -2369,6 +2403,7 @@ void SneakPeak::StandaloneUndoRestore()
   m_waveform.Invalidate();
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_dirty = true;
+  UpdateTitle();
   InvalidateRect(m_hwnd, nullptr, FALSE);
   DBG("[SneakPeak] Standalone undo (stack=%d, frames=%d, dur=%.3f)\n",
       (int)m_standaloneUndoStack.size(), newFrames, newDur);
@@ -2574,12 +2609,7 @@ void SneakPeak::LoadStandaloneFile(const char* path)
   m_minimap.Invalidate();
 
   if (m_hwnd) {
-    // Show filename in title
-    auto slashPos = spath.find_last_of('/');
-    const char* name = (slashPos != std::string::npos) ? spath.c_str() + slashPos + 1 : spath.c_str();
-    char title[512];
-    snprintf(title, sizeof(title), "SneakPeak: %s", name);
-    SetWindowText(m_hwnd, title);
+    UpdateTitle();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
@@ -2677,6 +2707,7 @@ void SneakPeak::SaveStandaloneFile()
                                 m_wavBitsPerSample, m_wavAudioFormat)) {
     DBG("[SneakPeak] Saved standalone file: %s\n", path.c_str());
     m_dirty = false;
+    UpdateTitle();
     // Update tab dirty state
     if (m_activeFileIdx >= 0 && m_activeFileIdx < (int)m_standaloneFiles.size())
       m_standaloneFiles[m_activeFileIdx].dirty = false;
@@ -2689,8 +2720,10 @@ void SneakPeak::SaveStandaloneFile()
 void SneakPeak::StandaloneCleanupPreview()
 {
   if (m_previewReg) {
-    if (g_StopPreview) g_StopPreview((preview_register_t*)m_previewReg);
     auto* reg = (preview_register_t*)m_previewReg;
+    if (g_StartPreviewFade)
+      g_StartPreviewFade(nullptr, reg, 0.050, 2); // 50ms fade-out
+    if (g_StopPreview) g_StopPreview(reg);
     pthread_mutex_destroy(&reg->mutex);
     delete reg;
     m_previewReg = nullptr;
@@ -2726,7 +2759,8 @@ void SneakPeak::StandalonePlayStop()
   int frames = m_waveform.GetAudioSampleCount();
   if (frames <= 0 || data.empty()) return;
 
-  std::string tmpPath = AudioEngine::WriteTempWav(data.data(), frames, nch, sr);
+  std::string tmpPath = AudioEngine::WriteTempWav(data.data(), frames, nch, sr,
+                                                    m_wavBitsPerSample, m_wavAudioFormat);
   if (tmpPath.empty()) return;
 
   PCM_source* src = g_PCM_Source_CreateFromFile(tmpPath.c_str());
@@ -2799,13 +2833,7 @@ void SneakPeak::WriteAndRefresh()
 
   m_waveform.Invalidate();
   m_dirty = true;
-
-  // Update title bar with dirty indicator
-  if (m_hwnd) {
-    char title[512];
-    GetItemTitle(title, sizeof(title));
-    SetWindowText(m_hwnd, title);
-  }
+  UpdateTitle();
 }
 
 // --- Sync SneakPeak selection to REAPER time selection ---
@@ -2971,6 +2999,7 @@ void SneakPeak::DoDelete()
       m_waveform.ClearSelection();
       m_waveform.Invalidate();
       m_dirty = true;
+      UpdateTitle();
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
     return;
@@ -3052,9 +3081,23 @@ void SneakPeak::DoSilence()
 
 void SneakPeak::DoNormalize()
 {
-  // Non-destructive: measure peak, set D_VOL to reach 0dB
+  // Non-destructive (REAPER) or destructive (standalone)
   if (!m_waveform.HasItem()) return;
-  if (m_waveform.IsStandaloneMode()) return;
+
+  if (m_waveform.IsStandaloneMode()) {
+    StandaloneUndoSave();
+    auto& data = m_waveform.GetAudioData();
+    int nch = m_waveform.GetNumChannels();
+    int frames = m_waveform.GetAudioSampleCount();
+    if (frames > 0 && nch > 0)
+      AudioOps::Normalize(data.data(), frames, nch, 0.989); // -0.1dB
+    m_dirty = true;
+    UpdateTitle();
+    m_waveform.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
   if (!g_SetMediaItemInfo_Value) return;
 
   const auto& data = m_waveform.GetAudioData();
@@ -3087,9 +3130,25 @@ void SneakPeak::DoNormalize()
 
 void SneakPeak::DoFadeIn()
 {
-  // Non-destructive: set item fade-in length via D_FADEINLEN
   if (!m_waveform.HasItem()) return;
-  if (m_waveform.IsStandaloneMode()) return;
+
+  if (m_waveform.IsStandaloneMode()) {
+    int startF, endF;
+    GetSelectionSampleRange(startF, endF);
+    int nch = m_waveform.GetNumChannels();
+    int selFrames = endF - startF;
+    if (selFrames <= 0) return;
+    StandaloneUndoSave();
+    auto& data = m_waveform.GetAudioData();
+    AudioOps::FadeIn(data.data() + (size_t)startF * nch, selFrames, nch);
+    m_dirty = true;
+    UpdateTitle();
+    m_waveform.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
+  // Non-destructive: set item fade-in length via D_FADEINLEN
   if (!g_SetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();
@@ -3114,9 +3173,25 @@ void SneakPeak::DoFadeIn()
 
 void SneakPeak::DoFadeOut()
 {
-  // Non-destructive: set item fade-out length via D_FADEOUTLEN
   if (!m_waveform.HasItem()) return;
-  if (m_waveform.IsStandaloneMode()) return;
+
+  if (m_waveform.IsStandaloneMode()) {
+    int startF, endF;
+    GetSelectionSampleRange(startF, endF);
+    int nch = m_waveform.GetNumChannels();
+    int selFrames = endF - startF;
+    if (selFrames <= 0) return;
+    StandaloneUndoSave();
+    auto& data = m_waveform.GetAudioData();
+    AudioOps::FadeOut(data.data() + (size_t)startF * nch, selFrames, nch);
+    m_dirty = true;
+    UpdateTitle();
+    m_waveform.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
+  // Non-destructive: set item fade-out length via D_FADEOUTLEN
   if (!g_SetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();
@@ -3173,9 +3248,23 @@ void SneakPeak::DoReverse()
 
 void SneakPeak::DoGain(double factor)
 {
-  // Non-destructive: multiply current D_VOL by factor
   if (!m_waveform.HasItem()) return;
-  if (m_waveform.IsStandaloneMode()) return;
+
+  if (m_waveform.IsStandaloneMode()) {
+    StandaloneUndoSave();
+    auto& data = m_waveform.GetAudioData();
+    int nch = m_waveform.GetNumChannels();
+    int frames = m_waveform.GetAudioSampleCount();
+    if (frames > 0 && nch > 0)
+      AudioOps::Gain(data.data(), frames, nch, factor);
+    m_dirty = true;
+    UpdateTitle();
+    m_waveform.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
+  // Non-destructive: multiply current D_VOL by factor
   if (!g_SetMediaItemInfo_Value || !g_GetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();
@@ -3225,6 +3314,38 @@ void SneakPeak::DoDCRemove()
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
+void SneakPeak::DoNormalizeLUFS()
+{
+  if (!m_waveform.HasItem()) return;
+  if (m_waveform.IsStandaloneMode()) return;
+  if (!g_CalculateNormalization || !g_SetMediaItemInfo_Value) return;
+
+  MediaItem_Take* take = m_waveform.GetTake();
+  if (!take) return;
+
+  PCM_source* src = g_GetMediaItemTake_Source ? g_GetMediaItemTake_Source(take) : nullptr;
+  if (!src) return;
+
+  // normalizeTo=0 (LUFS-I), target=-14.0 LUFS (streaming standard)
+  double gainDb = g_CalculateNormalization(src, 0, -14.0, 0.0, 0.0);
+
+  double gainLin = pow(10.0, gainDb / 20.0);
+  if (gainLin < 0.001 || gainLin > 100.0) return; // sanity
+
+  MediaItem* item = m_waveform.GetItem();
+  if (!item) return;
+
+  double curVol = g_GetMediaItemInfo_Value(item, "D_VOL");
+  double newVol = curVol * gainLin;
+
+  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+  g_SetMediaItemInfo_Value(item, "D_VOL", newVol);
+  if (g_UpdateArrange) g_UpdateArrange();
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Normalize to -14 LUFS", -1);
+
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
 // --- Drag & Drop Export ---
 
 void SneakPeak::CleanupDragTemp()
@@ -3264,7 +3385,9 @@ void SneakPeak::InitiateDragExport()
   }
   const double* selData = data.data() + offset;
 
-  m_dragTempPath = AudioEngine::WriteTempWav(selData, selFrames, nch, m_waveform.GetSampleRate());
+  m_dragTempPath = AudioEngine::WriteTempWav(selData, selFrames, nch,
+                                              m_waveform.GetSampleRate(),
+                                              m_wavBitsPerSample, m_wavAudioFormat);
   DBG("[SneakPeak] DragExport: wrote temp WAV to '%s'\n", m_dragTempPath.c_str());
   if (m_dragTempPath.empty()) return;
 

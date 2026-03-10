@@ -24,6 +24,8 @@ bool (*g_GetSetMediaItemTakeInfo_String)(MediaItem_Take*, const char*, char*, bo
 AudioAccessor* (*g_CreateTakeAudioAccessor)(MediaItem_Take*) = nullptr;
 void (*g_DestroyAudioAccessor)(AudioAccessor*) = nullptr;
 int (*g_GetAudioAccessorSamples)(AudioAccessor*, int, int, double, int, double*) = nullptr;
+bool (*g_AudioAccessorStateChanged)(AudioAccessor*) = nullptr;
+bool (*g_AudioAccessorValidateState)(AudioAccessor*) = nullptr;
 
 // Transport
 int (*g_GetPlayState)() = nullptr;
@@ -36,6 +38,7 @@ void (*g_OnStopButton)() = nullptr;
 // Preview playback (standalone mode)
 int (*g_PlayPreview)(preview_register_t*) = nullptr;
 int (*g_StopPreview)(preview_register_t*) = nullptr;
+int (*g_StartPreviewFade)(ReaProject*, preview_register_t*, double, int) = nullptr;
 
 // Markers
 int (*g_EnumProjectMarkers3)(ReaProject*, int, bool*, double*, double*, const char**, int*, int*) = nullptr;
@@ -76,6 +79,9 @@ bool (*g_GetUserInputs)(const char*, int, const char*, char*, int) = nullptr;
 // UI refresh
 void (*g_UpdateArrange)() = nullptr;
 void (*g_UpdateTimeline)() = nullptr;
+
+// Normalization
+double (*g_CalculateNormalization)(PCM_source*, int, double, double, double) = nullptr;
 
 // Time selection
 void (*g_GetSet_LoopTimeRange2)(ReaProject*, bool, bool, double*, double*, bool) = nullptr;

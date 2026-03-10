@@ -132,6 +132,10 @@ public:
   int GetChanMode() const; // returns I_CHANMODE value based on active state
   bool ClickChannelButton(int x, int y); // returns true if hit
 
+  // External audio change detection (via AudioAccessor)
+  bool CheckAudioChanged();
+  void ReloadAfterExternalChange();
+
   // Audio data access (for destructive editing)
   std::vector<double>& GetAudioData() { return m_audioData; }
   const std::vector<double>& GetAudioData() const { return m_audioData; }
@@ -208,6 +212,9 @@ private:
 
   // Cached fade/volume parameters
   FadeCache m_fadeCache;
+
+  // Live audio accessor for change detection
+  AudioAccessor* m_liveAccessor = nullptr;
 
   // Standalone file mode
   bool m_standaloneMode = false;
