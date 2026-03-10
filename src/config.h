@@ -1,4 +1,4 @@
-// config.h — Layout constants for EditView
+// config.h — Layout constants for SneakPeak
 #pragma once
 
 #include "platform.h"
@@ -24,3 +24,8 @@ inline constexpr float DEFAULT_VERTICAL_ZOOM = 1.0f;
 inline constexpr float MAX_VERTICAL_ZOOM = 10.0f;
 inline constexpr float MIN_VERTICAL_ZOOM = 0.1f;
 inline constexpr double ZOOM_FACTOR = 1.25;  // per scroll step
+
+// Interaction
+inline constexpr int EDGE_ZONE = 40;           // pixels from edge for auto-scroll
+inline constexpr int PLAY_GRACE_TICKS = 5;     // ticks to skip auto-stop after play start
+inline constexpr int ZERO_SNAP_RANGE = 512;    // sample search radius for zero-crossing snap

@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 
 if(APPLE)
-  project(reaper_editview VERSION 0.1.0 LANGUAGES CXX OBJCXX)
+  project(reaper_sneakpeak VERSION 0.1.0 LANGUAGES CXX OBJCXX)
 else()
-  project(reaper_editview VERSION 0.1.0 LANGUAGES CXX)
+  project(reaper_sneakpeak VERSION 0.1.0 LANGUAGES CXX)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -20,7 +20,7 @@ else()
 endif()
 set(WDL_DIR "${CMAKE_SOURCE_DIR}/WDL/WDL")
 
-add_library(reaper_editview SHARED
+add_library(reaper_sneakpeak SHARED
   src/main.cpp
   src/globals.cpp
   src/edit_view.cpp
@@ -36,24 +36,24 @@ add_library(reaper_editview SHARED
   src/minimap_view.cpp
 )
 
-target_include_directories(reaper_editview PRIVATE
+target_include_directories(reaper_sneakpeak PRIVATE
   ${REAPER_SDK_DIR}
   ${WDL_DIR}
   ${WDL_DIR}/swell
   src
 )
 
-target_compile_definitions(reaper_editview PRIVATE
+target_compile_definitions(reaper_sneakpeak PRIVATE
   $<$<NOT:$<PLATFORM_ID:Windows>>:SWELL_PROVIDED_BY_APP>
-  $<$<CONFIG:Debug>:EDITVIEW_DEBUG>
+  $<$<CONFIG:Debug>:SNEAKPEAK_DEBUG>
   $<$<PLATFORM_ID:Windows>:NOMINMAX>
   WDL_NO_DEFINE_MINMAX
 )
 
 if(MSVC)
-  target_compile_options(reaper_editview PRIVATE /W3)
+  target_compile_options(reaper_sneakpeak PRIVATE /W3)
 else()
-  target_compile_options(reaper_editview PRIVATE
+  target_compile_options(reaper_sneakpeak PRIVATE
     -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
     -Wshadow
     -Wconversion -Wno-sign-conversion
@@ -61,37 +61,37 @@ else()
 endif()
 
 if(APPLE)
-  set_target_properties(reaper_editview PROPERTIES
+  set_target_properties(reaper_sneakpeak PROPERTIES
     SUFFIX ".dylib"
     PREFIX ""
-    OUTPUT_NAME "reaper_editview"
+    OUTPUT_NAME "reaper_sneakpeak"
   )
-  target_link_libraries(reaper_editview PRIVATE
+  target_link_libraries(reaper_sneakpeak PRIVATE
     "-framework AppKit"
     "-framework CoreFoundation"
   )
-  target_sources(reaper_editview PRIVATE
+  target_sources(reaper_sneakpeak PRIVATE
     ${WDL_DIR}/swell/swell-modstub.mm
   )
 elseif(WIN32)
-  set_target_properties(reaper_editview PROPERTIES
+  set_target_properties(reaper_sneakpeak PROPERTIES
     SUFFIX ".dll"
     PREFIX ""
-    OUTPUT_NAME "reaper_editview"
+    OUTPUT_NAME "reaper_sneakpeak"
   )
-  target_compile_definitions(reaper_editview PRIVATE
+  target_compile_definitions(reaper_sneakpeak PRIVATE
     WIN32_LEAN_AND_MEAN
   )
 elseif(UNIX)
-  set_target_properties(reaper_editview PROPERTIES
+  set_target_properties(reaper_sneakpeak PROPERTIES
     SUFFIX ".so"
     PREFIX ""
-    OUTPUT_NAME "reaper_editview"
+    OUTPUT_NAME "reaper_sneakpeak"
   )
-  target_sources(reaper_editview PRIVATE
+  target_sources(reaper_sneakpeak PRIVATE
     src/swell_modstub.cpp
   )
-  target_link_libraries(reaper_editview PRIVATE
+  target_link_libraries(reaper_sneakpeak PRIVATE
     dl
     pthread
   )

@@ -1,4 +1,4 @@
-// edit_view.cpp — Main EditView window, double-buffered GDI rendering
+// edit_view.cpp — Main SneakPeak window, double-buffered GDI rendering
 // Includes: markers, clipboard ops, destructive editing, context menu
 #include "edit_view.h"
 #include "audio_engine.h"
@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <sys/stat.h>
 
-AudioClipboard EditView::s_clipboard;
+AudioClipboard SneakPeak::s_clipboard;
 
 // Helper: portable AppendMenu (SWELL doesn't have it directly)
 static void MenuAppend(HMENU menu, unsigned int flags, UINT_PTR id, const char* str)
@@ -41,21 +41,21 @@ static void MenuAppendSubmenu(HMENU menu, HMENU submenu, const char* str)
 #endif
 }
 
-EditView::EditView() {}
-EditView::~EditView() { Destroy(); }
+SneakPeak::SneakPeak() {}
+SneakPeak::~SneakPeak() { Destroy(); }
 
-void EditView::Create()
+void SneakPeak::Create()
 {
   if (m_hwnd) return;
 
-  m_hwnd = CreateEditViewDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this);
+  m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this);
   if (!m_hwnd) {
-    DBG("[EditView] Failed to create dialog\n");
+    DBG("[SneakPeak] Failed to create dialog\n");
     return;
   }
 
   if (g_DockWindowAddEx) {
-    g_DockWindowAddEx(m_hwnd, "EditView", "EditView_main", true);
+    g_DockWindowAddEx(m_hwnd, "SneakPeak", "SneakPeak_main", true);
   }
 
   ShowWindow(m_hwnd, SW_SHOW);
@@ -63,11 +63,11 @@ void EditView::Create()
 
   // Restore persisted settings
   if (g_GetExtState) {
-    const char* snap = g_GetExtState("EditView", "snap_zero");
+    const char* snap = g_GetExtState("SneakPeak", "snap_zero");
     if (snap && snap[0] == '1') m_waveform.SetSnapToZero(true);
-    const char* mm = g_GetExtState("EditView", "minimap");
+    const char* mm = g_GetExtState("SneakPeak", "minimap");
     if (mm && mm[0] == '1') m_minimapVisible = true;
-    const char* mmh = g_GetExtState("EditView", "minimap_h");
+    const char* mmh = g_GetExtState("SneakPeak", "minimap_h");
     if (mmh && mmh[0]) {
       int h = atoi(mmh);
       if (h >= MINIMAP_HEIGHT && h <= 120) m_minimapHeight = h;
@@ -81,10 +81,10 @@ void EditView::Create()
     RecalcLayout(cr.right, cr.bottom);
   }
 
-  DBG("[EditView] Window created: hwnd=%p\n", (void*)m_hwnd);
+  DBG("[SneakPeak] Window created: hwnd=%p\n", (void*)m_hwnd);
 }
 
-void EditView::Destroy()
+void SneakPeak::Destroy()
 {
   if (!m_hwnd) return;
   CleanupDragTemp();
@@ -94,18 +94,18 @@ void EditView::Destroy()
   m_hwnd = nullptr;
 }
 
-void EditView::Toggle()
+void SneakPeak::Toggle()
 {
   if (!m_hwnd) return;
   ShowWindow(m_hwnd, IsVisible() ? SW_HIDE : SW_SHOW);
 }
 
-bool EditView::IsVisible() const
+bool SneakPeak::IsVisible() const
 {
   return m_hwnd && IsWindowVisible(m_hwnd);
 }
 
-void EditView::LoadSelectedItem()
+void SneakPeak::LoadSelectedItem()
 {
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
@@ -123,8 +123,30 @@ void EditView::LoadSelectedItem()
   if (!item) return;
 
   // Multi-item: show selected items from same track as one continuous waveform
+  // Pick the track with the most selected items (not just the first item's track)
   if (count > 1 && g_GetMediaItemInfo_Value && g_GetMediaItem_Track) {
-    MediaTrack* track0 = g_GetMediaItem_Track(item);
+    // Collect all selected items grouped by track, find track with most items
+    MediaTrack* track0 = nullptr;
+    int maxOnTrack = 0;
+    {
+      // First pass: count items per track
+      std::vector<std::pair<MediaTrack*, int>> trackCounts;
+      for (int i = 0; i < count; i++) {
+        MediaItem* mi = g_GetSelectedMediaItem(nullptr, i);
+        if (!mi) continue;
+        MediaTrack* tr = g_GetMediaItem_Track(mi);
+        bool found = false;
+        for (auto& tc : trackCounts) {
+          if (tc.first == tr) { tc.second++; found = true; break; }
+        }
+        if (!found) trackCounts.push_back({tr, 1});
+      }
+      for (const auto& tc : trackCounts) {
+        if (tc.second > maxOnTrack) { maxOnTrack = tc.second; track0 = tc.first; }
+      }
+    }
+    if (!track0) track0 = g_GetMediaItem_Track(item);
+
     std::vector<MediaItem*> items;
     for (int i = 0; i < count; i++) {
       MediaItem* mi = g_GetSelectedMediaItem(nullptr, i);
@@ -136,11 +158,11 @@ void EditView::LoadSelectedItem()
       return g_GetMediaItemInfo_Value(a, "D_POSITION") < g_GetMediaItemInfo_Value(b, "D_POSITION");
     });
 
-    DBG("[EditView] Multi-item: %d items selected\n", (int)items.size());
+    DBG("[SneakPeak] Multi-item: %d items selected\n", (int)items.size());
     for (size_t i = 0; i < items.size() && i < 8; i++) {
       double p = g_GetMediaItemInfo_Value(items[i], "D_POSITION");
       double l = g_GetMediaItemInfo_Value(items[i], "D_LENGTH");
-      DBG("[EditView]   item[%d]: pos=%.3f len=%.3f\n", (int)i, p, l);
+      DBG("[SneakPeak]   item[%d]: pos=%.3f len=%.3f\n", (int)i, p, l);
     }
 
     if (items.size() > 1) {
@@ -153,11 +175,11 @@ void EditView::LoadSelectedItem()
       m_dirty = false;
       if (m_hwnd) {
         char title[512];
-        snprintf(title, sizeof(title), "EditView [%d items]", (int)items.size());
+        snprintf(title, sizeof(title), "SneakPeak [%d items]", (int)items.size());
         SetWindowText(m_hwnd, title);
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
-      DBG("[EditView] Multi-item loaded: segments=%d audioFrames=%d dur=%.3f\n",
+      DBG("[SneakPeak] Multi-item loaded: segments=%d audioFrames=%d dur=%.3f\n",
           (int)m_waveform.GetSegments().size(), m_waveform.GetAudioSampleCount(),
           m_waveform.GetItemDuration());
       return;
@@ -207,13 +229,22 @@ void EditView::LoadSelectedItem()
   }
 }
 
-void EditView::OnTimer()
+void SneakPeak::OnTimer()
 {
   if (!m_hwnd || !IsVisible()) return;
 
+  // Validate cached item pointer — may become dangling after split/snap/delete in arrange
+  if (m_waveform.HasItem() && g_ValidatePtr2 &&
+      !g_ValidatePtr2(nullptr, (void*)m_waveform.GetItem(), "MediaItem*")) {
+    m_waveform.ClearItem();
+    m_hasUndo = false;
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
   // Auto-scroll when dragging selection near edges
   if (m_dragging && m_waveform.HasItem()) {
-    int edgeZone = 40; // pixels from edge to trigger scroll
+    int edgeZone = EDGE_ZONE;
     int mx = m_lastMouseX;
     double scrollSpeed = m_waveform.GetViewDuration() * 0.08; // 8% of view per tick
 
@@ -269,24 +300,31 @@ void EditView::OnTimer()
     // Grace period countdown after play start
     if (m_playGraceTicks > 0) m_playGraceTicks--;
 
-    // Auto-stop: when EditView-initiated playback exits item bounds, stop once
+    // Auto-stop: when SneakPeak-initiated playback exits item bounds, stop once
     if (playing && m_startedPlayback && !m_autoStopped && m_playGraceTicks == 0 &&
         g_GetPlayPosition2 && m_waveform.HasItem()) {
-      double playPos = g_GetPlayPosition2();
-      double itemStart = m_waveform.GetItemPosition();
-      double itemEnd = itemStart + m_waveform.GetItemDuration();
-      if (playPos >= itemEnd || playPos < itemStart) {
-        DBG("[EditView] Auto-stop: playPos=%.3f itemEnd=%.3f\n", playPos, itemEnd);
-        m_autoStopped = true;  // prevent re-triggering until next user play
+      double absPos = g_GetPlayPosition2();
+      // Check against actual absolute timeline bounds of all segments
+      const auto& segs = m_waveform.GetSegments();
+      bool outsideBounds;
+      if (segs.size() > 1) {
+        double firstStart = segs.front().position;
+        const auto& last = segs.back();
+        double lastEnd = last.position + last.duration;
+        outsideBounds = (absPos < firstStart || absPos >= lastEnd);
+      } else {
+        double itemStart = m_waveform.GetItemPosition();
+        double itemEnd = itemStart + m_waveform.GetItemDuration();
+        outsideBounds = (absPos < itemStart || absPos >= itemEnd);
+      }
+      if (outsideBounds) {
+        DBG("[SneakPeak] Auto-stop: absPos=%.3f\n", absPos);
+        m_autoStopped = true;
         m_startedPlayback = false;
         if (g_OnStopButton) g_OnStopButton();
       }
     }
 
-    // Detect external playback start (we didn't press Space)
-    if (playing && !m_wasPlaying && !m_startedPlayback) {
-      // External play — track follow mode is active by default
-    }
     if (!playing && m_wasPlaying) {
       m_startedPlayback = false;
       m_autoStopped = false;  // reset for next play
@@ -310,6 +348,9 @@ void EditView::OnTimer()
 
   // Update fade/volume cache for paint
   if (m_waveform.HasItem()) m_waveform.UpdateFadeCache();
+
+  // Update solo state from REAPER (polled, not in paint)
+  UpdateSoloState();
 
   // Single-item only: refresh position/duration, detect channel mode changes
   if (m_waveform.HasItem() && !m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
@@ -337,11 +378,9 @@ void EditView::OnTimer()
 
   // Cursor + RMS levels — works for both single and multi-item
   if (m_waveform.HasItem()) {
-    double itemPos = m_waveform.GetItemPosition();
-
     if (g_GetCursorPosition) {
       double curPos = g_GetCursorPosition();
-      double relPos = curPos - itemPos;
+      double relPos = m_waveform.AbsTimeToRelTime(curPos);
       // Clamp cursor to item bounds
       double dur = m_waveform.GetItemDuration();
       if (relPos < 0.0) relPos = 0.0;
@@ -355,7 +394,8 @@ void EditView::OnTimer()
       bool playing = g_GetPlayState && (g_GetPlayState() & 1);
       int startFrame, endFrame;
       if (playing && g_GetPlayPosition2) {
-        double playPos = g_GetPlayPosition2() - itemPos;
+        double playPos = m_waveform.AbsTimeToRelTime(g_GetPlayPosition2());
+        if (playPos < 0.0) playPos = 0.0;
         int center = static_cast<int>(playPos * sr);
         int halfWin = sr / 40;
         startFrame = center - halfWin;
@@ -372,38 +412,38 @@ void EditView::OnTimer()
   }
 }
 
-void EditView::GetItemTitle(char* buf, int bufSize)
+void SneakPeak::GetItemTitle(char* buf, int bufSize)
 {
   const char* prefix = m_dirty ? "* " : "";
   if (!m_waveform.HasItem()) {
-    snprintf(buf, bufSize, "%sEditView", prefix);
+    snprintf(buf, bufSize, "%sSneakPeak", prefix);
     return;
   }
   MediaItem_Take* take = g_GetActiveTake ? g_GetActiveTake(m_waveform.GetItem()) : nullptr;
   if (take && g_GetSetMediaItemTakeInfo_String) {
     char nameBuf[256] = {};
     if (g_GetSetMediaItemTakeInfo_String(take, "P_NAME", nameBuf, false)) {
-      snprintf(buf, bufSize, "%sEditView: %s", prefix, nameBuf);
+      snprintf(buf, bufSize, "%sSneakPeak: %s", prefix, nameBuf);
       return;
     }
   }
-  snprintf(buf, bufSize, "%sEditView", prefix);
+  snprintf(buf, bufSize, "%sSneakPeak", prefix);
 }
 
 // --- Dialog Procedure ---
 
-INT_PTR CALLBACK EditView::DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK SneakPeak::DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-  EditView* self = nullptr;
+  SneakPeak* self = nullptr;
 
   if (msg == WM_CREATE || msg == WM_INITDIALOG) {
-    self = reinterpret_cast<EditView*>(lParam);
+    self = reinterpret_cast<SneakPeak*>(lParam);
     SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)self);
     if (self) self->m_hwnd = hwnd;
     return 0;
   }
 
-  self = reinterpret_cast<EditView*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+  self = reinterpret_cast<SneakPeak*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
   if (!self) return DefWindowProc(hwnd, msg, wParam, lParam);
 
   INT_PTR result = self->HandleMessage(msg, wParam, lParam);
@@ -411,7 +451,7 @@ INT_PTR CALLBACK EditView::DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
   return result;
 }
 
-INT_PTR EditView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
+INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 {
   switch (msg) {
     case WM_ERASEBKGND:
@@ -540,7 +580,7 @@ INT_PTR EditView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
 // --- Layout ---
 
-void EditView::RecalcLayout(int w, int h)
+void SneakPeak::RecalcLayout(int w, int h)
 {
   m_toolbarRect      = { 0, 0, w, TOOLBAR_HEIGHT };
   m_rulerRect        = { 0, TOOLBAR_HEIGHT, w, TOOLBAR_HEIGHT + RULER_HEIGHT };
@@ -584,7 +624,7 @@ void EditView::RecalcLayout(int w, int h)
   }
 }
 
-void EditView::OnSize(int w, int h)
+void SneakPeak::OnSize(int w, int h)
 {
   RecalcLayout(w, h);
   m_waveform.Invalidate();
@@ -594,7 +634,7 @@ void EditView::OnSize(int w, int h)
 
 // --- Painting ---
 
-void EditView::OnPaint(HDC hdc)
+void SneakPeak::OnPaint(HDC hdc)
 {
   if (!hdc) return;
 
@@ -612,7 +652,7 @@ void EditView::OnPaint(HDC hdc)
   DrawBottomPanel(hdc);
 }
 
-void EditView::DrawSplitter(HDC hdc)
+void SneakPeak::DrawSplitter(HDC hdc)
 {
   if (m_splitterRect.bottom <= m_splitterRect.top) return;
 
@@ -631,7 +671,7 @@ void EditView::DrawSplitter(HDC hdc)
   DeleteObject(dot);
 }
 
-void EditView::DrawRuler(HDC hdc)
+void SneakPeak::DrawRuler(HDC hdc)
 {
   int w = m_rulerRect.right - m_rulerRect.left;
   int h = m_rulerRect.bottom - m_rulerRect.top;
@@ -729,7 +769,7 @@ void EditView::DrawRuler(HDC hdc)
   DeleteObject(rulerFont);
 }
 
-void EditView::DrawScrollbar(HDC hdc)
+void SneakPeak::DrawScrollbar(HDC hdc)
 {
   HBRUSH bg = CreateSolidBrush(g_theme.scrollbarBg);
   FillRect(hdc, &m_scrollbarRect, bg);
@@ -769,7 +809,7 @@ static void FormatTimeHMS(double sec, char* buf, int sz)
 
 // --- Solo button ---
 
-void EditView::DrawSoloButton(HDC hdc)
+void SneakPeak::DrawSoloButton(HDC hdc)
 {
   if (!m_waveform.HasItem()) return;
 
@@ -778,9 +818,6 @@ void EditView::DrawSoloButton(HDC hdc)
   int btnX = m_waveformRect.right - DB_SCALE_WIDTH - btnW - 30;
   int btnY = m_waveformRect.top + 10;
   m_soloBtnRect = { btnX, btnY, btnX + btnW, btnY + btnH };
-
-  // Update solo state from REAPER
-  UpdateSoloState();
 
   // Background
   COLORREF bgCol = m_trackSoloed ? RGB(200, 180, 0) : RGB(50, 50, 50);
@@ -812,14 +849,14 @@ void EditView::DrawSoloButton(HDC hdc)
   DeleteObject(font);
 }
 
-bool EditView::ClickSoloButton(int x, int y)
+bool SneakPeak::ClickSoloButton(int x, int y)
 {
   if (!m_waveform.HasItem()) return false;
   return x >= m_soloBtnRect.left && x < m_soloBtnRect.right &&
          y >= m_soloBtnRect.top && y < m_soloBtnRect.bottom;
 }
 
-void EditView::ToggleTrackSolo()
+void SneakPeak::ToggleTrackSolo()
 {
   if (!g_GetMediaItem_Track || !g_GetSetMediaTrackInfo) return;
 
@@ -841,20 +878,28 @@ void EditView::ToggleTrackSolo()
   if (g_UpdateArrange) g_UpdateArrange();
 }
 
-void EditView::UpdateSoloState()
+void SneakPeak::UpdateSoloState()
 {
   if (!g_GetMediaItem_Track || !g_GetSetMediaTrackInfo || !m_waveform.HasItem()) {
     m_trackSoloed = false;
     return;
   }
-  MediaTrack* track = g_GetMediaItem_Track(m_waveform.GetItem());
+
+  // Validate item pointer — may be dangling after split/snap/delete in arrange
+  MediaItem* item = m_waveform.GetItem();
+  if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)item, "MediaItem*")) {
+    m_trackSoloed = false;
+    return;
+  }
+
+  MediaTrack* track = g_GetMediaItem_Track(item);
   if (!track) { m_trackSoloed = false; return; }
 
   int* pSolo = (int*)g_GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
   m_trackSoloed = (pSolo && *pSolo != 0);
 }
 
-void EditView::DrawBottomPanel(HDC hdc)
+void SneakPeak::DrawBottomPanel(HDC hdc)
 {
   // Dark background for entire bottom panel
   HBRUSH bg = CreateSolidBrush(RGB(24, 24, 24));
@@ -953,7 +998,7 @@ void EditView::DrawBottomPanel(HDC hdc)
 
 // --- Mouse ---
 
-void EditView::OnDoubleClick(int x, int y)
+void SneakPeak::OnDoubleClick(int x, int y)
 {
   // Double-click on gain panel = reset to 0 dB
   if (m_gainPanel.OnDoubleClick(x, y, m_waveformRect)) {
@@ -992,7 +1037,7 @@ void EditView::OnDoubleClick(int x, int y)
   }
 }
 
-void EditView::OnMouseDown(int x, int y, WPARAM wParam)
+void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 {
   m_lastMouseX = x;
   m_lastMouseY = y;
@@ -1023,7 +1068,7 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
       double time = m_waveform.XToTime(x);
       m_waveform.SetCursorTime(time);
       if (g_SetEditCurPos)
-        g_SetEditCurPos(m_waveform.GetItemPosition() + time, false, false);
+        g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), false, false);
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
     return;
@@ -1101,7 +1146,7 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
         m_waveform.StartSelection(time);
         m_waveform.SetCursorTime(time);
         if (g_SetEditCurPos)
-          g_SetEditCurPos(m_waveform.GetItemPosition() + time, false, false);
+          g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), false, false);
       }
       m_dragging = true;
       SetCapture(m_hwnd);
@@ -1163,7 +1208,7 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
         double selS = std::min(sel.startTime, sel.endTime);
         double selE = std::max(sel.startTime, sel.endTime);
         if (time >= selS && time <= selE) {
-          DBG("[EditView] Drag export pending: click at t=%.3f inside sel [%.3f..%.3f]\n",
+          DBG("[SneakPeak] Drag export pending: click at t=%.3f inside sel [%.3f..%.3f]\n",
               time, selS, selE);
           m_dragExportPending = true;
           m_dragStartX = x;
@@ -1179,7 +1224,7 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
         m_waveform.StartSelection(time);
         m_waveform.SetCursorTime(time);
         if (g_SetEditCurPos)
-          g_SetEditCurPos(m_waveform.GetItemPosition() + time, false, false);
+          g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), false, false);
       }
       m_dragging = true;
       SetCapture(m_hwnd);
@@ -1188,7 +1233,7 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
   }
 }
 
-void EditView::OnMouseUp(int x, int y)
+void SneakPeak::OnMouseUp(int x, int y)
 {
   if (m_dragExportPending) {
     // Didn't meet drag threshold — treat as click inside selection (place cursor)
@@ -1197,7 +1242,7 @@ void EditView::OnMouseUp(int x, int y)
     double time = m_waveform.XToTime(x);
     m_waveform.SetCursorTime(time);
     if (g_SetEditCurPos)
-      g_SetEditCurPos(m_waveform.GetItemPosition() + time, false, false);
+      g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), false, false);
     m_waveform.ClearSelection();
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
@@ -1214,7 +1259,7 @@ void EditView::OnMouseUp(int x, int y)
     if (g_SetExtState) {
       char buf[16];
       snprintf(buf, sizeof(buf), "%d", m_minimapHeight);
-      g_SetExtState("EditView", "minimap_h", buf, true);
+      g_SetExtState("SneakPeak", "minimap_h", buf, true);
     }
     return;
   }
@@ -1232,7 +1277,7 @@ void EditView::OnMouseUp(int x, int y)
     m_fadeDragging = FADE_NONE;
     m_waveform.SetFadeDragInfo(0, 0);
     ReleaseCapture();
-    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Adjust fade", -1);
+    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Adjust fade", -1);
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
@@ -1261,14 +1306,14 @@ void EditView::OnMouseUp(int x, int y)
   }
 }
 
-void EditView::OnMouseMove(int x, int y, WPARAM wParam)
+void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 {
   // Drag export: check threshold
   if (m_dragExportPending) {
     int dx = x - m_dragStartX;
     int dy = y - m_dragStartY;
     if (dx * dx + dy * dy > 25) {  // 5px threshold
-      DBG("[EditView] Drag threshold met: dx=%d dy=%d, initiating export\n", dx, dy);
+      DBG("[SneakPeak] Drag threshold met: dx=%d dy=%d, initiating export\n", dx, dy);
       m_dragExportPending = false;
       InitiateDragExport();
       ReleaseCapture();
@@ -1451,7 +1496,7 @@ void EditView::OnMouseMove(int x, int y, WPARAM wParam)
   m_lastMouseY = y;
 }
 
-void EditView::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
+void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
 {
   if (!m_waveform.HasItem()) return;
 
@@ -1483,7 +1528,7 @@ void EditView::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void EditView::OnKeyDown(WPARAM key)
+void SneakPeak::OnKeyDown(WPARAM key)
 {
   bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
 
@@ -1491,14 +1536,14 @@ void EditView::OnKeyDown(WPARAM key)
     case VK_HOME:
       if (m_waveform.HasItem()) {
         m_waveform.SetCursorTime(0.0);
-        if (g_SetEditCurPos) g_SetEditCurPos(m_waveform.GetItemPosition(), false, false);
+        if (g_SetEditCurPos) g_SetEditCurPos(m_waveform.RelTimeToAbsTime(0.0), false, false);
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
       break;
     case VK_END:
       if (m_waveform.HasItem()) {
         m_waveform.SetCursorTime(m_waveform.GetItemDuration());
-        if (g_SetEditCurPos) g_SetEditCurPos(m_waveform.GetItemPosition() + m_waveform.GetItemDuration(), false, false);
+        if (g_SetEditCurPos) g_SetEditCurPos(m_waveform.RelTimeToAbsTime(m_waveform.GetItemDuration()), false, false);
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
       break;
@@ -1512,7 +1557,7 @@ void EditView::OnKeyDown(WPARAM key)
         } else {
           m_startedPlayback = true;
           m_autoStopped = false;
-          m_playGraceTicks = 5; // ~165ms for REAPER to update play position
+          m_playGraceTicks = PLAY_GRACE_TICKS; // ~165ms for REAPER to update play position
           g_OnPlayButton();
         }
       }
@@ -1585,7 +1630,7 @@ void EditView::OnKeyDown(WPARAM key)
 
 // --- Right-click context menu ---
 
-void EditView::OnRightClick(int x, int y)
+void SneakPeak::OnRightClick(int x, int y)
 {
   HMENU menu = CreatePopupMenu();
   if (!menu) return;
@@ -1689,7 +1734,7 @@ void EditView::OnRightClick(int x, int y)
   DestroyMenu(menu);
 }
 
-void EditView::OnContextMenuCommand(int id)
+void SneakPeak::OnContextMenuCommand(int id)
 {
   switch (id) {
     case CM_UNDO:      UndoRestore(); break;
@@ -1739,7 +1784,7 @@ void EditView::OnContextMenuCommand(int id)
       m_gainPanel.Toggle(m_waveform.GetItem());
       break;
     case CM_MONO_DOWNMIX:
-      DBG("[EditView] CM_MONO_DOWNMIX: hasItem=%d hasTake=%d hasAPI=%d\n",
+      DBG("[SneakPeak] CM_MONO_DOWNMIX: hasItem=%d hasTake=%d hasAPI=%d\n",
           m_waveform.HasItem(), m_waveform.GetTake() != nullptr, g_GetSetMediaItemTakeInfo != nullptr);
       if (m_waveform.HasItem() && m_waveform.GetTake() && g_GetSetMediaItemTakeInfo) {
         MediaItem* item = m_waveform.GetItem();
@@ -1747,15 +1792,15 @@ void EditView::OnContextMenuCommand(int id)
         int* pCM = (int*)g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", nullptr);
         int chanMode = pCM ? *pCM : -999;
         int newMode = (chanMode == 2) ? 0 : 2;
-        DBG("[EditView] DOWNMIX: pCM=%p chanMode=%d -> newMode=%d\n", (void*)pCM, chanMode, newMode);
+        DBG("[SneakPeak] DOWNMIX: pCM=%p chanMode=%d -> newMode=%d\n", (void*)pCM, chanMode, newMode);
         if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
         int* pSet = (int*)g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", &newMode);
-        DBG("[EditView] DOWNMIX: after set pSet=%p\n", (void*)pSet);
+        DBG("[SneakPeak] DOWNMIX: after set pSet=%p\n", (void*)pSet);
         // Verify it was set
         int* pVerify = (int*)g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", nullptr);
         int verifyMode = pVerify ? *pVerify : -999;
-        DBG("[EditView] DOWNMIX: verify after set: %d (expected %d)\n", verifyMode, newMode);
-        if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Toggle Mono Downmix", -1);
+        DBG("[SneakPeak] DOWNMIX: verify after set: %d (expected %d)\n", verifyMode, newMode);
+        if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Toggle Mono Downmix", -1);
         m_lastChanMode = newMode;
         if (g_UpdateArrange) g_UpdateArrange();
         if (g_UpdateTimeline) g_UpdateTimeline();
@@ -1764,19 +1809,19 @@ void EditView::OnContextMenuCommand(int id)
         m_waveform.SetItem(item);
         if (m_gainPanel.IsVisible()) m_gainPanel.Show(item);
         InvalidateRect(m_hwnd, nullptr, FALSE);
-        DBG("[EditView] DOWNMIX: reload done, numCh=%d\n", m_waveform.GetNumChannels());
+        DBG("[SneakPeak] DOWNMIX: reload done, numCh=%d\n", m_waveform.GetNumChannels());
       }
       break;
     case CM_SNAP_ZERO:
       m_waveform.SetSnapToZero(!m_waveform.GetSnapToZero());
       if (g_SetExtState)
-        g_SetExtState("EditView", "snap_zero", m_waveform.GetSnapToZero() ? "1" : "0", true);
+        g_SetExtState("SneakPeak", "snap_zero", m_waveform.GetSnapToZero() ? "1" : "0", true);
       break;
     case CM_MINIMAP:
       m_minimapVisible = !m_minimapVisible;
-      DBG("[EditView] Minimap toggled: visible=%d\n", m_minimapVisible);
+      DBG("[SneakPeak] Minimap toggled: visible=%d\n", m_minimapVisible);
       if (g_SetExtState)
-        g_SetExtState("EditView", "minimap", m_minimapVisible ? "1" : "0", true);
+        g_SetExtState("SneakPeak", "minimap", m_minimapVisible ? "1" : "0", true);
       m_minimap.Invalidate();
       {
         RECT cr;
@@ -1822,7 +1867,7 @@ void EditView::OnContextMenuCommand(int id)
 
 // --- Toolbar actions ---
 
-void EditView::OnToolbarClick(int button)
+void SneakPeak::OnToolbarClick(int button)
 {
   switch (button) {
     case TB_ZOOM_IN: {
@@ -1852,7 +1897,7 @@ void EditView::OnToolbarClick(int button)
 
 // --- Selection sample range helper ---
 
-void EditView::GetSelectionSampleRange(int& startFrame, int& endFrame) const
+void SneakPeak::GetSelectionSampleRange(int& startFrame, int& endFrame) const
 {
   if (!m_waveform.HasSelection()) {
     startFrame = 0;
@@ -1872,12 +1917,12 @@ void EditView::GetSelectionSampleRange(int& startFrame, int& endFrame) const
 
 // --- Undo ---
 
-void EditView::UndoSave()
+void SneakPeak::UndoSave()
 {
   m_hasUndo = true;
 }
 
-void EditView::UndoRestore()
+void SneakPeak::UndoRestore()
 {
   // Trigger REAPER's native undo
   // Action 40029 = Edit: Undo
@@ -1892,13 +1937,13 @@ void EditView::UndoRestore()
 
 // --- Marker Navigation ---
 
-void EditView::NavigateToMarker(bool forward)
+void SneakPeak::NavigateToMarker(bool forward)
 {
   if (!m_waveform.HasItem() || !g_EnumProjectMarkers3 || !g_SetEditCurPos) return;
 
   double itemPos = m_waveform.GetItemPosition();
-  double itemEnd = itemPos + m_waveform.GetItemDuration();
-  double cursorAbs = itemPos + m_waveform.GetCursorTime();
+  double itemEnd = m_waveform.RelTimeToAbsTime(m_waveform.GetItemDuration());
+  double cursorAbs = m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime());
 
   double bestTime = -1.0;
   double bestDist = 1e30;
@@ -1924,22 +1969,21 @@ void EditView::NavigateToMarker(bool forward)
 
   if (bestTime >= 0.0) {
     g_SetEditCurPos(bestTime, false, false);
-    m_waveform.SetCursorTime(bestTime - itemPos);
+    m_waveform.SetCursorTime(m_waveform.AbsTimeToRelTime(bestTime));
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 }
 
 // --- Loop Playback ---
 
-void EditView::DoLoopSelection()
+void SneakPeak::DoLoopSelection()
 {
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
   if (!g_GetSet_LoopTimeRange2 || !g_SetEditCurPos || !g_OnPlayButton || !g_Main_OnCommand) return;
 
-  double itemPos = m_waveform.GetItemPosition();
   WaveformSelection sel = m_waveform.GetSelection();
-  double s = itemPos + std::min(sel.startTime, sel.endTime);
-  double e = itemPos + std::max(sel.startTime, sel.endTime);
+  double s = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
+  double e = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
 
   // Set loop range
   g_GetSet_LoopTimeRange2(nullptr, true, true, &s, &e, false);
@@ -1951,13 +1995,13 @@ void EditView::DoLoopSelection()
   g_SetEditCurPos(s, false, true);
   m_startedPlayback = true;
   m_autoStopped = false;
-  m_playGraceTicks = 5;
+  m_playGraceTicks = PLAY_GRACE_TICKS;
   g_OnPlayButton();
 }
 
 // --- Write back to disk and refresh ---
 
-void EditView::WriteAndRefresh()
+void SneakPeak::WriteAndRefresh()
 {
   if (!m_waveform.HasItem() || !m_waveform.GetTake()) return;
 
@@ -1973,7 +2017,7 @@ void EditView::WriteAndRefresh()
     for (auto& c : ext) c = (char)tolower((unsigned char)c);
     if (ext != "wav" && ext != "wave") {
       MessageBox(m_hwnd, "Destructive editing only supports WAV files.\nConvert source to WAV first.",
-                 "EditView", MB_OK | MB_ICONWARNING);
+                 "SneakPeak", MB_OK | MB_ICONWARNING);
       return;
     }
   }
@@ -1998,16 +2042,15 @@ void EditView::WriteAndRefresh()
   }
 }
 
-// --- Sync EditView selection to REAPER time selection ---
+// --- Sync SneakPeak selection to REAPER time selection ---
 
-void EditView::SyncSelectionToReaper()
+void SneakPeak::SyncSelectionToReaper()
 {
   if (!g_GetSet_LoopTimeRange2 || !m_waveform.HasItem()) return;
-  double itemPos = m_waveform.GetItemPosition();
   if (m_waveform.HasSelection()) {
     WaveformSelection sel = m_waveform.GetSelection();
-    double s = std::min(sel.startTime, sel.endTime) + itemPos;
-    double e = std::max(sel.startTime, sel.endTime) + itemPos;
+    double s = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
+    double e = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
     g_GetSet_LoopTimeRange2(nullptr, true, false, &s, &e, false);
   } else {
     // Clear time selection
@@ -2019,7 +2062,7 @@ void EditView::SyncSelectionToReaper()
 
 // --- Clipboard operations ---
 
-void EditView::DoCopy()
+void SneakPeak::DoCopy()
 {
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
 
@@ -2047,10 +2090,10 @@ void EditView::DoCopy()
   // Also trigger REAPER's native copy (40060 = Copy selected area of items)
   if (g_Main_OnCommand) g_Main_OnCommand(40060, 0);
 
-  DBG("[EditView] Copied %d frames to clipboard\n", selFrames);
+  DBG("[SneakPeak] Copied %d frames to clipboard\n", selFrames);
 }
 
-void EditView::DoCut()
+void SneakPeak::DoCut()
 {
   // Non-destructive: copy to clipboard, then delete via split+remove
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
@@ -2059,18 +2102,18 @@ void EditView::DoCut()
   DoDelete();
 }
 
-void EditView::DoPaste()
+void SneakPeak::DoPaste()
 {
   if (!m_waveform.HasItem() || s_clipboard.numFrames <= 0) return;
   if (s_clipboard.numChannels != m_waveform.GetNumChannels()) return;
   if (m_waveform.IsMultiItem()) {
-    MessageBox(m_hwnd, "Paste is not supported in multi-item view.", "EditView", MB_OK);
+    MessageBox(m_hwnd, "Paste is not supported in multi-item view.", "SneakPeak", MB_OK);
     return;
   }
 
   int ret = MessageBox(m_hwnd,
     "Paste modifies the audio file on disk. Continue?",
-    "EditView — Destructive Operation", MB_YESNO | MB_ICONWARNING);
+    "SneakPeak — Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
@@ -2096,27 +2139,26 @@ void EditView::DoPaste()
 
   WriteAndRefresh();
 
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Paste", -1);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Paste", -1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void EditView::DoDelete()
+void SneakPeak::DoDelete()
 {
   // Non-destructive: split item at selection edges, delete middle piece
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
   if (!g_SplitMediaItem || !g_DeleteTrackMediaItem || !g_GetMediaItem_Track) return;
 
   MediaItem* item = m_waveform.GetItem();
-  double itemPos = m_waveform.GetItemPosition();
   WaveformSelection sel = m_waveform.GetSelection();
   double selStart = std::min(sel.startTime, sel.endTime);
   double selEnd = std::max(sel.startTime, sel.endTime);
 
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
-  double splitStart = itemPos + selStart;
-  double splitEnd = itemPos + selEnd;
+  double splitStart = m_waveform.RelTimeToAbsTime(selStart);
+  double splitEnd = m_waveform.RelTimeToAbsTime(selEnd);
 
   // Split at end first (so item pointer stays valid for the first part)
   MediaItem* rightPart = g_SplitMediaItem(item, splitEnd);
@@ -2130,7 +2172,7 @@ void EditView::DoDelete()
   }
 
   if (g_UpdateArrange) g_UpdateArrange();
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Delete (non-destructive)", -1);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete (non-destructive)", -1);
 
   // Reload — item pointer may have changed, re-select
   if (rightPart) {
@@ -2143,22 +2185,21 @@ void EditView::DoDelete()
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void EditView::DoSilence()
+void SneakPeak::DoSilence()
 {
   // Non-destructive: split selection into separate item, set its volume to 0
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
   if (!g_SplitMediaItem || !g_SetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();
-  double itemPos = m_waveform.GetItemPosition();
   WaveformSelection sel = m_waveform.GetSelection();
   double selStart = std::min(sel.startTime, sel.endTime);
   double selEnd = std::max(sel.startTime, sel.endTime);
 
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
-  double splitStart = itemPos + selStart;
-  double splitEnd = itemPos + selEnd;
+  double splitStart = m_waveform.RelTimeToAbsTime(selStart);
+  double splitEnd = m_waveform.RelTimeToAbsTime(selEnd);
 
   // Split at end first
   g_SplitMediaItem(item, splitEnd);
@@ -2171,7 +2212,7 @@ void EditView::DoSilence()
   }
 
   if (g_UpdateArrange) g_UpdateArrange();
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Silence (non-destructive)", -1);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Silence (non-destructive)", -1);
 
   m_waveform.ClearItem();
   LoadSelectedItem();
@@ -2180,7 +2221,7 @@ void EditView::DoSilence()
 
 // --- Processing ---
 
-void EditView::DoNormalize()
+void SneakPeak::DoNormalize()
 {
   // Non-destructive: measure peak, set D_VOL to reach 0dB
   if (!m_waveform.HasItem()) return;
@@ -2209,12 +2250,12 @@ void EditView::DoNormalize()
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   g_SetMediaItemInfo_Value(item, "D_VOL", newVol);
   if (g_UpdateArrange) g_UpdateArrange();
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Normalize (non-destructive)", -1);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Normalize (non-destructive)", -1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void EditView::DoFadeIn()
+void SneakPeak::DoFadeIn()
 {
   // Non-destructive: set item fade-in length via D_FADEINLEN
   if (!m_waveform.HasItem()) return;
@@ -2235,12 +2276,12 @@ void EditView::DoFadeIn()
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   g_SetMediaItemInfo_Value(item, "D_FADEINLEN", fadeLen);
   if (g_UpdateArrange) g_UpdateArrange();
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Fade In", -1);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Fade In", -1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void EditView::DoFadeOut()
+void SneakPeak::DoFadeOut()
 {
   // Non-destructive: set item fade-out length via D_FADEOUTLEN
   if (!m_waveform.HasItem()) return;
@@ -2261,23 +2302,23 @@ void EditView::DoFadeOut()
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   g_SetMediaItemInfo_Value(item, "D_FADEOUTLEN", fadeLen);
   if (g_UpdateArrange) g_UpdateArrange();
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Fade Out", -1);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Fade Out", -1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void EditView::DoReverse()
+void SneakPeak::DoReverse()
 {
   // Destructive — no REAPER non-destructive reverse available
   if (!m_waveform.HasItem()) return;
   if (m_waveform.IsMultiItem()) {
-    MessageBox(m_hwnd, "Reverse is not supported in multi-item view.", "EditView", MB_OK);
+    MessageBox(m_hwnd, "Reverse is not supported in multi-item view.", "SneakPeak", MB_OK);
     return;
   }
 
   int ret = MessageBox(m_hwnd,
     "Reverse modifies the audio file on disk. Continue?",
-    "EditView — Destructive Operation", MB_YESNO | MB_ICONWARNING);
+    "SneakPeak — Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
@@ -2293,12 +2334,12 @@ void EditView::DoReverse()
 
   WriteAndRefresh();
 
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: Reverse (destructive)", -1);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Reverse (destructive)", -1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void EditView::DoGain(double factor)
+void SneakPeak::DoGain(double factor)
 {
   // Non-destructive: multiply current D_VOL by factor
   if (!m_waveform.HasItem()) return;
@@ -2313,24 +2354,24 @@ void EditView::DoGain(double factor)
   if (g_UpdateArrange) g_UpdateArrange();
 
   char desc[64];
-  snprintf(desc, sizeof(desc), "EditView: Gain %.1fdB", 20.0 * log10(factor));
+  snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", 20.0 * log10(factor));
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void EditView::DoDCRemove()
+void SneakPeak::DoDCRemove()
 {
   // Destructive — must modify audio data
   if (!m_waveform.HasItem()) return;
   if (m_waveform.IsMultiItem()) {
-    MessageBox(m_hwnd, "DC Remove is not supported in multi-item view.", "EditView", MB_OK);
+    MessageBox(m_hwnd, "DC Remove is not supported in multi-item view.", "SneakPeak", MB_OK);
     return;
   }
 
   int ret = MessageBox(m_hwnd,
     "DC Offset Remove modifies the audio file on disk. Continue?",
-    "EditView — Destructive Operation", MB_YESNO | MB_ICONWARNING);
+    "SneakPeak — Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
@@ -2346,14 +2387,14 @@ void EditView::DoDCRemove()
 
   WriteAndRefresh();
 
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "EditView: DC Offset Remove (destructive)", -1);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: DC Offset Remove (destructive)", -1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
 // --- Drag & Drop Export ---
 
-void EditView::CleanupDragTemp()
+void SneakPeak::CleanupDragTemp()
 {
   if (!m_dragTempPath.empty()) {
     remove(m_dragTempPath.c_str());
@@ -2361,9 +2402,9 @@ void EditView::CleanupDragTemp()
   }
 }
 
-void EditView::InitiateDragExport()
+void SneakPeak::InitiateDragExport()
 {
-  DBG("[EditView] InitiateDragExport: hasItem=%d hasSel=%d\n",
+  DBG("[SneakPeak] InitiateDragExport: hasItem=%d hasSel=%d\n",
       m_waveform.HasItem(), m_waveform.HasSelection());
 
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
@@ -2375,7 +2416,7 @@ void EditView::InitiateDragExport()
   int nch = m_waveform.GetNumChannels();
   int selFrames = endF - startF;
 
-  DBG("[EditView] DragExport: startF=%d endF=%d nch=%d selFrames=%d dataSize=%d\n",
+  DBG("[SneakPeak] DragExport: startF=%d endF=%d nch=%d selFrames=%d dataSize=%d\n",
       startF, endF, nch, selFrames, (int)m_waveform.GetAudioData().size());
 
   if (selFrames <= 0 || nch <= 0) return;
@@ -2384,14 +2425,14 @@ void EditView::InitiateDragExport()
   size_t offset = (size_t)startF * (size_t)nch;
   size_t needed = offset + (size_t)selFrames * (size_t)nch;
   if (needed > data.size()) {
-    DBG("[EditView] DragExport: buffer overflow! needed=%d have=%d\n",
+    DBG("[SneakPeak] DragExport: buffer overflow! needed=%d have=%d\n",
         (int)needed, (int)data.size());
     return;
   }
   const double* selData = data.data() + offset;
 
   m_dragTempPath = AudioEngine::WriteTempWav(selData, selFrames, nch, m_waveform.GetSampleRate());
-  DBG("[EditView] DragExport: wrote temp WAV to '%s'\n", m_dragTempPath.c_str());
+  DBG("[SneakPeak] DragExport: wrote temp WAV to '%s'\n", m_dragTempPath.c_str());
   if (m_dragTempPath.empty()) return;
 
 #ifndef _WIN32
@@ -2399,9 +2440,9 @@ void EditView::InitiateDragExport()
   RECT dragRect = { m_dragStartX - 5, m_dragStartY - 5,
                     m_dragStartX + 5, m_dragStartY + 5 };
   const char* files[] = { m_dragTempPath.c_str() };
-  DBG("[EditView] DragExport: calling SWELL_InitiateDragDropOfFileList\n");
+  DBG("[SneakPeak] DragExport: calling SWELL_InitiateDragDropOfFileList\n");
   SWELL_InitiateDragDropOfFileList(m_hwnd, &dragRect, files, 1, nullptr);
 #endif
 
-  DBG("[EditView] DragExport: done, %d frames\n", selFrames);
+  DBG("[SneakPeak] DragExport: done, %d frames\n", selFrames);
 }

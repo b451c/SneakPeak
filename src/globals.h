@@ -1,4 +1,4 @@
-// globals.h — REAPER API function pointers for EditView
+// globals.h — REAPER API function pointers for SneakPeak
 #pragma once
 
 #include "platform.h"
@@ -83,6 +83,9 @@ extern void (*g_UpdateTimeline)();
 
 // Time selection
 extern void (*g_GetSet_LoopTimeRange2)(ReaProject* proj, bool isSet, bool isLoop, double* startOut, double* endOut, bool allowautoseek);
+
+// Pointer validation
+extern bool (*g_ValidatePtr2)(ReaProject* proj, void* pointer, const char* ctypename);
 
 // UI / dialogs
 extern bool (*g_GetUserInputs)(const char* title, int num_inputs, const char* captions_csv, char* retvals_csv, int retvals_csv_sz);

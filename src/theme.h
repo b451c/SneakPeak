@@ -1,4 +1,4 @@
-// theme.h — REAPER theme color integration for EditView
+// theme.h — REAPER theme color integration for SneakPeak
 #pragma once
 
 #include "platform.h"

@@ -128,6 +128,6 @@ void Theme_Refresh()
   g_theme.border        = grid1;
   g_theme.emptyText     = RGB(100, 100, 100);
 
-  DBG("[EditView] Theme loaded: bg=%06X waveform=%06X cursor=%06X\n",
+  DBG("[SneakPeak] Theme loaded: bg=%06X waveform=%06X cursor=%06X\n",
       g_theme.waveformBg, g_theme.waveform, g_theme.editCursor);
 }

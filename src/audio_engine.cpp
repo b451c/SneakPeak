@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <cstdlib>
 #include <algorithm>
 
 // --- WAV format structures ---
@@ -136,7 +137,7 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
                                 int numFrames, int numChannels, int sampleRate,
                                 int bitsPerSample, int audioFormat)
 {
-  std::string tmpPath = path + ".editview.tmp";
+  std::string tmpPath = path + ".sneakpeak.tmp";
   FILE* f = fopen(tmpPath.c_str(), "wb");
   if (!f) {
     DBG("[AudioEngine] Failed to open tmp file for writing: %s\n", tmpPath.c_str());
@@ -243,9 +244,11 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
 std::string AudioEngine::WriteTempWav(const double* samples, int numFrames,
                                        int numChannels, int sampleRate)
 {
-  // Generate unique temp path
+  // Generate unique temp path (use $TMPDIR if available)
+  const char* tmpDir = getenv("TMPDIR");
+  if (!tmpDir) tmpDir = "/tmp";
   char tmpPath[512];
-  snprintf(tmpPath, sizeof(tmpPath), "/tmp/editview_export_%d.wav", (int)getpid());
+  snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_export_%d.wav", tmpDir, (int)getpid());
 
   if (!WriteWavFile(tmpPath, samples, numFrames, numChannels, sampleRate, 16, 1)) {
     DBG("[AudioEngine] WriteTempWav failed\n");

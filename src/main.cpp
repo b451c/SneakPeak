@@ -1,4 +1,4 @@
-// EditView — REAPER Extension for Item Waveform Editing
+// SneakPeak — REAPER Extension for Item Waveform Editing
 // Inspired by Adobe Audition's Edit View / Waveform Editor
 
 #include "platform.h"
@@ -92,19 +92,19 @@
 #include "debug.h"
 #include <memory>
 
-static std::unique_ptr<EditView> g_editView;
+static std::unique_ptr<SneakPeak> g_sneakPeak;
 static int g_cmdToggle = 0;
 static int g_cmdLoadItem = 0;
 static MediaItem* g_lastSelectedItem = nullptr;
 static int g_lastSelectedCount = 0;
 
 // Keyboard accelerator for docked window — intercepts Ctrl+Z/X/C/V etc.
-static int translateAccelEditView(MSG* msg, accelerator_register_t* ctx)
+static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
 {
-  if (!g_editView || !g_editView->IsVisible() || !g_editView->GetHwnd()) return 0;
+  if (!g_sneakPeak || !g_sneakPeak->IsVisible() || !g_sneakPeak->GetHwnd()) return 0;
 
   HWND focus = GetFocus();
-  HWND ourHwnd = g_editView->GetHwnd();
+  HWND ourHwnd = g_sneakPeak->GetHwnd();
   if (focus != ourHwnd && GetParent(focus) != ourHwnd) return 0;
 
   if (msg->message == WM_KEYDOWN) {
@@ -124,11 +124,11 @@ static int translateAccelEditView(MSG* msg, accelerator_register_t* ctx)
   return 0;
 }
 
-static accelerator_register_t g_accelReg = { translateAccelEditView, true, nullptr };
+static accelerator_register_t g_accelReg = { translateAccelSneakPeak, true, nullptr };
 
 static void pollSelectionTimer()
 {
-  if (!g_editView || !g_editView->IsVisible()) return;
+  if (!g_sneakPeak || !g_sneakPeak->IsVisible()) return;
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
   int count = g_CountSelectedMediaItems(nullptr);
@@ -142,24 +142,24 @@ static void pollSelectionTimer()
   if (item != g_lastSelectedItem || count != g_lastSelectedCount) {
     g_lastSelectedItem = item;
     g_lastSelectedCount = count;
-    g_editView->LoadSelectedItem();
+    g_sneakPeak->LoadSelectedItem();
   }
 }
 
 static bool hookCommandProc(int command, int flag)
 {
   if (command == g_cmdToggle) {
-    if (!g_editView) g_editView = std::make_unique<EditView>();
-    if (!g_editView->GetHwnd()) {
-      g_editView->Create();
-      g_editView->LoadSelectedItem();
+    if (!g_sneakPeak) g_sneakPeak = std::make_unique<SneakPeak>();
+    if (!g_sneakPeak->GetHwnd()) {
+      g_sneakPeak->Create();
+      g_sneakPeak->LoadSelectedItem();
     } else {
-      g_editView->Toggle();
+      g_sneakPeak->Toggle();
     }
     return true;
   }
   if (command == g_cmdLoadItem) {
-    if (g_editView && g_editView->GetHwnd()) g_editView->LoadSelectedItem();
+    if (g_sneakPeak && g_sneakPeak->GetHwnd()) g_sneakPeak->LoadSelectedItem();
     return true;
   }
   return false;
@@ -168,21 +168,21 @@ static bool hookCommandProc(int command, int flag)
 static int toggleActionCallback(int command)
 {
   if (command == g_cmdToggle) {
-    return (g_editView && g_editView->IsVisible()) ? 1 : 0;
+    return (g_sneakPeak && g_sneakPeak->IsVisible()) ? 1 : 0;
   }
   return -1;
 }
 
 static void onAtExit()
 {
-  DBG("[EditView] onAtExit\n");
-  if (g_editView) {
+  DBG("[SneakPeak] onAtExit\n");
+  if (g_sneakPeak) {
     if (g_SetExtState) {
-      g_SetExtState("EditView", "was_visible",
-                     g_editView->IsVisible() ? "1" : "0", true);
+      g_SetExtState("SneakPeak", "was_visible",
+                     g_sneakPeak->IsVisible() ? "1" : "0", true);
     }
-    g_editView->Destroy();
-    g_editView.reset();
+    g_sneakPeak->Destroy();
+    g_sneakPeak.reset();
   }
 }
 
@@ -196,15 +196,15 @@ static void startupTimerFunc()
 
   bool wasVisible = false;
   if (g_GetExtState) {
-    const char* vis = g_GetExtState("EditView", "was_visible");
+    const char* vis = g_GetExtState("SneakPeak", "was_visible");
     if (vis && vis[0] == '1') wasVisible = true;
   }
 
   if (wasVisible) {
-    if (!g_editView) g_editView = std::make_unique<EditView>();
-    if (!g_editView->GetHwnd()) {
-      g_editView->Create();
-      g_editView->LoadSelectedItem();
+    if (!g_sneakPeak) g_sneakPeak = std::make_unique<SneakPeak>();
+    if (!g_sneakPeak->GetHwnd()) {
+      g_sneakPeak->Create();
+      g_sneakPeak->LoadSelectedItem();
     }
   }
 
@@ -218,9 +218,9 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   HINSTANCE hInstance, reaper_plugin_info_t* rec)
 {
   if (!rec) {
-    if (g_editView) {
-      g_editView->Destroy();
-      g_editView.reset();
+    if (g_sneakPeak) {
+      g_sneakPeak->Destroy();
+      g_sneakPeak.reset();
     }
     return 0;
   }
@@ -288,22 +288,23 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_GetSet_LoopTimeRange2 = GetSet_LoopTimeRange2;
 
   g_GetUserInputs = GetUserInputs;
+  g_ValidatePtr2 = ValidatePtr2;
 
   // Theme colors
   Theme_SetGetThemeColor((void*)GetThemeColor);
   Theme_Init();
 
   // Register actions
-  g_cmdToggle = rec->Register("command_id", (void*)"EditView_Toggle");
+  g_cmdToggle = rec->Register("command_id", (void*)"SneakPeak_Toggle");
   if (!g_cmdToggle) return 0;
 
-  g_cmdLoadItem = rec->Register("command_id", (void*)"EditView_LoadSelectedItem");
+  g_cmdLoadItem = rec->Register("command_id", (void*)"SneakPeak_LoadSelectedItem");
 
-  static gaccel_register_t accelToggle = {{0, 0, 0}, "EditView: Open/Close Edit View"};
+  static gaccel_register_t accelToggle = {{0, 0, 0}, "SneakPeak: Open/Close SneakPeak"};
   accelToggle.accel.cmd = static_cast<unsigned short>(g_cmdToggle);
   rec->Register("gaccel", &accelToggle);
 
-  static gaccel_register_t accelLoad = {{0, 0, 0}, "EditView: Load Selected Item"};
+  static gaccel_register_t accelLoad = {{0, 0, 0}, "SneakPeak: Load Selected Item"};
   accelLoad.accel.cmd = static_cast<unsigned short>(g_cmdLoadItem);
   rec->Register("gaccel", &accelLoad);
 
@@ -314,7 +315,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
 
   g_plugin_register("timer", (void*)(void(*)())startupTimerFunc);
 
-  DBG("[EditView] Plugin loaded successfully\n");
+  DBG("[SneakPeak] Plugin loaded successfully\n");
   return 1;
 }
 

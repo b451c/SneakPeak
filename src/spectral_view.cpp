@@ -219,6 +219,7 @@ void SpectralView::RenderView(const WaveformView& waveform)
   if (!m_specValid.load() || m_specCols < 1) goto done;
 
   {
+    std::lock_guard<std::mutex> lock(m_specMutex);
     int nch = m_specNch;
     int chSep = (nch > 1) ? CHANNEL_SEPARATOR_HEIGHT : 0;
     int chH = (nch > 1) ? (height - chSep) / 2 : height;
@@ -410,7 +411,7 @@ void SpectralView::DrawPlayhead(HDC hdc, const WaveformView& waveform)
 
     // Playhead — solid moving line
     if (g_GetPlayPosition2) {
-      double relPos = g_GetPlayPosition2() - waveform.GetItemPosition();
+      double relPos = waveform.AbsTimeToRelTime(g_GetPlayPosition2());
       int px = waveform.TimeToX(relPos);
       if (px > m_rect.left && px < contentRight) {
         HPEN pen = CreatePen(PS_SOLID, 2, g_theme.playhead);

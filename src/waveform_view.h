@@ -1,4 +1,4 @@
-// waveform_view.h — Waveform display and interaction for EditView
+// waveform_view.h — Waveform display and interaction for SneakPeak
 #pragma once
 
 #include "platform.h"
@@ -68,6 +68,13 @@ public:
   // Coordinate conversion
   double XToTime(int x) const;
   int TimeToX(double time) const;
+
+  // Multi-item: convert absolute timeline position to concatenated view time
+  // Returns -1.0 if the position is not within any segment
+  double AbsTimeToRelTime(double absTime) const;
+
+  // Multi-item: convert concatenated view time back to absolute timeline position
+  double RelTimeToAbsTime(double relTime) const;
 
   // Rendering (GDI)
   void Paint(HDC hdc);

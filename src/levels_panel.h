@@ -1,4 +1,4 @@
-// levels_panel.h — RMS/Peak level meter for EditView
+// levels_panel.h — RMS/Peak level meter for SneakPeak
 #pragma once
 
 #include "platform.h"

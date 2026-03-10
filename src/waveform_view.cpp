@@ -86,7 +86,8 @@ void WaveformView::SetItem(MediaItem* item)
   LoadAudioData();
 
   // Apply take channel mode (mono downmix) after loading
-  if (g_GetSetMediaItemTakeInfo && m_take && srcChannels == 2) {
+  if (g_GetSetMediaItemTakeInfo && m_take && srcChannels == 2 &&
+      (int)m_audioData.size() >= m_audioSampleCount * 2) {
     int* pChanMode = (int*)g_GetSetMediaItemTakeInfo(m_take, "I_CHANMODE", nullptr);
     int chanMode = pChanMode ? *pChanMode : 0;
     if (chanMode == 2) {
@@ -119,7 +120,7 @@ void WaveformView::SetItem(MediaItem* item)
     }
   }
 
-  DBG("[EditView] SetItem: pos=%.3f dur=%.3f offset=%.3f ch=%d sr=%d samples=%d\n",
+  DBG("[SneakPeak] SetItem: pos=%.3f dur=%.3f offset=%.3f ch=%d sr=%d samples=%d\n",
       m_itemPosition, m_itemDuration, m_takeOffset, m_numChannels, m_sampleRate, m_audioSampleCount);
 }
 
@@ -139,52 +140,75 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
   m_segments.clear();
 
   if (!g_GetActiveTake || !g_GetMediaItemInfo_Value || !g_GetMediaItemTake_Source) {
-    DBG("[EditView] SetItems: missing API functions\n");
+    DBG("[SneakPeak] SetItems: missing API functions\n");
     return;
   }
   if (!g_CreateTakeAudioAccessor || !g_GetAudioAccessorSamples || !g_DestroyAudioAccessor) {
-    DBG("[EditView] SetItems: missing audio accessor API\n");
+    DBG("[SneakPeak] SetItems: missing audio accessor API\n");
     return;
   }
 
   // Determine sample rate and channel count from first item
   m_take = g_GetActiveTake(items[0]);
-  if (!m_take) { DBG("[EditView] SetItems: no active take on first item\n"); m_item = nullptr; return; }
+  if (!m_take) { DBG("[SneakPeak] SetItems: no active take on first item\n"); m_item = nullptr; return; }
 
   PCM_source* src0 = g_GetMediaItemTake_Source(m_take);
-  if (!src0) { DBG("[EditView] SetItems: no source on first take\n"); m_item = nullptr; m_take = nullptr; return; }
+  if (!src0) { DBG("[SneakPeak] SetItems: no source on first take\n"); m_item = nullptr; m_take = nullptr; return; }
   m_sampleRate = (int)src0->GetSampleRate();
   m_numChannels = src0->GetNumChannels();
   if (m_numChannels < 1) m_numChannels = 1;
   if (m_numChannels > 2) m_numChannels = 2;
-  DBG("[EditView] SetItems: first item sr=%d nch=%d\n", m_sampleRate, m_numChannels);
+  DBG("[SneakPeak] SetItems: first item sr=%d nch=%d\n", m_sampleRate, m_numChannels);
 
   m_itemPosition = g_GetMediaItemInfo_Value(items[0], "D_POSITION");
 
+  // Pre-compute positions and durations for overlap detection
+  struct ItemInfo { MediaItem* item; double pos; double dur; };
+  std::vector<ItemInfo> itemInfos;
+  for (MediaItem* it : items) {
+    double p = g_GetMediaItemInfo_Value(it, "D_POSITION");
+    double d = g_GetMediaItemInfo_Value(it, "D_LENGTH");
+    itemInfos.push_back({it, p, d});
+  }
+
   // Load audio from each item and concatenate
+  // When items overlap (crossfade), trim the first item to avoid counting the overlap twice
   double totalDuration = 0.0;
-  for (MediaItem* item : items) {
+  for (size_t idx = 0; idx < itemInfos.size(); idx++) {
+    MediaItem* item = itemInfos[idx].item;
     MediaItem_Take* take = g_GetActiveTake(item);
     if (!take) continue;
 
-    double pos = g_GetMediaItemInfo_Value(item, "D_POSITION");
-    double dur = g_GetMediaItemInfo_Value(item, "D_LENGTH");
+    double pos = itemInfos[idx].pos;
+    double dur = itemInfos[idx].dur;
+
+    // Trim effective duration if next item overlaps (crossfade)
+    double effectiveDur = dur;
+    if (idx + 1 < itemInfos.size()) {
+      double nextPos = itemInfos[idx + 1].pos;
+      if (nextPos < pos + dur) {
+        effectiveDur = nextPos - pos;
+        if (effectiveDur <= 0.0) continue; // completely overlapped, skip
+        DBG("[SneakPeak] SetItems: trimming item at pos=%.3f from dur=%.3f to %.3f (overlap with next at %.3f)\n",
+            pos, dur, effectiveDur, nextPos);
+      }
+    }
 
     ItemSegment seg;
     seg.item = item;
     seg.take = take;
     seg.position = pos;
-    seg.duration = dur;
+    seg.duration = effectiveDur;
     seg.relativeOffset = totalDuration;
     seg.audioStartFrame = m_audioSampleCount;
 
-    // Load this item's audio
-    int frames = (int)(dur * (double)m_sampleRate);
+    // Load this item's audio (only effectiveDur, not full dur)
+    int frames = (int)(effectiveDur * (double)m_sampleRate);
     if (frames <= 0) continue;
 
     AudioAccessor* accessor = g_CreateTakeAudioAccessor(take);
     if (!accessor) {
-      DBG("[EditView] SetItems: failed to create accessor for item at pos=%.3f\n", pos);
+      DBG("[SneakPeak] SetItems: failed to create accessor for item at pos=%.3f\n", pos);
       continue;
     }
 
@@ -205,22 +229,22 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
     }
     g_DestroyAudioAccessor(accessor);
 
-    // Apply item volume (D_VOL) so EditView matches REAPER's arrange view
+    // Apply item volume (D_VOL) so SneakPeak matches REAPER's arrange view
     double itemVol = g_GetMediaItemInfo_Value(item, "D_VOL");
     if (itemVol != 1.0 && itemVol > 0.0) {
       size_t sampleCount = (size_t)frames * m_numChannels;
       for (size_t s = 0; s < sampleCount; s++)
         m_audioData[prevSize + s] *= itemVol;
-      DBG("[EditView] SetItems: applied D_VOL=%.3f to %d frames at pos=%.3f\n", itemVol, frames, pos);
+      DBG("[SneakPeak] SetItems: applied D_VOL=%.3f to %d frames at pos=%.3f\n", itemVol, frames, pos);
     }
 
     seg.audioFrameCount = frames;
     m_audioSampleCount += frames;
-    totalDuration += dur;
+    totalDuration += effectiveDur;
     m_segments.push_back(seg);
 
-    DBG("[EditView] SetItems seg[%d]: pos=%.3f dur=%.3f offset=%.3f frames=%d\n",
-        (int)m_segments.size() - 1, pos, dur, seg.relativeOffset, frames);
+    DBG("[SneakPeak] SetItems seg[%d]: pos=%.3f dur=%.3f effDur=%.3f offset=%.3f frames=%d\n",
+        (int)m_segments.size() - 1, pos, dur, effectiveDur, seg.relativeOffset, frames);
   }
 
   m_itemDuration = totalDuration;
@@ -229,7 +253,7 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
   m_viewDuration = totalDuration;
   m_cursorTime = 0.0;
 
-  DBG("[EditView] SetItems: %d items, total dur=%.3f frames=%d\n",
+  DBG("[SneakPeak] SetItems: %d items, total dur=%.3f frames=%d\n",
       (int)items.size(), totalDuration, m_audioSampleCount);
 }
 
@@ -258,7 +282,7 @@ void WaveformView::LoadAudioData()
   int nch = m_numChannels;
   if (nch < 1) nch = 1;
 
-  int totalFrames = (int)(m_itemDuration * (double)m_sampleRate) + 1;
+  int totalFrames = (int)(m_itemDuration * (double)m_sampleRate);
   // Safety cap: 30 minutes of stereo 96kHz = ~346M samples, ~2.6GB
   // For practical use, cap at 10M frames (~3.5 min stereo 48kHz)
   // Beyond that, we'll downsample on load
@@ -275,7 +299,7 @@ void WaveformView::LoadAudioData()
     if (readRate < 8000) readRate = 8000;
     readFrames = (int)(m_itemDuration * (double)readRate) + 1;
     m_sampleRate = readRate; // update so peak calculations use correct rate
-    DBG("[EditView] Downsampling: ratio=%d readRate=%d readFrames=%d\n", ratio, readRate, readFrames);
+    DBG("[SneakPeak] Downsampling: ratio=%d readRate=%d readFrames=%d\n", ratio, readRate, readFrames);
   }
 
   AudioAccessor* accessor = g_CreateTakeAudioAccessor(m_take);
@@ -307,7 +331,7 @@ void WaveformView::LoadAudioData()
   m_audioSampleCount = readFrames;
   g_DestroyAudioAccessor(accessor);
 
-  DBG("[EditView] Loaded %d frames (%d ch) into %.1f MB\n",
+  DBG("[SneakPeak] Loaded %d frames (%d ch) into %.1f MB\n",
       m_audioSampleCount, nch, (double)(m_audioData.size() * sizeof(double)) / (1024.0 * 1024.0));
 }
 
@@ -424,10 +448,10 @@ double WaveformView::SnapToZeroCrossing(double time) const {
   int frame = (int)(time * (double)m_sampleRate);
   frame = std::max(0, std::min(frame, m_audioSampleCount - 1));
 
-  // Search outward ±512 samples on channel 0 for sign change
-  int bestDist = 513;
+  // Search outward ±ZERO_SNAP_RANGE samples on channel 0 for sign change
+  int bestDist = ZERO_SNAP_RANGE + 1;
   int bestFrame = frame;
-  int searchRange = std::min(512, m_audioSampleCount - 1);
+  int searchRange = std::min(ZERO_SNAP_RANGE, m_audioSampleCount - 1);
 
   for (int d = 0; d <= searchRange; d++) {
     for (int sign = -1; sign <= 1; sign += 2) {
@@ -464,6 +488,67 @@ int WaveformView::TimeToX(double time) const {
   if (w < 1) w = m_rect.right - m_rect.left;
   if (m_viewDuration <= 0.0) return m_rect.left;
   return m_rect.left + (int)(((time - m_viewStartTime) / m_viewDuration) * (double)w);
+}
+
+double WaveformView::AbsTimeToRelTime(double absTime) const
+{
+  if (m_segments.size() <= 1) {
+    // Single item: simple offset from item start
+    return absTime - m_itemPosition;
+  }
+
+  // Multi-item: find which segment the absolute time falls into
+  for (size_t i = 0; i < m_segments.size(); i++) {
+    const auto& seg = m_segments[i];
+    if (absTime >= seg.position && absTime < seg.position + seg.duration) {
+      double timeInSeg = absTime - seg.position;
+      return seg.relativeOffset + timeInSeg;
+    }
+    // In a gap between this segment and the next? Snap to boundary.
+    if (i + 1 < m_segments.size()) {
+      double segEnd = seg.position + seg.duration;
+      if (absTime >= segEnd && absTime < m_segments[i + 1].position) {
+        return seg.relativeOffset + seg.duration; // park at end of this segment
+      }
+    }
+  }
+
+  // Before first segment
+  if (!m_segments.empty() && absTime < m_segments[0].position) {
+    return 0.0;
+  }
+
+  // Past the last segment
+  if (!m_segments.empty()) {
+    const auto& last = m_segments.back();
+    if (absTime >= last.position + last.duration) {
+      return last.relativeOffset + last.duration; // end of concatenated view
+    }
+  }
+  return 0.0;
+}
+
+double WaveformView::RelTimeToAbsTime(double relTime) const
+{
+  if (m_segments.size() <= 1) {
+    // Single item: simple offset from item start
+    return m_itemPosition + relTime;
+  }
+
+  // Multi-item: find which segment the relative time falls into
+  for (const auto& seg : m_segments) {
+    if (relTime >= seg.relativeOffset && relTime < seg.relativeOffset + seg.duration) {
+      double timeInSeg = relTime - seg.relativeOffset;
+      return seg.position + timeInSeg;
+    }
+  }
+
+  // Past the last segment — clamp to end of last item
+  if (!m_segments.empty()) {
+    const auto& last = m_segments.back();
+    return last.position + last.duration;
+  }
+  return m_itemPosition + relTime;
 }
 
 // --- Peaks from cached audio data (pure math, no API calls) ---
@@ -671,7 +756,12 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   HPEN curPen = normalPen;
   HPEN oldPen = (HPEN)SelectObject(hdc, curPen);
 
-  for (int col = 0; col < w; col++) {
+  // Pre-compute time stepping to avoid per-column XToTime() calls
+  double viewStart = m_viewStartTime;
+  double timeStep = (w > 1) ? m_viewDuration / (double)w : 0.0;
+  double colTime = viewStart;
+
+  for (int col = 0; col < w; col++, colTime += timeStep) {
     size_t idx = (size_t)(col * nch + channel);
     if (idx >= m_peakMax.size()) break;
 
@@ -685,7 +775,6 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     }
 
     // Calculate fade envelope at this column's time position
-    double colTime = XToTime(x);
     double fadeGain = 1.0;
     if (fadeInLen > 0.0 && colTime < fadeInLen)
       fadeGain *= ApplyFadeShape(colTime / fadeInLen, fadeInShape);
@@ -712,7 +801,8 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   // Draw RMS overlay (narrower, darker)
   curPen = rmsNormPen;
   SelectObject(hdc, curPen);
-  for (int col = 0; col < w; col++) {
+  colTime = viewStart;
+  for (int col = 0; col < w; col++, colTime += timeStep) {
     size_t idx = (size_t)(col * nch + channel);
     if (idx >= m_peakRMS.size()) break;
 
@@ -723,7 +813,6 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
       curPen = wantPen;
     }
 
-    double colTime = XToTime(x);
     double fadeGain = 1.0;
     if (fadeInLen > 0.0 && colTime < fadeInLen)
       fadeGain *= ApplyFadeShape(colTime / fadeInLen, fadeInShape);
@@ -1102,7 +1191,8 @@ void WaveformView::DrawCursor(HDC hdc)
 
     // 2) Playhead — solid red line moving with playback, clamped to item bounds
     if (g_GetPlayPosition2) {
-      double relPos = g_GetPlayPosition2() - m_itemPosition;
+      double absPos = g_GetPlayPosition2();
+      double relPos = AbsTimeToRelTime(absPos);
       // Don't draw playhead outside item bounds
       if (relPos < 0.0 || relPos > m_itemDuration) relPos = -1.0;
       int px = TimeToX(relPos);

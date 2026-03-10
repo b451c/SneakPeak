@@ -47,7 +47,7 @@ void LevelsPanel::Update(const std::vector<double>& audio, int startFrame,
   double pkL = 0.0, pkR = 0.0;
 
   int startIdx = startFrame * nch;
-  int endIdx = endFrame * nch;
+  int endIdx = std::min(endFrame * nch, (int)audio.size());
 
   for (int i = startIdx; i < endIdx; i += nch) {
     double sL = audio[i] * itemVol;
@@ -205,15 +205,15 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
 
     // dB tick marks on bars
     static const double ticks[] = { -48, -36, -24, -18, -12, -6, -3, 0 };
+    HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(55, 55, 55));
+    HPEN prevTick = (HPEN)SelectObject(hdc, tickPen);
     for (double db : ticks) {
       int tx = DbToX(db, barLeft, barWidth);
-      HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(55, 55, 55));
-      HPEN prev = (HPEN)SelectObject(hdc, tickPen);
       MoveToEx(hdc, tx, yTop, nullptr);
       LineTo(hdc, tx, yBot);
-      SelectObject(hdc, prev);
-      DeleteObject(tickPen);
     }
+    SelectObject(hdc, prevTick);
+    DeleteObject(tickPen);
   }
 
   // dB scale labels row below bars
@@ -224,19 +224,19 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
   DrawText(hdc, "dB", -1, &dbLbl, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   static const double scaleMarks[] = { -54, -48, -42, -36, -30, -24, -18, -12, -6, -3, 0 };
+  HPEN sPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
+  HPEN prevScale = (HPEN)SelectObject(hdc, sPen);
   for (double db : scaleMarks) {
     int x = DbToX(db, barLeft, barWidth);
     char buf[8];
     snprintf(buf, sizeof(buf), "%.0f", db);
     // Small tick line from bar bottom to scale
-    HPEN sPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
-    HPEN prev = (HPEN)SelectObject(hdc, sPen);
     MoveToEx(hdc, x, scaleY, nullptr);
     LineTo(hdc, x, scaleY + 3);
-    SelectObject(hdc, prev);
-    DeleteObject(sPen);
 
     RECT tr = { x - 14, scaleY + 2, x + 14, rect.bottom };
     DrawText(hdc, buf, -1, &tr, DT_CENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
+  SelectObject(hdc, prevScale);
+  DeleteObject(sPen);
 }

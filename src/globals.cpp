@@ -63,6 +63,9 @@ bool (*g_SetMediaItemInfo_Value)(MediaItem*, const char*, double) = nullptr;
 void (*g_Undo_BeginBlock2)(ReaProject*) = nullptr;
 void (*g_Undo_EndBlock2)(ReaProject*, const char*, int) = nullptr;
 
+// Pointer validation
+bool (*g_ValidatePtr2)(ReaProject*, void*, const char*) = nullptr;
+
 // UI / dialogs
 bool (*g_GetUserInputs)(const char*, int, const char*, char*, int) = nullptr;
 

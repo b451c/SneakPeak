@@ -1,4 +1,4 @@
-// audio_engine.h — WAV file I/O and REAPER source refresh for EditView
+// audio_engine.h — WAV file I/O and REAPER source refresh for SneakPeak
 #pragma once
 
 #include "platform.h"

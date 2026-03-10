@@ -1,4 +1,4 @@
-// platform.h — Cross-platform abstraction for EditView
+// platform.h — Cross-platform abstraction for SneakPeak
 #pragma once
 
 #ifdef _WIN32
@@ -52,7 +52,7 @@
 
 // Portable dialog creation
 #ifdef _WIN32
-inline HWND CreateEditViewDialog(HWND parent, DLGPROC dlgProc, LPARAM param) {
+inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param) {
   #pragma pack(push, 4)
   struct { DLGTEMPLATE tmpl; WORD menu; WORD wndClass; WORD title; } dlg = {};
   #pragma pack(pop)
@@ -62,7 +62,7 @@ inline HWND CreateEditViewDialog(HWND parent, DLGPROC dlgProc, LPARAM param) {
   return CreateDialogIndirectParam(GetModuleHandle(nullptr), &dlg.tmpl, parent, dlgProc, param);
 }
 #else
-inline HWND CreateEditViewDialog(HWND parent, DLGPROC dlgProc, LPARAM param) {
+inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param) {
   return SWELL_CreateDialog(nullptr, nullptr, parent, dlgProc, param);
 }
 #endif

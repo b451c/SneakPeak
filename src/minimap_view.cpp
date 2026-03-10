@@ -120,6 +120,7 @@ void MinimapView::Paint(HDC hdc, const WaveformView& wv)
 
   HPEN activePen = CreatePen(PS_SOLID, 1, activeColor);
   HPEN dimPen = CreatePen(PS_SOLID, 1, dimColor);
+  HPEN oldPen = (HPEN)SelectObject(hdc, activePen);
 
   for (int col = 0; col < w; col++) {
     double maxVal = std::max(-1.0, std::min(1.0, m_peakMax[col]));
@@ -135,7 +136,7 @@ void MinimapView::Paint(HDC hdc, const WaveformView& wv)
     LineTo(hdc, x, yMin + 1);
   }
 
-  SelectObject(hdc, (HGDIOBJ)activePen); // restore before delete
+  SelectObject(hdc, oldPen);
   DeleteObject(activePen);
   DeleteObject(dimPen);
 

@@ -1,4 +1,4 @@
-// edit_view.h — Main EditView window class
+// edit_view.h — Main SneakPeak window class
 #pragma once
 
 #include "platform.h"
@@ -59,10 +59,10 @@ enum ContextMenuID {
   CM_SUPPORT_PAYPAL,
 };
 
-class EditView {
+class SneakPeak {
 public:
-  EditView();
-  ~EditView();
+  SneakPeak();
+  ~SneakPeak();
 
   void Create();
   void Destroy();

@@ -1,4 +1,4 @@
-// toolbar.h — Toolbar for EditView
+// toolbar.h — Toolbar for SneakPeak
 #pragma once
 
 #include "platform.h"

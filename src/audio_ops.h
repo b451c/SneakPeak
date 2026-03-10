@@ -1,4 +1,4 @@
-// audio_ops.h — Sample-level audio processing operations for EditView
+// audio_ops.h — Sample-level audio processing operations for SneakPeak
 #pragma once
 
 #include <cstddef>

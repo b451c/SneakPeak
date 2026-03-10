@@ -1,10 +1,10 @@
-// debug.h — Conditional debug logging for EditView
+// debug.h — Conditional debug logging for SneakPeak
 #pragma once
 
-#ifdef EDITVIEW_DEBUG
+#ifdef SNEAKPEAK_DEBUG
   #include <cstdio>
   #define DBG(...) do { \
-    FILE* _f = fopen("/tmp/editview_debug.log", "a"); \
+    FILE* _f = fopen("/tmp/sneakpeak_debug.log", "a"); \
     if (_f) { fprintf(_f, __VA_ARGS__); fclose(_f); } \
   } while(0)
 #else
