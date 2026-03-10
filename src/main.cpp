@@ -133,11 +133,16 @@ static accelerator_register_t g_accelReg = { translateAccelSneakPeak, true, null
 static void pollSelectionTimer()
 {
   if (!g_sneakPeak || !g_sneakPeak->IsVisible()) return;
-  if (g_sneakPeak->IsStandaloneMode()) return;
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
   int count = g_CountSelectedMediaItems(nullptr);
   MediaItem* item = (count > 0) ? g_GetSelectedMediaItem(nullptr, 0) : nullptr;
+
+  // In standalone mode, only exit when user selects items in REAPER
+  if (g_sneakPeak->IsStandaloneMode()) {
+    if (count <= 0) return; // no items selected — stay in standalone
+    // Items selected — fall through to load them (exits standalone via ClearItem)
+  }
 
   // Validate cached pointer — item may have been deleted
   if (g_lastSelectedItem && ValidatePtr2 &&

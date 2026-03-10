@@ -42,8 +42,13 @@ void WaveformView::SetItem(MediaItem* item)
     return;
   }
 
-  if (m_item == item) return;
+  if (m_item == item && !m_standaloneMode) return;
 
+  m_standaloneMode = false;
+  m_standaloneFilePath.clear();
+  m_standaloneGain = 1.0;
+  m_standaloneGainStart = -1.0;
+  m_standaloneGainEnd = -1.0;
   m_item = item;
   m_take = nullptr;
   m_segments.clear();
@@ -132,6 +137,11 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
     return;
   }
 
+  m_standaloneMode = false;
+  m_standaloneFilePath.clear();
+  m_standaloneGain = 1.0;
+  m_standaloneGainStart = -1.0;
+  m_standaloneGainEnd = -1.0;
   m_item = items[0];
   m_take = nullptr;
   m_peaksValid = false;

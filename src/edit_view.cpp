@@ -113,6 +113,7 @@ void SneakPeak::LoadSelectedItem()
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
   CleanupDragTemp();
+  if (m_previewActive) StandaloneCleanupPreview();
 
   int count = g_CountSelectedMediaItems(nullptr);
   if (count <= 0) {
