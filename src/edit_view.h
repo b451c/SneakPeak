@@ -30,6 +30,7 @@ struct StandaloneFileState {
   double viewDuration = 1.0;
   WaveformSelection selection;
   bool dirty = false;
+  WaveformView::StandaloneFade fade;
 };
 
 // Tab hit-test cache for mode bar

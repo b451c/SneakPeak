@@ -1693,32 +1693,13 @@ void SneakPeak::OnMouseUp(int x, int y)
     ReleaseCapture();
 
     if (wasStandalone) {
-      // Bake standalone fade into audio data
+      // Keep fade as non-destructive preview — baked only on save
       auto sf = m_waveform.GetStandaloneFade();
-      auto& data = m_waveform.GetAudioData();
-      int nch = m_waveform.GetNumChannels();
-      int sr = m_waveform.GetSampleRate();
-      int totalFrames = m_waveform.GetAudioSampleCount();
-
-      if (wasType == FADE_IN && sf.fadeInLen >= 0.001) {
-        int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
-        if (fadeFrames > 0) {
-          StandaloneUndoSave();
-          AudioOps::FadeInShaped(data.data(), fadeFrames, nch, sf.fadeInShape);
-          m_dirty = true;
-          UpdateTitle();
-        }
-      } else if (wasType == FADE_OUT && sf.fadeOutLen >= 0.001) {
-        int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
-        if (fadeFrames > 0) {
-          StandaloneUndoSave();
-          int startFrame = totalFrames - fadeFrames;
-          AudioOps::FadeOutShaped(data.data() + (size_t)startFrame * nch, fadeFrames, nch, sf.fadeOutShape);
-          m_dirty = true;
-          UpdateTitle();
-        }
+      if ((wasType == FADE_IN && sf.fadeInLen >= 0.001) ||
+          (wasType == FADE_OUT && sf.fadeOutLen >= 0.001)) {
+        m_dirty = true;
+        UpdateTitle();
       }
-      m_waveform.ClearStandaloneFade();
       m_waveform.Invalidate();
     } else {
       if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Adjust fade", -1);
@@ -2160,7 +2141,9 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_COPY, "Copy\tCtrl+C");
   MenuAppend(editMenu, (hasItem && hasClip) ? MF_STRING : MF_GRAYED, CM_PASTE, "Paste (destructive)\tCtrl+V");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_DELETE, "Delete\tDel");
-  MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_SILENCE, "Silence\tCtrl+Del");
+  bool canSilence = hasItem && (hasSel || m_waveform.IsStandaloneMode());
+  MenuAppend(editMenu, canSilence ? MF_STRING : MF_GRAYED, CM_SILENCE,
+             (m_waveform.IsStandaloneMode() && !hasSel) ? "Insert Silence...\tCtrl+Del" : "Silence\tCtrl+Del");
   MenuAppendSeparator(editMenu);
   MenuAppend(editMenu, hasItem ? MF_STRING : MF_GRAYED, CM_SELECT_ALL, "Select All\tCtrl+A");
 
@@ -2485,6 +2468,7 @@ void SneakPeak::StandaloneUndoRestore()
   m_waveform.SetItemDuration(newDur);
 
   m_waveform.ClearSelection();
+  m_waveform.ClearStandaloneFade(); // clear non-destructive fade on undo
   m_waveform.Invalidate();
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_dirty = true;
@@ -2581,6 +2565,7 @@ void SneakPeak::SaveCurrentStandaloneState()
   fs.viewDuration = m_waveform.GetViewDuration();
   fs.selection = m_waveform.GetSelection();
   fs.dirty = m_dirty;
+  fs.fade = m_waveform.GetStandaloneFade();
 
   DBG("[SneakPeak] Saved state for tab %d: %s\n", m_activeFileIdx, fs.filePath.c_str());
 }
@@ -2601,6 +2586,7 @@ void SneakPeak::RestoreStandaloneState(int idx)
   m_waveform.SetViewDuration(fs.viewDuration);
   m_waveform.SetCursorTime(fs.cursorTime);
   m_waveform.SetSelection(fs.selection);
+  m_waveform.SetStandaloneFade(fs.fade);
   m_waveform.Invalidate();
 
   m_standaloneUndoStack = fs.undoStack;
@@ -2787,7 +2773,30 @@ void SneakPeak::SaveStandaloneFile()
     }
   }
 
-  // Gain is already baked into audio data on knob release — just save
+  // Bake pending non-destructive fade into audio data before saving
+  auto sf = m_waveform.GetStandaloneFade();
+  if (sf.fadeInLen >= 0.001 || sf.fadeOutLen >= 0.001) {
+    StandaloneUndoSave();
+    auto& data = m_waveform.GetAudioData();
+    int nch = m_waveform.GetNumChannels();
+    int sr = m_waveform.GetSampleRate();
+    int totalFrames = m_waveform.GetAudioSampleCount();
+    if (sf.fadeInLen >= 0.001) {
+      int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
+      if (fadeFrames > 0)
+        AudioOps::FadeInShaped(data.data(), fadeFrames, nch, sf.fadeInShape);
+    }
+    if (sf.fadeOutLen >= 0.001) {
+      int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
+      if (fadeFrames > 0) {
+        int startFrame = totalFrames - fadeFrames;
+        AudioOps::FadeOutShaped(data.data() + (size_t)startFrame * nch, fadeFrames, nch, sf.fadeOutShape);
+      }
+    }
+    m_waveform.ClearStandaloneFade();
+    m_waveform.Invalidate();
+  }
+
   const auto& data = m_waveform.GetAudioData();
   int nch = m_waveform.GetNumChannels();
   int sr = m_waveform.GetSampleRate();
@@ -2843,13 +2852,28 @@ void SneakPeak::StandalonePlayStop()
   // (so edits like gain are heard without saving)
   if (!g_PCM_Source_CreateFromFile || !g_PlayPreview) return;
 
-  const auto& data = m_waveform.GetAudioData();
+  std::vector<double> previewData = m_waveform.GetAudioData(); // copy
   int nch = m_waveform.GetNumChannels();
   int sr = m_waveform.GetSampleRate();
   int frames = m_waveform.GetAudioSampleCount();
-  if (frames <= 0 || data.empty()) return;
+  if (frames <= 0 || previewData.empty()) return;
 
-  std::string tmpPath = AudioEngine::WriteTempWav(data.data(), frames, nch, sr,
+  // Apply pending non-destructive fade to preview copy
+  auto sf = m_waveform.GetStandaloneFade();
+  if (sf.fadeInLen >= 0.001) {
+    int fadeFrames = std::min((int)(sf.fadeInLen * sr), frames);
+    if (fadeFrames > 0)
+      AudioOps::FadeInShaped(previewData.data(), fadeFrames, nch, sf.fadeInShape);
+  }
+  if (sf.fadeOutLen >= 0.001) {
+    int fadeFrames = std::min((int)(sf.fadeOutLen * sr), frames);
+    if (fadeFrames > 0) {
+      int startFrame = frames - fadeFrames;
+      AudioOps::FadeOutShaped(previewData.data() + (size_t)startFrame * nch, fadeFrames, nch, sf.fadeOutShape);
+    }
+  }
+
+  std::string tmpPath = AudioEngine::WriteTempWav(previewData.data(), frames, nch, sr,
                                                     m_wavBitsPerSample, m_wavAudioFormat);
   if (tmpPath.empty()) return;
 
@@ -3135,8 +3159,111 @@ void SneakPeak::DoDelete()
 
 void SneakPeak::DoSilence()
 {
-  // Non-destructive: split selection into separate item, set its volume to 0
-  if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
+  if (!m_waveform.HasItem()) return;
+
+  // --- Standalone mode ---
+  if (m_waveform.IsStandaloneMode()) {
+    auto& data = m_waveform.GetAudioData();
+    int nch = m_waveform.GetNumChannels();
+    int sr = m_waveform.GetSampleRate();
+    int totalFrames = m_waveform.GetAudioSampleCount();
+    int fadeFrames = std::min(sr / 200, 50); // ~5ms crossfade to avoid clicks
+
+    if (m_waveform.HasSelection()) {
+      // Mode 1: Replace selection with silence + edge crossfades
+      WaveformSelection sel = m_waveform.GetSelection();
+      int startFrame = std::max(0, std::min(totalFrames, (int)(std::min(sel.startTime, sel.endTime) * sr)));
+      int endFrame = std::max(0, std::min(totalFrames, (int)(std::max(sel.startTime, sel.endTime) * sr)));
+      if (endFrame <= startFrame) return;
+
+      StandaloneUndoSave();
+
+      // Zero out the selection region
+      int selFrames = endFrame - startFrame;
+      memset(data.data() + (size_t)startFrame * nch, 0, (size_t)selFrames * nch * sizeof(double));
+
+      // Crossfade at left edge (existing audio → silence)
+      int fadeLenL = std::min(fadeFrames, startFrame);
+      fadeLenL = std::min(fadeLenL, selFrames);
+      for (int f = 0; f < fadeLenL; f++) {
+        double t = (double)f / (double)fadeLenL;
+        double gain = 0.5 * (1.0 + cos(t * M_PI)); // 1→0
+        int frame = startFrame - fadeLenL + f;
+        for (int ch = 0; ch < nch; ch++)
+          data[(size_t)frame * nch + ch] *= gain;
+      }
+
+      // Crossfade at right edge (silence → existing audio)
+      int fadeLenR = std::min(fadeFrames, totalFrames - endFrame);
+      fadeLenR = std::min(fadeLenR, selFrames);
+      for (int f = 0; f < fadeLenR; f++) {
+        double t = (double)f / (double)fadeLenR;
+        double gain = 0.5 * (1.0 - cos(t * M_PI)); // 0→1
+        for (int ch = 0; ch < nch; ch++)
+          data[(size_t)(endFrame + f) * nch + ch] *= gain;
+      }
+    } else {
+      // Mode 2: Insert silence at cursor position
+      double cursorTime = m_waveform.GetCursorTime();
+      int insertFrame = std::max(0, std::min(totalFrames, (int)(cursorTime * sr)));
+
+      // Ask user for silence duration via REAPER's GetUserInputs
+      if (!g_GetUserInputs) return;
+      char buf[64] = "1.0";
+      if (!g_GetUserInputs("Insert Silence", 1, "Duration (seconds):", buf, sizeof(buf)))
+        return;
+
+      double silenceSec = atof(buf);
+      if (silenceSec <= 0.0 || silenceSec > 3600.0) return;
+
+      int silenceFrames = (int)(silenceSec * sr);
+      if (silenceFrames <= 0) return;
+
+      StandaloneUndoSave();
+
+      // Insert zero samples at cursor
+      size_t insertSample = (size_t)insertFrame * nch;
+      size_t insertCount = (size_t)silenceFrames * nch;
+      data.insert(data.begin() + insertSample, insertCount, 0.0);
+
+      int newFrames = (int)data.size() / nch;
+      double newDur = (double)newFrames / (double)sr;
+      m_waveform.SetAudioSampleCount(newFrames);
+      m_waveform.SetItemDuration(newDur);
+
+      // Crossfade at left edge (before insert → silence)
+      int fadeLenL = std::min(fadeFrames, insertFrame);
+      for (int f = 0; f < fadeLenL; f++) {
+        double t = (double)f / (double)fadeLenL;
+        double gain = 0.5 * (1.0 + cos(t * M_PI));
+        int frame = insertFrame - fadeLenL + f;
+        for (int ch = 0; ch < nch; ch++)
+          data[(size_t)frame * nch + ch] *= gain;
+      }
+
+      // Crossfade at right edge (silence → after insert)
+      int rightStart = insertFrame + silenceFrames;
+      int fadeLenR = std::min(fadeFrames, newFrames - rightStart);
+      for (int f = 0; f < fadeLenR; f++) {
+        double t = (double)f / (double)fadeLenR;
+        double gain = 0.5 * (1.0 - cos(t * M_PI));
+        for (int ch = 0; ch < nch; ch++)
+          data[(size_t)(rightStart + f) * nch + ch] *= gain;
+      }
+
+      // Move cursor to end of inserted silence
+      m_waveform.SetCursorTime((double)(insertFrame + silenceFrames) / (double)sr);
+    }
+
+    m_dirty = true;
+    UpdateTitle();
+    m_waveform.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
+  // --- REAPER mode: non-destructive split + volume 0 ---
+  if (!m_waveform.HasSelection()) return;
   if (!g_SplitMediaItem || !g_SetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();
