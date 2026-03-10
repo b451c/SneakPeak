@@ -5,7 +5,7 @@
 
 // Layout
 static const int TOOLBAR_HEIGHT = 0;
-static const int RULER_HEIGHT = 24;
+static const int RULER_HEIGHT = 28;
 static const int SCROLLBAR_HEIGHT = 14;
 static const int BOTTOM_PANEL_HEIGHT = 52;
 static const int CHANNEL_SEPARATOR_HEIGHT = 3;

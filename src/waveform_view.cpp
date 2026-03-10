@@ -419,8 +419,9 @@ void WaveformView::Paint(HDC hdc)
 
   UpdatePeaks();
 
-  // Draw order: center lines → dB grid lines → waveform → dB scale column → selection → cursor
+  // Draw order: time grid → center lines → dB grid lines → waveform → dB scale column → selection → cursor
   // Grid lines go UNDER the waveform so they're subtly visible through gaps
+  DrawTimeGrid(hdc);
   for (int ch = 0; ch < m_numChannels; ch++) {
     int chTop = GetChannelTop(ch);
     int chH = GetChannelHeight();
@@ -565,6 +566,45 @@ void WaveformView::DrawSelection(HDC hdc)
   DeleteObject(edgePen);
 }
 
+// Vertical time grid lines — synced with ruler tick interval
+void WaveformView::DrawTimeGrid(HDC hdc)
+{
+  int w = m_rect.right - m_rect.left - DB_SCALE_WIDTH;
+  if (w < 10 || m_viewDuration <= 0) return;
+
+  int waveRight = m_rect.left + w;
+  int yTop = m_rect.top;
+  int yBot = m_rect.bottom;
+
+  double pixelsPerSec = (double)w / m_viewDuration;
+
+  // Same interval logic as ruler (DrawRuler in edit_view.cpp)
+  static const double intervals[] = {
+    0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5,
+    1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0
+  };
+  double tickInterval = 300.0;
+  for (double iv : intervals) {
+    if (iv * pixelsPerSec >= 150.0) { tickInterval = iv; break; }
+  }
+
+  // Subtle vertical lines at ruler tick positions (Audition-style)
+  HPEN gridPen = CreatePen(PS_SOLID, 1, RGB(35, 55, 40));
+  HPEN oldPen = (HPEN)SelectObject(hdc, gridPen);
+
+  double firstTick = floor(m_viewStartTime / tickInterval) * tickInterval;
+  for (double t = firstTick; t < m_viewStartTime + m_viewDuration; t += tickInterval) {
+    int x = TimeToX(t);
+    if (x > m_rect.left && x < waveRight) {
+      MoveToEx(hdc, x, yTop, nullptr);
+      LineTo(hdc, x, yBot);
+    }
+  }
+
+  SelectObject(hdc, oldPen);
+  DeleteObject(gridPen);
+}
+
 // Horizontal dB grid lines — dynamic, matches scale labels
 void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
 {
@@ -577,18 +617,13 @@ void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
   HPEN gridPen = CreatePen(PS_SOLID, 1, RGB(35, 55, 40));
   HPEN oldPen = (HPEN)SelectObject(hdc, gridPen);
 
-  // Same dB values as scale labels (center outward)
-  static const double allDb[] = {
-    -60, -55, -50, -45, -40, -36, -33, -30, -27, -24,
-    -21, -20, -18, -16, -15, -14, -12, -10,
-    -9, -8, -7, -6, -5, -4, -3, -2, -1, 0,
-    3, 6, 9, 12
-  };
+  // Sparse key dB values only (Audition-style: few lines, not dense)
+  static const double keyDb[] = { -48, -36, -24, -18, -12, -6, -3, 0, 3, 6, 12 };
 
   int lastY_top = centerY;
   int lastY_bot = centerY;
 
-  for (double db : allDb) {
+  for (double db : keyDb) {
     double linear = pow(10.0, db / 20.0);
     int yOff = (int)(linear * (double)halfH);
     if (yOff < 1) continue;
@@ -596,14 +631,14 @@ void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
     int y1 = centerY - yOff;
     int y2 = centerY + yOff;
 
-    // Top half — skip if too close to last drawn line
-    if (y1 >= yTop && y1 < yTop + height && lastY_top - y1 >= 13) {
+    // Top half — min 30px spacing
+    if (y1 >= yTop && y1 < yTop + height && lastY_top - y1 >= 30) {
       MoveToEx(hdc, m_rect.left, y1, nullptr);
       LineTo(hdc, waveRight, y1);
       lastY_top = y1;
     }
     // Bottom half
-    if (y2 >= yTop && y2 < yTop + height && y2 != y1 && y2 - lastY_bot >= 13) {
+    if (y2 >= yTop && y2 < yTop + height && y2 != y1 && y2 - lastY_bot >= 30) {
       MoveToEx(hdc, m_rect.left, y2, nullptr);
       LineTo(hdc, waveRight, y2);
       lastY_bot = y2;

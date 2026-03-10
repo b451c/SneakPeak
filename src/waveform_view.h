@@ -94,6 +94,7 @@ private:
   void DrawCursor(HDC hdc);
   void DrawCenterLine(HDC hdc, int yCenter);
   void DrawDbGridLines(HDC hdc, int channel, int yTop, int height);
+  void DrawTimeGrid(HDC hdc);
   void DrawDbScale(HDC hdc, int channel, int yTop, int height);
   void DrawFadeBackground(HDC hdc);
   void DrawFadeEnvelope(HDC hdc);

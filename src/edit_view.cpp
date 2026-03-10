@@ -175,6 +175,11 @@ void EditView::OnTimer()
     InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
   }
 
+  // Keep repainting while spectral is computing (progress bar update)
+  if (m_spectralVisible && m_spectral.IsLoading()) {
+    InvalidateRect(m_hwnd, &m_spectralRect, FALSE);
+  }
+
   if (m_waveform.HasItem() && g_GetMediaItemInfo_Value) {
     // Refresh item position/duration in case item was moved on timeline
     double pos = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_POSITION");
