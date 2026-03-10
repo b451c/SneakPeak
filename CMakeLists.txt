@@ -32,6 +32,7 @@ add_library(reaper_editview SHARED
   src/gain_panel.cpp
   src/marker_manager.cpp
   src/levels_panel.cpp
+  src/spectral_view.cpp
 )
 
 target_include_directories(reaper_editview PRIVATE

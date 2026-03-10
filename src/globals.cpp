@@ -64,5 +64,13 @@ bool (*g_GetUserInputs)(const char*, int, const char*, char*, int) = nullptr;
 void (*g_UpdateArrange)() = nullptr;
 void (*g_UpdateTimeline)() = nullptr;
 
+// LICE bitmap API
+LICE_IBitmap* (*g_LICE_CreateBitmap)(int, int, int) = nullptr;
+void (*g_LICE__Destroy)(LICE_IBitmap*) = nullptr;
+void* (*g_LICE__GetBits)(LICE_IBitmap*) = nullptr;
+int (*g_LICE__GetRowSpan)(LICE_IBitmap*) = nullptr;
+bool (*g_LICE__resize)(LICE_IBitmap*, int, int) = nullptr;
+HDC (*g_LICE__GetDC)(LICE_IBitmap*) = nullptr;
+
 // Time selection
 void (*g_GetSet_LoopTimeRange2)(ReaProject*, bool, bool, double*, double*, bool) = nullptr;

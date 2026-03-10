@@ -75,6 +75,14 @@
 // Theme
 #define REAPERAPI_WANT_GetThemeColor
 
+// LICE (bitmap rendering)
+#define REAPERAPI_WANT_LICE_CreateBitmap
+#define REAPERAPI_WANT_LICE__Destroy
+#define REAPERAPI_WANT_LICE__GetBits
+#define REAPERAPI_WANT_LICE__GetRowSpan
+#define REAPERAPI_WANT_LICE__resize
+#define REAPERAPI_WANT_LICE__GetDC
+
 #include "reaper_plugin.h"
 #include "reaper_plugin_functions.h"
 #include "globals.h"
@@ -260,6 +268,14 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_GetSet_LoopTimeRange2 = GetSet_LoopTimeRange2;
 
   g_GetUserInputs = GetUserInputs;
+
+  // LICE
+  g_LICE_CreateBitmap = LICE_CreateBitmap;
+  g_LICE__Destroy = LICE__Destroy;
+  g_LICE__GetBits = LICE__GetBits;
+  g_LICE__GetRowSpan = LICE__GetRowSpan;
+  g_LICE__resize = LICE__resize;
+  g_LICE__GetDC = LICE__GetDC;
 
   // Theme colors
   Theme_SetGetThemeColor((void*)GetThemeColor);

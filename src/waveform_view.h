@@ -79,6 +79,7 @@ public:
   int GetAudioSampleCount() const { return m_audioSampleCount; }
   int GetSampleRate() const { return m_sampleRate; }
   MediaItem_Take* GetTake() const { return m_take; }
+  double GetTakeOffset() const { return m_takeOffset; }
 
   // Update after destructive edit
   void SetAudioSampleCount(int count) { m_audioSampleCount = count; }

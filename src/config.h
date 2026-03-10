@@ -12,6 +12,9 @@ static const int CHANNEL_SEPARATOR_HEIGHT = 3;
 static const int DB_SCALE_WIDTH = 42;
 static const int MIN_WINDOW_WIDTH = 400;
 static const int MIN_WINDOW_HEIGHT = 200;
+static const int SPLITTER_HEIGHT = 5;
+static const int MIN_WAVEFORM_HEIGHT = 80;
+static const int MIN_SPECTRAL_HEIGHT = 60;
 
 // Waveform
 static const int WAVEFORM_PADDING_TOP = 4;

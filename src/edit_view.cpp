@@ -100,11 +100,11 @@ void EditView::LoadSelectedItem()
   if (!item) return;
 
   m_waveform.SetItem(item);
+  m_spectral.ClearSpectrum();
+  m_spectral.Invalidate();
 
-  // Update gain panel to follow new item
-  if (m_gainPanel.IsVisible()) {
-    m_gainPanel.Show(item);
-  }
+  // Gain panel — always visible, follows current item
+  m_gainPanel.Show(item);
 
   // Read WAV format info for write-back
   MediaItem_Take* take = m_waveform.GetTake();
@@ -368,7 +368,7 @@ INT_PTR EditView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_COMMAND: {
       int id = LOWORD(wParam);
-      if (id >= CM_UNDO && id <= CM_MONO_DOWNMIX) {
+      if (id >= CM_UNDO && id <= CM_TOGGLE_SPECTRAL) {
         OnContextMenuCommand(id);
         return 0;
       }
@@ -395,18 +395,42 @@ void EditView::RecalcLayout(int w, int h)
   m_rulerRect        = { 0, TOOLBAR_HEIGHT, w, TOOLBAR_HEIGHT + RULER_HEIGHT };
   m_bottomPanelRect  = { 0, h - BOTTOM_PANEL_HEIGHT, w, h };
   m_scrollbarRect    = { 0, h - BOTTOM_PANEL_HEIGHT - SCROLLBAR_HEIGHT, w, h - BOTTOM_PANEL_HEIGHT };
-  m_waveformRect     = { 0, TOOLBAR_HEIGHT + RULER_HEIGHT, w, h - BOTTOM_PANEL_HEIGHT - SCROLLBAR_HEIGHT };
+
+  int contentTop = TOOLBAR_HEIGHT + RULER_HEIGHT;
+  int contentBot = h - BOTTOM_PANEL_HEIGHT - SCROLLBAR_HEIGHT;
+  int contentH = contentBot - contentTop;
+
+  if (m_spectralVisible && contentH > MIN_WAVEFORM_HEIGHT + MIN_SPECTRAL_HEIGHT + SPLITTER_HEIGHT) {
+    int waveH = (int)((float)contentH * m_splitterRatio) - SPLITTER_HEIGHT / 2;
+    waveH = std::max(MIN_WAVEFORM_HEIGHT, std::min(contentH - MIN_SPECTRAL_HEIGHT - SPLITTER_HEIGHT, waveH));
+    int splitterTop = contentTop + waveH;
+    int spectralTop = splitterTop + SPLITTER_HEIGHT;
+
+    m_waveformRect = { 0, contentTop, w, splitterTop };
+    m_splitterRect = { 0, splitterTop, w, spectralTop };
+    m_spectralRect = { 0, spectralTop, w, contentBot };
+  } else {
+    m_waveformRect = { 0, contentTop, w, contentBot };
+    m_splitterRect = {};
+    m_spectralRect = {};
+  }
 
   m_toolbar.SetRect(0, 0, w, TOOLBAR_HEIGHT);
   m_waveform.SetRect(m_waveformRect.left, m_waveformRect.top,
                      m_waveformRect.right - m_waveformRect.left,
                      m_waveformRect.bottom - m_waveformRect.top);
+  if (m_spectralVisible) {
+    m_spectral.SetRect(m_spectralRect.left, m_spectralRect.top,
+                       m_spectralRect.right - m_spectralRect.left,
+                       m_spectralRect.bottom - m_spectralRect.top);
+  }
 }
 
 void EditView::OnSize(int w, int h)
 {
   RecalcLayout(w, h);
   m_waveform.Invalidate();
+  m_spectral.Invalidate();
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
@@ -420,8 +444,31 @@ void EditView::OnPaint(HDC hdc)
   m_waveform.Paint(hdc);
   if (m_markers.m_showMarkers) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
   if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect);
+  if (m_spectralVisible) {
+    DrawSplitter(hdc);
+    m_spectral.Paint(hdc, m_waveform);
+  }
   DrawScrollbar(hdc);
   DrawBottomPanel(hdc);
+}
+
+void EditView::DrawSplitter(HDC hdc)
+{
+  if (m_splitterRect.bottom <= m_splitterRect.top) return;
+
+  HBRUSH bg = CreateSolidBrush(RGB(45, 45, 45));
+  FillRect(hdc, &m_splitterRect, bg);
+  DeleteObject(bg);
+
+  // Grip dots in center
+  int cx = (m_splitterRect.left + m_splitterRect.right) / 2;
+  int cy = (m_splitterRect.top + m_splitterRect.bottom) / 2;
+  HBRUSH dot = CreateSolidBrush(RGB(120, 120, 120));
+  for (int dx = -12; dx <= 12; dx += 6) {
+    RECT d = { cx + dx - 1, cy - 1, cx + dx + 2, cy + 2 };
+    FillRect(hdc, &d, dot);
+  }
+  DeleteObject(dot);
 }
 
 void EditView::DrawRuler(HDC hdc)
@@ -712,6 +759,13 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
     return;
   }
 
+  // Splitter drag
+  if (m_spectralVisible && y >= m_splitterRect.top && y < m_splitterRect.bottom) {
+    m_splitterDragging = true;
+    SetCapture(m_hwnd);
+    return;
+  }
+
   if (y >= m_rulerRect.top && y < m_rulerRect.bottom) {
     if (m_waveform.HasItem()) {
       // Check if clicking on a marker — start drag
@@ -746,6 +800,49 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
     return; // don't pass click through
+  }
+
+  // Spectral area — time selection + frequency band selection
+  if (m_spectralVisible && y >= m_spectralRect.top && y < m_spectralRect.bottom) {
+    if (m_waveform.HasItem()) {
+      int specH = m_spectralRect.bottom - m_spectralRect.top;
+      int nch = m_waveform.GetNumChannels();
+      int chSep = (nch > 1) ? CHANNEL_SEPARATOR_HEIGHT : 0;
+      int chH = (nch > 1) ? (specH - chSep) / 2 : specH;
+      // Determine which channel was clicked
+      int chTop = m_spectralRect.top;
+      if (nch > 1 && y >= m_spectralRect.top + chH + chSep)
+        chTop = m_spectralRect.top + chH + chSep;
+
+      // Alt+click = frequency band selection
+      bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+      if (altDown) {
+        double freq = m_spectral.YToFreq(y, chTop, chH);
+        m_spectral.StartFreqSelection(freq);
+        m_spectralFreqDragging = true;
+        m_spectralFreqDragChTop = chTop;
+        m_spectralFreqDragChH = chH;
+        SetCapture(m_hwnd);
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+        return;
+      }
+
+      // Normal click = time selection (same as waveform)
+      m_spectral.ClearFreqSelection();
+      double time = m_waveform.XToTime(x);
+      if (wParam & MK_SHIFT) {
+        m_waveform.UpdateSelection(time);
+      } else {
+        m_waveform.StartSelection(time);
+        m_waveform.SetCursorTime(time);
+        if (g_SetEditCurPos)
+          g_SetEditCurPos(m_waveform.GetItemPosition() + time, false, false);
+      }
+      m_dragging = true;
+      SetCapture(m_hwnd);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    return;
   }
 
   if (y >= m_waveformRect.top && y < m_waveformRect.bottom) {
@@ -804,6 +901,17 @@ void EditView::OnMouseDown(int x, int y, WPARAM wParam)
 
 void EditView::OnMouseUp(int x, int y)
 {
+  if (m_spectralFreqDragging) {
+    m_spectralFreqDragging = false;
+    ReleaseCapture();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+  if (m_splitterDragging) {
+    m_splitterDragging = false;
+    ReleaseCapture();
+    return;
+  }
   if (m_fadeDragging != FADE_NONE) {
     m_fadeDragging = FADE_NONE;
     m_waveform.SetFadeDragInfo(0, 0);
@@ -838,6 +946,24 @@ void EditView::OnMouseUp(int x, int y)
 
 void EditView::OnMouseMove(int x, int y, WPARAM wParam)
 {
+  // Splitter dragging
+  if (m_splitterDragging) {
+    RECT clientRect;
+    GetClientRect(m_hwnd, &clientRect);
+    int contentTop = TOOLBAR_HEIGHT + RULER_HEIGHT;
+    int contentBot = clientRect.bottom - BOTTOM_PANEL_HEIGHT - SCROLLBAR_HEIGHT;
+    int contentH = contentBot - contentTop;
+    if (contentH > 0) {
+      m_splitterRatio = (float)(y - contentTop) / (float)contentH;
+      m_splitterRatio = std::max(0.15f, std::min(0.85f, m_splitterRatio));
+      RecalcLayout(clientRect.right, clientRect.bottom);
+      m_waveform.Invalidate();
+      m_spectral.Invalidate();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    return;
+  }
+
   if (y >= m_toolbarRect.top && y < m_toolbarRect.bottom) {
     m_toolbar.SetHover(m_toolbar.HitTest(x, y));
     InvalidateRect(m_hwnd, &m_toolbarRect, FALSE);
@@ -873,6 +999,13 @@ void EditView::OnMouseMove(int x, int y, WPARAM wParam)
     m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2, newShape);
 
     if (g_UpdateArrange) g_UpdateArrange();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
+  if (m_spectralFreqDragging) {
+    double freq = m_spectral.YToFreq(y, m_spectralFreqDragChTop, m_spectralFreqDragChH);
+    m_spectral.UpdateFreqSelection(freq);
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
@@ -933,6 +1066,7 @@ void EditView::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
     m_waveform.ZoomHorizontal(pow(ZOOM_FACTOR, steps), centerTime);
   }
 
+  m_spectral.Invalidate();
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
@@ -1093,6 +1227,9 @@ void EditView::OnRightClick(int x, int y)
   MenuAppend(viewMenu, hasItem ? MF_STRING : MF_GRAYED, CM_ZOOM_OUT, "Zoom Out");
   MenuAppend(viewMenu, hasItem ? MF_STRING : MF_GRAYED, CM_ZOOM_FIT, "Zoom to Fit");
   MenuAppend(viewMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_ZOOM_SEL, "Zoom to Selection");
+  MenuAppendSeparator(viewMenu);
+  MenuAppend(viewMenu, MF_STRING, CM_TOGGLE_SPECTRAL,
+             m_spectralVisible ? "Spectral View  \xE2\x9C\x93" : "Spectral View");
 
   MenuAppendSubmenu(menu, editMenu, "Edit");
   MenuAppendSubmenu(menu, procMenu, "Process");
@@ -1182,6 +1319,18 @@ void EditView::OnContextMenuCommand(int id)
         if (m_gainPanel.IsVisible()) m_gainPanel.Show(item);
         InvalidateRect(m_hwnd, nullptr, FALSE);
         DBG("[EditView] DOWNMIX: reload done, numCh=%d\n", m_waveform.GetNumChannels());
+      }
+      break;
+    case CM_TOGGLE_SPECTRAL:
+      m_spectralVisible = !m_spectralVisible;
+      if (m_spectralVisible)
+        m_spectral.EnableOnItem(); // tell REAPER to generate spectral peaks
+      {
+        RECT cr;
+        GetClientRect(m_hwnd, &cr);
+        RecalcLayout(cr.right, cr.bottom);
+        m_waveform.Invalidate();
+        m_spectral.Invalidate();
       }
       break;
   }

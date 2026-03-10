@@ -565,7 +565,7 @@ void WaveformView::DrawSelection(HDC hdc)
   DeleteObject(edgePen);
 }
 
-// Horizontal dB grid lines — drawn UNDER waveform (visible through gaps)
+// Horizontal dB grid lines — dynamic, matches scale labels
 void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
 {
   if (height < 40) return;
@@ -574,24 +574,39 @@ void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
   float halfH = (float)(height / 2) * m_verticalZoom;
   int waveRight = m_rect.right - DB_SCALE_WIDTH;
 
-  // Subtle grid line color
   HPEN gridPen = CreatePen(PS_SOLID, 1, RGB(35, 55, 40));
   HPEN oldPen = (HPEN)SelectObject(hdc, gridPen);
 
-  static const double dbValues[] = { -3, -6, -9, -15, -21 };
-  for (double db : dbValues) {
+  // Same dB values as scale labels (center outward)
+  static const double allDb[] = {
+    -60, -55, -50, -45, -40, -36, -33, -30, -27, -24,
+    -21, -20, -18, -16, -15, -14, -12, -10,
+    -9, -8, -7, -6, -5, -4, -3, -2, -1, 0,
+    3, 6, 9, 12
+  };
+
+  int lastY_top = centerY;
+  int lastY_bot = centerY;
+
+  for (double db : allDb) {
     double linear = pow(10.0, db / 20.0);
     int yOff = (int)(linear * (double)halfH);
+    if (yOff < 1) continue;
+
     int y1 = centerY - yOff;
     int y2 = centerY + yOff;
 
-    if (y1 >= yTop && y1 < yTop + height) {
+    // Top half — skip if too close to last drawn line
+    if (y1 >= yTop && y1 < yTop + height && lastY_top - y1 >= 13) {
       MoveToEx(hdc, m_rect.left, y1, nullptr);
       LineTo(hdc, waveRight, y1);
+      lastY_top = y1;
     }
-    if (y2 >= yTop && y2 < yTop + height && y2 != y1) {
+    // Bottom half
+    if (y2 >= yTop && y2 < yTop + height && y2 != y1 && y2 - lastY_bot >= 13) {
       MoveToEx(hdc, m_rect.left, y2, nullptr);
       LineTo(hdc, waveRight, y2);
+      lastY_bot = y2;
     }
   }
 
@@ -599,7 +614,7 @@ void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
   DeleteObject(gridPen);
 }
 
-// dB scale column with labels — drawn ON TOP of waveform (right edge)
+// dB scale column with labels — dynamic Audition-style, adapts to vertical zoom
 void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
 {
   if (height < 40) return;
@@ -608,7 +623,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
   float halfH = (float)(height / 2) * m_verticalZoom;
   int scaleLeft = m_rect.right - DB_SCALE_WIDTH;
 
-  // Column background — dark gray, distinct from black waveform area
+  // Column background
   RECT colRect = { scaleLeft, yTop, m_rect.right, yTop + height };
   HBRUSH colBrush = CreateSolidBrush(RGB(25, 25, 25));
   FillRect(hdc, &colRect, colBrush);
@@ -624,50 +639,91 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
 
   SetBkMode(hdc, TRANSPARENT);
 
-  // Larger font for readability
-  HFONT font = CreateFont(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+  HFONT font = CreateFont(11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
+                           DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
   HFONT oldFont = (HFONT)SelectObject(hdc, font);
 
   // "dB" header
   SetTextColor(hdc, g_theme.dbScaleText);
-  RECT hdrRect = { scaleLeft + 2, yTop + 1, m_rect.right - 2, yTop + 14 };
+  RECT hdrRect = { scaleLeft + 2, yTop + 1, m_rect.right - 2, yTop + 13 };
   DrawText(hdc, "dB", -1, &hdrRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
-  // Tick + label for each dB level (both halves)
-  HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
+  // Dynamic dB labels — Audition-style, adapts to vertical zoom
+  // Center = -∞ (silence), edges = 0 dB at zoom 1.0
+  // When zoomed in (verticalZoom > 1), more negative dB values become visible
+  // When zoomed out (verticalZoom < 1), 0 dB line moves toward center → show positive dB labels
 
-  static const double dbValues[] = { -3, -6, -9, -15, -21 };
-  for (double db : dbValues) {
+  // Candidate dB values from center outward (-60 → +12)
+  // Iterate from most negative (nearest center) to positive (furthest from center)
+  static const double allDb[] = {
+    -60, -55, -50, -45, -40, -36, -33, -30, -27, -24,
+    -21, -20, -18, -16, -15, -14, -12, -10,
+    -9, -8, -7, -6, -5, -4, -3, -2, -1, 0,
+    3, 6, 9, 12
+  };
+  static const int numDb = sizeof(allDb) / sizeof(allDb[0]);
+
+  HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
+
+  // -∞ at center line
+  if (centerY > yTop + 4 && centerY < yTop + height - 4) {
+    oldPen = (HPEN)SelectObject(hdc, tickPen);
+    MoveToEx(hdc, scaleLeft + 1, centerY, nullptr);
+    LineTo(hdc, scaleLeft + 5, centerY);
+    SelectObject(hdc, oldPen);
+
+    SetTextColor(hdc, g_theme.dbScaleText);
+    RECT tr = { scaleLeft + 5, centerY - 6, m_rect.right - 2, centerY + 6 };
+    DrawText(hdc, "-\xE2\x88\x9E", -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  }
+
+  // Top half: iterate from center outward (y decreasing upward)
+  int lastY_top = centerY;
+  for (int i = 0; i < numDb; i++) {
+    double db = allDb[i];
     double linear = pow(10.0, db / 20.0);
     int yOff = (int)(linear * (double)halfH);
-    int y1 = centerY - yOff;
-    int y2 = centerY + yOff;
+    if (yOff < 1) continue;
+    int y = centerY - yOff;
+    if (y > yTop + height - 4 || y < yTop + 2) continue;
+    if (lastY_top - y < 13) continue;
+
+    oldPen = (HPEN)SelectObject(hdc, tickPen);
+    MoveToEx(hdc, scaleLeft + 1, y, nullptr);
+    LineTo(hdc, scaleLeft + 5, y);
+    SelectObject(hdc, oldPen);
 
     char label[8];
     snprintf(label, sizeof(label), "%d", (int)db);
+    SetTextColor(hdc, g_theme.dbScaleText);
+    RECT tr = { scaleLeft + 5, y - 6, m_rect.right - 2, y + 6 };
+    DrawText(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    lastY_top = y;
+  }
 
-    if (y1 >= yTop + 14 && y1 < yTop + height - 14) {
-      oldPen = (HPEN)SelectObject(hdc, tickPen);
-      MoveToEx(hdc, scaleLeft + 1, y1, nullptr);
-      LineTo(hdc, scaleLeft + 5, y1);
-      SelectObject(hdc, oldPen);
+  // Bottom half: iterate from center outward (y increasing downward)
+  int lastY_bot = centerY;
+  for (int i = 0; i < numDb; i++) {
+    double db = allDb[i];
+    double linear = pow(10.0, db / 20.0);
+    int yOff = (int)(linear * (double)halfH);
+    if (yOff < 1) continue;
+    int y = centerY + yOff;
+    if (y < yTop + 4 || y > yTop + height - 2) continue;
+    if (y - lastY_bot < 13) continue;
 
-      SetTextColor(hdc, g_theme.dbScaleText);
-      RECT tr = { scaleLeft + 5, y1 - 7, m_rect.right - 2, y1 + 7 };
-      DrawText(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    }
-    if (y2 >= yTop + 14 && y2 < yTop + height - 14 && y2 != y1) {
-      oldPen = (HPEN)SelectObject(hdc, tickPen);
-      MoveToEx(hdc, scaleLeft + 1, y2, nullptr);
-      LineTo(hdc, scaleLeft + 5, y2);
-      SelectObject(hdc, oldPen);
+    oldPen = (HPEN)SelectObject(hdc, tickPen);
+    MoveToEx(hdc, scaleLeft + 1, y, nullptr);
+    LineTo(hdc, scaleLeft + 5, y);
+    SelectObject(hdc, oldPen);
 
-      SetTextColor(hdc, g_theme.dbScaleText);
-      RECT tr = { scaleLeft + 5, y2 - 7, m_rect.right - 2, y2 + 7 };
-      DrawText(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-    }
+    char label[8];
+    snprintf(label, sizeof(label), "%d", (int)db);
+    SetTextColor(hdc, g_theme.dbScaleText);
+    RECT tr = { scaleLeft + 5, y - 6, m_rect.right - 2, y + 6 };
+    DrawText(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    lastY_bot = y;
   }
 
   DeleteObject(tickPen);

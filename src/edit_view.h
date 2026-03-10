@@ -9,6 +9,7 @@
 #include "gain_panel.h"
 #include "marker_manager.h"
 #include "levels_panel.h"
+#include "spectral_view.h"
 #include <vector>
 
 // Audio clipboard for cut/copy/paste
@@ -48,6 +49,7 @@ enum ContextMenuID {
   CM_EDIT_MARKER,
   CM_GAIN_PANEL,
   CM_MONO_DOWNMIX,
+  CM_TOGGLE_SPECTRAL,
 };
 
 class EditView {
@@ -84,6 +86,7 @@ private:
   void DrawRegions(HDC hdc);
   void DrawBottomPanel(HDC hdc);
   void DrawScrollbar(HDC hdc);
+  void DrawSplitter(HDC hdc);
   void GetItemTitle(char* buf, int bufSize);
   void RecalcLayout(int w, int h);
 
@@ -112,6 +115,8 @@ private:
   RECT m_toolbarRect = {};
   RECT m_rulerRect = {};
   RECT m_waveformRect = {};
+  RECT m_splitterRect = {};
+  RECT m_spectralRect = {};
   RECT m_scrollbarRect = {};
   RECT m_bottomPanelRect = {};
 
@@ -134,6 +139,13 @@ private:
 
   GainPanel m_gainPanel;
   LevelsPanel m_levels;
+  SpectralView m_spectral;
+  bool m_spectralVisible = false;
+  float m_splitterRatio = 0.55f; // waveform gets 55% of content area
+  bool m_splitterDragging = false;
+  bool m_spectralFreqDragging = false;
+  int m_spectralFreqDragChTop = 0;
+  int m_spectralFreqDragChH = 0;
 
   // Internal undo (1 level)
   std::vector<double> m_undoBuffer;

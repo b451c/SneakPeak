@@ -81,6 +81,15 @@ extern void (*g_GetSet_LoopTimeRange2)(ReaProject* proj, bool isSet, bool isLoop
 // UI / dialogs
 extern bool (*g_GetUserInputs)(const char* title, int num_inputs, const char* captions_csv, char* retvals_csv, int retvals_csv_sz);
 
+// LICE bitmap API
+class LICE_IBitmap;
+extern LICE_IBitmap* (*g_LICE_CreateBitmap)(int mode, int w, int h);
+extern void (*g_LICE__Destroy)(LICE_IBitmap* bm);
+extern void* (*g_LICE__GetBits)(LICE_IBitmap* bm);
+extern int (*g_LICE__GetRowSpan)(LICE_IBitmap* bm);
+extern bool (*g_LICE__resize)(LICE_IBitmap* bm, int w, int h);
+extern HDC (*g_LICE__GetDC)(LICE_IBitmap* bm);
+
 // Utility
 inline void safe_strncpy(char* dst, const char* src, size_t dst_size) {
   if (!dst || dst_size == 0) return;
