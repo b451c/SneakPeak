@@ -112,7 +112,6 @@ void SneakPeak::LoadSelectedItem()
 {
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
-  CleanupDragTemp();
   if (m_previewActive) StandaloneCleanupPreview();
 
   int count = g_CountSelectedMediaItems(nullptr);
@@ -2032,6 +2031,16 @@ void SneakPeak::OnKeyDown(WPARAM key)
         if (g_GetPlayState() & 1) {
           g_OnStopButton();
         } else {
+          // Move REAPER cursor to selection start (or item start) before play
+          if (g_SetEditCurPos && m_waveform.HasItem()) {
+            double startTime = 0.0;
+            if (m_waveform.HasSelection()) {
+              WaveformSelection sel = m_waveform.GetSelection();
+              startTime = std::min(sel.startTime, sel.endTime);
+            }
+            double absTime = m_waveform.GetItemPosition() + startTime;
+            g_SetEditCurPos(absTime, false, false);
+          }
           m_startedPlayback = true;
           m_autoStopped = false;
           m_playGraceTicks = PLAY_GRACE_TICKS; // ~165ms for REAPER to update play position
@@ -2662,6 +2671,8 @@ void SneakPeak::LoadStandaloneFile(const char* path)
   if (!path || !path[0]) return;
   StandaloneCleanupPreview();
   m_standaloneUndoStack.clear();
+  m_waveform.ClearStandaloneFade();
+  m_waveform.ClearStandaloneGain();
 
   std::string spath(path);
   DBG("[SneakPeak] LoadStandaloneFile: %s\n", path);
@@ -3107,11 +3118,19 @@ void SneakPeak::DoDelete()
       m_waveform.SetAudioSampleCount(newFrames);
       m_waveform.SetItemDuration(newDur);
 
+      // Clamp view to new duration
+      if (m_waveform.GetViewStart() + m_waveform.GetViewDuration() > newDur) {
+        double vs = std::max(0.0, newDur - m_waveform.GetViewDuration());
+        m_waveform.SetViewStart(vs);
+        if (m_waveform.GetViewDuration() > newDur)
+          m_waveform.SetViewDuration(newDur);
+      }
       // Place cursor at delete point
       double cursorTime = (double)startFrame / (double)sr;
       m_waveform.SetCursorTime(cursorTime);
       m_waveform.ClearSelection();
       m_waveform.Invalidate();
+      m_minimap.Invalidate();
       m_dirty = true;
       UpdateTitle();
       InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -3587,6 +3606,7 @@ void SneakPeak::InitiateDragExport()
   int startF, endF;
   GetSelectionSampleRange(startF, endF);
   int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
   int selFrames = endF - startF;
 
   DBG("[SneakPeak] DragExport: startF=%d endF=%d nch=%d selFrames=%d dataSize=%d\n",
@@ -3602,10 +3622,70 @@ void SneakPeak::InitiateDragExport()
         (int)needed, (int)data.size());
     return;
   }
-  const double* selData = data.data() + offset;
 
-  m_dragTempPath = AudioEngine::WriteTempWav(selData, selFrames, nch,
-                                              m_waveform.GetSampleRate(),
+  // Copy selection data so we can bake standalone fade without modifying original
+  std::vector<double> exportBuf(data.begin() + offset, data.begin() + offset + (size_t)selFrames * nch);
+
+  // Bake pending standalone fade into export copy
+  if (m_waveform.IsStandaloneMode()) {
+    auto sf = m_waveform.GetStandaloneFade();
+    int totalFrames = m_waveform.GetAudioSampleCount();
+    if (sf.fadeInLen >= 0.001) {
+      int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
+      // Only process the overlap between selection and fade-in region [0, fadeFrames)
+      if (startF < fadeFrames) {
+        int overlapFrames = std::min(fadeFrames - startF, selFrames);
+        // We need to offset into the fade curve since selection may not start at 0
+        for (int i = 0; i < overlapFrames; i++) {
+          double t = (double)(startF + i) / (double)fadeFrames;
+          t = std::max(0.0, std::min(1.0, t));
+          // Same shape logic as ApplyFadeShapeOps in audio_ops.cpp
+          double gain;
+          switch (sf.fadeInShape) {
+            default: case 0: gain = t; break;
+            case 1: gain = sqrt(t); break;
+            case 2: gain = t * t; break;
+            case 3: gain = pow(t, 0.25); break;
+            case 4: gain = t * t * t * t; break;
+            case 5: gain = 0.5 - 0.5 * cos(M_PI * t); break;
+            case 6: { double s = 0.5 - 0.5 * cos(M_PI * t); gain = s * s * (3.0 - 2.0 * s); break; }
+          }
+          for (int ch = 0; ch < nch; ch++)
+            exportBuf[i * nch + ch] *= gain;
+        }
+      }
+    }
+    if (sf.fadeOutLen >= 0.001) {
+      int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
+      int fadeStart = totalFrames - fadeFrames;
+      int overlapStart = std::max(startF, fadeStart);
+      int overlapEnd = std::min(endF, totalFrames);
+      if (overlapStart < overlapEnd) {
+        for (int i = overlapStart; i < overlapEnd; i++) {
+          double t = (double)(i - fadeStart) / (double)fadeFrames;
+          t = std::max(0.0, std::min(1.0, t));
+          // FadeOut uses ApplyFadeShapeOps(1.0 - t, shape)
+          double rt = 1.0 - t;
+          double gain;
+          switch (sf.fadeOutShape) {
+            default: case 0: gain = rt; break;
+            case 1: gain = sqrt(rt); break;
+            case 2: gain = rt * rt; break;
+            case 3: gain = pow(rt, 0.25); break;
+            case 4: gain = rt * rt * rt * rt; break;
+            case 5: gain = 0.5 - 0.5 * cos(M_PI * rt); break;
+            case 6: { double s = 0.5 - 0.5 * cos(M_PI * rt); gain = s * s * (3.0 - 2.0 * s); break; }
+          }
+          int bufIdx = i - startF;
+          for (int ch = 0; ch < nch; ch++)
+            exportBuf[bufIdx * nch + ch] *= gain;
+        }
+      }
+    }
+  }
+
+  m_dragTempPath = AudioEngine::WriteTempWav(exportBuf.data(), selFrames, nch,
+                                              sr,
                                               m_wavBitsPerSample, m_wavAudioFormat);
   DBG("[SneakPeak] DragExport: wrote temp WAV to '%s'\n", m_dragTempPath.c_str());
   if (m_dragTempPath.empty()) return;
