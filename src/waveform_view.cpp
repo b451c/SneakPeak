@@ -1,6 +1,7 @@
 // waveform_view.cpp — Waveform rendering using GDI
 // Audio data is loaded once into memory, peaks computed from cache (zero API calls per paint)
 #include "waveform_view.h"
+#include "audio_engine.h"
 #include "reaper_plugin.h"
 #include "theme.h"
 #include "debug.h"
@@ -268,6 +269,45 @@ void WaveformView::ClearItem()
   m_itemDuration = 0.0;
   m_audioData.clear();
   m_audioSampleCount = 0;
+  m_standaloneMode = false;
+  m_standaloneFilePath.clear();
+  m_standaloneGain = 1.0;
+  m_standaloneGainStart = -1.0;
+  m_standaloneGainEnd = -1.0;
+  m_fadeCache = {};
+  m_fadeCache.itemVol = 1.0;
+}
+
+bool WaveformView::LoadFromFile(const std::string& path)
+{
+  ClearItem();
+
+  WavInfo info;
+  if (!AudioEngine::ReadAudioFile(path, info, m_audioData)) {
+    DBG("[SneakPeak] LoadFromFile failed: %s\n", path.c_str());
+    return false;
+  }
+
+  m_standaloneMode = true;
+  m_standaloneFilePath = path;
+  m_standaloneBitsPerSample = info.bitsPerSample;
+  m_standaloneAudioFormat = info.audioFormat;
+  m_sampleRate = info.sampleRate;
+  m_numChannels = info.numChannels;
+  if (m_numChannels < 1) m_numChannels = 1;
+  if (m_numChannels > 2) m_numChannels = 2;
+  m_audioSampleCount = info.numFrames;
+  m_itemDuration = (double)info.numFrames / (double)m_sampleRate;
+  m_itemPosition = 0.0;
+  m_takeOffset = 0.0;
+  m_viewStartTime = 0.0;
+  m_viewDuration = m_itemDuration;
+  m_cursorTime = 0.0;
+  m_peaksValid = false;
+
+  DBG("[SneakPeak] LoadFromFile: %s (%d frames, %dch, %dHz, %.3fs)\n",
+      path.c_str(), info.numFrames, m_numChannels, m_sampleRate, m_itemDuration);
+  return true;
 }
 
 // Load ALL audio samples into memory — called once per item
@@ -643,7 +683,7 @@ void WaveformView::Paint(HDC hdc)
   int h = m_rect.bottom - m_rect.top;
   if (w <= 0 || h <= 0) return;
 
-  if (!m_item || !m_take) {
+  if ((!m_item || !m_take) && !m_standaloneMode) {
     HBRUSH bgBrush = CreateSolidBrush(g_theme.waveformBg);
     FillRect(hdc, &m_rect, bgBrush);
     DeleteObject(bgBrush);
@@ -731,6 +771,7 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   int fadeInShape = m_fadeCache.fadeInShape;
   int fadeOutShape = m_fadeCache.fadeOutShape;
 
+
   // Pens: normal (green) and selected (dark green), plus RMS (darker variants)
   // Dim channel if muted (inactive)
   bool dimmed = (m_numChannels > 1 && !m_channelActive[channel]);
@@ -782,7 +823,17 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
       fadeGain *= ApplyFadeShape((m_itemDuration - colTime) / fadeOutLen, fadeOutShape);
     if (fadeGain < 0.0) fadeGain = 0.0;
 
-    double vol = itemVol * fadeGain;
+    // Standalone gain preview (applies to selection region only)
+    double sgain = 1.0;
+    if (m_standaloneMode && m_standaloneGain != 1.0) {
+      if (m_standaloneGainStart < 0.0) {
+        sgain = m_standaloneGain; // no selection = full file
+      } else if (colTime >= m_standaloneGainStart && colTime < m_standaloneGainEnd) {
+        sgain = m_standaloneGain;
+      }
+    }
+
+    double vol = itemVol * fadeGain * sgain;
     double maxVal = std::max(-1.0, std::min(1.0, m_peakMax[idx] * vol));
     double minVal = std::max(-1.0, std::min(1.0, m_peakMin[idx] * vol));
 
@@ -820,7 +871,12 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
       fadeGain *= ApplyFadeShape((m_itemDuration - colTime) / fadeOutLen, fadeOutShape);
     if (fadeGain < 0.0) fadeGain = 0.0;
 
-    double vol = itemVol * fadeGain;
+    double sgain2 = 1.0;
+    if (m_standaloneMode && m_standaloneGain != 1.0) {
+      if (m_standaloneGainStart < 0.0) sgain2 = m_standaloneGain;
+      else if (colTime >= m_standaloneGainStart && colTime < m_standaloneGainEnd) sgain2 = m_standaloneGain;
+    }
+    double vol = itemVol * fadeGain * sgain2;
     double rmsVal = std::min(1.0, m_peakRMS[idx] * vol);
 
     int yRmsTop = centerY - (int)(rmsVal * (double)halfH);
@@ -1210,8 +1266,9 @@ void WaveformView::DrawCursor(HDC hdc)
 
 void WaveformView::UpdateFadeCache()
 {
-  if (!m_item || !g_GetMediaItemInfo_Value) {
+  if (!m_item || !g_GetMediaItemInfo_Value || m_standaloneMode) {
     m_fadeCache = {};
+    m_fadeCache.itemVol = 1.0; // unity gain default
     return;
   }
   double oldVol = m_fadeCache.itemVol;
@@ -1274,7 +1331,7 @@ bool WaveformView::ClickChannelButton(int x, int y)
 
 void WaveformView::DrawFadeBackground(HDC hdc)
 {
-  if (!m_item) return;
+  if (!m_item || m_standaloneMode) return;
 
   double fadeInLen = m_fadeCache.fadeInLen;
   double fadeOutLen = m_fadeCache.fadeOutLen;
@@ -1329,7 +1386,7 @@ void WaveformView::DrawFadeBackground(HDC hdc)
 
 void WaveformView::DrawFadeEnvelope(HDC hdc)
 {
-  if (!m_item) return;
+  if (!m_item || m_standaloneMode) return;
 
   double fadeInLen = m_fadeCache.fadeInLen;
   double fadeOutLen = m_fadeCache.fadeOutLen;

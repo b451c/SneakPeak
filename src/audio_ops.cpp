@@ -81,6 +81,33 @@ void Gain(double* samples, int numFrames, int numChannels, double gainFactor)
   }
 }
 
+void GainWithCrossfade(double* samples, int numFrames, int numChannels,
+                       double gainFactor, int fadeFrames)
+{
+  if (!samples || numFrames <= 0 || numChannels <= 0) return;
+  if (fadeFrames < 1) fadeFrames = 1;
+  // Clamp fade to half the region so start/end fades don't overlap
+  fadeFrames = std::min(fadeFrames, numFrames / 2);
+
+  for (int f = 0; f < numFrames; f++) {
+    double gain = gainFactor;
+    if (f < fadeFrames) {
+      // Crossfade in: smoothly from 1.0 to gainFactor
+      double t = (double)f / (double)fadeFrames;
+      double blend = 0.5 * (1.0 - cos(t * M_PI)); // 0→1 cosine
+      gain = 1.0 + (gainFactor - 1.0) * blend;
+    } else if (f >= numFrames - fadeFrames) {
+      // Crossfade out: smoothly from gainFactor to 1.0
+      double t = (double)(numFrames - 1 - f) / (double)fadeFrames;
+      double blend = 0.5 * (1.0 - cos(t * M_PI)); // 0→1 cosine
+      gain = 1.0 + (gainFactor - 1.0) * blend;
+    }
+    for (int ch = 0; ch < numChannels; ch++) {
+      samples[(size_t)f * numChannels + ch] *= gain;
+    }
+  }
+}
+
 void DCOffsetRemove(double* samples, int numFrames, int numChannels)
 {
   if (!samples || numFrames <= 0 || numChannels <= 0) return;

@@ -68,6 +68,7 @@ public:
   void Destroy();
   void Toggle();
   bool IsVisible() const;
+  bool IsStandaloneMode() const { return m_waveform.IsStandaloneMode(); }
   HWND GetHwnd() const { return m_hwnd; }
 
   void LoadSelectedItem();
@@ -169,6 +170,12 @@ private:
   bool m_autoStopped = false;      // true after auto-stop, prevents re-trigger loop
   int m_playGraceTicks = 0;        // skip auto-stop for N ticks after play start
 
+  // Standalone file mode (drag & drop from disk)
+  void LoadStandaloneFile(const char* path);
+  void SaveStandaloneFile();
+  void StandalonePlayStop();
+  void StandaloneCleanupPreview();
+
   // Drag & drop export
   bool m_dragExportPending = false;
   int m_dragStartX = 0;
@@ -187,9 +194,20 @@ private:
 
   // Undo state
   bool m_hasUndo = false;
+  // Standalone undo stack (snapshots of audio data)
+  std::vector<std::vector<double>> m_standaloneUndoStack;
+  static const int MAX_STANDALONE_UNDO = 20;
+  void StandaloneUndoSave();
+  void StandaloneUndoRestore();
 
   // Dirty indicator (destructive edit pending)
   bool m_dirty = false;
+
+  // Toast overlay (e.g. "Saved!")
+  DWORD m_toastStartTick = 0;
+  char m_toastText[64] = {};
+  void ShowToast(const char* text);
+  void DrawToast(HDC hdc);
 
   // Cached file size (avoid stat() every paint)
   double m_cachedFileSizeMB = 0.0;
@@ -198,6 +216,12 @@ private:
   int m_wavBitsPerSample = 16;
   int m_wavAudioFormat = 1; // 1=PCM, 3=float
   int m_lastChanMode = -1;  // tracks I_CHANMODE for change detection
+
+  // Standalone preview playback
+  bool m_previewActive = false;
+  void* m_previewReg = nullptr; // preview_register_t* (opaque to avoid header dep)
+  PCM_source* m_previewSrc = nullptr;
+  std::string m_previewTempPath;
 
   static AudioClipboard s_clipboard;
   static const int TIMER_REFRESH = 100;

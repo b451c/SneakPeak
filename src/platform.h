@@ -62,7 +62,17 @@ inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param) {
   return CreateDialogIndirectParam(GetModuleHandle(nullptr), &dlg.tmpl, parent, dlgProc, param);
 }
 #else
+#include "swell/swell-dlggen.h"
+
+static void _sneakpeak_dlg_noop(HWND, int) {} // SWELL requires non-null createFunc
+
 inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param) {
-  return SWELL_CreateDialog(nullptr, nullptr, parent, dlgProc, param);
+  // SWELL resource with drop target flag for file drag & drop
+  static SWELL_DialogResourceIndex res = {
+    nullptr, "SneakPeak",
+    SWELL_DLG_WS_FLIPPED | SWELL_DLG_WS_OPAQUE | SWELL_DLG_WS_DROPTARGET,
+    _sneakpeak_dlg_noop, 800, 400, nullptr
+  };
+  return SWELL_CreateDialog(&res, nullptr, parent, dlgProc, param);
 }
 #endif

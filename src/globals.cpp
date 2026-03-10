@@ -33,6 +33,10 @@ void (*g_SetEditCurPos)(double, bool, bool) = nullptr;
 void (*g_OnPlayButton)() = nullptr;
 void (*g_OnStopButton)() = nullptr;
 
+// Preview playback (standalone mode)
+int (*g_PlayPreview)(preview_register_t*) = nullptr;
+int (*g_StopPreview)(preview_register_t*) = nullptr;
+
 // Markers
 int (*g_EnumProjectMarkers3)(ReaProject*, int, bool*, double*, double*, const char**, int*, int*) = nullptr;
 int (*g_AddProjectMarker2)(ReaProject*, bool, double, double, const char*, int, int) = nullptr;

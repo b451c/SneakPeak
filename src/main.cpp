@@ -38,6 +38,10 @@
 #define REAPERAPI_WANT_OnPlayButton
 #define REAPERAPI_WANT_OnStopButton
 
+// Preview playback (standalone mode)
+#define REAPERAPI_WANT_PlayPreview
+#define REAPERAPI_WANT_StopPreview
+
 // Markers
 #define REAPERAPI_WANT_EnumProjectMarkers3
 #define REAPERAPI_WANT_AddProjectMarker2
@@ -113,7 +117,7 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
     bool handled = false;
     if (k == VK_HOME || k == VK_END || k == VK_SPACE || k == VK_ESCAPE || k == VK_TAB) handled = true;
     else if (k == VK_DELETE) handled = true;
-    else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A')) handled = true;
+    else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A' || k == 'S')) handled = true;
     else if (!ctrl && (k == 'M' || k == 'G')) handled = true;
     if (handled) {
       SendMessage(ourHwnd, WM_KEYDOWN, msg->wParam, msg->lParam);
@@ -129,6 +133,7 @@ static accelerator_register_t g_accelReg = { translateAccelSneakPeak, true, null
 static void pollSelectionTimer()
 {
   if (!g_sneakPeak || !g_sneakPeak->IsVisible()) return;
+  if (g_sneakPeak->IsStandaloneMode()) return;
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
   int count = g_CountSelectedMediaItems(nullptr);
@@ -257,6 +262,8 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_SetEditCurPos = SetEditCurPos;
   g_OnPlayButton = OnPlayButton;
   g_OnStopButton = OnStopButton;
+  g_PlayPreview = PlayPreview;
+  g_StopPreview = StopPreview;
 
   g_EnumProjectMarkers3 = EnumProjectMarkers3;
   g_AddProjectMarker2 = AddProjectMarker2;

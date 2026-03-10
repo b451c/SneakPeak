@@ -20,12 +20,15 @@ public:
   // Visibility — Show reads current D_VOL from item
   bool IsVisible() const { return m_visible; }
   void Show(MediaItem* item);
-  void Hide() { m_visible = false; m_item = nullptr; }
+  void ShowStandalone(); // standalone mode: no item, internal gain only
+  void Hide() { m_visible = false; m_item = nullptr; m_standalone = false; }
   void Toggle(MediaItem* item);
+  bool IsStandalone() const { return m_standalone; }
 
   // State
   double GetDb() const { return m_db; }
   bool IsDragging() const { return m_knobDragging || m_panelDragging; }
+  bool IsPanelDragging() const { return m_panelDragging; }
 
 private:
   void ReadFromItem();
@@ -46,6 +49,7 @@ private:
   double m_dragAnchorDb = 0.0;
   int m_dragAnchorY = 0;
   MediaItem* m_item = nullptr;
+  bool m_standalone = false;
 
   // Panel position offset from default center position
   int m_offsetX = 0;

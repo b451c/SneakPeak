@@ -19,6 +19,14 @@ void GainPanel::Show(MediaItem* item)
   ReadFromItem();
 }
 
+void GainPanel::ShowStandalone()
+{
+  m_item = nullptr;
+  m_standalone = true;
+  m_visible = true;
+  m_db = 0.0;
+}
+
 void GainPanel::Toggle(MediaItem* item)
 {
   if (m_visible) Hide();

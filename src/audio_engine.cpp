@@ -1,5 +1,6 @@
 // audio_engine.cpp — WAV file I/O and REAPER source management
 #include "audio_engine.h"
+#include "reaper_plugin.h"
 #include "debug.h"
 #include <cstdio>
 #include <cstring>
@@ -113,6 +114,64 @@ bool AudioEngine::ReadWavHeader(const std::string& path, WavInfo& info)
   return true;
 }
 
+bool AudioEngine::ReadWavFile(const std::string& path, WavInfo& info,
+                               std::vector<double>& samples)
+{
+  samples.clear();
+  if (!ReadWavHeader(path, info)) return false;
+  if (info.numFrames <= 0 || info.numChannels <= 0) return false;
+
+  FILE* f = fopen(path.c_str(), "rb");
+  if (!f) return false;
+
+  // Skip RIFF header
+  RiffHeader riff;
+  if (fread(&riff, sizeof(riff), 1, f) != 1) { fclose(f); return false; }
+
+  // Find data chunk
+  bool found = false;
+  while (!feof(f)) {
+    char chunkId[4];
+    uint32_t chunkSize;
+    if (fread(chunkId, 4, 1, f) != 1) break;
+    if (fread(&chunkSize, 4, 1, f) != 1) break;
+    if (memcmp(chunkId, "data", 4) == 0) { found = true; break; }
+    fseek(f, (long)chunkSize, SEEK_CUR);
+    if (chunkSize & 1) fseek(f, 1, SEEK_CUR);
+  }
+  if (!found) { fclose(f); return false; }
+
+  size_t totalSamples = (size_t)info.numFrames * (size_t)info.numChannels;
+  samples.resize(totalSamples, 0.0);
+
+  if (info.audioFormat == 3 && info.bitsPerSample == 32) {
+    // 32-bit float
+    std::vector<float> buf(totalSamples);
+    size_t read = fread(buf.data(), sizeof(float), totalSamples, f);
+    for (size_t i = 0; i < read; i++) samples[i] = (double)buf[i];
+  } else if (info.bitsPerSample == 16) {
+    std::vector<int16_t> buf(totalSamples);
+    size_t read = fread(buf.data(), sizeof(int16_t), totalSamples, f);
+    for (size_t i = 0; i < read; i++) samples[i] = (double)buf[i] / 32768.0;
+  } else if (info.bitsPerSample == 24) {
+    std::vector<uint8_t> buf(totalSamples * 3);
+    size_t bytesRead = fread(buf.data(), 1, totalSamples * 3, f);
+    size_t framesRead = bytesRead / 3;
+    for (size_t i = 0; i < framesRead; i++) {
+      int32_t v = (int32_t)buf[i*3] | ((int32_t)buf[i*3+1] << 8) | ((int32_t)buf[i*3+2] << 16);
+      if (v & 0x800000) v |= (int32_t)0xFF000000; // sign extend
+      samples[i] = (double)v / 8388608.0;
+    }
+  } else {
+    fclose(f); return false;
+  }
+
+  fclose(f);
+  DBG("[AudioEngine] ReadWavFile: %s (%d frames, %dch, %dHz, %dbit)\n",
+      path.c_str(), info.numFrames, info.numChannels, info.sampleRate, info.bitsPerSample);
+  return true;
+}
+
 static inline int16_t doubleToS16(double v)
 {
   v = std::max(-1.0, std::min(1.0, v));
@@ -218,6 +277,75 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
   DBG("[AudioEngine] Wrote WAV: %s (%d frames, %dch, %dHz, %dbit)\n",
       path.c_str(), numFrames, numChannels, sampleRate, bitsPerSample);
   return true;
+}
+
+bool AudioEngine::ReadAudioFile(const std::string& path, WavInfo& info,
+                                 std::vector<double>& samples)
+{
+  samples.clear();
+
+  // Try REAPER's PCM_Source first — supports WAV, MP3, FLAC, OGG, AIFF, etc.
+  if (g_PCM_Source_CreateFromFile) {
+    PCM_source* src = g_PCM_Source_CreateFromFile(path.c_str());
+    if (src) {
+      int nch = src->GetNumChannels();
+      int sr = (int)src->GetSampleRate();
+      double length = src->GetLength();
+      int totalFrames = (int)(length * sr);
+
+      if (nch > 0 && sr > 0 && totalFrames > 0) {
+        if (nch > 2) nch = 2; // cap at stereo
+
+        info.numChannels = nch;
+        info.sampleRate = sr;
+        info.numFrames = totalFrames;
+        info.bitsPerSample = 32; // PCM_Source always gives us float-quality
+        info.audioFormat = 3;    // treat as float for write-back
+
+        // Check if source is WAV — preserve original format for write-back
+        {
+          WavInfo wavInfo;
+          if (ReadWavHeader(path, wavInfo)) {
+            info.bitsPerSample = wavInfo.bitsPerSample;
+            info.audioFormat = wavInfo.audioFormat;
+          }
+        }
+
+        samples.resize((size_t)totalFrames * nch, 0.0);
+
+        // Read in chunks
+        static const int CHUNK = 65536;
+        std::vector<double> buf((size_t)CHUNK * nch);
+        int framesRead = 0;
+        while (framesRead < totalFrames) {
+          int chunk = std::min(CHUNK, totalFrames - framesRead);
+          PCM_source_transfer_t transfer = {};
+          transfer.time_s = (double)framesRead / (double)sr;
+          transfer.length = chunk;
+          transfer.nch = nch;
+          transfer.samplerate = sr;
+          transfer.samples = buf.data();
+          src->GetSamples(&transfer);
+
+          int got = transfer.samples_out;
+          if (got <= 0) break;
+          memcpy(samples.data() + (size_t)framesRead * nch,
+                 buf.data(), (size_t)got * nch * sizeof(double));
+          framesRead += got;
+        }
+
+        delete src;
+        info.numFrames = framesRead;
+        DBG("[AudioEngine] ReadAudioFile (PCM_Source): %s (%d frames, %dch, %dHz)\n",
+            path.c_str(), framesRead, nch, sr);
+        return framesRead > 0;
+      }
+      delete src;
+    }
+  }
+
+  // Fallback: direct WAV reading
+  return ReadWavFile(path, info, samples);
 }
 
 void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)

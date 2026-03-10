@@ -5,6 +5,7 @@
 #include "config.h"
 #include "globals.h"
 #include <vector>
+#include <string>
 #include <cmath>
 
 struct WaveformSelection {
@@ -32,10 +33,17 @@ public:
   void SetItem(MediaItem* item);
   void SetItems(const std::vector<MediaItem*>& items);
   void ClearItem();
-  bool HasItem() const { return m_item != nullptr; }
+  bool HasItem() const { return m_item != nullptr || m_standaloneMode; }
   MediaItem* GetItem() const { return m_item; }
   bool IsMultiItem() const { return m_segments.size() > 1; }
   const std::vector<ItemSegment>& GetSegments() const { return m_segments; }
+
+  // Standalone file mode (no REAPER item)
+  bool LoadFromFile(const std::string& path);
+  bool IsStandaloneMode() const { return m_standaloneMode; }
+  const std::string& GetStandaloneFilePath() const { return m_standaloneFilePath; }
+  int GetStandaloneBitsPerSample() const { return m_standaloneBitsPerSample; }
+  int GetStandaloneAudioFormat() const { return m_standaloneAudioFormat; }
 
   // Geometry
   void SetRect(int x, int y, int w, int h);
@@ -102,6 +110,15 @@ public:
   };
   void UpdateFadeCache();
   FadeCache GetFadeCache() const { return m_fadeCache; }
+  void SetItemVol(double vol) { m_fadeCache.itemVol = vol; }
+
+  // Standalone gain preview (visual only, applied per-column in draw)
+  void SetStandaloneGain(double gainLinear, double selStart, double selEnd) {
+    m_standaloneGain = gainLinear;
+    m_standaloneGainStart = selStart;
+    m_standaloneGainEnd = selEnd;
+  }
+  void ClearStandaloneGain() { m_standaloneGain = 1.0; m_standaloneGainStart = -1; m_standaloneGainEnd = -1; }
 
   // Channel active state (mute buttons: both on by default)
   bool IsChannelActive(int ch) const { return m_channelActive[ch]; } // ch: 0=L, 1=R
@@ -184,6 +201,15 @@ private:
 
   // Cached fade/volume parameters
   FadeCache m_fadeCache;
+
+  // Standalone file mode
+  bool m_standaloneMode = false;
+  std::string m_standaloneFilePath;
+  int m_standaloneBitsPerSample = 16;
+  int m_standaloneAudioFormat = 1;
+  double m_standaloneGain = 1.0;       // visual gain preview
+  double m_standaloneGainStart = -1.0; // selection start (-1 = full file)
+  double m_standaloneGainEnd = -1.0;   // selection end
 
   // Geometry
   RECT m_rect = {0, 0, 0, 0};

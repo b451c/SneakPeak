@@ -20,6 +20,12 @@ void Reverse(double* samples, int numFrames, int numChannels);
 // Apply gain multiplier
 void Gain(double* samples, int numFrames, int numChannels, double gainFactor);
 
+// Apply gain with cosine crossfade at boundaries (fadeFrames on each edge)
+// samples points to start of region, gainFactor is the target gain
+// Crossfade smoothly transitions from 1.0 to gainFactor at start, gainFactor to 1.0 at end
+void GainWithCrossfade(double* samples, int numFrames, int numChannels,
+                       double gainFactor, int fadeFrames);
+
 // Remove DC offset (subtract mean)
 void DCOffsetRemove(double* samples, int numFrames, int numChannels);
 

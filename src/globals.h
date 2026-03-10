@@ -47,6 +47,14 @@ extern void (*g_SetEditCurPos)(double time, bool moveview, bool seekplay);
 extern void (*g_OnPlayButton)();
 extern void (*g_OnStopButton)();
 
+// Preview playback (standalone mode)
+#ifndef _REAPER_PLUGIN_H_
+struct _REAPER_preview_register_t;
+typedef struct _REAPER_preview_register_t preview_register_t;
+#endif
+extern int (*g_PlayPreview)(preview_register_t* preview);
+extern int (*g_StopPreview)(preview_register_t* preview);
+
 // Markers
 extern int (*g_EnumProjectMarkers3)(ReaProject* proj, int idx, bool* isrgnOut, double* posOut, double* rgnendOut, const char** nameOut, int* markrgnindexnumberOut, int* colorOut);
 extern int (*g_AddProjectMarker2)(ReaProject* proj, bool isrgn, double pos, double rgnend, const char* name, int wantidx, int color);

@@ -5,11 +5,13 @@
 #include "audio_ops.h"
 #include "theme.h"
 #include "debug.h"
+#include "reaper_plugin.h"
 #include <cstring>
 #include <cstdio>
 #include <cmath>
 #include <algorithm>
 #include <sys/stat.h>
+#include <pthread.h>
 
 AudioClipboard SneakPeak::s_clipboard;
 
@@ -87,6 +89,7 @@ void SneakPeak::Create()
 void SneakPeak::Destroy()
 {
   if (!m_hwnd) return;
+  StandaloneCleanupPreview();
   CleanupDragTemp();
   KillTimer(m_hwnd, TIMER_REFRESH);
   if (g_DockWindowRemove) g_DockWindowRemove(m_hwnd);
@@ -234,7 +237,7 @@ void SneakPeak::OnTimer()
   if (!m_hwnd || !IsVisible()) return;
 
   // Validate cached item pointer — may become dangling after split/snap/delete in arrange
-  if (m_waveform.HasItem() && g_ValidatePtr2 &&
+  if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() && g_ValidatePtr2 &&
       !g_ValidatePtr2(nullptr, (void*)m_waveform.GetItem(), "MediaItem*")) {
     m_waveform.ClearItem();
     m_hasUndo = false;
@@ -302,7 +305,7 @@ void SneakPeak::OnTimer()
 
     // Auto-stop: when SneakPeak-initiated playback exits item bounds, stop once
     if (playing && m_startedPlayback && !m_autoStopped && m_playGraceTicks == 0 &&
-        g_GetPlayPosition2 && m_waveform.HasItem()) {
+        g_GetPlayPosition2 && m_waveform.HasItem() && !m_waveform.IsStandaloneMode()) {
       double absPos = g_GetPlayPosition2();
       // Check against actual absolute timeline bounds of all segments
       const auto& segs = m_waveform.GetSegments();
@@ -346,14 +349,28 @@ void SneakPeak::OnTimer()
     InvalidateRect(m_hwnd, &m_spectralRect, FALSE);
   }
 
-  // Update fade/volume cache for paint
-  if (m_waveform.HasItem()) m_waveform.UpdateFadeCache();
+  // Update fade/volume cache for paint (not in standalone mode)
+  if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode()) m_waveform.UpdateFadeCache();
+  // In standalone mode, reflect gain panel dB in waveform display
+  if (m_waveform.IsStandaloneMode() && m_gainPanel.IsVisible()) {
+    double gainLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
+    if (m_waveform.HasSelection()) {
+      WaveformSelection sel = m_waveform.GetSelection();
+      double s = std::min(sel.startTime, sel.endTime);
+      double e = std::max(sel.startTime, sel.endTime);
+      m_waveform.SetStandaloneGain(gainLin, s, e);
+    } else {
+      m_waveform.SetStandaloneGain(gainLin, -1.0, -1.0); // whole file
+    }
+  } else if (m_waveform.IsStandaloneMode()) {
+    m_waveform.ClearStandaloneGain();
+  }
 
-  // Update solo state from REAPER (polled, not in paint)
-  UpdateSoloState();
+  // Update solo state from REAPER (polled, not in paint, not in standalone)
+  if (!m_waveform.IsStandaloneMode()) UpdateSoloState();
 
   // Single-item only: refresh position/duration, detect channel mode changes
-  if (m_waveform.HasItem() && !m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
+  if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() && !m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
     double pos = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_POSITION");
     double len = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_LENGTH");
     if (pos != m_waveform.GetItemPosition() || len != m_waveform.GetItemDuration()) {
@@ -378,7 +395,22 @@ void SneakPeak::OnTimer()
 
   // Cursor + RMS levels — works for both single and multi-item
   if (m_waveform.HasItem()) {
-    if (g_GetCursorPosition) {
+    if (m_waveform.IsStandaloneMode() && m_previewActive && m_previewReg) {
+      // Track standalone preview cursor
+      auto* reg = (preview_register_t*)m_previewReg;
+      pthread_mutex_lock(&reg->mutex);
+      double pos = reg->curpos;
+      pthread_mutex_unlock(&reg->mutex);
+      double dur = m_waveform.GetItemDuration();
+      if (pos >= dur) {
+        // Preview finished
+        DBG("[SneakPeak] Preview finished: pos=%.3f dur=%.3f\n", pos, dur);
+        StandaloneCleanupPreview();
+      } else {
+        m_waveform.SetCursorTime(pos);
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+      }
+    } else if (g_GetCursorPosition && !m_waveform.IsStandaloneMode()) {
       double curPos = g_GetCursorPosition();
       double relPos = m_waveform.AbsTimeToRelTime(curPos);
       // Clamp cursor to item bounds
@@ -565,6 +597,17 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       // Let OnMouseMove handle cursor — prevent system from resetting it
       return TRUE;
 
+    case WM_DROPFILES: {
+      DBG("[SneakPeak] WM_DROPFILES received\n");
+      HDROP hDrop = (HDROP)wParam;
+      char path[2048] = {};
+      DragQueryFile(hDrop, 0, path, sizeof(path));
+      DragFinish(hDrop);
+      DBG("[SneakPeak] Drop file: %s\n", path);
+      if (path[0]) LoadStandaloneFile(path);
+      return 0;
+    }
+
     case WM_CLOSE:
       // Docker [x] button or undock — hide window instead of destroying
       ShowWindow(m_hwnd, SW_HIDE);
@@ -650,6 +693,7 @@ void SneakPeak::OnPaint(HDC hdc)
   if (m_minimapVisible) m_minimap.Paint(hdc, m_waveform);
   DrawScrollbar(hdc);
   DrawBottomPanel(hdc);
+  DrawToast(hdc);
 }
 
 void SneakPeak::DrawSplitter(HDC hdc)
@@ -996,6 +1040,57 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
 
 }
 
+void SneakPeak::ShowToast(const char* text)
+{
+  snprintf(m_toastText, sizeof(m_toastText), "%s", text);
+  m_toastStartTick = GetTickCount();
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+void SneakPeak::DrawToast(HDC hdc)
+{
+  if (!m_toastStartTick) return;
+  DWORD elapsed = GetTickCount() - m_toastStartTick;
+  if (elapsed > 2000) { m_toastStartTick = 0; return; }
+
+  // Fade out in last 500ms
+  int alpha = 255;
+  if (elapsed > 1500) alpha = 255 - (int)(255.0 * (elapsed - 1500) / 500.0);
+
+  // Draw centered pill on waveform area
+  int textLen = (int)strlen(m_toastText);
+  if (textLen == 0) return;
+
+  int pillW = textLen * 9 + 24;
+  int pillH = 26;
+  int cx = (m_waveformRect.left + m_waveformRect.right) / 2;
+  int cy = m_waveformRect.top + 30;
+  RECT pill = { cx - pillW/2, cy - pillH/2, cx + pillW/2, cy + pillH/2 };
+
+  // Background
+  int bg = (alpha * 40) / 255;
+  HBRUSH bgBrush = CreateSolidBrush(RGB(bg, bg + bg/4, bg));
+  FillRect(hdc, &pill, bgBrush);
+  DeleteObject(bgBrush);
+
+  // Border
+  HPEN pen = CreatePen(PS_SOLID, 1, RGB((alpha*80)/255, (alpha*80)/255, (alpha*80)/255));
+  HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+  MoveToEx(hdc, pill.left, pill.top, nullptr);
+  LineTo(hdc, pill.right, pill.top);
+  LineTo(hdc, pill.right, pill.bottom);
+  LineTo(hdc, pill.left, pill.bottom);
+  LineTo(hdc, pill.left, pill.top);
+  SelectObject(hdc, oldPen);
+  DeleteObject(pen);
+
+  // Text
+  SetBkMode(hdc, TRANSPARENT);
+  int g = (alpha * 230) / 255;
+  SetTextColor(hdc, RGB(g, g, g));
+  DrawText(hdc, m_toastText, -1, &pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+}
+
 // --- Mouse ---
 
 void SneakPeak::OnDoubleClick(int x, int y)
@@ -1017,6 +1112,9 @@ void SneakPeak::OnDoubleClick(int x, int y)
     }
     // Otherwise select all
     if (m_waveform.HasItem()) {
+      m_dragExportPending = false; // cancel any pending drag
+      m_dragging = false;          // prevent mouseup from clearing selection
+      ReleaseCapture();
       m_waveform.StartSelection(0.0);
       m_waveform.UpdateSelection(m_waveform.GetItemDuration());
       m_waveform.EndSelection();
@@ -1041,6 +1139,9 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 {
   m_lastMouseX = x;
   m_lastMouseY = y;
+
+  // Stop standalone preview on click (allows repositioning cursor)
+  if (m_previewActive) StandaloneCleanupPreview();
 
   if (y >= m_toolbarRect.top && y < m_toolbarRect.bottom) {
     int btn = m_toolbar.HitTest(x, y);
@@ -1282,8 +1383,44 @@ void SneakPeak::OnMouseUp(int x, int y)
     return;
   }
   if (m_gainPanel.IsDragging()) {
+    bool wasKnobDrag = m_gainPanel.IsDragging() && !m_gainPanel.IsPanelDragging();
     m_gainPanel.OnMouseUp();
     ReleaseCapture();
+
+    // In standalone mode, bake gain into audio data immediately on knob release
+    if (wasKnobDrag && m_waveform.IsStandaloneMode() && m_gainPanel.IsStandalone()) {
+      double db = m_gainPanel.GetDb();
+      if (std::abs(db) > 0.01) {
+        StandaloneUndoSave(); // save state before destructive edit
+        double factor = pow(10.0, db / 20.0);
+        auto& data = m_waveform.GetAudioData();
+        int nch = m_waveform.GetNumChannels();
+        int sr = m_waveform.GetSampleRate();
+        int totalFrames = m_waveform.GetAudioSampleCount();
+
+        if (m_waveform.HasSelection()) {
+          WaveformSelection sel = m_waveform.GetSelection();
+          int startFrame = (int)(std::min(sel.startTime, sel.endTime) * sr);
+          int endFrame = (int)(std::max(sel.startTime, sel.endTime) * sr);
+          startFrame = std::max(0, std::min(totalFrames, startFrame));
+          endFrame = std::max(0, std::min(totalFrames, endFrame));
+          int selFrames = endFrame - startFrame;
+          if (selFrames > 0) {
+            int fadeFrames = std::min(sr / 100, selFrames / 2); // ~10ms crossfade
+            AudioOps::GainWithCrossfade(data.data() + (size_t)startFrame * nch, selFrames, nch, factor, fadeFrames);
+          }
+        } else {
+          AudioOps::Gain(data.data(), totalFrames, nch, factor);
+        }
+
+        m_gainPanel.ShowStandalone(); // reset knob to 0dB
+        m_waveform.ClearStandaloneGain();
+        m_waveform.Invalidate(); // recalc peaks
+        m_dirty = true;
+        DBG("[SneakPeak] Standalone gain baked: %.1f dB\n", db);
+      }
+    }
+
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
@@ -1548,6 +1685,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
       }
       break;
     case VK_SPACE: {
+      if (m_waveform.IsStandaloneMode()) { StandalonePlayStop(); break; }
       bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
       if (shift && m_waveform.HasItem() && m_waveform.HasSelection()) {
         DoLoopSelection();
@@ -1603,6 +1741,9 @@ void SneakPeak::OnKeyDown(WPARAM key)
       break;
     case 'Z':
       if (ctrl) UndoRestore();
+      break;
+    case 'S':
+      if (ctrl) SaveStandaloneFile();
       break;
     case 'N':
       if (ctrl) DoNormalize();
@@ -1924,6 +2065,10 @@ void SneakPeak::UndoSave()
 
 void SneakPeak::UndoRestore()
 {
+  if (m_waveform.IsStandaloneMode()) {
+    StandaloneUndoRestore();
+    return;
+  }
   // Trigger REAPER's native undo
   // Action 40029 = Edit: Undo
   if (g_Main_OnCommand) {
@@ -1933,6 +2078,28 @@ void SneakPeak::UndoRestore()
     LoadSelectedItem();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
+}
+
+void SneakPeak::StandaloneUndoSave()
+{
+  const auto& data = m_waveform.GetAudioData();
+  if (data.empty()) return;
+  if ((int)m_standaloneUndoStack.size() >= MAX_STANDALONE_UNDO)
+    m_standaloneUndoStack.erase(m_standaloneUndoStack.begin());
+  m_standaloneUndoStack.push_back(data);
+  m_hasUndo = true;
+}
+
+void SneakPeak::StandaloneUndoRestore()
+{
+  if (m_standaloneUndoStack.empty()) return;
+  m_waveform.GetAudioData() = std::move(m_standaloneUndoStack.back());
+  m_standaloneUndoStack.pop_back();
+  m_waveform.Invalidate();
+  m_hasUndo = !m_standaloneUndoStack.empty();
+  m_dirty = true;
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+  DBG("[SneakPeak] Standalone undo (stack=%d)\n", (int)m_standaloneUndoStack.size());
 }
 
 // --- Marker Navigation ---
@@ -2001,6 +2168,166 @@ void SneakPeak::DoLoopSelection()
 
 // --- Write back to disk and refresh ---
 
+// --- Standalone file mode ---
+
+void SneakPeak::LoadStandaloneFile(const char* path)
+{
+  if (!path || !path[0]) return;
+  StandaloneCleanupPreview();
+  m_standaloneUndoStack.clear();
+
+  std::string spath(path);
+  DBG("[SneakPeak] LoadStandaloneFile: %s\n", path);
+
+  if (!m_waveform.LoadFromFile(spath)) {
+    MessageBox(m_hwnd, "Failed to load audio file.", "SneakPeak", MB_OK | MB_ICONERROR);
+    return;
+  }
+
+  m_wavBitsPerSample = m_waveform.GetStandaloneBitsPerSample();
+  m_wavAudioFormat = m_waveform.GetStandaloneAudioFormat();
+  m_hasUndo = false;
+  m_dirty = false;
+
+  // Show gain panel in standalone mode
+  m_gainPanel.ShowStandalone();
+
+  // Clear spectral/minimap
+  m_spectral.ClearSpectrum();
+  m_spectral.Invalidate();
+  m_minimap.Invalidate();
+
+  if (m_hwnd) {
+    // Show filename in title
+    auto slashPos = spath.find_last_of('/');
+    const char* name = (slashPos != std::string::npos) ? spath.c_str() + slashPos + 1 : spath.c_str();
+    char title[512];
+    snprintf(title, sizeof(title), "SneakPeak: %s", name);
+    SetWindowText(m_hwnd, title);
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+
+  DBG("[SneakPeak] Loaded standalone file: %s\n", path);
+}
+
+void SneakPeak::SaveStandaloneFile()
+{
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
+
+  std::string path = m_waveform.GetStandaloneFilePath();
+  if (path.empty()) return;
+
+  // For non-WAV sources, save as WAV next to the original
+  {
+    auto dotPos = path.find_last_of('.');
+    std::string ext;
+    if (dotPos != std::string::npos) ext = path.substr(dotPos + 1);
+    for (auto& c : ext) c = (char)tolower((unsigned char)c);
+    if (ext != "wav" && ext != "wave") {
+      path = path.substr(0, dotPos) + ".wav";
+      // Default to 24-bit PCM for non-WAV exports
+      m_wavBitsPerSample = 24;
+      m_wavAudioFormat = 1;
+    }
+  }
+
+  // Gain is already baked into audio data on knob release — just save
+  const auto& data = m_waveform.GetAudioData();
+  int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
+  int frames = m_waveform.GetAudioSampleCount();
+
+  if (AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr,
+                                m_wavBitsPerSample, m_wavAudioFormat)) {
+    DBG("[SneakPeak] Saved standalone file: %s\n", path.c_str());
+    m_dirty = false;
+    ShowToast("Saved!");
+  } else {
+    MessageBox(m_hwnd, "Failed to save file.", "SneakPeak", MB_OK | MB_ICONERROR);
+  }
+}
+
+void SneakPeak::StandaloneCleanupPreview()
+{
+  if (m_previewReg) {
+    if (g_StopPreview) g_StopPreview((preview_register_t*)m_previewReg);
+    auto* reg = (preview_register_t*)m_previewReg;
+    pthread_mutex_destroy(&reg->mutex);
+    delete reg;
+    m_previewReg = nullptr;
+  }
+  if (m_previewSrc) {
+    delete m_previewSrc;
+    m_previewSrc = nullptr;
+  }
+  if (!m_previewTempPath.empty()) {
+    remove(m_previewTempPath.c_str());
+    m_previewTempPath.clear();
+  }
+  m_previewActive = false;
+}
+
+void SneakPeak::StandalonePlayStop()
+{
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
+
+  // If already playing, stop
+  if (m_previewActive) {
+    StandaloneCleanupPreview();
+    return;
+  }
+
+  // Write current audio data to temp WAV, then preview from it
+  // (so edits like gain are heard without saving)
+  if (!g_PCM_Source_CreateFromFile || !g_PlayPreview) return;
+
+  const auto& data = m_waveform.GetAudioData();
+  int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
+  int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || data.empty()) return;
+
+  std::string tmpPath = AudioEngine::WriteTempWav(data.data(), frames, nch, sr);
+  if (tmpPath.empty()) return;
+
+  PCM_source* src = g_PCM_Source_CreateFromFile(tmpPath.c_str());
+  if (!src) { remove(tmpPath.c_str()); return; }
+  m_previewTempPath = tmpPath; // cleaned up in StandaloneCleanupPreview
+
+  auto* reg = new preview_register_t();
+  memset(reg, 0, sizeof(*reg));
+  pthread_mutex_init(&reg->mutex, nullptr);
+  reg->src = src;
+  reg->m_out_chan = 0;
+  reg->loop = false;
+  reg->volume = 1.0;
+
+  // Start from selection start (if any), otherwise cursor position
+  double startTime = 0.0;
+  if (m_waveform.HasSelection()) {
+    WaveformSelection sel = m_waveform.GetSelection();
+    startTime = std::min(sel.startTime, sel.endTime);
+  } else {
+    startTime = m_waveform.GetCursorTime();
+  }
+  if (startTime < 0.0) startTime = 0.0;
+  if (startTime >= m_waveform.GetItemDuration()) startTime = 0.0;
+  reg->curpos = startTime;
+
+  if (g_PlayPreview(reg)) {
+    m_previewReg = reg;
+    m_previewSrc = src;
+    m_previewActive = true;
+    DBG("[SneakPeak] Standalone preview started at %.3f (src=%p, nch=%d, sr=%.0f, len=%.3f)\n",
+        startTime, (void*)src, src->GetNumChannels(), src->GetSampleRate(), src->GetLength());
+  } else {
+    pthread_mutex_destroy(&reg->mutex);
+    delete reg;
+    delete src;
+    DBG("[SneakPeak] Standalone preview FAILED to start\n");
+  }
+}
+
 void SneakPeak::WriteAndRefresh()
 {
   if (!m_waveform.HasItem() || !m_waveform.GetTake()) return;
@@ -2046,7 +2373,9 @@ void SneakPeak::WriteAndRefresh()
 
 void SneakPeak::SyncSelectionToReaper()
 {
-  if (!g_GetSet_LoopTimeRange2 || !m_waveform.HasItem()) return;
+  if (!m_waveform.HasItem()) return;
+  if (m_waveform.IsStandaloneMode()) return; // no REAPER time selection in standalone
+  if (!g_GetSet_LoopTimeRange2) return;
   if (m_waveform.HasSelection()) {
     WaveformSelection sel = m_waveform.GetSelection();
     double s = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));

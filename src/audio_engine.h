@@ -23,6 +23,15 @@ public:
   // Read WAV header info (does not read audio data)
   static bool ReadWavHeader(const std::string& path, WavInfo& info);
 
+  // Read WAV file into double samples (interleaved). Fills info + samples vector.
+  static bool ReadWavFile(const std::string& path, WavInfo& info,
+                          std::vector<double>& samples);
+
+  // Read any audio file via REAPER's PCM_Source (supports WAV, MP3, FLAC, OGG, AIFF, etc.)
+  // Falls back to ReadWavFile if REAPER API is unavailable.
+  static bool ReadAudioFile(const std::string& path, WavInfo& info,
+                            std::vector<double>& samples);
+
   // Write audio data to WAV file (atomic: writes to .tmp then renames)
   // samples are interleaved doubles, will be converted to original format
   static bool WriteWavFile(const std::string& path, const double* samples,
