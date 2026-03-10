@@ -67,6 +67,20 @@ struct ThemeColors {
 // Global theme instance
 extern ThemeColors g_theme;
 
+// Cached fonts — created once, destroyed at exit
+struct ThemeFonts {
+  HFONT normal11 = nullptr;  // Arial 11 normal (ruler, dB scale, mode bar tabs)
+  HFONT bold12   = nullptr;  // Arial 12 bold (solo, gain panel, channel btns, mode label)
+  HFONT normal10 = nullptr;  // Arial 10 normal (spectral freq labels)
+  HFONT bold10   = nullptr;  // Arial 10 bold (spectral freq bold)
+  HFONT bold14   = nullptr;  // Arial 14 bold (fade envelope label)
+  HFONT bold11   = nullptr;  // Arial 11 bold (markers)
+  HFONT normal13 = nullptr;  // Arial 13 normal (spectral loading)
+};
+extern ThemeFonts g_fonts;
+void Theme_CreateFonts();
+void Theme_DestroyFonts();
+
 // Set the GetThemeColor function pointer (call from main.cpp)
 void Theme_SetGetThemeColor(void* func);
 

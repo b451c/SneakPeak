@@ -749,9 +749,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
   DeleteObject(borderPen);
 
   SetBkMode(hdc, TRANSPARENT);
-  HFONT font = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                          DEFAULT_CHARSET, 0, 0, DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
-  HFONT oldFont = (HFONT)SelectObject(hdc, font);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
 
   m_modeBarTabs.clear();
   int xPos = 6;
@@ -811,11 +809,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     xPos += 8;
 
     // Switch to normal weight for tabs
-    SelectObject(hdc, oldFont);
-    DeleteObject(font);
-    font = CreateFont(11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                      DEFAULT_CHARSET, 0, 0, DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
-    oldFont = (HFONT)SelectObject(hdc, font);
+    oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
 
     int tabAreaRight = m_modeBarRect.right - 8;
 
@@ -954,7 +948,6 @@ void SneakPeak::DrawModeBar(HDC hdc)
   }
 
   SelectObject(hdc, oldFont);
-  DeleteObject(font);
 }
 
 void SneakPeak::DrawRuler(HDC hdc)
@@ -993,10 +986,7 @@ void SneakPeak::DrawRuler(HDC hdc)
   SetBkMode(hdc, TRANSPARENT);
   SetTextColor(hdc, g_theme.rulerText);
 
-  HFONT rulerFont = CreateFont(11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
-  HFONT oldFont = (HFONT)SelectObject(hdc, rulerFont);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
 
   HPEN tickPen = CreatePen(PS_SOLID, 1, g_theme.rulerTick);
   HPEN minorPen = CreatePen(PS_SOLID, 1, g_theme.rulerTickMinor);
@@ -1052,7 +1042,6 @@ void SneakPeak::DrawRuler(HDC hdc)
   DeleteObject(tickPen);
   DeleteObject(minorPen);
   SelectObject(hdc, oldFont);
-  DeleteObject(rulerFont);
 }
 
 void SneakPeak::DrawScrollbar(HDC hdc)
@@ -1124,15 +1113,11 @@ void SneakPeak::DrawSoloButton(HDC hdc)
   DeleteObject(pen);
 
   // Label "S"
-  HFONT font = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
-  HFONT oldFont = (HFONT)SelectObject(hdc, font);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
   SetBkMode(hdc, TRANSPARENT);
   SetTextColor(hdc, m_trackSoloed ? RGB(0, 0, 0) : RGB(140, 140, 140));
   DrawText(hdc, "S", 1, &m_soloBtnRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   SelectObject(hdc, oldFont);
-  DeleteObject(font);
 }
 
 bool SneakPeak::ClickSoloButton(int x, int y)
@@ -1764,7 +1749,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
   if (m_splitterDragging) {
     RECT clientRect;
     GetClientRect(m_hwnd, &clientRect);
-    int contentTop = TOOLBAR_HEIGHT + RULER_HEIGHT;
+    int contentTop = TOOLBAR_HEIGHT + MODE_BAR_HEIGHT + RULER_HEIGHT;
     int contentBot = clientRect.bottom - BOTTOM_PANEL_HEIGHT - SCROLLBAR_HEIGHT;
     int contentH = contentBot - contentTop;
     if (contentH > 0) {
@@ -2052,6 +2037,7 @@ void SneakPeak::OnRightClick(int x, int y)
   if (!menu) return;
 
   bool hasItem = m_waveform.HasItem();
+  bool hasReaperItem = hasItem && !m_waveform.IsStandaloneMode();
   bool hasSel = m_waveform.HasSelection();
   bool hasClip = s_clipboard.numFrames > 0;
 
@@ -2077,12 +2063,12 @@ void SneakPeak::OnRightClick(int x, int y)
 
   // Process submenu
   HMENU procMenu = CreatePopupMenu();
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE, "Normalize");
-  MenuAppend(procMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_IN, "Fade In");
-  MenuAppend(procMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_OUT, "Fade Out");
+  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_NORMALIZE, "Normalize");
+  MenuAppend(procMenu, (hasReaperItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_IN, "Fade In");
+  MenuAppend(procMenu, (hasReaperItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_OUT, "Fade Out");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_REVERSE, "Reverse (destructive)");
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_UP, "Gain +3dB");
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_DOWN, "Gain -3dB");
+  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_GAIN_UP, "Gain +3dB");
+  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_GAIN_DOWN, "Gain -3dB");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_DC_REMOVE, "DC Offset Remove (destructive)");
   MenuAppendSeparator(procMenu);
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_PANEL, "Gain Control...\tG");
@@ -2960,6 +2946,7 @@ void SneakPeak::DoDelete()
           double fadeIn = 0.5 * (1.0 - cos(t * M_PI));        // 0→1
           int leftFrame = startFrame - fadeLen + f;
           int rightFrame = startFrame + f;
+          if (leftFrame < 0 || rightFrame >= newFrames) break;
           for (int ch = 0; ch < nch; ch++) {
             size_t li = (size_t)leftFrame * nch + ch;
             size_t ri = (size_t)rightFrame * nch + ch;
@@ -3067,6 +3054,7 @@ void SneakPeak::DoNormalize()
 {
   // Non-destructive: measure peak, set D_VOL to reach 0dB
   if (!m_waveform.HasItem()) return;
+  if (m_waveform.IsStandaloneMode()) return;
   if (!g_SetMediaItemInfo_Value) return;
 
   const auto& data = m_waveform.GetAudioData();
@@ -3101,6 +3089,7 @@ void SneakPeak::DoFadeIn()
 {
   // Non-destructive: set item fade-in length via D_FADEINLEN
   if (!m_waveform.HasItem()) return;
+  if (m_waveform.IsStandaloneMode()) return;
   if (!g_SetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();
@@ -3127,6 +3116,7 @@ void SneakPeak::DoFadeOut()
 {
   // Non-destructive: set item fade-out length via D_FADEOUTLEN
   if (!m_waveform.HasItem()) return;
+  if (m_waveform.IsStandaloneMode()) return;
   if (!g_SetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();
@@ -3185,6 +3175,7 @@ void SneakPeak::DoGain(double factor)
 {
   // Non-destructive: multiply current D_VOL by factor
   if (!m_waveform.HasItem()) return;
+  if (m_waveform.IsStandaloneMode()) return;
   if (!g_SetMediaItemInfo_Value || !g_GetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();

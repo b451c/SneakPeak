@@ -188,6 +188,7 @@ static int toggleActionCallback(int command)
 static void onAtExit()
 {
   DBG("[SneakPeak] onAtExit\n");
+  Theme_DestroyFonts();
   if (g_sneakPeak) {
     if (g_SetExtState) {
       g_SetExtState("SneakPeak", "was_visible",
@@ -307,6 +308,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   // Theme colors
   Theme_SetGetThemeColor((void*)GetThemeColor);
   Theme_Init();
+  Theme_CreateFonts();
 
   // Register actions
   g_cmdToggle = rec->Register("command_id", (void*)"SneakPeak_Toggle");

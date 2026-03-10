@@ -1110,10 +1110,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
 
   SetBkMode(hdc, TRANSPARENT);
 
-  HFONT font = CreateFont(11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                           DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
-  HFONT oldFont = (HFONT)SelectObject(hdc, font);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
 
   // "dB" header
   SetTextColor(hdc, g_theme.dbScaleText);
@@ -1227,18 +1224,13 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     DeleteObject(btnBorder);
 
     // Label
-    HFONT chFont = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
-    HFONT prevFont = (HFONT)SelectObject(hdc, chFont);
+    HFONT prevFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
     SetTextColor(hdc, active ? RGB(255, 255, 255) : RGB(100, 100, 100));
     DrawText(hdc, chLabel, -1, &btnRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, prevFont);
-    DeleteObject(chFont);
   }
 
   SelectObject(hdc, oldFont);
-  DeleteObject(font);
 }
 
 void WaveformView::DrawCursor(HDC hdc)
@@ -1506,9 +1498,7 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
     int labelY = yFull + 4;
 
     // Draw label with semi-transparent bg
-    HFONT font = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                            ANSI_CHARSET, 0, 0, 0, 0, "Arial");
-    HFONT oldFont = (HFONT)SelectObject(hdc, font);
+    HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold14);
     SetBkMode(hdc, OPAQUE);
     SetBkColor(hdc, RGB(30, 30, 30));
     SetTextColor(hdc, envColor);
@@ -1516,6 +1506,5 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
     DrawText(hdc, label, -1, &labelRect, DT_LEFT | DT_SINGLELINE | DT_NOCLIP);
     SetBkMode(hdc, TRANSPARENT);
     SelectObject(hdc, oldFont);
-    DeleteObject(font);
   }
 }

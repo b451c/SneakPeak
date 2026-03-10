@@ -304,11 +304,7 @@ void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
 
   SetBkMode(hdc, TRANSPARENT);
 
-  HFONT labelFont = CreateFont(10, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                DEFAULT_CHARSET, 0, 0, 0, 0, "Arial");
-  HFONT boldFont = CreateFont(10, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                               DEFAULT_CHARSET, 0, 0, 0, 0, "Arial");
-  HFONT oldFont = (HFONT)SelectObject(hdc, labelFont);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal10);
 
   double nyquist = sampleRate / 2.0;
   double fMin = std::min(FREQ_MIN, nyquist * 0.5);
@@ -352,10 +348,10 @@ void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
 
     // Label
     if (lab.bold) {
-      SelectObject(hdc, boldFont);
+      SelectObject(hdc, g_fonts.bold10);
       SetTextColor(hdc, RGB(190, 190, 190));
     } else {
-      SelectObject(hdc, labelFont);
+      SelectObject(hdc, g_fonts.normal10);
       SetTextColor(hdc, RGB(150, 150, 150));
     }
 
@@ -370,8 +366,6 @@ void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
 
   DeleteObject(tickPen);
   SelectObject(hdc, oldFont);
-  DeleteObject(labelFont);
-  DeleteObject(boldFont);
 }
 
 // --- Playhead & cursor drawing ---
@@ -559,9 +553,7 @@ void SpectralView::DrawLoadingOverlay(HDC hdc)
   int cy = (m_rect.top + m_rect.bottom) / 2;
 
   SetBkMode(hdc, TRANSPARENT);
-  HFONT font = CreateFont(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                           DEFAULT_CHARSET, 0, 0, 0, 0, "Arial");
-  HFONT oldFont = (HFONT)SelectObject(hdc, font);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal13);
 
   // Progress bar
   float pct = m_progress.load();
@@ -593,7 +585,6 @@ void SpectralView::DrawLoadingOverlay(HDC hdc)
   DrawText(hdc, text, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   SelectObject(hdc, oldFont);
-  DeleteObject(font);
 }
 
 // --- Main paint ---

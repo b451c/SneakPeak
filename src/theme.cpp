@@ -5,6 +5,7 @@
 #include <algorithm>
 
 ThemeColors g_theme;
+ThemeFonts g_fonts = {};
 
 // GetThemeColor function pointer
 static int (*s_GetThemeColor)(const char* ini_key, int flagsOptional) = nullptr;
@@ -138,4 +139,33 @@ void Theme_Refresh()
 
   DBG("[SneakPeak] Theme loaded: bg=%06X waveform=%06X cursor=%06X\n",
       g_theme.waveformBg, g_theme.waveform, g_theme.editCursor);
+}
+
+void Theme_CreateFonts() {
+  Theme_DestroyFonts();
+  g_fonts.normal11 = CreateFont(11,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+                     DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
+  g_fonts.bold12   = CreateFont(12,0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
+                     DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
+  g_fonts.normal10 = CreateFont(10,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+                     DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
+  g_fonts.bold10   = CreateFont(10,0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
+                     DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
+  g_fonts.bold14   = CreateFont(14,0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
+                     DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
+  g_fonts.bold11   = CreateFont(11,0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
+                     DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
+  g_fonts.normal13 = CreateFont(13,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+                     DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
+}
+
+void Theme_DestroyFonts() {
+  auto del = [](HFONT& f) { if (f) { DeleteObject(f); f = nullptr; } };
+  del(g_fonts.normal11);
+  del(g_fonts.bold12);
+  del(g_fonts.normal10);
+  del(g_fonts.bold10);
+  del(g_fonts.bold14);
+  del(g_fonts.bold11);
+  del(g_fonts.normal13);
 }

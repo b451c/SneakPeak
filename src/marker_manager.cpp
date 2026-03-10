@@ -18,10 +18,7 @@ void MarkerManager::DrawMarkers(HDC hdc, const RECT& waveformRect, const RECT& r
 
   SetBkMode(hdc, TRANSPARENT);
 
-  HFONT font = CreateFont(11, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
-  HFONT oldFont = (HFONT)SelectObject(hdc, font);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold11);
 
   int idx = 0;
   bool isrgn;
@@ -110,7 +107,6 @@ void MarkerManager::DrawMarkers(HDC hdc, const RECT& waveformRect, const RECT& r
   }
 
   SelectObject(hdc, oldFont);
-  DeleteObject(font);
 }
 
 int MarkerManager::HitTestMarker(int x, const WaveformView& wv, int tolerance) const

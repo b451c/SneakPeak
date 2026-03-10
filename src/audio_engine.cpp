@@ -203,6 +203,13 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
     return false;
   }
 
+  // Force unsupported bit depths to 16-bit PCM for consistency
+  if (!(audioFormat == 3 && bitsPerSample == 32) &&
+      bitsPerSample != 16 && bitsPerSample != 24) {
+    bitsPerSample = 16;
+    audioFormat = 1;
+  }
+
   int bytesPerSample = bitsPerSample / 8;
   int bytesPerFrame = bytesPerSample * numChannels;
   int64_t dataSizeCheck = (int64_t)numFrames * (int64_t)bytesPerFrame;

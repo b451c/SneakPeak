@@ -256,10 +256,7 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect)
   DeleteObject(ptrPen);
 
   // --- dB readout ---
-  HFONT font = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                           DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
-  HFONT oldFont = (HFONT)SelectObject(hdc, font);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
 
   char dbText[16];
   if (m_db <= MIN_DB + 0.5)
@@ -277,5 +274,4 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect)
   DrawText(hdc, "x", -1, &xRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   SelectObject(hdc, oldFont);
-  DeleteObject(font);
 }
