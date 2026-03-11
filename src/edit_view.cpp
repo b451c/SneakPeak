@@ -2217,7 +2217,10 @@ void SneakPeak::OnRightClick(int x, int y)
 
   // Edit submenu
   HMENU editMenu = CreatePopupMenu();
-  MenuAppend(editMenu, m_hasUndo ? MF_STRING : MF_GRAYED, CM_UNDO, "Undo\tCtrl+Z");
+  // In REAPER mode, always enable undo (REAPER manages its own undo stack)
+  // In standalone mode, use our own stack state
+  bool canUndo = m_waveform.IsStandaloneMode() ? m_hasUndo : hasReaperItem;
+  MenuAppend(editMenu, canUndo ? MF_STRING : MF_GRAYED, CM_UNDO, "Undo\tCtrl+Z");
   MenuAppendSeparator(editMenu);
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_CUT, "Cut\tCtrl+X");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_COPY, "Copy\tCtrl+C");
