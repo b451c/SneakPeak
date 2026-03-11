@@ -82,7 +82,29 @@ int LevelsPanel::GetIntegrationHalfWindow(int sampleRate) const
 
 void LevelsPanel::UpdateFromTrackPeak(double peakLinL, double peakLinR, bool playing, int nch)
 {
-  double peakDecay = 0.3, peakHoldDecay = 0.3, decayRate = 0.5;
+  // Same mode-dependent ballistics as Update()
+  double attackRate, decayRate, peakDecay, peakHoldDecay;
+  switch (m_mode) {
+    case MeterMode::PEAK:
+      attackRate = 999.0;
+      decayRate = 0.5;
+      peakDecay = 0.3;
+      peakHoldDecay = 0.3;
+      break;
+    case MeterMode::VU:
+      attackRate = 2.2;
+      decayRate = 2.2;
+      peakDecay = 0.3;
+      peakHoldDecay = 0.3;
+      break;
+    case MeterMode::RMS:
+    default:
+      attackRate = 999.0;
+      decayRate = 3.0;
+      peakDecay = 1.5;
+      peakHoldDecay = 1.5;
+      break;
+  }
 
   if (!playing) {
     if (m_wasPlaying || m_barL > -60.0 || m_barR > -60.0) {
@@ -103,9 +125,11 @@ void LevelsPanel::UpdateFromTrackPeak(double peakLinL, double peakLinR, bool pla
   dbL = std::max(-60.0, std::min(0.0, dbL));
   dbR = std::max(-60.0, std::min(0.0, dbR));
 
-  // Instant attack for bars (Track_GetPeakInfo already smoothed by REAPER)
-  m_barL = dbL;
-  m_barR = dbR;
+  // Bar: instant attack, smooth decay
+  if (dbL > m_barL) m_barL = std::min(m_barL + attackRate, dbL);
+  else m_barL = std::max(dbL, m_barL - decayRate);
+  if (dbR > m_barR) m_barR = std::min(m_barR + attackRate, dbR);
+  else m_barR = std::max(dbR, m_barR - decayRate);
 
   // Peak indicator
   if (dbL > m_peakL) m_peakL = dbL;

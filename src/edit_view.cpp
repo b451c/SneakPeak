@@ -21,7 +21,16 @@ static void MenuAppend(HMENU menu, unsigned int flags, UINT_PTR id, const char* 
 #ifdef _WIN32
   AppendMenuA(menu, flags, id, str);
 #else
-  SWELL_Menu_AddMenuItem(menu, str, (int)id, flags);
+  // SWELL_Menu_AddMenuItem treats any non-zero flags as MFS_GRAYED,
+  // so use InsertMenuItem directly for proper MF_CHECKED support
+  MENUITEMINFO mi = { sizeof(mi) };
+  mi.fMask = MIIM_ID | MIIM_STATE | MIIM_TYPE;
+  mi.fType = MFT_STRING;
+  mi.fState = (flags & MF_CHECKED) ? MFS_CHECKED : 0;
+  if (flags & MF_GRAYED) mi.fState |= MFS_GRAYED;
+  mi.wID = (unsigned int)id;
+  mi.dwTypeData = (char*)str;
+  InsertMenuItem(menu, GetMenuItemCount(menu), TRUE, &mi);
 #endif
 }
 
@@ -2533,8 +2542,8 @@ void SneakPeak::OnRightClick(int x, int y)
     MenuAppend(meterMenu, MF_STRING | (cur == MeterMode::PEAK ? MF_CHECKED : 0), CM_METER_PEAK, "Peak (PPM)");
     MenuAppend(meterMenu, MF_STRING | (cur == MeterMode::RMS  ? MF_CHECKED : 0), CM_METER_RMS,  "RMS (AES/EBU)");
     MenuAppend(meterMenu, MF_STRING | (cur == MeterMode::VU   ? MF_CHECKED : 0), CM_METER_VU,   "VU");
-    MenuAppend(meterMenu, MF_SEPARATOR, 0, "");
-    MenuAppend(meterMenu, MF_STRING | (m_meterFromMaster ? MF_CHECKED : 0), CM_METER_SOURCE_MASTER, "Source: Master");
+    MenuAppendSeparator(meterMenu);
+    MenuAppend(meterMenu, MF_STRING | (m_meterFromMaster ? MF_CHECKED : 0), CM_METER_SOURCE_MASTER, "Master Output");
     POINT pt = { x, y };
     ClientToScreen(m_hwnd, &pt);
     TrackPopupMenu(meterMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
