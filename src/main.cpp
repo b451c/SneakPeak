@@ -32,6 +32,7 @@
 
 // Transport
 #define REAPERAPI_WANT_GetPlayState
+#define REAPERAPI_WANT_GetPlayPosition
 #define REAPERAPI_WANT_GetPlayPosition2
 #define REAPERAPI_WANT_GetCursorPosition
 #define REAPERAPI_WANT_SetEditCurPos
@@ -269,6 +270,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_AudioAccessorValidateState = (bool(*)(AudioAccessor*))rec->GetFunc("AudioAccessorValidateState");
 
   g_GetPlayState = GetPlayState;
+  g_GetPlayPosition = GetPlayPosition;
   g_GetPlayPosition2 = GetPlayPosition2;
   g_GetCursorPosition = GetCursorPosition;
   g_SetEditCurPos = SetEditCurPos;

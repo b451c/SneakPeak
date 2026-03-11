@@ -126,7 +126,7 @@ public:
     int fadeOutShape = 0;
     double itemVol = 1.0;
   };
-  void UpdateFadeCache();
+  bool UpdateFadeCache(); // returns true if volume/fade changed
   FadeCache GetFadeCache() const { return m_fadeCache; }
   void SetItemVol(double vol) { m_fadeCache.itemVol = vol; }
 

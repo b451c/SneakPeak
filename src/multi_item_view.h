@@ -71,6 +71,9 @@ public:
   void Invalidate() { m_peaksValid = false; }
   void Clear();
 
+  // Check if any layer's volume changed since load — caller should reload if true
+  bool CheckVolumeChanged() const;
+
 private:
   void ComputeMixPeaks(double viewStart, double viewDur, int width, int numChannels,
                        std::vector<double>& peakMax, std::vector<double>& peakMin,

@@ -4,6 +4,62 @@
 #include <cmath>
 #include <algorithm>
 
+LevelsPanel::~LevelsPanel()
+{
+  DestroyGdiCache();
+}
+
+void LevelsPanel::CreateGdiCache()
+{
+  DestroyGdiCache();
+
+  m_gdi.bgBrush    = CreateSolidBrush(RGB(20, 20, 20));
+  m_gdi.barBgBrush = CreateSolidBrush(RGB(30, 30, 30));
+  m_gdi.tickPen    = CreatePen(PS_SOLID, 1, RGB(55, 55, 55));
+  m_gdi.scalePen   = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
+
+  switch (m_mode) {
+    case MeterMode::PEAK:
+      m_gdi.greenBrush  = CreateSolidBrush(RGB(50, 210, 90));
+      m_gdi.yellowBrush = CreateSolidBrush(RGB(210, 190, 40));
+      m_gdi.redBrush    = CreateSolidBrush(RGB(220, 50, 50));
+      break;
+    case MeterMode::VU:
+      m_gdi.greenBrush  = CreateSolidBrush(RGB(30, 150, 70));
+      m_gdi.yellowBrush = CreateSolidBrush(RGB(180, 160, 30));
+      m_gdi.redBrush    = CreateSolidBrush(RGB(190, 40, 40));
+      break;
+    case MeterMode::RMS:
+    default:
+      m_gdi.greenBrush  = CreateSolidBrush(RGB(40, 160, 60));
+      m_gdi.yellowBrush = CreateSolidBrush(RGB(190, 170, 30));
+      m_gdi.redBrush    = CreateSolidBrush(RGB(200, 40, 40));
+      break;
+  }
+
+  m_gdi.peakGreen  = CreatePen(PS_SOLID, 2, RGB(50, 200, 80));
+  m_gdi.peakYellow = CreatePen(PS_SOLID, 2, RGB(220, 200, 50));
+  m_gdi.peakRed    = CreatePen(PS_SOLID, 2, RGB(220, 50, 50));
+
+  m_gdi.mode = m_mode;
+  m_gdi.valid = true;
+}
+
+void LevelsPanel::DestroyGdiCache()
+{
+  if (m_gdi.bgBrush)    { DeleteObject(m_gdi.bgBrush);    m_gdi.bgBrush = nullptr; }
+  if (m_gdi.barBgBrush) { DeleteObject(m_gdi.barBgBrush); m_gdi.barBgBrush = nullptr; }
+  if (m_gdi.greenBrush) { DeleteObject(m_gdi.greenBrush); m_gdi.greenBrush = nullptr; }
+  if (m_gdi.yellowBrush){ DeleteObject(m_gdi.yellowBrush);m_gdi.yellowBrush = nullptr; }
+  if (m_gdi.redBrush)   { DeleteObject(m_gdi.redBrush);   m_gdi.redBrush = nullptr; }
+  if (m_gdi.tickPen)    { DeleteObject(m_gdi.tickPen);    m_gdi.tickPen = nullptr; }
+  if (m_gdi.scalePen)   { DeleteObject(m_gdi.scalePen);   m_gdi.scalePen = nullptr; }
+  if (m_gdi.peakGreen)  { DeleteObject(m_gdi.peakGreen);  m_gdi.peakGreen = nullptr; }
+  if (m_gdi.peakYellow) { DeleteObject(m_gdi.peakYellow); m_gdi.peakYellow = nullptr; }
+  if (m_gdi.peakRed)    { DeleteObject(m_gdi.peakRed);    m_gdi.peakRed = nullptr; }
+  m_gdi.valid = false;
+}
+
 const char* LevelsPanel::GetModeLabel() const
 {
   switch (m_mode) {
@@ -32,16 +88,12 @@ void LevelsPanel::Update(const std::vector<double>& audio, int startFrame,
   double attackRate, decayRate, peakDecay, peakHoldDecay;
   switch (m_mode) {
     case MeterMode::PEAK:
-      // PPM: instant attack, slow decay (~1.7 dB/s = 24dB in 14s, but per tick ~0.06)
-      // Actually PPM decay is ~20dB/1.5s ≈ 13.3 dB/s ≈ 0.44 dB/tick
-      attackRate = 999.0; // instant
-      decayRate = 0.5;    // ~15 dB/s — fast but visible
+      attackRate = 999.0;
+      decayRate = 0.5;
       peakDecay = 0.3;
       peakHoldDecay = 0.3;
       break;
     case MeterMode::VU:
-      // VU: 300ms attack AND decay (sluggish, musical)
-      // At 33ms/tick, 300ms ≈ 9 ticks. For -20 to 0 in 9 ticks: ~2.2 dB/tick
       attackRate = 2.2;
       decayRate = 2.2;
       peakDecay = 0.3;
@@ -49,7 +101,6 @@ void LevelsPanel::Update(const std::vector<double>& audio, int startFrame,
       break;
     case MeterMode::RMS:
     default:
-      // RMS: instant attack, moderate decay
       attackRate = 999.0;
       decayRate = 3.0;
       peakDecay = 1.5;
@@ -189,15 +240,10 @@ static int DbToX(double db, int barLeft, int barWidth)
   return barLeft + static_cast<int>(frac * barWidth);
 }
 
-static COLORREF MeterColor(double db)
-{
-  if (db > -6.0) return RGB(220, 50, 50);
-  if (db > -18.0) return RGB(220, 200, 50);
-  return RGB(50, 200, 80);
-}
-
 void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
 {
+  if (!m_gdi.valid || m_gdi.mode != m_mode) CreateGdiCache();
+
   int numCh = (nch >= 2) ? 2 : 1;
   int scaleH = 12; // height for dB scale labels
   int barsH = rect.bottom - rect.top - scaleH;
@@ -211,9 +257,7 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
   if (barWidth < 10) return;
 
   // Dark background
-  HBRUSH bg = CreateSolidBrush(RGB(20, 20, 20));
-  FillRect(hdc, &rect, bg);
-  DeleteObject(bg);
+  FillRect(hdc, &rect, m_gdi.bgBrush);
 
   SetBkMode(hdc, TRANSPARENT);
 
@@ -221,27 +265,6 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
   double peak[2] = { m_peakHoldL, m_peakHoldR };
   const char* labels[2] = { "L", "R" };
   if (numCh == 1) labels[0] = "M";
-
-  // Bar color depends on mode
-  COLORREF barGreen, barYellow, barRed;
-  switch (m_mode) {
-    case MeterMode::PEAK:
-      barGreen = RGB(50, 210, 90);
-      barYellow = RGB(210, 190, 40);
-      barRed = RGB(220, 50, 50);
-      break;
-    case MeterMode::VU:
-      barGreen = RGB(30, 150, 70);
-      barYellow = RGB(180, 160, 30);
-      barRed = RGB(190, 40, 40);
-      break;
-    case MeterMode::RMS:
-    default:
-      barGreen = RGB(40, 160, 60);
-      barYellow = RGB(190, 170, 30);
-      barRed = RGB(200, 40, 40);
-      break;
-  }
 
   for (int ch = 0; ch < numCh; ch++) {
     int yTop = rect.top + ch * (barH + gap);
@@ -254,9 +277,7 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
 
     // Bar background
     RECT barBg = { barLeft, yTop, barRight, yBot };
-    HBRUSH barBgBrush = CreateSolidBrush(RGB(30, 30, 30));
-    FillRect(hdc, &barBg, barBgBrush);
-    DeleteObject(barBgBrush);
+    FillRect(hdc, &barBg, m_gdi.barBgBrush);
 
     // Main bar — gradient segments
     int barX = DbToX(bar[ch], barLeft, barWidth);
@@ -264,52 +285,44 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
       int greenEnd = std::min(DbToX(-18.0, barLeft, barWidth), barX);
       if (greenEnd > barLeft) {
         RECT seg = { barLeft, yTop, greenEnd, yBot };
-        HBRUSH br = CreateSolidBrush(barGreen);
-        FillRect(hdc, &seg, br);
-        DeleteObject(br);
+        FillRect(hdc, &seg, m_gdi.greenBrush);
       }
       int yelStart = DbToX(-18.0, barLeft, barWidth);
       if (barX > yelStart) {
         int yelEnd = std::min(DbToX(-6.0, barLeft, barWidth), barX);
         if (yelEnd > yelStart) {
           RECT seg = { yelStart, yTop, yelEnd, yBot };
-          HBRUSH br = CreateSolidBrush(barYellow);
-          FillRect(hdc, &seg, br);
-          DeleteObject(br);
+          FillRect(hdc, &seg, m_gdi.yellowBrush);
         }
       }
       int redStart = DbToX(-6.0, barLeft, barWidth);
       if (barX > redStart) {
         RECT seg = { redStart, yTop, barX, yBot };
-        HBRUSH br = CreateSolidBrush(barRed);
-        FillRect(hdc, &seg, br);
-        DeleteObject(br);
+        FillRect(hdc, &seg, m_gdi.redBrush);
       }
     }
 
     // Peak hold indicator
     int peakX = DbToX(peak[ch], barLeft, barWidth);
     if (peakX > barLeft + 2) {
-      COLORREF peakCol = MeterColor(peak[ch]);
-      HPEN peakPen = CreatePen(PS_SOLID, 2, peakCol);
+      HPEN peakPen = (peak[ch] > -6.0) ? m_gdi.peakRed
+                   : (peak[ch] > -18.0) ? m_gdi.peakYellow
+                   : m_gdi.peakGreen;
       HPEN prevPen = (HPEN)SelectObject(hdc, peakPen);
       MoveToEx(hdc, peakX, yTop, nullptr);
       LineTo(hdc, peakX, yBot);
       SelectObject(hdc, prevPen);
-      DeleteObject(peakPen);
     }
 
     // dB tick marks on bars
     static const double ticks[] = { -48, -36, -24, -18, -12, -6, -3, 0 };
-    HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(55, 55, 55));
-    HPEN prevTick = (HPEN)SelectObject(hdc, tickPen);
+    HPEN prevTick = (HPEN)SelectObject(hdc, m_gdi.tickPen);
     for (double db : ticks) {
       int tx = DbToX(db, barLeft, barWidth);
       MoveToEx(hdc, tx, yTop, nullptr);
       LineTo(hdc, tx, yBot);
     }
     SelectObject(hdc, prevTick);
-    DeleteObject(tickPen);
   }
 
   // dB scale labels row below bars
@@ -321,8 +334,7 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
   DrawText(hdc, GetModeLabel(), -1, &dbLbl, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   static const double scaleMarks[] = { -54, -48, -42, -36, -30, -24, -18, -12, -6, -3, 0 };
-  HPEN sPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
-  HPEN prevScale = (HPEN)SelectObject(hdc, sPen);
+  HPEN prevScale = (HPEN)SelectObject(hdc, m_gdi.scalePen);
   for (double db : scaleMarks) {
     int x = DbToX(db, barLeft, barWidth);
     char buf[8];
@@ -334,5 +346,4 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
     DrawText(hdc, buf, -1, &tr, DT_CENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
   SelectObject(hdc, prevScale);
-  DeleteObject(sPen);
 }

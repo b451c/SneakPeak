@@ -61,6 +61,11 @@ bool MultiItemView::LoadItems(const std::vector<MediaItem*>& items,
     layer.position = pos;
     layer.duration = dur;
     layer.itemVol = g_GetMediaItemInfo_Value(item, "D_VOL");
+    // Take volume (the handle in arrange view)
+    if (g_GetSetMediaItemTakeInfo) {
+      double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(take, "D_VOL", nullptr);
+      if (pTakeVol) layer.itemVol *= *pTakeVol;
+    }
     if (layer.itemVol <= 0.0) layer.itemVol = 1.0;
 
     PCM_source* src = g_GetMediaItemTake_Source(take);
@@ -209,6 +214,22 @@ void MultiItemView::GetMixedAudio(int startFrame, int endFrame, int numChannels,
       }
     }
   }
+}
+
+bool MultiItemView::CheckVolumeChanged() const
+{
+  for (const auto& layer : m_layers) {
+    if (!layer.item || !g_GetMediaItemInfo_Value) continue;
+    double vol = g_GetMediaItemInfo_Value(layer.item, "D_VOL");
+    if (g_GetSetMediaItemTakeInfo && layer.take) {
+      double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(layer.take, "D_VOL", nullptr);
+      if (pTakeVol) vol *= *pTakeVol;
+    }
+    if (vol <= 0.0) vol = 1.0;
+    // Compare with baked volume (tolerance for float rounding)
+    if (std::abs(vol - layer.itemVol) > 1e-6) return true;
+  }
+  return false;
 }
 
 void MultiItemView::UpdatePeaks(double viewStart, double viewDur, int width, int numChannels,

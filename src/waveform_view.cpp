@@ -247,6 +247,11 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
     g_DestroyAudioAccessor(accessor);
 
     double itemVol = g_GetMediaItemInfo_Value(item, "D_VOL");
+    // Take volume (the handle in arrange view)
+    if (g_GetSetMediaItemTakeInfo && take) {
+      double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(take, "D_VOL", nullptr);
+      if (pTakeVol) itemVol *= *pTakeVol;
+    }
     if (itemVol != 1.0 && itemVol > 0.0) {
       size_t sampleCount = (size_t)frames * m_numChannels;
       for (size_t s = 0; s < sampleCount; s++)
@@ -1411,18 +1416,19 @@ void WaveformView::DrawCursor(HDC hdc)
   }
 }
 
-void WaveformView::UpdateFadeCache()
+bool WaveformView::UpdateFadeCache()
 {
   if (!m_item || !g_GetMediaItemInfo_Value || m_standaloneMode) {
     m_fadeCache = {};
-    m_fadeCache.itemVol = 1.0; // unity gain default
-    return;
+    m_fadeCache.itemVol = 1.0;
+    return false;
   }
 
   // Multi-item: D_VOL is already baked into audio data per-segment in SetItems(),
   // so don't apply it again in draw. Batch gain offset reflects knob adjustment.
   // Show first item's fade-in and last item's fade-out.
   if (m_segments.size() > 1) {
+    double oldVol = m_fadeCache.itemVol;
     m_fadeCache = {};
     m_fadeCache.itemVol = m_batchGainOffset;
     // Fade-in from first item
@@ -1437,20 +1443,27 @@ void WaveformView::UpdateFadeCache()
       m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(last, "D_FADEOUTLEN");
       m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(last, "C_FADEOUTSHAPE");
     }
-    return;
+    return oldVol != m_fadeCache.itemVol;
   }
 
   double oldVol = m_fadeCache.itemVol;
   m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
+  // Take volume (the handle in arrange view controls take D_VOL, not item D_VOL)
+  if (g_GetSetMediaItemTakeInfo && m_take) {
+    double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_take, "D_VOL", nullptr);
+    if (pTakeVol) m_fadeCache.itemVol *= *pTakeVol;
+  }
   m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
   m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
   m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
   m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
 
   // If volume changed, invalidate peaks so clip indicators update
-  if (oldVol != m_fadeCache.itemVol) {
+  bool changed = (oldVol != m_fadeCache.itemVol);
+  if (changed) {
     m_peaksValid = false;
   }
+  return changed;
 }
 
 void WaveformView::SetFadeDragInfo(int dragType, int shape)

@@ -29,6 +29,7 @@ bool (*g_AudioAccessorValidateState)(AudioAccessor*) = nullptr;
 
 // Transport
 int (*g_GetPlayState)() = nullptr;
+double (*g_GetPlayPosition)() = nullptr;
 double (*g_GetPlayPosition2)() = nullptr;
 double (*g_GetCursorPosition)() = nullptr;
 void (*g_SetEditCurPos)(double, bool, bool) = nullptr;

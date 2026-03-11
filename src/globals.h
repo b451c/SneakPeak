@@ -43,6 +43,7 @@ extern bool (*g_AudioAccessorValidateState)(AudioAccessor*);
 
 // Transport / playback
 extern int (*g_GetPlayState)();
+extern double (*g_GetPlayPosition)();
 extern double (*g_GetPlayPosition2)();
 extern double (*g_GetCursorPosition)();
 extern void (*g_SetEditCurPos)(double time, bool moveview, bool seekplay);

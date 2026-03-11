@@ -380,7 +380,10 @@ void SneakPeak::OnTimer()
 
   // Update fade/volume cache for paint (not in standalone mode)
   if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode()) {
-    m_waveform.UpdateFadeCache();
+    if (m_waveform.UpdateFadeCache()) {
+      // Volume changed in REAPER — repaint waveform + meters
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
     // Batch gain: sync knob offset to waveform for visual feedback
     if (m_gainPanel.IsBatch()) {
       double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
@@ -402,6 +405,16 @@ void SneakPeak::OnTimer()
     }
   } else if (m_waveform.IsStandaloneMode()) {
     m_waveform.ClearStandaloneGain();
+  }
+
+  // Multi-item: detect volume changes and reload (every ~1s to avoid heavy polling)
+  if (m_waveform.IsMultiItemActive() && !m_waveform.IsStandaloneMode()) {
+    if (m_audioChangeCheckCounter % 30 == 0) {
+      if (m_waveform.GetMultiItemView().CheckVolumeChanged()) {
+        LoadSelectedItem();  // reloads with new volumes
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+      }
+    }
   }
 
   // Update solo state from REAPER (polled, not in paint, not in standalone)
@@ -478,8 +491,11 @@ void SneakPeak::OnTimer()
     if (sr > 0 && nch > 0) {
       bool playing = g_GetPlayState && (g_GetPlayState() & 1);
       int startFrame, endFrame;
-      if (playing && g_GetPlayPosition2) {
-        double playPos = m_waveform.AbsTimeToRelTime(g_GetPlayPosition2());
+      if (playing) {
+        // Use GetPlayPosition (latency-compensated = what you hear) for meter sync
+        double absPos = g_GetPlayPosition ? g_GetPlayPosition()
+                      : (g_GetPlayPosition2 ? g_GetPlayPosition2() : 0.0);
+        double playPos = m_waveform.AbsTimeToRelTime(absPos);
         if (playPos < 0.0) playPos = 0.0;
         int center = static_cast<int>(playPos * sr);
         int halfWin = m_levels.GetIntegrationHalfWindow(sr);
@@ -489,8 +505,17 @@ void SneakPeak::OnTimer()
         startFrame = static_cast<int>(m_waveform.GetViewStart() * sr);
         endFrame = static_cast<int>(m_waveform.GetViewEnd() * sr);
       }
-      double itemVol = m_waveform.IsMultiItem() ? 1.0
-        : (g_GetMediaItemInfo_Value ? g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_VOL") : 1.0);
+      // Volume: item D_VOL × take D_VOL
+      // Single-item audio is raw (vol applied in rendering), so meters need the multiplier
+      // Multi-item audio has D_VOL baked in at load time, so use 1.0
+      double itemVol = 1.0;
+      if (!m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
+        itemVol = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_VOL");
+        if (g_GetSetMediaItemTakeInfo && m_waveform.GetTake()) {
+          double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "D_VOL", nullptr);
+          if (pTakeVol) itemVol *= *pTakeVol;
+        }
+      }
       const bool chActive[2] = { m_waveform.IsChannelActive(0), m_waveform.IsChannelActive(1) };
 
       if (m_waveform.IsMultiItemActive()) {
