@@ -2300,7 +2300,8 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(viewMenu, hasItem ? MF_STRING : MF_GRAYED, CM_ZOOM_FIT, "Zoom to Fit");
   MenuAppend(viewMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_ZOOM_SEL, "Zoom to Selection");
   MenuAppendSeparator(viewMenu);
-  MenuAppend(viewMenu, MF_STRING, CM_TOGGLE_SPECTRAL,
+  bool canSpectral = hasItem && !m_waveform.IsMultiItemActive();
+  MenuAppend(viewMenu, canSpectral ? MF_STRING : MF_GRAYED, CM_TOGGLE_SPECTRAL,
              m_spectralVisible ? "Spectral View  \xE2\x9C\x93" : "Spectral View");
   MenuAppend(viewMenu, MF_STRING, CM_SNAP_ZERO,
              m_waveform.GetSnapToZero() ? "Snap to Zero-Crossing  \xE2\x9C\x93" : "Snap to Zero-Crossing");

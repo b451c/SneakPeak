@@ -1,0 +1,95 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin-arm64
+            artifact: reaper_sneakpeak-arm64.dylib
+            build_file: reaper_sneakpeak.dylib
+            cmake_flags: "-DCMAKE_OSX_ARCHITECTURES=arm64"
+
+    runs-on: ${{ matrix.os }}
+    continue-on-error: false
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone REAPER SDK
+        run: git clone --depth 1 https://github.com/justinfrankel/reaper-sdk.git sdk
+
+      - name: Clone WDL
+        run: git clone --depth 1 https://github.com/justinfrankel/WDL.git WDL
+
+      - name: Create build directory
+        run: mkdir -p build
+
+      - name: Configure
+        working-directory: build
+        run: cmake .. -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }}
+
+      - name: Build
+        working-directory: build
+        run: make -j$(sysctl -n hw.ncpu)
+
+      - name: Rename artifact
+        working-directory: build
+        run: cp "${{ matrix.build_file }}" "${{ matrix.artifact }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: build/${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: reaper_sneakpeak-*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: false
+          body: |
+            ## SneakPeak ${{ github.ref_name }}
+
+            Native C++ extension for REAPER — precision waveform item editor with spectral analysis, multi-item layering, and real-time metering.
+
+            ### Downloads
+
+            | Platform | File | Status |
+            |----------|------|--------|
+            | macOS arm64 (Apple Silicon) | `reaper_sneakpeak-arm64.dylib` | Stable |
+
+            ### Installation
+
+            Copy the binary to your REAPER UserPlugins folder and restart REAPER:
+            - **macOS**: `~/Library/Application Support/REAPER/UserPlugins/`
+
+            Open via **Actions > SneakPeak: Toggle Window**.
+
+            > **Note:** Windows and Linux builds are planned for a future release. The codebase is cross-platform ready (WDL/SWELL).
+
+            See the full [CHANGELOG](https://github.com/b451c/SneakPeak/blob/main/CHANGELOG.md) for version history.
+
+            ---
+            *SneakPeak is free and open source. Support development: [Ko-fi](https://ko-fi.com/quickmd) · [Buy Me a Coffee](https://buymeacoffee.com/bsroczynskh) · [PayPal](https://paypal.me/b451c)*

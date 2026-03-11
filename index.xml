@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<index version="1" name="SneakPeak">
+  <category name="Extensions">
+    <reapack name="reaper_sneakpeak" type="extension" desc="SneakPeak: Precision Waveform Item Editor for REAPER">
+      <metadata>
+        <link rel="website">https://github.com/b451c/SneakPeak</link>
+        <link rel="screenshot">https://raw.githubusercontent.com/b451c/SneakPeak/main/docs/images/sneakpeak-hero.png</link>
+        <link rel="screenshot">https://raw.githubusercontent.com/b451c/SneakPeak/main/docs/images/standalone-editing.gif</link>
+        <link rel="screenshot">https://raw.githubusercontent.com/b451c/SneakPeak/main/docs/images/multiview.gif</link>
+        <link rel="screenshot">https://raw.githubusercontent.com/b451c/SneakPeak/main/docs/images/spectral-view.png</link>
+        <link rel="donation">https://ko-fi.com/quickmd</link>
+        <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
+{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\widowctrl\hyphauto
+
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel0 \b \fs36 SneakPeak - Waveform Editor for REAPER\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 A native C++ extension that provides a precision waveform editor for any media item. Click an item in REAPER and get instant, detailed waveform editing.\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Features\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Precision waveform with peak + RMS display and dB scale\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Precision selection and editing\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Cut, Copy, Paste, Normalize, Fade, Reverse, Gain\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Real-time spectral analysis with frequency selection\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Multi-item view: Mix, Layered per Item, Layered per Track\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Peak/RMS/VU metering with AES/EBU standard integration\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Minimap, markers, gain knob, solo button\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Standalone WAV editing with drag-and-drop\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab SDK peak rendering - zero RAM for waveform display\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Dockable window, persistent settings\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Zero dependencies - pure C++ extension\sa180\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Requirements\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab REAPER 7.0+\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab macOS arm64 (Apple Silicon)\sa180\par}
+{\pard \qc \f0 \sa180 \li0 \fi0 \emdash\emdash\emdash\emdash\emdash\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 MIT License | https://github.com/b451c/SneakPeak\par}
+}
+]]></description>
+      </metadata>
+
+      <version name="1.4.0" author="b451c" time="2026-03-11T00:00:00Z">
+        <changelog><![CDATA[Feature release: Multi-item views and professional metering
+
+New features:
+- Meter mode selection: Peak (PPM), RMS (AES/EBU), VU — right-click meters to switch
+- Multi-item Mix mode: sum all items into single waveform on absolute timeline
+- Multi-item Layered mode (per Item): 8-color palette with transparency
+- Multi-item Layered mode (per Track): items colored by parent track
+- Crossfade join indicators at item transition midpoints
+- Batch gain control across multiple items
+
+Improvements:
+- RMS integration window: 300ms per AES/EBU standard (was 50ms)
+- Optimized layered drawing for 20+ items across 10+ tracks
+- Zero warnings in Release build
+
+Fixes:
+- Undo menu state in REAPER mode
+- Compiler warnings in Release build
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v1.4.0/reaper_sneakpeak-arm64.dylib</source>
+      </version>
+    </reapack>
+  </category>
+</index>
