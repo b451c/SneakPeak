@@ -36,6 +36,30 @@
 ]]></description>
       </metadata>
 
+      <version name="1.5.0" author="b451c" time="2026-03-12T00:00:00Z">
+        <changelog><![CDATA[Master Meter Mode & Meter Improvements
+
+New features:
+- Master meter mode: MASTER tab in mode bar shows rolling peak waveform from master track output
+- Red clipping indicator when master signal exceeds 0dB
+- dB scale in master waveform view
+- Master Output meter source: right-click meters to read from master while viewing items
+- S shortcut for split at cursor
+
+Fixes:
+- Meter accuracy: take D_VOL now included in level calculation
+- Multi-item volume changes auto-detected and reloaded
+- Latency-compensated meter sync
+- SWELL menu checkmarks no longer grayed out on macOS
+- Docker close crash on macOS
+
+Improvements:
+- GDI caching for meters (0 allocations per frame)
+- Mode-dependent ballistics for master meter (Peak/VU/RMS)
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v1.5.0/reaper_sneakpeak-arm64.dylib</source>
+      </version>
+
       <version name="1.4.0" author="b451c" time="2026-03-11T00:00:00Z">
         <changelog><![CDATA[Feature release: Multi-item views and professional metering
 
