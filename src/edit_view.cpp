@@ -3033,8 +3033,10 @@ void SneakPeak::DoCopy()
 
   const auto& data = m_waveform.GetAudioData();
   size_t srcOffset = (size_t)startF * nch;
+  size_t copyLen = (size_t)selFrames * nch;
+  if (srcOffset + copyLen > data.size()) return;
   std::copy(data.begin() + (long)srcOffset,
-            data.begin() + (long)(srcOffset + (size_t)selFrames * nch),
+            data.begin() + (long)(srcOffset + copyLen),
             s_clipboard.samples.begin());
 
   // Also trigger REAPER's native copy (40060 = Copy selected area of items)
@@ -3667,18 +3669,7 @@ void SneakPeak::InitiateDragExport()
         // We need to offset into the fade curve since selection may not start at 0
         for (int i = 0; i < overlapFrames; i++) {
           double t = (double)(startF + i) / (double)fadeFrames;
-          t = std::max(0.0, std::min(1.0, t));
-          // Same shape logic as ApplyFadeShapeOps in audio_ops.cpp
-          double gain;
-          switch (sf.fadeInShape) {
-            default: case 0: gain = t; break;
-            case 1: gain = sqrt(t); break;
-            case 2: gain = t * t; break;
-            case 3: gain = pow(t, 0.25); break;
-            case 4: gain = t * t * t * t; break;
-            case 5: gain = 0.5 - 0.5 * cos(M_PI * t); break;
-            case 6: { double s = 0.5 - 0.5 * cos(M_PI * t); gain = s * s * (3.0 - 2.0 * s); break; }
-          }
+          double gain = ApplyFadeShape(t, sf.fadeInShape);
           for (int ch = 0; ch < nch; ch++)
             exportBuf[i * nch + ch] *= gain;
         }
@@ -3692,19 +3683,7 @@ void SneakPeak::InitiateDragExport()
       if (overlapStart < overlapEnd) {
         for (int i = overlapStart; i < overlapEnd; i++) {
           double t = (double)(i - fadeStart) / (double)fadeFrames;
-          t = std::max(0.0, std::min(1.0, t));
-          // FadeOut uses ApplyFadeShapeOps(1.0 - t, shape)
-          double rt = 1.0 - t;
-          double gain;
-          switch (sf.fadeOutShape) {
-            default: case 0: gain = rt; break;
-            case 1: gain = sqrt(rt); break;
-            case 2: gain = rt * rt; break;
-            case 3: gain = pow(rt, 0.25); break;
-            case 4: gain = rt * rt * rt * rt; break;
-            case 5: gain = 0.5 - 0.5 * cos(M_PI * rt); break;
-            case 6: { double s = 0.5 - 0.5 * cos(M_PI * rt); gain = s * s * (3.0 - 2.0 * s); break; }
-          }
+          double gain = ApplyFadeShape(1.0 - t, sf.fadeOutShape);
           int bufIdx = i - startF;
           for (int ch = 0; ch < nch; ch++)
             exportBuf[bufIdx * nch + ch] *= gain;

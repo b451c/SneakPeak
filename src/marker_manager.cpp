@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cmath>
 #include <algorithm>
+#include <cstdlib>
 
 void MarkerManager::DrawMarkers(HDC hdc, const RECT& waveformRect, const RECT& rulerRect, const WaveformView& wv)
 {

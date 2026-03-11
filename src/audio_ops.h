@@ -2,6 +2,29 @@
 #pragma once
 
 #include <cstddef>
+#include <cmath>
+#include <algorithm>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+// Shared fade shape curve (used by waveform_view, audio_ops, edit_view)
+inline double ApplyFadeShape(double t, int shape)
+{
+  t = std::max(0.0, std::min(1.0, t));
+  switch (shape) {
+    default:
+    case 0: return t;                                       // linear
+    case 1: return sqrt(t);                                 // fast start
+    case 2: return t * t;                                   // slow start
+    case 3: return pow(t, 0.25);                            // fast start steep
+    case 4: return t * t * t * t;                           // slow start steep
+    case 5: return 0.5 - 0.5 * cos(M_PI * t);              // S-curve
+    case 6: { double s = 0.5 - 0.5 * cos(M_PI * t);       // S-curve steep
+              return s * s * (3.0 - 2.0 * s); }
+  }
+}
 
 namespace AudioOps {
 

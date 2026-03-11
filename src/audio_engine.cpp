@@ -264,12 +264,6 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
       doubleToS24(samples[i], v);
       fwrite(v, 3, 1, f);
     }
-  } else {
-    // Unsupported format — write as 16-bit PCM fallback
-    for (size_t i = 0; i < totalSamples; i++) {
-      int16_t v = doubleToS16(samples[i]);
-      fwrite(&v, sizeof(int16_t), 1, f);
-    }
   }
 
   fclose(f);

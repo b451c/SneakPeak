@@ -2,35 +2,17 @@
 // Audio data is loaded once into memory, peaks computed from cache (zero API calls per paint)
 #include "waveform_view.h"
 #include "audio_engine.h"
+#include "audio_ops.h"
 #include "reaper_plugin.h"
 #include "theme.h"
 #include "debug.h"
-#include <algorithm>
 #include <cstring>
 #include <cstdio>
-#include <cmath>
+
+// ApplyFadeShape is now shared via audio_ops.h
 
 WaveformView::WaveformView() {}
 WaveformView::~WaveformView() {}
-
-// Apply REAPER fade shape curve to a linear 0..1 ratio
-// shape: 0=linear, 1=fast start, 2=slow start, 3=fast start steep,
-//        4=slow start steep, 5=S-curve, 6=S-curve steep
-static double ApplyFadeShape(double t, int shape)
-{
-  t = std::max(0.0, std::min(1.0, t));
-  switch (shape) {
-    default:
-    case 0: return t;                                       // linear
-    case 1: return sqrt(t);                                 // fast start
-    case 2: return t * t;                                   // slow start
-    case 3: return pow(t, 0.25);                            // fast start steep
-    case 4: return t * t * t * t;                           // slow start steep
-    case 5: return 0.5 - 0.5 * cos(M_PI * t);              // S-curve
-    case 6: { double s = 0.5 - 0.5 * cos(M_PI * t);       // S-curve steep
-              return s * s * (3.0 - 2.0 * s); }
-  }
-}
 
 void WaveformView::SetItem(MediaItem* item)
 {
@@ -540,7 +522,7 @@ void WaveformView::EndSelection() {
 }
 
 double WaveformView::SnapToZeroCrossing(double time) const {
-  if (m_audioData.empty() || m_numChannels <= 0 || m_sampleRate <= 0) return time;
+  if (m_audioData.empty() || m_audioSampleCount < 2 || m_numChannels <= 0 || m_sampleRate <= 0) return time;
 
   int frame = (int)(time * (double)m_sampleRate);
   frame = std::max(0, std::min(frame, m_audioSampleCount - 1));
