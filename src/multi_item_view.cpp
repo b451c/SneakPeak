@@ -79,9 +79,25 @@ bool MultiItemView::LoadItems(const std::vector<MediaItem*>& items,
     return false;
   }
 
+  // Determine if we need to downsample (cap per-layer to keep memory/CPU sane)
+  static const int MAX_FRAMES_PER_LAYER = 5000000; // ~1.7 min stereo 48kHz
+  double maxLayerDur = 0.0;
+  for (const auto& layer : m_layers)
+    if (layer.duration > maxLayerDur) maxLayerDur = layer.duration;
+
+  int readRate = m_sampleRate;
+  int maxFrames = (int)(maxLayerDur * (double)m_sampleRate);
+  if (maxFrames > MAX_FRAMES_PER_LAYER) {
+    int ratio = (maxFrames + MAX_FRAMES_PER_LAYER - 1) / MAX_FRAMES_PER_LAYER;
+    readRate = m_sampleRate / ratio;
+    if (readRate < 8000) readRate = 8000;
+    m_sampleRate = readRate;
+    DBG("[MultiItem] Downsampling all layers: ratio=%d readRate=%d\n", ratio, readRate);
+  }
+
   // Load audio for each layer (full duration, absolute timeline aligned)
   for (auto& layer : m_layers) {
-    int frames = (int)(layer.duration * (double)m_sampleRate);
+    int frames = (int)(layer.duration * (double)readRate);
     if (frames <= 0) continue;
 
     AudioAccessor* accessor = g_CreateTakeAudioAccessor(layer.take);
@@ -96,23 +112,19 @@ bool MultiItemView::LoadItems(const std::vector<MediaItem*>& items,
     int framesLoaded = 0;
     while (framesLoaded < frames) {
       int chunk = std::min(CHUNK_FRAMES, frames - framesLoaded);
-      double chunkTime = (double)framesLoaded / (double)m_sampleRate;
+      double chunkTime = (double)framesLoaded / (double)readRate;
 
-      // If layer has fewer channels than output, read at layer's channel count
-      // and upmix below
       if (layer.numChannels < maxChannels) {
-        // Read at source channel count, then upmix
         std::vector<double> tmpBuf((size_t)chunk * layer.numChannels, 0.0);
-        g_GetAudioAccessorSamples(accessor, m_sampleRate, layer.numChannels,
+        g_GetAudioAccessorSamples(accessor, readRate, layer.numChannels,
                                   chunkTime, chunk, tmpBuf.data());
-        // Upmix mono → stereo (duplicate)
         for (int f = 0; f < chunk; f++) {
           size_t dstOff = ((size_t)framesLoaded + f) * maxChannels;
           layer.audio[dstOff] = tmpBuf[(size_t)f * layer.numChannels];
-          layer.audio[dstOff + 1] = tmpBuf[(size_t)f * layer.numChannels]; // dup mono
+          layer.audio[dstOff + 1] = tmpBuf[(size_t)f * layer.numChannels];
         }
       } else {
-        g_GetAudioAccessorSamples(accessor, m_sampleRate, maxChannels,
+        g_GetAudioAccessorSamples(accessor, readRate, maxChannels,
                                   chunkTime, chunk,
                                   layer.audio.data() + (size_t)framesLoaded * maxChannels);
       }
@@ -131,6 +143,22 @@ bool MultiItemView::LoadItems(const std::vector<MediaItem*>& items,
 
     DBG("[MultiItem] Layer: pos=%.3f dur=%.3f vol=%.3f frames=%d startFrame=%d\n",
         layer.position, layer.duration, layer.itemVol, frames, layer.audioStartFrame);
+  }
+
+  // Assign color indices: per-item and per-track
+  {
+    std::vector<MediaTrack*> seenTracks;
+    for (int i = 0; i < (int)m_layers.size(); i++) {
+      m_layers[i].colorIndex = i; // per-item: sequential
+      // per-track: find or assign
+      MediaTrack* tr = g_GetMediaItem_Track ? g_GetMediaItem_Track(m_layers[i].item) : nullptr;
+      int trackIdx = -1;
+      for (int t = 0; t < (int)seenTracks.size(); t++) {
+        if (seenTracks[t] == tr) { trackIdx = t; break; }
+      }
+      if (trackIdx < 0) { trackIdx = (int)seenTracks.size(); seenTracks.push_back(tr); }
+      m_layers[i].trackColorIndex = trackIdx;
+    }
   }
 
   outChannels = maxChannels;
@@ -165,9 +193,27 @@ void MultiItemView::UpdatePeaks(double viewStart, double viewDur, int width, int
   if (m_mode == MultiItemMode::MIX) {
     ComputeMixPeaks(viewStart, viewDur, width, numChannels, peakMax, peakMin, peakRMS);
   } else {
+    // LAYERED modes: compute per-layer peaks, then derive mix from layer peaks (fast)
     ComputeLayeredPeaks(viewStart, viewDur, width, numChannels);
-    // For LAYERED, also write mix to shared arrays so clip detection etc. still works
-    ComputeMixPeaks(viewStart, viewDur, width, numChannels, peakMax, peakMin, peakRMS);
+
+    // Build approximate mix peaks from per-layer peaks (sum of peaks, no re-scan of audio)
+    int nch = numChannels;
+    size_t total = (size_t)(width * nch);
+    peakMax.assign(total, 0.0);
+    peakMin.assign(total, 0.0);
+    peakRMS.assign(total, 0.0);
+    for (const auto& layer : m_layers) {
+      if (layer.peakMax.size() < total) continue;
+      for (size_t i = 0; i < total; i++) {
+        peakMax[i] += layer.peakMax[i];
+        peakMin[i] += layer.peakMin[i];
+        double r = layer.peakRMS[i];
+        peakRMS[i] += r * r; // sum of squares for RMS
+      }
+    }
+    for (size_t i = 0; i < total; i++) {
+      peakRMS[i] = sqrt(peakRMS[i]);
+    }
   }
 
   m_peaksValid = true;
@@ -185,9 +231,8 @@ void MultiItemView::ComputeMixPeaks(double viewStart, double viewDur, int width,
   peakMin.resize((size_t)(width * nch));
   peakRMS.resize((size_t)(width * nch));
 
-  // viewStart/viewDur are relative times (0-based), but layer positions are absolute.
-  // Convert: relTime → absTime by adding m_timelineStart.
   double timePerPixel = viewDur / (double)width;
+  int numLayers = (int)m_layers.size();
 
   for (int col = 0; col < width; col++) {
     double colRelTime = viewStart + (double)col * timePerPixel;
@@ -196,10 +241,9 @@ void MultiItemView::ComputeMixPeaks(double viewStart, double viewDur, int width,
     if (sampleStart < 0) sampleStart = 0;
     if (sampleEnd < sampleStart + 1) sampleEnd = sampleStart + 1;
 
-    // Subsample for zoomed-out views
     int span = sampleEnd - sampleStart;
     int step = 1;
-    if (span > 8192) step = span / 4096;
+    if (span > 2048) step = span / 1024;
 
     for (int ch = 0; ch < nch; ch++) {
       double maxVal = -2.0;
@@ -208,10 +252,14 @@ void MultiItemView::ComputeMixPeaks(double viewStart, double viewDur, int width,
       int count = 0;
 
       for (int s = sampleStart; s < sampleEnd; s += step) {
-        int timelineFrame = s;  // relative frame from timeline start
         double sum = 0.0;
-        for (const auto& layer : m_layers) {
-          sum += GetLayerSample(layer, timelineFrame, ch, nch);
+        for (int li = 0; li < numLayers; li++) {
+          const auto& layer = m_layers[li];
+          int lf = s - layer.audioStartFrame;
+          if (lf >= 0 && lf < layer.audioFrameCount) {
+            size_t ai = (size_t)lf * nch + ch;
+            if (ai < layer.audio.size()) sum += layer.audio[ai];
+          }
         }
         if (sum > maxVal) maxVal = sum;
         if (sum < minVal) minVal = sum;
@@ -248,7 +296,7 @@ void MultiItemView::ComputeLayeredPeaks(double viewStart, double viewDur, int wi
 
       int span = sampleEnd - sampleStart;
       int step = 1;
-      if (span > 8192) step = span / 4096;
+      if (span > 2048) step = span / 1024;
 
       for (int ch = 0; ch < nch; ch++) {
         double maxVal = -2.0;
@@ -257,7 +305,12 @@ void MultiItemView::ComputeLayeredPeaks(double viewStart, double viewDur, int wi
         int count = 0;
 
         for (int s = sampleStart; s < sampleEnd; s += step) {
-          double v = GetLayerSample(layer, s, ch, nch);
+          int lf = s - layer.audioStartFrame;
+          double v = 0.0;
+          if (lf >= 0 && lf < layer.audioFrameCount) {
+            size_t ai = (size_t)lf * nch + ch;
+            if (ai < layer.audio.size()) v = layer.audio[ai];
+          }
           if (v > maxVal) maxVal = v;
           if (v < minVal) minVal = v;
           sumSq += v * v;
@@ -290,7 +343,7 @@ static COLORREF BlendColor(COLORREF fg, COLORREF bg, float alpha)
 
 void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
                                double viewStart, double viewDur, float verticalZoom,
-                               const WaveformSelection& selection)
+                               const WaveformSelection& selection, double gainOffset)
 {
   int w = rect.right - rect.left - DB_SCALE_WIDTH;
   if (w < 1) w = 1;
@@ -317,7 +370,8 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
     const auto& layer = m_layers[layerIdx];
     if (layer.peakMax.empty()) continue;
 
-    COLORREF baseColor = kLayerColors[layerIdx % kNumLayerColors];
+    int ci = (m_mode == MultiItemMode::LAYERED_TRACKS) ? layer.trackColorIndex : layer.colorIndex;
+    COLORREF baseColor = kLayerColors[ci % kNumLayerColors];
     COLORREF peakColor = BlendColor(baseColor, bgColor, 0.7f);
     COLORREF rmsColor = BlendColor(baseColor, bgColor, 0.9f);
     COLORREF peakSelColor = BlendColor(baseColor, g_theme.waveformSelBg, 0.7f);
@@ -345,8 +399,8 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
         HPEN wantPen = (hasSel && x >= selX1 && x < selX2) ? peakSelPen : peakPen;
         if (wantPen != curPen) { SelectObject(hdc, wantPen); curPen = wantPen; }
 
-        double maxVal = std::max(-1.0, std::min(1.0, layer.peakMax[idx]));
-        double minVal = std::max(-1.0, std::min(1.0, layer.peakMin[idx]));
+        double maxVal = std::max(-1.0, std::min(1.0, layer.peakMax[idx] * gainOffset));
+        double minVal = std::max(-1.0, std::min(1.0, layer.peakMin[idx] * gainOffset));
 
         int yMax = centerY - (int)(maxVal * (double)halfH);
         int yMin = centerY - (int)(minVal * (double)halfH);
@@ -370,7 +424,7 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
         HPEN wantPen = (hasSel && x >= selX1 && x < selX2) ? rmsSelPen : rmsPen;
         if (wantPen != curPen) { SelectObject(hdc, wantPen); curPen = wantPen; }
 
-        double rmsVal = std::min(1.0, layer.peakRMS[idx]);
+        double rmsVal = std::min(1.0, layer.peakRMS[idx] * gainOffset);
         int yRmsTop = centerY - (int)(rmsVal * (double)halfH);
         int yRmsBot = centerY + (int)(rmsVal * (double)halfH);
         yRmsTop = std::max(chTop, std::min(chTop + chH - 1, yRmsTop));

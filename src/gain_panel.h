@@ -2,6 +2,7 @@
 #pragma once
 
 #include "platform.h"
+#include <vector>
 
 class MediaItem;
 
@@ -20,10 +21,12 @@ public:
   // Visibility — Show reads current D_VOL from item
   bool IsVisible() const { return m_visible; }
   void Show(MediaItem* item);
+  void ShowBatch(const std::vector<MediaItem*>& items); // multi-item batch mode
   void ShowStandalone(); // standalone mode: no item, internal gain only
-  void Hide() { m_visible = false; m_item = nullptr; m_standalone = false; }
+  void Hide() { m_visible = false; m_item = nullptr; m_standalone = false; m_batchItems.clear(); m_batchOrigVols.clear(); }
   void Toggle(MediaItem* item);
   bool IsStandalone() const { return m_standalone; }
+  bool IsBatch() const { return !m_batchItems.empty(); }
 
   // State
   double GetDb() const { return m_db; }
@@ -50,6 +53,10 @@ private:
   int m_dragAnchorY = 0;
   MediaItem* m_item = nullptr;
   bool m_standalone = false;
+
+  // Batch mode: multiple items, knob controls relative gain offset
+  std::vector<MediaItem*> m_batchItems;
+  std::vector<double> m_batchOrigVols; // original D_VOL per item (linear)
 
   // Panel position offset from default center position
   int m_offsetX = 0;

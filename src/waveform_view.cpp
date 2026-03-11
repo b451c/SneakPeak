@@ -277,6 +277,7 @@ void WaveformView::ClearItem()
   m_segments.clear();
   m_multiItemActive = false;
   m_multiItem.Clear();
+  m_batchGainOffset = 1.0;
   m_peaksValid = false;
   m_selection = {};
   m_numChannels = 0;
@@ -566,6 +567,15 @@ double WaveformView::SnapToZeroCrossing(double time) const {
 
 void WaveformView::ClearSelection() { m_selection = {}; m_selecting = false; }
 
+void WaveformView::SetBatchGainOffset(double linearOffset)
+{
+  if (linearOffset != m_batchGainOffset) {
+    m_batchGainOffset = linearOffset;
+    m_peaksValid = false;
+    m_multiItem.Invalidate();
+  }
+}
+
 // --- Coordinate conversion ---
 
 double WaveformView::XToTime(int x) const {
@@ -801,10 +811,10 @@ void WaveformView::Paint(HDC hdc)
   }
 
   // LAYERED mode: draw per-layer waveforms. MIX mode: standard single draw.
-  if (m_multiItemActive && m_multiItem.GetMode() == MultiItemMode::LAYERED) {
+  if (m_multiItemActive && m_multiItem.GetMode() != MultiItemMode::MIX) {
     m_multiItem.DrawLayers(hdc, m_rect, m_numChannels,
                            m_viewStartTime, m_viewDuration, m_verticalZoom,
-                           m_selection);
+                           m_selection, m_batchGainOffset);
   } else {
     for (int ch = 0; ch < m_numChannels; ch++) {
       DrawWaveformChannel(hdc, ch, GetChannelTop(ch), GetChannelHeight());
@@ -1017,11 +1027,13 @@ void WaveformView::DrawItemBoundaries(HDC hdc)
 {
   if (m_multiItemActive) {
     // New multi-item: draw boundaries at each layer's start and end
-    bool layered = (m_multiItem.GetMode() == MultiItemMode::LAYERED);
+    MultiItemMode mode = m_multiItem.GetMode();
+    bool layered = (mode != MultiItemMode::MIX);
     const auto& layers = m_multiItem.GetLayers();
 
     for (size_t i = 0; i < layers.size(); i++) {
-      COLORREF color = layered ? kLayerColors[i % kNumLayerColors] : RGB(100, 100, 100);
+      int ci = (mode == MultiItemMode::LAYERED_TRACKS) ? layers[i].trackColorIndex : layers[i].colorIndex;
+      COLORREF color = layered ? kLayerColors[ci % kNumLayerColors] : RGB(100, 100, 100);
       HPEN pen = CreatePen(PS_SOLID, 1, color);
       HPEN oldPen = (HPEN)SelectObject(hdc, pen);
 
@@ -1378,10 +1390,11 @@ void WaveformView::UpdateFadeCache()
   }
 
   // Multi-item: D_VOL is already baked into audio data per-segment in SetItems(),
-  // so don't apply it again in draw. Show first item's fade-in and last item's fade-out.
+  // so don't apply it again in draw. Batch gain offset reflects knob adjustment.
+  // Show first item's fade-in and last item's fade-out.
   if (m_segments.size() > 1) {
     m_fadeCache = {};
-    m_fadeCache.itemVol = 1.0;
+    m_fadeCache.itemVol = m_batchGainOffset;
     // Fade-in from first item
     MediaItem* first = m_segments.front().item;
     if (first) {

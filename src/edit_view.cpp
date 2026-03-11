@@ -75,9 +75,10 @@ void SneakPeak::Create()
       if (h >= MINIMAP_HEIGHT && h <= 120) m_minimapHeight = h;
     }
     const char* multiMode = g_GetExtState("SneakPeak", "multi_mode");
-    if (multiMode && strcmp(multiMode, "layered") == 0) {
+    if (multiMode && strcmp(multiMode, "layered") == 0)
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED);
-    }
+    else if (multiMode && strcmp(multiMode, "layered_tracks") == 0)
+      m_waveform.SetMultiItemMode(MultiItemMode::LAYERED_TRACKS);
   }
 
   // Recalc layout after restoring settings (minimap visibility etc.)
@@ -157,7 +158,21 @@ void SneakPeak::LoadSelectedItem()
       m_spectral.ClearSpectrum();
       m_spectral.Invalidate();
       m_minimap.Invalidate();
-      m_gainPanel.Show(items[0]);
+
+      // Hide gain panel if items span multiple tracks (changing D_VOL across tracks is ambiguous)
+      // Same track: batch mode (knob applies relative offset to all items)
+      bool multiTrack = false;
+      if (g_GetMediaItem_Track) {
+        MediaTrack* firstTrack = g_GetMediaItem_Track(items[0]);
+        for (size_t i = 1; i < items.size(); i++) {
+          if (g_GetMediaItem_Track(items[i]) != firstTrack) { multiTrack = true; break; }
+        }
+      }
+      if (multiTrack) {
+        m_gainPanel.Hide();
+      } else {
+        m_gainPanel.ShowBatch(items);
+      }
       m_hasUndo = false;
       m_dirty = false;
       if (m_hwnd) {
@@ -351,7 +366,16 @@ void SneakPeak::OnTimer()
   }
 
   // Update fade/volume cache for paint (not in standalone mode)
-  if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode()) m_waveform.UpdateFadeCache();
+  if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode()) {
+    m_waveform.UpdateFadeCache();
+    // Batch gain: sync knob offset to waveform for visual feedback
+    if (m_gainPanel.IsBatch()) {
+      double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
+      m_waveform.SetBatchGainOffset(offsetLin);
+    } else if (m_waveform.IsMultiItemActive()) {
+      m_waveform.SetBatchGainOffset(1.0);
+    }
+  }
   // In standalone mode, reflect gain panel dB in waveform display
   if (m_waveform.IsStandaloneMode() && m_gainPanel.IsVisible()) {
     double gainLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
@@ -2250,17 +2274,17 @@ void SneakPeak::OnRightClick(int x, int y)
              m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
 
   // Multi-item view mode submenu (only when multi-item active)
+  HMENU multiMenu = nullptr;
   if (m_waveform.IsMultiItemActive()) {
-    HMENU multiMenu = CreatePopupMenu();
+    multiMenu = CreatePopupMenu();
     MultiItemMode curMode = m_waveform.GetMultiItemMode();
     MenuAppend(multiMenu, (curMode == MultiItemMode::MIX) ? (MF_STRING | MF_CHECKED) : MF_STRING,
                CM_MULTI_MODE_MIX, "Mix (Sum)");
     MenuAppend(multiMenu, (curMode == MultiItemMode::LAYERED) ? (MF_STRING | MF_CHECKED) : MF_STRING,
-               CM_MULTI_MODE_LAYERED, "Layered");
+               CM_MULTI_MODE_LAYERED, "Layered (per Item)");
+    MenuAppend(multiMenu, (curMode == MultiItemMode::LAYERED_TRACKS) ? (MF_STRING | MF_CHECKED) : MF_STRING,
+               CM_MULTI_MODE_LAYERED_TRACKS, "Layered (per Track)");
     MenuAppendSubmenu(viewMenu, multiMenu, "Multi-Item View");
-#ifndef _WIN32
-    DestroyMenu(multiMenu);
-#endif
   }
 
   HMENU supportMenu = CreatePopupMenu();
@@ -2283,6 +2307,7 @@ void SneakPeak::OnRightClick(int x, int y)
   DestroyMenu(editMenu);
   DestroyMenu(procMenu);
   DestroyMenu(markerMenu);
+  if (multiMenu) DestroyMenu(multiMenu);
   DestroyMenu(viewMenu);
   DestroyMenu(supportMenu);
 #endif
@@ -2397,6 +2422,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED);
       m_waveform.Invalidate();
       if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "layered", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_MULTI_MODE_LAYERED_TRACKS:
+      m_waveform.SetMultiItemMode(MultiItemMode::LAYERED_TRACKS);
+      m_waveform.Invalidate();
+      if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "layered_tracks", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_TOGGLE_SPECTRAL:

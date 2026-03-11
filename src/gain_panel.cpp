@@ -15,13 +15,36 @@ void GainPanel::Show(MediaItem* item)
 {
   if (!item) return;
   m_item = item;
+  m_batchItems.clear();
+  m_batchOrigVols.clear();
   m_visible = true;
   ReadFromItem();
+}
+
+void GainPanel::ShowBatch(const std::vector<MediaItem*>& items)
+{
+  if (items.empty()) return;
+  m_batchItems = items;
+  m_batchOrigVols.clear();
+  m_item = items[0]; // primary item for compatibility
+  m_standalone = false;
+  m_visible = true;
+
+  // Store original D_VOL for each item
+  for (MediaItem* it : m_batchItems) {
+    double vol = 1.0;
+    if (g_GetMediaItemInfo_Value) vol = g_GetMediaItemInfo_Value(it, "D_VOL");
+    if (vol <= 0.0) vol = 1.0;
+    m_batchOrigVols.push_back(vol);
+  }
+  m_db = 0.0; // knob starts at 0 dB (no offset)
 }
 
 void GainPanel::ShowStandalone()
 {
   m_item = nullptr;
+  m_batchItems.clear();
+  m_batchOrigVols.clear();
   m_standalone = true;
   m_visible = true;
   m_db = 0.0;
@@ -35,6 +58,7 @@ void GainPanel::Toggle(MediaItem* item)
 
 void GainPanel::ReadFromItem()
 {
+  if (!m_batchItems.empty()) return; // batch mode: knob is relative offset, don't read
   if (!m_item || !g_GetMediaItemInfo_Value) { m_db = 0.0; return; }
   double vol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
   if (vol <= 0.0) vol = 1.0;
@@ -44,7 +68,20 @@ void GainPanel::ReadFromItem()
 
 void GainPanel::WriteToItem()
 {
-  if (!m_item || !g_SetMediaItemInfo_Value || !g_UpdateArrange) return;
+  if (!g_SetMediaItemInfo_Value || !g_UpdateArrange) return;
+
+  // Batch mode: apply relative offset to each item's original volume
+  if (!m_batchItems.empty()) {
+    double offsetLinear = pow(10.0, m_db / 20.0);
+    for (size_t i = 0; i < m_batchItems.size(); i++) {
+      double origVol = (i < m_batchOrigVols.size()) ? m_batchOrigVols[i] : 1.0;
+      g_SetMediaItemInfo_Value(m_batchItems[i], "D_VOL", origVol * offsetLinear);
+    }
+    g_UpdateArrange();
+    return;
+  }
+
+  if (!m_item) return;
   double linear = pow(10.0, m_db / 20.0);
   g_SetMediaItemInfo_Value(m_item, "D_VOL", linear);
   g_UpdateArrange();
@@ -52,6 +89,18 @@ void GainPanel::WriteToItem()
 
 void GainPanel::ResetTo0dB()
 {
+  if (!m_batchItems.empty()) {
+    // Restore original volumes
+    m_db = 0.0;
+    if (g_SetMediaItemInfo_Value) {
+      for (size_t i = 0; i < m_batchItems.size(); i++) {
+        double origVol = (i < m_batchOrigVols.size()) ? m_batchOrigVols[i] : 1.0;
+        g_SetMediaItemInfo_Value(m_batchItems[i], "D_VOL", origVol);
+      }
+      if (g_UpdateArrange) g_UpdateArrange();
+    }
+    return;
+  }
   m_db = 0.0;
   WriteToItem();
 }

@@ -44,6 +44,8 @@ public:
   void SetMultiItemMode(MultiItemMode mode) { m_multiItem.SetMode(mode); m_peaksValid = false; }
   MultiItemMode GetMultiItemMode() const { return m_multiItem.GetMode(); }
   const MultiItemView& GetMultiItemView() const { return m_multiItem; }
+  void SetBatchGainOffset(double linearOffset);
+  double GetBatchGainOffset() const { return m_batchGainOffset; }
 
   // Standalone file mode (no REAPER item)
   bool LoadFromFile(const std::string& path);
@@ -189,6 +191,7 @@ private:
   // Multi-item view
   MultiItemView m_multiItem;
   bool m_multiItemActive = false;
+  double m_batchGainOffset = 1.0; // visual gain multiplier for batch mode (linear)
 
   // Item data
   MediaItem* m_item = nullptr;

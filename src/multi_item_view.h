@@ -8,7 +8,7 @@
 
 struct WaveformSelection;
 
-enum class MultiItemMode { MIX, LAYERED };
+enum class MultiItemMode { MIX, LAYERED, LAYERED_TRACKS };
 
 struct ItemLayer {
   MediaItem* item = nullptr;
@@ -17,6 +17,8 @@ struct ItemLayer {
   double duration = 0.0;       // full item length (not trimmed)
   double itemVol = 1.0;        // D_VOL baked into audio
   int numChannels = 1;
+  int colorIndex = 0;          // index into kLayerColors (per-item or per-track)
+  int trackColorIndex = 0;     // index into kLayerColors (per-track, for LAYERED_TRACKS)
 
   std::vector<double> audio;   // interleaved samples (full length)
   int audioFrameCount = 0;
@@ -54,7 +56,7 @@ public:
   // Draw all layers for LAYERED mode
   void DrawLayers(HDC hdc, RECT rect, int numChannels,
                   double viewStart, double viewDur, float verticalZoom,
-                  const WaveformSelection& selection);
+                  const WaveformSelection& selection, double gainOffset = 1.0);
 
   void SetMode(MultiItemMode mode) { m_mode = mode; m_peaksValid = false; }
   MultiItemMode GetMode() const { return m_mode; }
