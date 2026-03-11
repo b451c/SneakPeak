@@ -1026,34 +1026,54 @@ void WaveformView::DrawClipIndicators(HDC hdc)
 void WaveformView::DrawItemBoundaries(HDC hdc)
 {
   if (m_multiItemActive) {
-    // New multi-item: draw boundaries at each layer's start and end
-    MultiItemMode mode = m_multiItem.GetMode();
-    bool layered = (mode != MultiItemMode::MIX);
+    // Draw join lines where items meet (crossfade midpoint or shared edge)
     const auto& layers = m_multiItem.GetLayers();
+    if (layers.empty()) return;
 
-    for (size_t i = 0; i < layers.size(); i++) {
-      int ci = (mode == MultiItemMode::LAYERED_TRACKS) ? layers[i].trackColorIndex : layers[i].colorIndex;
-      COLORREF color = layered ? kLayerColors[ci % kNumLayerColors] : RGB(100, 100, 100);
-      HPEN pen = CreatePen(PS_SOLID, 1, color);
-      HPEN oldPen = (HPEN)SelectObject(hdc, pen);
-
+    // Collect all edges (end of one item near start of another = join)
+    static const double JOIN_THRESH = 0.05; // 50ms tolerance for matching edges
+    struct Edge { double time; bool isEnd; int layerIdx; };
+    std::vector<Edge> edges;
+    edges.reserve(layers.size() * 2);
+    for (int i = 0; i < (int)layers.size(); i++) {
       double relStart = layers[i].position - m_itemPosition;
       double relEnd = relStart + layers[i].duration;
-
-      int x1 = TimeToX(relStart);
-      if (x1 >= m_rect.left && x1 < m_rect.right) {
-        MoveToEx(hdc, x1, m_rect.top, nullptr);
-        LineTo(hdc, x1, m_rect.bottom);
-      }
-      int x2 = TimeToX(relEnd);
-      if (x2 >= m_rect.left && x2 < m_rect.right) {
-        MoveToEx(hdc, x2, m_rect.top, nullptr);
-        LineTo(hdc, x2, m_rect.bottom);
-      }
-
-      SelectObject(hdc, oldPen);
-      DeleteObject(pen);
+      edges.push_back({ relStart, false, i });
+      edges.push_back({ relEnd, true, i });
     }
+    std::sort(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
+      return a.time < b.time;
+    });
+
+    // Find join points: an end-edge near a start-edge = items meeting
+    std::vector<double> joinTimes;
+    for (int i = 0; i < (int)edges.size(); i++) {
+      if (!edges[i].isEnd) continue; // only match from end edges
+      for (int j = i + 1; j < (int)edges.size(); j++) {
+        double dt = edges[j].time - edges[i].time;
+        if (dt > JOIN_THRESH) break; // too far
+        if (!edges[j].isEnd) {
+          // End of item i meets start of item j — join at midpoint
+          joinTimes.push_back((edges[i].time + edges[j].time) * 0.5);
+          break;
+        }
+      }
+    }
+
+    // Deduplicate join times within pixel distance
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
+    HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+    int lastDrawnX = -999;
+    for (double t : joinTimes) {
+      int x = TimeToX(t);
+      if (x >= m_rect.left && x < m_rect.right && x != lastDrawnX) {
+        MoveToEx(hdc, x, m_rect.top, nullptr);
+        LineTo(hdc, x, m_rect.bottom);
+        lastDrawnX = x;
+      }
+    }
+    SelectObject(hdc, oldPen);
+    DeleteObject(pen);
     return;
   }
 
