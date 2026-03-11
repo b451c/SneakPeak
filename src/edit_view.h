@@ -93,6 +93,7 @@ enum ContextMenuID {
   CM_METER_PEAK,
   CM_METER_RMS,
   CM_METER_VU,
+  CM_METER_SOURCE_MASTER,
   CM_LAST // sentinel — keep last
 };
 
@@ -283,6 +284,7 @@ private:
 
   // Master meter mode (when no item selected)
   bool m_masterMode = false;
+  bool m_meterFromMaster = false; // meter reads master track instead of item
   static const int MASTER_ROLLING_SIZE = 4096;
   float m_masterPeakBufL[MASTER_ROLLING_SIZE] = {};
   float m_masterPeakBufR[MASTER_ROLLING_SIZE] = {};

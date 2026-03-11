@@ -84,6 +84,8 @@ void SneakPeak::Create()
     const char* meterMode = g_GetExtState("SneakPeak", "meter_mode");
     if (meterMode && strcmp(meterMode, "rms") == 0) m_levels.SetMode(MeterMode::RMS);
     else if (meterMode && strcmp(meterMode, "vu") == 0) m_levels.SetMode(MeterMode::VU);
+    const char* meterSrc = g_GetExtState("SneakPeak", "meter_source");
+    if (meterSrc && strcmp(meterSrc, "master") == 0) m_meterFromMaster = true;
   }
 
   // Recalc layout after restoring settings (minimap visibility etc.)
@@ -486,45 +488,51 @@ void SneakPeak::OnTimer()
       m_waveform.SetCursorTime(relPos);
     }
 
-    int sr = m_waveform.GetSampleRate();
-    int nch = m_waveform.GetNumChannels();
-    if (sr > 0 && nch > 0) {
-      bool playing = g_GetPlayState && (g_GetPlayState() & 1);
-      int startFrame, endFrame;
-      if (playing) {
-        // Use GetPlayPosition (latency-compensated = what you hear) for meter sync
-        double absPos = g_GetPlayPosition ? g_GetPlayPosition()
-                      : (g_GetPlayPosition2 ? g_GetPlayPosition2() : 0.0);
-        double playPos = m_waveform.AbsTimeToRelTime(absPos);
-        if (playPos < 0.0) playPos = 0.0;
-        int center = static_cast<int>(playPos * sr);
-        int halfWin = m_levels.GetIntegrationHalfWindow(sr);
-        startFrame = center - halfWin;
-        endFrame = center + halfWin;
-      } else {
-        startFrame = static_cast<int>(m_waveform.GetViewStart() * sr);
-        endFrame = static_cast<int>(m_waveform.GetViewEnd() * sr);
+    // Meter source: master track or item audio
+    if (m_meterFromMaster && g_GetMasterTrack && g_Track_GetPeakInfo && g_GetPlayState) {
+      MediaTrack* master = g_GetMasterTrack(nullptr);
+      bool playing = (g_GetPlayState() & 1) != 0;
+      if (master) {
+        double pkL = g_Track_GetPeakInfo(master, 0);
+        double pkR = g_Track_GetPeakInfo(master, 1);
+        m_levels.UpdateFromTrackPeak(pkL, pkR, playing, 2);
       }
-      // Volume: item D_VOL × take D_VOL
-      // Single-item audio is raw (vol applied in rendering), so meters need the multiplier
-      // Multi-item audio has D_VOL baked in at load time, so use 1.0
-      double itemVol = 1.0;
-      if (!m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
-        itemVol = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_VOL");
-        if (g_GetSetMediaItemTakeInfo && m_waveform.GetTake()) {
-          double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "D_VOL", nullptr);
-          if (pTakeVol) itemVol *= *pTakeVol;
+    } else {
+      int sr = m_waveform.GetSampleRate();
+      int nch = m_waveform.GetNumChannels();
+      if (sr > 0 && nch > 0) {
+        bool playing = g_GetPlayState && (g_GetPlayState() & 1);
+        int startFrame, endFrame;
+        if (playing) {
+          double absPos = g_GetPlayPosition ? g_GetPlayPosition()
+                        : (g_GetPlayPosition2 ? g_GetPlayPosition2() : 0.0);
+          double playPos = m_waveform.AbsTimeToRelTime(absPos);
+          if (playPos < 0.0) playPos = 0.0;
+          int center = static_cast<int>(playPos * sr);
+          int halfWin = m_levels.GetIntegrationHalfWindow(sr);
+          startFrame = center - halfWin;
+          endFrame = center + halfWin;
+        } else {
+          startFrame = static_cast<int>(m_waveform.GetViewStart() * sr);
+          endFrame = static_cast<int>(m_waveform.GetViewEnd() * sr);
         }
-      }
-      const bool chActive[2] = { m_waveform.IsChannelActive(0), m_waveform.IsChannelActive(1) };
+        double itemVol = 1.0;
+        if (!m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
+          itemVol = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_VOL");
+          if (g_GetSetMediaItemTakeInfo && m_waveform.GetTake()) {
+            double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "D_VOL", nullptr);
+            if (pTakeVol) itemVol *= *pTakeVol;
+          }
+        }
+        const bool chActive[2] = { m_waveform.IsChannelActive(0), m_waveform.IsChannelActive(1) };
 
-      if (m_waveform.IsMultiItemActive()) {
-        // Multi-item: sum layers into temp buffer for metering
-        std::vector<double> mixBuf;
-        m_waveform.GetMultiItemView().GetMixedAudio(startFrame, endFrame, nch, mixBuf);
-        m_levels.Update(mixBuf, 0, (int)mixBuf.size() / std::max(1, nch), sr, nch, itemVol, playing, chActive);
-      } else {
-        m_levels.Update(m_waveform.GetAudioData(), startFrame, endFrame, sr, nch, itemVol, playing, chActive);
+        if (m_waveform.IsMultiItemActive()) {
+          std::vector<double> mixBuf;
+          m_waveform.GetMultiItemView().GetMixedAudio(startFrame, endFrame, nch, mixBuf);
+          m_levels.Update(mixBuf, 0, (int)mixBuf.size() / std::max(1, nch), sr, nch, itemVol, playing, chActive);
+        } else {
+          m_levels.Update(m_waveform.GetAudioData(), startFrame, endFrame, sr, nch, itemVol, playing, chActive);
+        }
       }
     }
     // (master mode is toggled manually via MASTER tab, not auto-disabled here)
@@ -1392,11 +1400,13 @@ void SneakPeak::UpdateSoloState()
 void SneakPeak::DrawMasterWaveform(HDC hdc)
 {
   RECT r = m_waveformRect;
-  int w = r.right - r.left;
+  int scaleLeft = r.right - DB_SCALE_WIDTH;
+  int waveRight = scaleLeft; // waveform ends before dB scale
+  int w = waveRight - r.left;
   int h = r.bottom - r.top;
   if (w <= 0 || h <= 0) return;
 
-  // Dark background
+  // Dark background (full rect including scale area)
   HBRUSH bgBrush = CreateSolidBrush(g_theme.waveformBg);
   FillRect(hdc, &r, bgBrush);
   DeleteObject(bgBrush);
@@ -1408,7 +1418,7 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
   HPEN centerPen = CreatePen(PS_SOLID, 1, RGB(40, 40, 40));
   HPEN oldPen = (HPEN)SelectObject(hdc, centerPen);
   MoveToEx(hdc, r.left, centerY, nullptr);
-  LineTo(hdc, r.right, centerY);
+  LineTo(hdc, waveRight, centerY);
   SelectObject(hdc, oldPen);
   DeleteObject(centerPen);
 
@@ -1426,41 +1436,68 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
   int count = m_masterPeakCount;
   int columnsToShow = std::min(w, count);
 
-  // L channel (top half) — green
-  HPEN peakPenL = CreatePen(PS_SOLID, 1, RGB(40, 160, 60));
-  HPEN prevPen = (HPEN)SelectObject(hdc, peakPenL);
+  // L channel (top half) — green, red above 0dB
+  HPEN greenPenL = CreatePen(PS_SOLID, 1, RGB(40, 160, 60));
+  HPEN redPen = CreatePen(PS_SOLID, 1, RGB(220, 50, 50));
+  int clipY0dBTop = centerY - (int)(1.0f * halfH);
+  int clipY0dBBot = centerY + (int)(1.0f * halfH);
+  HPEN prevPen;
 
   for (int col = 0; col < columnsToShow; col++) {
     int bufIdx = (m_masterPeakHead - columnsToShow + col + MASTER_ROLLING_SIZE) % MASTER_ROLLING_SIZE;
     float pkL = m_masterPeakBufL[bufIdx];
 
-    int x = r.right - columnsToShow + col;
+    int x = waveRight - columnsToShow + col;
     int yL = centerY - (int)(pkL * halfH);
     if (yL < r.top) yL = r.top;
-    MoveToEx(hdc, x, centerY, nullptr);
-    LineTo(hdc, x, yL);
+
+    if (pkL > 1.0f) {
+      // Green part up to 0dB, red above
+      prevPen = (HPEN)SelectObject(hdc, greenPenL);
+      MoveToEx(hdc, x, centerY, nullptr);
+      LineTo(hdc, x, clipY0dBTop);
+      SelectObject(hdc, redPen);
+      MoveToEx(hdc, x, clipY0dBTop, nullptr);
+      LineTo(hdc, x, yL);
+      SelectObject(hdc, prevPen);
+    } else {
+      prevPen = (HPEN)SelectObject(hdc, greenPenL);
+      MoveToEx(hdc, x, centerY, nullptr);
+      LineTo(hdc, x, yL);
+      SelectObject(hdc, prevPen);
+    }
   }
 
-  SelectObject(hdc, prevPen);
-  DeleteObject(peakPenL);
-
-  // R channel (bottom half) — slightly different green
-  HPEN peakPenR = CreatePen(PS_SOLID, 1, RGB(30, 140, 50));
-  prevPen = (HPEN)SelectObject(hdc, peakPenR);
+  // R channel (bottom half)
+  HPEN greenPenR = CreatePen(PS_SOLID, 1, RGB(30, 140, 50));
 
   for (int col = 0; col < columnsToShow; col++) {
     int bufIdx = (m_masterPeakHead - columnsToShow + col + MASTER_ROLLING_SIZE) % MASTER_ROLLING_SIZE;
     float pkR = m_masterPeakBufR[bufIdx];
 
-    int x = r.right - columnsToShow + col;
+    int x = waveRight - columnsToShow + col;
     int yR = centerY + (int)(pkR * halfH);
     if (yR > r.bottom) yR = r.bottom;
-    MoveToEx(hdc, x, centerY, nullptr);
-    LineTo(hdc, x, yR);
+
+    if (pkR > 1.0f) {
+      prevPen = (HPEN)SelectObject(hdc, greenPenR);
+      MoveToEx(hdc, x, centerY, nullptr);
+      LineTo(hdc, x, clipY0dBBot);
+      SelectObject(hdc, redPen);
+      MoveToEx(hdc, x, clipY0dBBot, nullptr);
+      LineTo(hdc, x, yR);
+      SelectObject(hdc, prevPen);
+    } else {
+      prevPen = (HPEN)SelectObject(hdc, greenPenR);
+      MoveToEx(hdc, x, centerY, nullptr);
+      LineTo(hdc, x, yR);
+      SelectObject(hdc, prevPen);
+    }
   }
 
-  SelectObject(hdc, prevPen);
-  DeleteObject(peakPenR);
+  DeleteObject(greenPenL);
+  DeleteObject(greenPenR);
+  DeleteObject(redPen);
 
   // Clip line at 0dB (1.0 linear)
   int clipYTop = centerY - (int)(1.0f * halfH);
@@ -1468,9 +1505,9 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
   HPEN clipPen = CreatePen(PS_SOLID, 1, RGB(100, 40, 40));
   prevPen = (HPEN)SelectObject(hdc, clipPen);
   MoveToEx(hdc, r.left, clipYTop, nullptr);
-  LineTo(hdc, r.right, clipYTop);
+  LineTo(hdc, waveRight, clipYTop);
   MoveToEx(hdc, r.left, clipYBot, nullptr);
-  LineTo(hdc, r.right, clipYBot);
+  LineTo(hdc, waveRight, clipYBot);
   SelectObject(hdc, prevPen);
   DeleteObject(clipPen);
 
@@ -1479,6 +1516,69 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
   SetTextColor(hdc, RGB(100, 100, 100));
   RECT lblRect = { r.left + 6, r.top + 4, r.left + 120, r.top + 20 };
   DrawText(hdc, "MASTER", -1, &lblRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+
+  // dB scale (right column)
+  RECT colRect = { scaleLeft, r.top, r.right, r.bottom };
+  HBRUSH colBrush = CreateSolidBrush(RGB(25, 25, 25));
+  FillRect(hdc, &colRect, colBrush);
+  DeleteObject(colBrush);
+
+  HPEN borderPen2 = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
+  HPEN oldPen2 = (HPEN)SelectObject(hdc, borderPen2);
+  MoveToEx(hdc, scaleLeft, r.top, nullptr);
+  LineTo(hdc, scaleLeft, r.bottom);
+  SelectObject(hdc, oldPen2);
+  DeleteObject(borderPen2);
+
+  SetTextColor(hdc, g_theme.dbScaleText);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
+
+  RECT hdrRect = { scaleLeft + 2, r.top + 1, r.right - 2, r.top + 13 };
+  DrawText(hdc, "dB", -1, &hdrRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+  // -∞ at center
+  HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
+  HPEN tpOld = (HPEN)SelectObject(hdc, tickPen);
+  MoveToEx(hdc, scaleLeft + 1, centerY, nullptr);
+  LineTo(hdc, scaleLeft + 5, centerY);
+  SelectObject(hdc, tpOld);
+  RECT infR = { scaleLeft + 5, centerY - 6, r.right - 2, centerY + 6 };
+  DrawText(hdc, "-\xE2\x88\x9E", -1, &infR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+  static const double dbVals[] = { -48, -36, -24, -18, -12, -6, -3, 0 };
+  int lastYTop = centerY, lastYBot = centerY;
+  for (double db : dbVals) {
+    double lin = pow(10.0, db / 20.0);
+    int yOff = (int)(lin * (double)halfH);
+    if (yOff < 1) continue;
+
+    // Top half
+    int yt = centerY - yOff;
+    if (yt > r.top + 2 && lastYTop - yt >= 13) {
+      tpOld = (HPEN)SelectObject(hdc, tickPen);
+      MoveToEx(hdc, scaleLeft + 1, yt, nullptr);
+      LineTo(hdc, scaleLeft + 5, yt);
+      SelectObject(hdc, tpOld);
+      char lbl[8]; snprintf(lbl, sizeof(lbl), "%d", (int)db);
+      RECT tr = { scaleLeft + 5, yt - 6, r.right - 2, yt + 6 };
+      DrawText(hdc, lbl, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      lastYTop = yt;
+    }
+    // Bottom half
+    int yb = centerY + yOff;
+    if (yb < r.bottom - 2 && yb - lastYBot >= 13) {
+      tpOld = (HPEN)SelectObject(hdc, tickPen);
+      MoveToEx(hdc, scaleLeft + 1, yb, nullptr);
+      LineTo(hdc, scaleLeft + 5, yb);
+      SelectObject(hdc, tpOld);
+      char lbl[8]; snprintf(lbl, sizeof(lbl), "%d", (int)db);
+      RECT tr = { scaleLeft + 5, yb - 6, r.right - 2, yb + 6 };
+      DrawText(hdc, lbl, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      lastYBot = yb;
+    }
+  }
+  DeleteObject(tickPen);
+  SelectObject(hdc, oldFont);
 }
 
 void SneakPeak::DrawBottomPanel(HDC hdc)
@@ -1505,7 +1605,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
   RECT metersRect = { m_bottomPanelRect.left, m_bottomPanelRect.top + 1,
                       dividerX - 1, m_bottomPanelRect.bottom };
   m_metersRect = metersRect;
-  int meterCh = m_masterMode ? 2 : m_waveform.GetNumChannels();
+  int meterCh = (m_masterMode || m_meterFromMaster) ? 2 : m_waveform.GetNumChannels();
   m_levels.Draw(hdc, metersRect, meterCh);
 
   if (!m_waveform.HasItem() && !m_masterMode) return;
@@ -2433,6 +2533,8 @@ void SneakPeak::OnRightClick(int x, int y)
     MenuAppend(meterMenu, MF_STRING | (cur == MeterMode::PEAK ? MF_CHECKED : 0), CM_METER_PEAK, "Peak (PPM)");
     MenuAppend(meterMenu, MF_STRING | (cur == MeterMode::RMS  ? MF_CHECKED : 0), CM_METER_RMS,  "RMS (AES/EBU)");
     MenuAppend(meterMenu, MF_STRING | (cur == MeterMode::VU   ? MF_CHECKED : 0), CM_METER_VU,   "VU");
+    MenuAppend(meterMenu, MF_SEPARATOR, 0, "");
+    MenuAppend(meterMenu, MF_STRING | (m_meterFromMaster ? MF_CHECKED : 0), CM_METER_SOURCE_MASTER, "Source: Master");
     POINT pt = { x, y };
     ClientToScreen(m_hwnd, &pt);
     TrackPopupMenu(meterMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
@@ -2711,6 +2813,11 @@ void SneakPeak::OnContextMenuCommand(int id)
     case CM_METER_VU:
       m_levels.SetMode(MeterMode::VU);
       if (g_SetExtState) g_SetExtState("SneakPeak", "meter_mode", "vu", true);
+      InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+      break;
+    case CM_METER_SOURCE_MASTER:
+      m_meterFromMaster = !m_meterFromMaster;
+      if (g_SetExtState) g_SetExtState("SneakPeak", "meter_source", m_meterFromMaster ? "master" : "item", true);
       InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
       break;
     case CM_TOGGLE_SPECTRAL:
