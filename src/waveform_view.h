@@ -4,6 +4,7 @@
 #include "platform.h"
 #include "config.h"
 #include "globals.h"
+#include "multi_item_view.h"
 #include <vector>
 #include <string>
 #include <cmath>
@@ -35,8 +36,14 @@ public:
   void ClearItem();
   bool HasItem() const { return m_item != nullptr || m_standaloneMode; }
   MediaItem* GetItem() const { return m_item; }
-  bool IsMultiItem() const { return m_segments.size() > 1; }
+  bool IsMultiItem() const { return m_multiItemActive || m_segments.size() > 1; }
   const std::vector<ItemSegment>& GetSegments() const { return m_segments; }
+
+  // Multi-item view mode (Mix/Layered)
+  bool IsMultiItemActive() const { return m_multiItemActive; }
+  void SetMultiItemMode(MultiItemMode mode) { m_multiItem.SetMode(mode); m_peaksValid = false; }
+  MultiItemMode GetMultiItemMode() const { return m_multiItem.GetMode(); }
+  const MultiItemView& GetMultiItemView() const { return m_multiItem; }
 
   // Standalone file mode (no REAPER item)
   bool LoadFromFile(const std::string& path);
@@ -179,7 +186,9 @@ private:
   double SnapToZeroCrossing(double time) const;
   int GetChannelTop(int channel) const;
   int GetChannelHeight() const;
-  void LoadMultiItemAudio();
+  // Multi-item view
+  MultiItemView m_multiItem;
+  bool m_multiItemActive = false;
 
   // Item data
   MediaItem* m_item = nullptr;

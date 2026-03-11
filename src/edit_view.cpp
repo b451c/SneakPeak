@@ -74,6 +74,10 @@ void SneakPeak::Create()
       int h = atoi(mmh);
       if (h >= MINIMAP_HEIGHT && h <= 120) m_minimapHeight = h;
     }
+    const char* multiMode = g_GetExtState("SneakPeak", "multi_mode");
+    if (multiMode && strcmp(multiMode, "layered") == 0) {
+      m_waveform.SetMultiItemMode(MultiItemMode::LAYERED);
+    }
   }
 
   // Recalc layout after restoring settings (minimap visibility etc.)
@@ -611,7 +615,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_COMMAND: {
       int id = LOWORD(wParam);
-      if (id >= CM_UNDO && id <= CM_SUPPORT_PAYPAL) {
+      if (id >= CM_UNDO && id < CM_LAST) {
         OnContextMenuCommand(id);
         return 0;
       }
@@ -2245,6 +2249,20 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(viewMenu, MF_STRING, CM_MINIMAP,
              m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
 
+  // Multi-item view mode submenu (only when multi-item active)
+  if (m_waveform.IsMultiItemActive()) {
+    HMENU multiMenu = CreatePopupMenu();
+    MultiItemMode curMode = m_waveform.GetMultiItemMode();
+    MenuAppend(multiMenu, (curMode == MultiItemMode::MIX) ? (MF_STRING | MF_CHECKED) : MF_STRING,
+               CM_MULTI_MODE_MIX, "Mix (Sum)");
+    MenuAppend(multiMenu, (curMode == MultiItemMode::LAYERED) ? (MF_STRING | MF_CHECKED) : MF_STRING,
+               CM_MULTI_MODE_LAYERED, "Layered");
+    MenuAppendSubmenu(viewMenu, multiMenu, "Multi-Item View");
+#ifndef _WIN32
+    DestroyMenu(multiMenu);
+#endif
+  }
+
   HMENU supportMenu = CreatePopupMenu();
   MenuAppend(supportMenu, MF_STRING, CM_SUPPORT_KOFI, "Ko-fi");
   MenuAppend(supportMenu, MF_STRING, CM_SUPPORT_BMAC, "Buy Me a Coffee");
@@ -2368,6 +2386,18 @@ void SneakPeak::OnContextMenuCommand(int id)
         RecalcLayout(cr.right, cr.bottom);
         m_waveform.Invalidate();
       }
+      break;
+    case CM_MULTI_MODE_MIX:
+      m_waveform.SetMultiItemMode(MultiItemMode::MIX);
+      m_waveform.Invalidate();
+      if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "mix", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_MULTI_MODE_LAYERED:
+      m_waveform.SetMultiItemMode(MultiItemMode::LAYERED);
+      m_waveform.Invalidate();
+      if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "layered", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_TOGGLE_SPECTRAL:
       m_spectralVisible = !m_spectralVisible;

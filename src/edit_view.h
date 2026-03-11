@@ -86,6 +86,9 @@ enum ContextMenuID {
   CM_SUPPORT_PAYPAL,
   CM_NORMALIZE_LUFS,
   CM_NORMALIZE_LUFS_16,
+  CM_MULTI_MODE_MIX,
+  CM_MULTI_MODE_LAYERED,
+  CM_LAST // sentinel — keep last
 };
 
 class SneakPeak {

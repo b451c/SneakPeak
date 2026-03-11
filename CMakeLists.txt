@@ -34,6 +34,7 @@ add_library(reaper_sneakpeak SHARED
   src/levels_panel.cpp
   src/spectral_view.cpp
   src/minimap_view.cpp
+  src/multi_item_view.cpp
 )
 
 target_include_directories(reaper_sneakpeak PRIVATE
