@@ -79,6 +79,9 @@ void SneakPeak::Create()
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED);
     else if (multiMode && strcmp(multiMode, "layered_tracks") == 0)
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED_TRACKS);
+    const char* meterMode = g_GetExtState("SneakPeak", "meter_mode");
+    if (meterMode && strcmp(meterMode, "rms") == 0) m_levels.SetMode(MeterMode::RMS);
+    else if (meterMode && strcmp(meterMode, "vu") == 0) m_levels.SetMode(MeterMode::VU);
   }
 
   // Recalc layout after restoring settings (minimap visibility etc.)
@@ -469,7 +472,7 @@ void SneakPeak::OnTimer()
         double playPos = m_waveform.AbsTimeToRelTime(g_GetPlayPosition2());
         if (playPos < 0.0) playPos = 0.0;
         int center = static_cast<int>(playPos * sr);
-        int halfWin = sr / 40;
+        int halfWin = m_levels.GetIntegrationHalfWindow(sr);
         startFrame = center - halfWin;
         endFrame = center + halfWin;
       } else {
@@ -2180,6 +2183,22 @@ void SneakPeak::OnKeyDown(WPARAM key)
 
 void SneakPeak::OnRightClick(int x, int y)
 {
+  // Right-click on bottom panel (meters) → meter mode menu
+  POINT ptTest = { x, y };
+  if (PtInRect(&m_bottomPanelRect, ptTest)) {
+    HMENU meterMenu = CreatePopupMenu();
+    if (!meterMenu) return;
+    MeterMode cur = m_levels.GetMode();
+    MenuAppend(meterMenu, MF_STRING | (cur == MeterMode::PEAK ? MF_CHECKED : 0), CM_METER_PEAK, "Peak (PPM)");
+    MenuAppend(meterMenu, MF_STRING | (cur == MeterMode::RMS  ? MF_CHECKED : 0), CM_METER_RMS,  "RMS (AES/EBU)");
+    MenuAppend(meterMenu, MF_STRING | (cur == MeterMode::VU   ? MF_CHECKED : 0), CM_METER_VU,   "VU");
+    POINT pt = { x, y };
+    ClientToScreen(m_hwnd, &pt);
+    TrackPopupMenu(meterMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
+    DestroyMenu(meterMenu);
+    return;
+  }
+
   HMENU menu = CreatePopupMenu();
   if (!menu) return;
 
@@ -2429,6 +2448,21 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_waveform.Invalidate();
       if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "layered_tracks", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_METER_PEAK:
+      m_levels.SetMode(MeterMode::PEAK);
+      if (g_SetExtState) g_SetExtState("SneakPeak", "meter_mode", "peak", true);
+      InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+      break;
+    case CM_METER_RMS:
+      m_levels.SetMode(MeterMode::RMS);
+      if (g_SetExtState) g_SetExtState("SneakPeak", "meter_mode", "rms", true);
+      InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+      break;
+    case CM_METER_VU:
+      m_levels.SetMode(MeterMode::VU);
+      if (g_SetExtState) g_SetExtState("SneakPeak", "meter_mode", "vu", true);
+      InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
       break;
     case CM_TOGGLE_SPECTRAL:
       m_spectralVisible = !m_spectralVisible;

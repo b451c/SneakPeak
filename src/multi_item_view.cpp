@@ -366,7 +366,18 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
 
   COLORREF bgColor = g_theme.waveformBg;
 
-  for (int layerIdx = 0; layerIdx < (int)m_layers.size(); layerIdx++) {
+  // Build draw order: for LAYERED_TRACKS, group by track so same-track layers
+  // are drawn together (earlier tracks underneath, later tracks on top)
+  std::vector<int> drawOrder(m_layers.size());
+  for (int i = 0; i < (int)m_layers.size(); i++) drawOrder[i] = i;
+  if (m_mode == MultiItemMode::LAYERED_TRACKS) {
+    std::sort(drawOrder.begin(), drawOrder.end(), [this](int a, int b) {
+      return m_layers[a].trackColorIndex < m_layers[b].trackColorIndex;
+    });
+  }
+
+  for (int di = 0; di < (int)drawOrder.size(); di++) {
+    int layerIdx = drawOrder[di];
     const auto& layer = m_layers[layerIdx];
     if (layer.peakMax.empty()) continue;
 

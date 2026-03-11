@@ -89,6 +89,9 @@ enum ContextMenuID {
   CM_MULTI_MODE_MIX,
   CM_MULTI_MODE_LAYERED,
   CM_MULTI_MODE_LAYERED_TRACKS,
+  CM_METER_PEAK,
+  CM_METER_RMS,
+  CM_METER_VU,
   CM_LAST // sentinel — keep last
 };
 
