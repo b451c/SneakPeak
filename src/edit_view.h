@@ -175,6 +175,7 @@ private:
   RECT m_minimapRect = {};
   RECT m_scrollbarRect = {};
   RECT m_bottomPanelRect = {};
+  RECT m_metersRect = {};
 
   HWND m_hwnd = nullptr;
   WaveformView m_waveform;
@@ -279,6 +280,15 @@ private:
   void* m_previewReg = nullptr; // preview_register_t* (opaque to avoid header dep)
   PCM_source* m_previewSrc = nullptr;
   std::string m_previewTempPath;
+
+  // Master meter mode (when no item selected)
+  bool m_masterMode = false;
+  static const int MASTER_ROLLING_SIZE = 4096;
+  float m_masterPeakBufL[MASTER_ROLLING_SIZE] = {};
+  float m_masterPeakBufR[MASTER_ROLLING_SIZE] = {};
+  int m_masterPeakHead = 0;
+  int m_masterPeakCount = 0;
+  void DrawMasterWaveform(HDC hdc);
 
   static AudioClipboard s_clipboard;
   static const int TIMER_REFRESH = 100;

@@ -527,6 +527,30 @@ void SneakPeak::OnTimer()
         m_levels.Update(m_waveform.GetAudioData(), startFrame, endFrame, sr, nch, itemVol, playing, chActive);
       }
     }
+    // (master mode is toggled manually via MASTER tab, not auto-disabled here)
+  }
+
+  // Master meter mode (manually activated via MASTER tab)
+  if (m_masterMode) {
+    if (g_GetMasterTrack && g_Track_GetPeakInfo && g_GetPlayState) {
+      MediaTrack* master = g_GetMasterTrack(nullptr);
+      bool playing = (g_GetPlayState() & 1) != 0;
+      if (master) {
+        double pkL = g_Track_GetPeakInfo(master, 0);
+        double pkR = g_Track_GetPeakInfo(master, 1);
+        m_levels.UpdateFromTrackPeak(pkL, pkR, playing, 2);
+
+        // Push into rolling buffer
+        if (playing) {
+          m_masterPeakBufL[m_masterPeakHead] = (float)pkL;
+          m_masterPeakBufR[m_masterPeakHead] = (float)pkR;
+          m_masterPeakHead = (m_masterPeakHead + 1) % MASTER_ROLLING_SIZE;
+          if (m_masterPeakCount < MASTER_ROLLING_SIZE) m_masterPeakCount++;
+        }
+        InvalidateRect(m_hwnd, &m_waveformRect, FALSE);
+        InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+      }
+    }
   }
 }
 
@@ -795,7 +819,11 @@ void SneakPeak::OnPaint(HDC hdc)
 
   DrawModeBar(hdc);
   DrawRuler(hdc);
-  m_waveform.Paint(hdc);
+  if (m_masterMode) {
+    DrawMasterWaveform(hdc);
+  } else {
+    m_waveform.Paint(hdc);
+  }
   if (m_markers.m_showMarkers) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
   if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect);
   if (m_waveform.HasItem()) DrawSoloButton(hdc);
@@ -866,12 +894,26 @@ void SneakPeak::DrawModeBar(HDC hdc)
   bool isReaper = m_waveform.HasItem() && !m_waveform.IsStandaloneMode();
   bool isEmpty = !m_waveform.HasItem() && m_standaloneFiles.empty();
 
-  if (isEmpty) {
+  // MASTER tab — always available (on the right side, drawn later)
+  // We'll draw it after the main content
+
+  if (isEmpty && !m_masterMode) {
     // Empty state
     SetTextColor(hdc, g_theme.emptyText);
-    RECT textR = { xPos, m_modeBarRect.top, m_modeBarRect.right - 4, m_modeBarRect.bottom };
+    RECT textR = { xPos, m_modeBarRect.top, m_modeBarRect.right - 80, m_modeBarRect.bottom };
     DrawText(hdc, "SneakPeak - Drop audio file or select item", -1, &textR,
              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  } else if (isEmpty && m_masterMode) {
+    // Master mode active — show indicator
+    COLORREF accent = RGB(200, 80, 80);
+    HBRUSH accentBrush = CreateSolidBrush(accent);
+    RECT dot = { xPos, yMid - 3, xPos + 7, yMid + 4 };
+    FillRect(hdc, &dot, accentBrush);
+    DeleteObject(accentBrush);
+    xPos += 12;
+    SetTextColor(hdc, accent);
+    RECT labelR = { xPos, m_modeBarRect.top, xPos + 80, m_modeBarRect.bottom };
+    DrawText(hdc, "MASTER", -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   } else {
     // Mode indicator
     COLORREF accent = isStandalone && !isReaper ? g_theme.modeBarStandaloneAccent : g_theme.modeBarReaperAccent;
@@ -1052,6 +1094,42 @@ void SneakPeak::DrawModeBar(HDC hdc)
         }
       }
     }
+  }
+
+  // MASTER tab — right-aligned, always visible
+  {
+    SelectObject(hdc, g_fonts.normal11);
+    const char* ml = "MASTER";
+    RECT tsM = { 0, 0, 200, 20 };
+    DrawText(hdc, ml, -1, &tsM, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+    int tw = (int)(tsM.right - tsM.left) + 14;
+    int tabRight = m_modeBarRect.right - 6;
+    int tabLeft = tabRight - tw;
+
+    RECT tabR = { tabLeft, m_modeBarRect.top + 1, tabRight, m_modeBarRect.bottom - 1 };
+    HBRUSH tabBg = CreateSolidBrush(m_masterMode ? g_theme.modeBarActiveTab : g_theme.modeBarInactiveTab);
+    FillRect(hdc, &tabR, tabBg);
+    DeleteObject(tabBg);
+
+    if (m_masterMode) {
+      HPEN ulPen = CreatePen(PS_SOLID, 2, RGB(200, 80, 80));
+      HPEN ulPrev = (HPEN)SelectObject(hdc, ulPen);
+      MoveToEx(hdc, tabR.left, tabR.bottom - 1, nullptr);
+      LineTo(hdc, tabR.right, tabR.bottom - 1);
+      SelectObject(hdc, ulPrev);
+      DeleteObject(ulPen);
+    }
+
+    SetTextColor(hdc, m_masterMode ? RGB(220, 220, 220) : RGB(200, 80, 80));
+    RECT textR = { tabR.left + 7, tabR.top, tabR.right - 7, tabR.bottom };
+    DrawText(hdc, ml, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    ModeBarTab mbt;
+    mbt.rect = tabR;
+    mbt.closeRect = {};
+    mbt.fileIdx = -2; // special: MASTER tab
+    mbt.isReaper = false;
+    m_modeBarTabs.push_back(mbt);
   }
 
   SelectObject(hdc, oldFont);
@@ -1311,6 +1389,98 @@ void SneakPeak::UpdateSoloState()
   }
 }
 
+void SneakPeak::DrawMasterWaveform(HDC hdc)
+{
+  RECT r = m_waveformRect;
+  int w = r.right - r.left;
+  int h = r.bottom - r.top;
+  if (w <= 0 || h <= 0) return;
+
+  // Dark background
+  HBRUSH bgBrush = CreateSolidBrush(g_theme.waveformBg);
+  FillRect(hdc, &r, bgBrush);
+  DeleteObject(bgBrush);
+
+  int centerY = r.top + h / 2;
+  float halfH = (float)(h / 2) * 0.9f; // 90% of half-height
+
+  // Center line
+  HPEN centerPen = CreatePen(PS_SOLID, 1, RGB(40, 40, 40));
+  HPEN oldPen = (HPEN)SelectObject(hdc, centerPen);
+  MoveToEx(hdc, r.left, centerY, nullptr);
+  LineTo(hdc, r.right, centerY);
+  SelectObject(hdc, oldPen);
+  DeleteObject(centerPen);
+
+  if (m_masterPeakCount == 0) {
+    // No data yet — show label
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, g_theme.emptyText);
+    RECT textRect = r;
+    DrawText(hdc, "Master Output — play to see waveform", -1, &textRect,
+             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    return;
+  }
+
+  // Draw rolling waveform — most recent samples on the right
+  int count = m_masterPeakCount;
+  int columnsToShow = std::min(w, count);
+
+  // L channel (top half) — green
+  HPEN peakPenL = CreatePen(PS_SOLID, 1, RGB(40, 160, 60));
+  HPEN prevPen = (HPEN)SelectObject(hdc, peakPenL);
+
+  for (int col = 0; col < columnsToShow; col++) {
+    int bufIdx = (m_masterPeakHead - columnsToShow + col + MASTER_ROLLING_SIZE) % MASTER_ROLLING_SIZE;
+    float pkL = m_masterPeakBufL[bufIdx];
+
+    int x = r.right - columnsToShow + col;
+    int yL = centerY - (int)(pkL * halfH);
+    if (yL < r.top) yL = r.top;
+    MoveToEx(hdc, x, centerY, nullptr);
+    LineTo(hdc, x, yL);
+  }
+
+  SelectObject(hdc, prevPen);
+  DeleteObject(peakPenL);
+
+  // R channel (bottom half) — slightly different green
+  HPEN peakPenR = CreatePen(PS_SOLID, 1, RGB(30, 140, 50));
+  prevPen = (HPEN)SelectObject(hdc, peakPenR);
+
+  for (int col = 0; col < columnsToShow; col++) {
+    int bufIdx = (m_masterPeakHead - columnsToShow + col + MASTER_ROLLING_SIZE) % MASTER_ROLLING_SIZE;
+    float pkR = m_masterPeakBufR[bufIdx];
+
+    int x = r.right - columnsToShow + col;
+    int yR = centerY + (int)(pkR * halfH);
+    if (yR > r.bottom) yR = r.bottom;
+    MoveToEx(hdc, x, centerY, nullptr);
+    LineTo(hdc, x, yR);
+  }
+
+  SelectObject(hdc, prevPen);
+  DeleteObject(peakPenR);
+
+  // Clip line at 0dB (1.0 linear)
+  int clipYTop = centerY - (int)(1.0f * halfH);
+  int clipYBot = centerY + (int)(1.0f * halfH);
+  HPEN clipPen = CreatePen(PS_SOLID, 1, RGB(100, 40, 40));
+  prevPen = (HPEN)SelectObject(hdc, clipPen);
+  MoveToEx(hdc, r.left, clipYTop, nullptr);
+  LineTo(hdc, r.right, clipYTop);
+  MoveToEx(hdc, r.left, clipYBot, nullptr);
+  LineTo(hdc, r.right, clipYBot);
+  SelectObject(hdc, prevPen);
+  DeleteObject(clipPen);
+
+  // "MASTER" label
+  SetBkMode(hdc, TRANSPARENT);
+  SetTextColor(hdc, RGB(100, 100, 100));
+  RECT lblRect = { r.left + 6, r.top + 4, r.left + 120, r.top + 20 };
+  DrawText(hdc, "MASTER", -1, &lblRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+}
+
 void SneakPeak::DrawBottomPanel(HDC hdc)
 {
   // Dark background for entire bottom panel
@@ -1331,12 +1501,14 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
   if (infoW > 320) infoW = 320;
   int dividerX = m_bottomPanelRect.right - infoW;
 
-  // RMS meters on the left (fills most space)
+  // Meters on the left (fills most space)
   RECT metersRect = { m_bottomPanelRect.left, m_bottomPanelRect.top + 1,
                       dividerX - 1, m_bottomPanelRect.bottom };
-  m_levels.Draw(hdc, metersRect, m_waveform.GetNumChannels());
+  m_metersRect = metersRect;
+  int meterCh = m_masterMode ? 2 : m_waveform.GetNumChannels();
+  m_levels.Draw(hdc, metersRect, meterCh);
 
-  if (!m_waveform.HasItem()) return;
+  if (!m_waveform.HasItem() && !m_masterMode) return;
 
   // Divider line
   HPEN divPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
@@ -1529,12 +1701,23 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           OnModeBarCloseTab(tab.fileIdx);
           return;
         }
-        if (tab.isReaper) {
+        if (tab.fileIdx == -2) {
+          // Toggle MASTER mode
+          m_masterMode = !m_masterMode;
+          if (m_masterMode) {
+            // Clear rolling buffer on activation
+            m_masterPeakHead = 0;
+            m_masterPeakCount = 0;
+          }
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+        } else if (tab.isReaper) {
           // Switch to REAPER mode
+          m_masterMode = false;
           if (m_waveform.IsStandaloneMode()) SaveCurrentStandaloneState();
           LoadSelectedItem();
         } else {
           // Switch to standalone tab
+          m_masterMode = false;
           if (m_waveform.IsStandaloneMode() && tab.fileIdx == m_activeFileIdx) return;
           if (m_waveform.IsStandaloneMode()) SaveCurrentStandaloneState();
           RestoreStandaloneState(tab.fileIdx);

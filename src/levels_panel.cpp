@@ -80,6 +80,46 @@ int LevelsPanel::GetIntegrationHalfWindow(int sampleRate) const
   return sampleRate * 3 / 20;
 }
 
+void LevelsPanel::UpdateFromTrackPeak(double peakLinL, double peakLinR, bool playing, int nch)
+{
+  double peakDecay = 0.3, peakHoldDecay = 0.3, decayRate = 0.5;
+
+  if (!playing) {
+    if (m_wasPlaying || m_barL > -60.0 || m_barR > -60.0) {
+      m_barL = std::max(-60.0, m_barL - decayRate);
+      m_barR = std::max(-60.0, m_barR - decayRate);
+      m_peakL = std::max(-60.0, m_peakL - peakDecay);
+      m_peakR = std::max(-60.0, m_peakR - peakDecay);
+      m_peakHoldL = std::max(-60.0, m_peakHoldL - peakHoldDecay);
+      m_peakHoldR = std::max(-60.0, m_peakHoldR - peakHoldDecay);
+    }
+    m_wasPlaying = false;
+    return;
+  }
+  m_wasPlaying = true;
+
+  double dbL = (peakLinL > 1e-10) ? 20.0 * std::log10(peakLinL) : -60.0;
+  double dbR = (nch >= 2 && peakLinR > 1e-10) ? 20.0 * std::log10(peakLinR) : dbL;
+  dbL = std::max(-60.0, std::min(0.0, dbL));
+  dbR = std::max(-60.0, std::min(0.0, dbR));
+
+  // Instant attack for bars (Track_GetPeakInfo already smoothed by REAPER)
+  m_barL = dbL;
+  m_barR = dbR;
+
+  // Peak indicator
+  if (dbL > m_peakL) m_peakL = dbL;
+  else m_peakL = std::max(dbL, m_peakL - peakDecay);
+  if (dbR > m_peakR) m_peakR = dbR;
+  else m_peakR = std::max(dbR, m_peakR - peakDecay);
+
+  // Peak hold
+  if (dbL >= m_peakHoldL) { m_peakHoldL = dbL; m_peakHoldCountL = 0; }
+  else if (++m_peakHoldCountL > PEAK_HOLD_TICKS) { m_peakHoldL = std::max(dbL, m_peakHoldL - peakHoldDecay); }
+  if (dbR >= m_peakHoldR) { m_peakHoldR = dbR; m_peakHoldCountR = 0; }
+  else if (++m_peakHoldCountR > PEAK_HOLD_TICKS) { m_peakHoldR = std::max(dbR, m_peakHoldR - peakHoldDecay); }
+}
+
 void LevelsPanel::Update(const std::vector<double>& audio, int startFrame,
                          int endFrame, int sampleRate, int nch, double itemVol, bool playing,
                          const bool* channelActive)

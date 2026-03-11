@@ -96,6 +96,11 @@ extern void (*g_UpdateTimeline)();
 // Time selection
 extern void (*g_GetSet_LoopTimeRange2)(ReaProject* proj, bool isSet, bool isLoop, double* startOut, double* endOut, bool allowautoseek);
 
+// Master track metering
+extern MediaTrack* (*g_GetMasterTrack)(ReaProject* proj);
+extern double (*g_Track_GetPeakInfo)(MediaTrack* track, int channel);
+extern double (*g_Track_GetPeakHoldDB)(MediaTrack* track, int channel, bool clear);
+
 // Pointer validation
 extern bool (*g_ValidatePtr2)(ReaProject* proj, void* pointer, const char* ctypename);
 

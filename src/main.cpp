@@ -86,6 +86,11 @@
 // Theme
 #define REAPERAPI_WANT_GetThemeColor
 
+// Master track metering
+#define REAPERAPI_WANT_GetMasterTrack
+#define REAPERAPI_WANT_Track_GetPeakInfo
+#define REAPERAPI_WANT_Track_GetPeakHoldDB
+
 // Pointer validation
 #define REAPERAPI_WANT_ValidatePtr2
 
@@ -311,6 +316,9 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_GetSet_LoopTimeRange2 = GetSet_LoopTimeRange2;
 
   g_GetUserInputs = GetUserInputs;
+  g_GetMasterTrack = GetMasterTrack;
+  g_Track_GetPeakInfo = Track_GetPeakInfo;
+  g_Track_GetPeakHoldDB = Track_GetPeakHoldDB;
   g_ValidatePtr2 = ValidatePtr2;
   g_CalculateNormalization = (double(*)(PCM_source*, int, double, double, double))
       rec->GetFunc("CalculateNormalization");

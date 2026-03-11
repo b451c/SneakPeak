@@ -28,6 +28,8 @@ public:
   void Update(const std::vector<double>& audio, int startFrame,
               int endFrame, int sampleRate, int nch, double itemVol, bool playing,
               const bool* channelActive = nullptr);
+  // Feed pre-computed peak values directly (e.g. from Track_GetPeakInfo)
+  void UpdateFromTrackPeak(double peakLinL, double peakLinR, bool playing, int nch);
   void Draw(HDC hdc, RECT rect, int nch);
   bool IsDecaying() const { return m_barL > -59.0 || m_barR > -59.0 || m_peakHoldL > -59.0 || m_peakHoldR > -59.0; }
 
