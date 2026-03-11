@@ -79,6 +79,8 @@ void SneakPeak::Create()
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED);
     else if (multiMode && strcmp(multiMode, "layered_tracks") == 0)
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED_TRACKS);
+    const char* joinLines = g_GetExtState("SneakPeak", "show_join_lines");
+    if (joinLines && joinLines[0] == '0') m_waveform.SetShowJoinLines(false);
     const char* meterMode = g_GetExtState("SneakPeak", "meter_mode");
     if (meterMode && strcmp(meterMode, "rms") == 0) m_levels.SetMode(MeterMode::RMS);
     else if (meterMode && strcmp(meterMode, "vu") == 0) m_levels.SetMode(MeterMode::VU);
@@ -484,7 +486,15 @@ void SneakPeak::OnTimer()
       double itemVol = m_waveform.IsMultiItem() ? 1.0
         : (g_GetMediaItemInfo_Value ? g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_VOL") : 1.0);
       const bool chActive[2] = { m_waveform.IsChannelActive(0), m_waveform.IsChannelActive(1) };
-      m_levels.Update(m_waveform.GetAudioData(), startFrame, endFrame, sr, nch, itemVol, playing, chActive);
+
+      if (m_waveform.IsMultiItemActive()) {
+        // Multi-item: sum layers into temp buffer for metering
+        std::vector<double> mixBuf;
+        m_waveform.GetMultiItemView().GetMixedAudio(startFrame, endFrame, nch, mixBuf);
+        m_levels.Update(mixBuf, 0, (int)mixBuf.size() / std::max(1, nch), sr, nch, itemVol, playing, chActive);
+      } else {
+        m_levels.Update(m_waveform.GetAudioData(), startFrame, endFrame, sr, nch, itemVol, playing, chActive);
+      }
     }
   }
 }
@@ -2308,6 +2318,9 @@ void SneakPeak::OnRightClick(int x, int y)
                CM_MULTI_MODE_LAYERED, "Layered (per Item)");
     MenuAppend(multiMenu, (curMode == MultiItemMode::LAYERED_TRACKS) ? (MF_STRING | MF_CHECKED) : MF_STRING,
                CM_MULTI_MODE_LAYERED_TRACKS, "Layered (per Track)");
+    MenuAppendSeparator(multiMenu);
+    MenuAppend(multiMenu, MF_STRING, CM_SHOW_JOIN_LINES,
+               m_waveform.GetShowJoinLines() ? "Show Join Lines  \xE2\x9C\x93" : "Show Join Lines");
     MenuAppendSubmenu(viewMenu, multiMenu, "Multi-Item View");
   }
 
@@ -2447,6 +2460,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED_TRACKS);
       m_waveform.Invalidate();
       if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "layered_tracks", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_SHOW_JOIN_LINES:
+      m_waveform.SetShowJoinLines(!m_waveform.GetShowJoinLines());
+      if (g_SetExtState) g_SetExtState("SneakPeak", "show_join_lines",
+                                        m_waveform.GetShowJoinLines() ? "1" : "0", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_METER_PEAK:

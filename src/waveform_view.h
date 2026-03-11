@@ -43,6 +43,8 @@ public:
   bool IsMultiItemActive() const { return m_multiItemActive; }
   void SetMultiItemMode(MultiItemMode mode) { m_multiItem.SetMode(mode); m_peaksValid = false; }
   MultiItemMode GetMultiItemMode() const { return m_multiItem.GetMode(); }
+  void SetShowJoinLines(bool show) { m_showJoinLines = show; }
+  bool GetShowJoinLines() const { return m_showJoinLines; }
   const MultiItemView& GetMultiItemView() const { return m_multiItem; }
   void SetBatchGainOffset(double linearOffset);
   double GetBatchGainOffset() const { return m_batchGainOffset; }
@@ -191,6 +193,7 @@ private:
   // Multi-item view
   MultiItemView m_multiItem;
   bool m_multiItemActive = false;
+  bool m_showJoinLines = true;
   double m_batchGainOffset = 1.0; // visual gain multiplier for batch mode (linear)
 
   // Item data

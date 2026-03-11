@@ -64,6 +64,10 @@ public:
   double GetTimelineEnd() const { return m_timelineEnd; }
   double GetTimelineDuration() const { return m_timelineEnd - m_timelineStart; }
   const std::vector<ItemLayer>& GetLayers() const { return m_layers; }
+  // Fill buffer with mixed audio for a frame range (for metering)
+  void GetMixedAudio(int startFrame, int endFrame, int numChannels,
+                     std::vector<double>& out) const;
+
   void Invalidate() { m_peaksValid = false; }
   void Clear();
 

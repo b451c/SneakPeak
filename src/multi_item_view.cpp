@@ -181,6 +181,36 @@ double MultiItemView::GetLayerSample(const ItemLayer& layer, int timelineFrame, 
   return layer.audio[idx];
 }
 
+void MultiItemView::GetMixedAudio(int startFrame, int endFrame, int numChannels,
+                                  std::vector<double>& out) const
+{
+  if (m_layers.empty() || startFrame >= endFrame) {
+    out.clear();
+    return;
+  }
+  int frames = endFrame - startFrame;
+  int nch = std::max(1, std::min(2, numChannels));
+  out.assign((size_t)frames * nch, 0.0);
+
+  for (const auto& layer : m_layers) {
+    // Compute overlap between [startFrame, endFrame) and layer's frame range
+    int layerEnd = layer.audioStartFrame + layer.audioFrameCount;
+    int from = std::max(startFrame, layer.audioStartFrame);
+    int to = std::min(endFrame, layerEnd);
+    if (from >= to) continue;
+
+    for (int f = from; f < to; f++) {
+      int layerF = f - layer.audioStartFrame;
+      int outIdx = (f - startFrame) * nch;
+      for (int ch = 0; ch < nch; ch++) {
+        size_t srcIdx = (size_t)layerF * nch + ch;
+        if (srcIdx < layer.audio.size())
+          out[outIdx + ch] += layer.audio[srcIdx];
+      }
+    }
+  }
+}
+
 void MultiItemView::UpdatePeaks(double viewStart, double viewDur, int width, int numChannels,
                                 std::vector<double>& peakMax, std::vector<double>& peakMin,
                                 std::vector<double>& peakRMS)
