@@ -148,11 +148,13 @@ void SneakPeak::LoadSelectedItem()
     });
 
     DBG("[SneakPeak] Multi-item: %d items selected\n", (int)items.size());
+#ifdef SNEAKPEAK_DEBUG
     for (size_t i = 0; i < items.size() && i < 8; i++) {
       double p = g_GetMediaItemInfo_Value(items[i], "D_POSITION");
       double l = g_GetMediaItemInfo_Value(items[i], "D_LENGTH");
       DBG("[SneakPeak]   item[%d]: pos=%.3f len=%.3f\n", (int)i, p, l);
     }
+#endif
 
     if (items.size() > 1) {
       m_waveform.SetItems(items);
@@ -2398,12 +2400,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         int newMode = (chanMode == 2) ? 0 : 2;
         DBG("[SneakPeak] DOWNMIX: pCM=%p chanMode=%d -> newMode=%d\n", (void*)pCM, chanMode, newMode);
         if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-        int* pSet = (int*)g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", &newMode);
-        DBG("[SneakPeak] DOWNMIX: after set pSet=%p\n", (void*)pSet);
-        // Verify it was set
-        int* pVerify = (int*)g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", nullptr);
-        int verifyMode = pVerify ? *pVerify : -999;
-        DBG("[SneakPeak] DOWNMIX: verify after set: %d (expected %d)\n", verifyMode, newMode);
+        g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", &newMode);
         if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Toggle Mono Downmix", -1);
         m_lastChanMode = newMode;
         if (g_UpdateArrange) g_UpdateArrange();
