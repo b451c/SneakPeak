@@ -148,6 +148,7 @@ void SneakPeak::LoadSelectedItem()
 
     if (items.size() > 1) {
       m_waveform.SetItems(items);
+      m_waveform.UpdateFadeCache(); // clear stale single-item fades immediately
       m_spectralVisible = false;  // spectral is per-item, reset on switch
       m_spectral.ClearSpectrum();
       m_spectral.Invalidate();
