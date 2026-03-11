@@ -180,6 +180,7 @@ private:
   WaveformView m_waveform;
   Toolbar m_toolbar;
 
+  bool m_pendingClose = false;
   bool m_dragging = false;
   bool m_scrollbarDragging = false;
   int m_lastMouseX = 0;

@@ -111,9 +111,7 @@ void SneakPeak::Destroy()
 void SneakPeak::Toggle()
 {
   if (!m_hwnd) return;
-  // Destroy window to properly remove from docker (SWS pattern)
-  if (g_SetExtState) g_SetExtState("SneakPeak", "was_visible", "0", true);
-  Destroy();
+  m_pendingClose = true;
 }
 
 bool SneakPeak::IsVisible() const
@@ -252,6 +250,12 @@ void SneakPeak::LoadSelectedItem()
 
 void SneakPeak::OnTimer()
 {
+  if (m_pendingClose) {
+    m_pendingClose = false;
+    if (g_SetExtState) g_SetExtState("SneakPeak", "was_visible", "0", true);
+    Destroy();
+    return;
+  }
   if (!m_hwnd || !IsVisible()) return;
 
   // Validate cached item pointer — may become dangling after split/snap/delete in arrange
@@ -657,11 +661,9 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_COMMAND: {
       int id = LOWORD(wParam);
       if (id == IDCANCEL) {
-        // Docker [x] button sends IDCANCEL — destroy window (SWS pattern)
-        // The SneakPeak object persists; window is recreated on next toggle.
-        DBG("[SneakPeak] WM_COMMAND IDCANCEL — destroying window\n");
-        if (g_SetExtState) g_SetExtState("SneakPeak", "was_visible", "0", true);
-        Destroy();
+        // Docker [x] button sends IDCANCEL — defer destruction to OnTimer
+        // to avoid re-entrancy crash (destroying window inside its own DlgProc)
+        m_pendingClose = true;
         return 0;
       }
       if (id >= CM_UNDO && id < CM_LAST) {
@@ -694,9 +696,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     case WM_CLOSE:
-      DBG("[SneakPeak] WM_CLOSE received — destroying window\n");
-      if (g_SetExtState) g_SetExtState("SneakPeak", "was_visible", "0", true);
-      Destroy();
+      m_pendingClose = true;
       return 0;
 
     case WM_DESTROY:
@@ -2172,7 +2172,17 @@ void SneakPeak::OnKeyDown(WPARAM key)
       if (ctrl) UndoRestore();
       break;
     case 'S':
-      if (ctrl) SaveStandaloneFile();
+    case 's':
+      if (ctrl) {
+        SaveStandaloneFile();
+      } else if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+        SyncSelectionToReaper();
+        if (m_waveform.HasSelection() && g_Main_OnCommand) {
+          g_Main_OnCommand(40061, 0); // Split at time selection (both edges)
+        } else if (g_Main_OnCommand) {
+          g_Main_OnCommand(40012, 0); // Split at edit cursor
+        }
+      }
       break;
     case 'N':
       if (ctrl) DoNormalize();

@@ -118,7 +118,7 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
     if (k == VK_HOME || k == VK_END || k == VK_SPACE || k == VK_ESCAPE || k == VK_TAB) handled = true;
     else if (k == VK_DELETE || k == VK_BACK) handled = true;
     else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A' || k == 'S')) handled = true;
-    else if (!ctrl && (k == 'M' || k == 'G' || k == 'E')) handled = true;
+    else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S')) handled = true;
     if (handled) {
       SendMessage(ourHwnd, WM_KEYDOWN, msg->wParam, msg->lParam);
       return 1;
