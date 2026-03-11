@@ -29,12 +29,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [1.3.0] - 2026-03-09
 
 ### Added
-- **SDK peak rendering (v2.0)** — Waveform display powered by REAPER's `GetMediaItemTake_Peaks` API. Zero RAM usage for waveform display in REAPER mode.
-- **Lazy audio loading** — Audio data loaded on-demand only for destructive operations, spectral analysis, clipboard, and export. Massive memory savings for large files.
-- **Dual-mode rendering** — SDK peaks for REAPER single-item, legacy full-audio for standalone/multi-item/old REAPER.
-- **Minimap SDK peaks** — Minimap uses SDK peak rendering with graceful fallback.
-- **Levels meter graceful degradation** — Meters work without loaded audio (view-based estimation).
-- **Snap graceful degradation** — Snap to zero-crossing works with SDK peaks when possible.
+- **GDI resource caching** — Pen creation moved out of draw loops, incremental time stepping in waveform rendering.
+- **Safety fixes** — Bounds checks in levels panel and mono downmix, minimap pen restore, spectral mutex, off-by-one fixes.
+- **Config constants** — Magic numbers extracted to `config.h` (EDGE_ZONE, PLAY_GRACE_TICKS, ZERO_SNAP_RANGE).
+
+### Changed
+- **UpdateSoloState()** moved out of paint into OnTimer() for cleaner separation.
+- **Dead code cleanup** — Removed empty blocks, unused variables, consolidated debug logging.
 
 ---
 
