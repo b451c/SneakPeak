@@ -1026,41 +1026,51 @@ void WaveformView::DrawClipIndicators(HDC hdc)
 void WaveformView::DrawItemBoundaries(HDC hdc)
 {
   if (m_multiItemActive) {
-    // Draw join lines where items meet (crossfade midpoint or shared edge)
+    // Draw join lines where items meet or overlap (crossfade midpoint)
     const auto& layers = m_multiItem.GetLayers();
     if (layers.empty()) return;
 
-    // Collect all edges (end of one item near start of another = join)
-    static const double JOIN_THRESH = 0.05; // 50ms tolerance for matching edges
-    struct Edge { double time; bool isEnd; int layerIdx; };
-    std::vector<Edge> edges;
-    edges.reserve(layers.size() * 2);
-    for (int i = 0; i < (int)layers.size(); i++) {
-      double relStart = layers[i].position - m_itemPosition;
-      double relEnd = relStart + layers[i].duration;
-      edges.push_back({ relStart, false, i });
-      edges.push_back({ relEnd, true, i });
-    }
-    std::sort(edges.begin(), edges.end(), [](const Edge& a, const Edge& b) {
-      return a.time < b.time;
-    });
-
-    // Find join points: an end-edge near a start-edge = items meeting
+    // Check all pairs of items for adjacency or overlap
+    static const double JOIN_THRESH = 0.5; // max gap to still consider a join (500ms)
     std::vector<double> joinTimes;
-    for (int i = 0; i < (int)edges.size(); i++) {
-      if (!edges[i].isEnd) continue; // only match from end edges
-      for (int j = i + 1; j < (int)edges.size(); j++) {
-        double dt = edges[j].time - edges[i].time;
-        if (dt > JOIN_THRESH) break; // too far
-        if (!edges[j].isEnd) {
-          // End of item i meets start of item j — join at midpoint
-          joinTimes.push_back((edges[i].time + edges[j].time) * 0.5);
-          break;
+    int n = (int)layers.size();
+    for (int i = 0; i < n; i++) {
+      double endA = (layers[i].position - m_itemPosition) + layers[i].duration;
+      for (int j = i + 1; j < n; j++) {
+        double startB = layers[j].position - m_itemPosition;
+        double endB = startB + layers[j].duration;
+        double startA = layers[i].position - m_itemPosition;
+
+        // Check both directions: A.end meets B.start, or B.end meets A.start
+        double gap1 = startB - endA;   // positive = gap, negative = overlap
+        double gap2 = startA - endB;
+
+        if (gap1 >= -layers[i].duration && gap1 <= JOIN_THRESH) {
+          // A ends near/at/overlapping B start
+          if (gap1 < 0.0) {
+            // Overlap: midpoint of overlap region
+            double overlapStart = std::max(startA, startB);
+            double overlapEnd = std::min(endA, endB);
+            joinTimes.push_back((overlapStart + overlapEnd) * 0.5);
+          } else {
+            // Small gap or exact match: midpoint of gap
+            joinTimes.push_back((endA + startB) * 0.5);
+          }
+        } else if (gap2 >= -layers[j].duration && gap2 <= JOIN_THRESH) {
+          // B ends near/at/overlapping A start
+          if (gap2 < 0.0) {
+            double overlapStart = std::max(startA, startB);
+            double overlapEnd = std::min(endA, endB);
+            joinTimes.push_back((overlapStart + overlapEnd) * 0.5);
+          } else {
+            joinTimes.push_back((endB + startA) * 0.5);
+          }
         }
       }
     }
 
-    // Deduplicate join times within pixel distance
+    // Sort and deduplicate within pixel distance
+    std::sort(joinTimes.begin(), joinTimes.end());
     HPEN pen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
     HPEN oldPen = (HPEN)SelectObject(hdc, pen);
     int lastDrawnX = -999;
