@@ -4,6 +4,28 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-03-12
+
+### Added
+- **Master meter mode** - Click the MASTER tab in the mode bar to monitor master track output with a real-time rolling peak waveform (L channel up, R channel down from center) and level meters.
+- **Clipping indicator** - Master waveform turns red above 0dB for instant visual feedback on clipping.
+- **dB scale in master view** - Familiar dB scale column on the right side of the master waveform.
+- **Master Output meter source** - Right-click the meter panel and enable "Master Output" to read meters from the master track while viewing item/multi-item waveforms. Persisted across sessions.
+- **S shortcut** - Split item at cursor position.
+
+### Fixed
+- **Meter accuracy** - Take volume (D_VOL) now included in level calculation alongside item volume for correct readings.
+- **Multi-item volume tracking** - Volume changes on REAPER timeline now detected and auto-reloaded (~1s polling).
+- **Meter sync** - Latency-compensated playback position (GetPlayPosition) used for meter timing instead of buffer position.
+- **SWELL menu checkmarks** - Fixed MF_CHECKED causing grayed-out menu items on macOS (SWELL bug workaround).
+- **Docker close crash** - Fixed crash when closing docked window on macOS with deferred destruction.
+
+### Changed
+- **GDI caching for meters** - Pre-created brushes and pens reused per frame (0 allocations per frame instead of ~12-15).
+- **Master meter ballistics** - Mode-dependent attack/decay matching item meter behavior (Peak: instant attack + slow decay, VU: sluggish symmetric, RMS: fast decay).
+
+---
+
 ## [1.4.0] - 2026-03-11
 
 ### Added
