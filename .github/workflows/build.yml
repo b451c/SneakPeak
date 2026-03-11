@@ -72,7 +72,7 @@ jobs:
           body: |
             ## SneakPeak ${{ github.ref_name }}
 
-            Native C++ extension for REAPER — precision waveform item editor with spectral analysis, multi-item layering, and real-time metering.
+            Native C++ extension for REAPER - precision waveform item editor with spectral analysis, multi-item layering, and real-time metering.
 
             ### Downloads
 

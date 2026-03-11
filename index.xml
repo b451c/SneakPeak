@@ -24,7 +24,7 @@
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Peak/RMS/VU metering with AES/EBU standard integration\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Minimap, markers, gain knob, solo button\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Standalone WAV editing with drag-and-drop\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab SDK peak rendering - zero RAM for waveform display\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Full audio loading for accurate waveform display\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Dockable window, persistent settings\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Zero dependencies - pure C++ extension\sa180\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Requirements\par}

@@ -32,14 +32,14 @@ Debug builds log to `/tmp/sneakpeak_debug.log`.
 
 - C++17, no exceptions, no RTTI
 - SWELL API for cross-platform windowing (no direct Win32 or Cocoa calls in core code)
-- Named constants in `config.h` — no magic numbers
+- Named constants in `config.h` - no magic numbers
 - Compile with zero warnings (`-Wall -Wextra -Wshadow -Wconversion`)
 
 ## Pull Request Process
 
 1. Fork the repository and create a feature branch (`git checkout -b feature/my-feature`)
 2. Make your changes and ensure the build compiles with zero warnings
-3. Test in REAPER — verify the extension loads, basic view/selection/editing works
+3. Test in REAPER - verify the extension loads, basic view/selection/editing works
 4. Commit with a descriptive message
 5. Push and open a Pull Request against `main`
 
