@@ -90,6 +90,7 @@ void SneakPeak::Destroy()
 {
   if (!m_hwnd) return;
   StandaloneCleanupPreview();
+  if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
   CleanupDragTemp();
   KillTimer(m_hwnd, TIMER_REFRESH);
   if (g_DockWindowRemove) g_DockWindowRemove(m_hwnd);
@@ -291,7 +292,7 @@ void SneakPeak::OnTimer()
     // Grace period countdown after play start
     if (m_playGraceTicks > 0) m_playGraceTicks--;
 
-    // Note: no auto-stop — user controls playback via spacebar
+    // No auto-stop — user controls playback via spacebar
 
     if (!playing && m_wasPlaying) {
       m_startedPlayback = false;
@@ -300,8 +301,37 @@ void SneakPeak::OnTimer()
     m_wasPlaying = playing;
 
     if (playing) {
+      // Scroll view to follow playhead when it exits visible area
+      if (g_GetPlayPosition2 && m_waveform.HasItem() && !m_waveform.IsStandaloneMode()) {
+        double relPos = m_waveform.AbsTimeToRelTime(g_GetPlayPosition2());
+        double viewStart = m_waveform.GetViewStart();
+        double viewEnd = m_waveform.GetViewEnd();
+        if (relPos >= 0.0 && relPos <= m_waveform.GetItemDuration() &&
+            (relPos < viewStart || relPos > viewEnd)) {
+          double newStart = relPos - m_waveform.GetViewDuration() * 0.1;
+          if (newStart < 0.0) newStart = 0.0;
+          m_waveform.SetViewStart(newStart);
+          m_waveform.Invalidate();
+        }
+      }
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
+  }
+
+  // Standalone preview: follow playhead (independent of REAPER transport)
+  if (m_previewActive && m_previewReg && m_waveform.IsStandaloneMode()) {
+    auto* reg = (preview_register_t*)m_previewReg;
+    double pos = reg->curpos;
+    double viewStart = m_waveform.GetViewStart();
+    double viewEnd = m_waveform.GetViewEnd();
+    if (pos >= 0.0 && pos <= m_waveform.GetItemDuration() &&
+        (pos < viewStart || pos > viewEnd)) {
+      double newStart = pos - m_waveform.GetViewDuration() * 0.1;
+      if (newStart < 0.0) newStart = 0.0;
+      m_waveform.SetViewStart(newStart);
+      m_waveform.Invalidate();
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
   // Keep repainting while RMS meters are decaying after stop
@@ -1656,6 +1686,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     if (g_SetEditCurPos)
       g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), false, false);
     m_waveform.ClearSelection();
+    SyncSelectionToReaper();
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
@@ -2050,6 +2081,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case VK_ESCAPE:
       if (m_waveform.HasSelection()) {
         m_waveform.ClearSelection();
+        SyncSelectionToReaper();
         InvalidateRect(m_hwnd, nullptr, FALSE);
       } else if (g_OnStopButton) {
         g_OnStopButton();
@@ -2454,6 +2486,7 @@ void SneakPeak::StandaloneUndoSave()
     m_standaloneUndoStack.erase(m_standaloneUndoStack.begin());
   m_standaloneUndoStack.push_back(data);
   m_hasUndo = true;
+  m_previewCacheDirty = true;
 }
 
 void SneakPeak::StandaloneUndoRestore()
@@ -2475,6 +2508,7 @@ void SneakPeak::StandaloneUndoRestore()
   m_waveform.Invalidate();
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_dirty = true;
+  m_previewCacheDirty = true;
   UpdateTitle();
   InvalidateRect(m_hwnd, nullptr, FALSE);
   DBG("[SneakPeak] Standalone undo (stack=%d, frames=%d, dur=%.3f)\n",
@@ -2616,11 +2650,15 @@ void SneakPeak::OnModeBarCloseTab(int idx)
   if (isActiveTab)
     m_standaloneFiles[idx].dirty = m_dirty;
 
-  // Dirty check
+  // Dirty check: Yes=save+close, No=close without saving, Cancel=abort
   if (m_standaloneFiles[idx].dirty) {
-    int result = MessageBox(m_hwnd, "This file has unsaved changes. Close anyway?",
-                            "SneakPeak", MB_YESNO | MB_ICONQUESTION);
-    if (result != IDYES) return;
+    int result = MessageBox(m_hwnd, "Save changes before closing?",
+                            "SneakPeak", MB_YESNOCANCEL | MB_ICONQUESTION);
+    if (result == IDCANCEL) return;
+    if (result == IDYES) {
+      // Save if this is the active tab
+      if (isActiveTab) SaveStandaloneFile();
+    }
   }
 
   bool wasActive = (m_waveform.IsStandaloneMode() && idx == m_activeFileIdx);
@@ -2656,6 +2694,7 @@ void SneakPeak::LoadStandaloneFile(const char* path)
 {
   if (!path || !path[0]) return;
   StandaloneCleanupPreview();
+  if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
   m_standaloneUndoStack.clear();
   m_waveform.ClearStandaloneFade();
   m_waveform.ClearStandaloneGain();
@@ -2672,6 +2711,7 @@ void SneakPeak::LoadStandaloneFile(const char* path)
   m_wavAudioFormat = m_waveform.GetStandaloneAudioFormat();
   m_hasUndo = false;
   m_dirty = false;
+  m_previewCacheDirty = true;
 
   // Show gain panel in standalone mode
   m_gainPanel.ShowStandalone();
@@ -2828,10 +2868,7 @@ void SneakPeak::StandaloneCleanupPreview()
     delete m_previewSrc;
     m_previewSrc = nullptr;
   }
-  if (!m_previewTempPath.empty()) {
-    remove(m_previewTempPath.c_str());
-    m_previewTempPath.clear();
-  }
+  // Keep temp file for cache (reused on next play if audio unchanged)
   m_previewActive = false;
 }
 
@@ -2845,38 +2882,44 @@ void SneakPeak::StandalonePlayStop()
     return;
   }
 
-  // Write current audio data to temp WAV, then preview from it
-  // (so edits like gain are heard without saving)
   if (!g_PCM_Source_CreateFromFile || !g_PlayPreview) return;
 
-  std::vector<double> previewData = m_waveform.GetAudioData(); // copy
   int nch = m_waveform.GetNumChannels();
   int sr = m_waveform.GetSampleRate();
   int frames = m_waveform.GetAudioSampleCount();
-  if (frames <= 0 || previewData.empty()) return;
+  if (frames <= 0) return;
 
-  // Apply pending non-destructive fade to preview copy
-  auto sf = m_waveform.GetStandaloneFade();
-  if (sf.fadeInLen >= 0.001) {
-    int fadeFrames = std::min((int)(sf.fadeInLen * sr), frames);
-    if (fadeFrames > 0)
-      AudioOps::FadeInShaped(previewData.data(), fadeFrames, nch, sf.fadeInShape);
-  }
-  if (sf.fadeOutLen >= 0.001) {
-    int fadeFrames = std::min((int)(sf.fadeOutLen * sr), frames);
-    if (fadeFrames > 0) {
-      int startFrame = frames - fadeFrames;
-      AudioOps::FadeOutShaped(previewData.data() + (size_t)startFrame * nch, fadeFrames, nch, sf.fadeOutShape);
+  // Only rewrite temp WAV if audio/fade changed since last write
+  if (m_previewCacheDirty || m_previewTempPath.empty()) {
+    std::vector<double> previewData = m_waveform.GetAudioData(); // copy
+    if (previewData.empty()) return;
+
+    // Apply pending non-destructive fade to preview copy
+    auto sf = m_waveform.GetStandaloneFade();
+    if (sf.fadeInLen >= 0.001) {
+      int fadeFrames = std::min((int)(sf.fadeInLen * sr), frames);
+      if (fadeFrames > 0)
+        AudioOps::FadeInShaped(previewData.data(), fadeFrames, nch, sf.fadeInShape);
     }
+    if (sf.fadeOutLen >= 0.001) {
+      int fadeFrames = std::min((int)(sf.fadeOutLen * sr), frames);
+      if (fadeFrames > 0) {
+        int startFrame = frames - fadeFrames;
+        AudioOps::FadeOutShaped(previewData.data() + (size_t)startFrame * nch, fadeFrames, nch, sf.fadeOutShape);
+      }
+    }
+
+    // Clean up old temp file
+    if (!m_previewTempPath.empty()) remove(m_previewTempPath.c_str());
+
+    m_previewTempPath = AudioEngine::WriteTempWav(previewData.data(), frames, nch, sr,
+                                                    m_wavBitsPerSample, m_wavAudioFormat);
+    if (m_previewTempPath.empty()) return;
+    m_previewCacheDirty = false;
   }
 
-  std::string tmpPath = AudioEngine::WriteTempWav(previewData.data(), frames, nch, sr,
-                                                    m_wavBitsPerSample, m_wavAudioFormat);
-  if (tmpPath.empty()) return;
-
-  PCM_source* src = g_PCM_Source_CreateFromFile(tmpPath.c_str());
-  if (!src) { remove(tmpPath.c_str()); return; }
-  m_previewTempPath = tmpPath; // cleaned up in StandaloneCleanupPreview
+  PCM_source* src = g_PCM_Source_CreateFromFile(m_previewTempPath.c_str());
+  if (!src) return;
 
   auto* reg = new preview_register_t();
   memset(reg, 0, sizeof(*reg));

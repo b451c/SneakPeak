@@ -266,6 +266,7 @@ private:
 
   // Standalone preview playback
   bool m_previewActive = false;
+  bool m_previewCacheDirty = true; // true when temp WAV needs rewrite
   void* m_previewReg = nullptr; // preview_register_t* (opaque to avoid header dep)
   PCM_source* m_previewSrc = nullptr;
   std::string m_previewTempPath;
