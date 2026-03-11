@@ -174,6 +174,7 @@ void SneakPeak::LoadSelectedItem()
   // Clear first to exit multi-item mode if active
   if (m_waveform.IsMultiItem()) m_waveform.ClearItem();
   m_waveform.SetItem(item);
+  m_waveform.UpdateFadeCache(); // read D_VOL/fades immediately so first paint is correct
   m_spectralVisible = false;  // spectral is per-item, reset on switch
   m_spectral.ClearSpectrum();
   m_spectral.Invalidate();
@@ -290,30 +291,7 @@ void SneakPeak::OnTimer()
     // Grace period countdown after play start
     if (m_playGraceTicks > 0) m_playGraceTicks--;
 
-    // Auto-stop: when SneakPeak-initiated playback exits item bounds, stop once
-    if (playing && m_startedPlayback && !m_autoStopped && m_playGraceTicks == 0 &&
-        g_GetPlayPosition2 && m_waveform.HasItem() && !m_waveform.IsStandaloneMode()) {
-      double absPos = g_GetPlayPosition2();
-      // Check against actual absolute timeline bounds of all segments
-      const auto& segs = m_waveform.GetSegments();
-      bool outsideBounds;
-      if (segs.size() > 1) {
-        double firstStart = segs.front().position;
-        const auto& last = segs.back();
-        double lastEnd = last.position + last.duration;
-        outsideBounds = (absPos < firstStart || absPos >= lastEnd);
-      } else {
-        double itemStart = m_waveform.GetItemPosition();
-        double itemEnd = itemStart + m_waveform.GetItemDuration();
-        outsideBounds = (absPos < itemStart || absPos >= itemEnd);
-      }
-      if (outsideBounds) {
-        DBG("[SneakPeak] Auto-stop: absPos=%.3f\n", absPos);
-        m_autoStopped = true;
-        m_startedPlayback = false;
-        if (g_OnStopButton) g_OnStopButton();
-      }
-    }
+    // Note: no auto-stop — user controls playback via spacebar
 
     if (!playing && m_wasPlaying) {
       m_startedPlayback = false;
@@ -2048,26 +2026,17 @@ void SneakPeak::OnKeyDown(WPARAM key)
       break;
     case VK_SPACE: {
       if (m_waveform.IsStandaloneMode()) { StandalonePlayStop(); break; }
-      bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-      if (shift && m_waveform.HasItem() && m_waveform.HasSelection()) {
-        DoLoopSelection();
-      } else if (g_GetPlayState && g_OnPlayButton && g_OnStopButton) {
+      if (g_GetPlayState && g_OnPlayButton && g_OnStopButton) {
         if (g_GetPlayState() & 1) {
           g_OnStopButton();
+        } else if (m_waveform.HasItem() && m_waveform.HasSelection()) {
+          // Play selection (sets loop range + plays from start)
+          DoLoopSelection();
         } else {
-          // Move REAPER cursor to selection start (or item start) before play
-          if (g_SetEditCurPos && m_waveform.HasItem()) {
-            double startTime = 0.0;
-            if (m_waveform.HasSelection()) {
-              WaveformSelection sel = m_waveform.GetSelection();
-              startTime = std::min(sel.startTime, sel.endTime);
-            }
-            double absTime = m_waveform.GetItemPosition() + startTime;
-            g_SetEditCurPos(absTime, false, false);
-          }
+          // No selection: play from cursor
           m_startedPlayback = true;
           m_autoStopped = false;
-          m_playGraceTicks = PLAY_GRACE_TICKS; // ~165ms for REAPER to update play position
+          m_playGraceTicks = PLAY_GRACE_TICKS;
           g_OnPlayButton();
         }
       }
@@ -2556,22 +2525,14 @@ void SneakPeak::NavigateToMarker(bool forward)
 void SneakPeak::DoLoopSelection()
 {
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
-  if (!g_GetSet_LoopTimeRange2 || !g_SetEditCurPos || !g_OnPlayButton || !g_Main_OnCommand) return;
+  if (!g_SetEditCurPos || !g_OnPlayButton) return;
 
   WaveformSelection sel = m_waveform.GetSelection();
   double s = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
-  double e = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
 
-  // Set loop range
-  g_GetSet_LoopTimeRange2(nullptr, true, true, &s, &e, false);
-  // Enable repeat (action 1068 = Toggle repeat)
-  if (g_GetPlayState && !(g_GetPlayState() & 4)) {
-    g_Main_OnCommand(1068, 0);
-  }
   // Play from selection start
-  g_SetEditCurPos(s, false, true);
+  g_SetEditCurPos(s, false, false);
   m_startedPlayback = true;
-  m_autoStopped = false;
   m_playGraceTicks = PLAY_GRACE_TICKS;
   g_OnPlayButton();
 }

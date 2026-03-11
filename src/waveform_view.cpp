@@ -1321,6 +1321,15 @@ void WaveformView::UpdateFadeCache()
     m_fadeCache.itemVol = 1.0; // unity gain default
     return;
   }
+
+  // Multi-item: D_VOL is already baked into audio data per-segment in SetItems(),
+  // so don't apply it again in draw. Fades also don't apply to concatenated view.
+  if (m_segments.size() > 1) {
+    m_fadeCache = {};
+    m_fadeCache.itemVol = 1.0;
+    return;
+  }
+
   double oldVol = m_fadeCache.itemVol;
   m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
   m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
