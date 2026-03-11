@@ -281,20 +281,38 @@ void MultiItemView::ComputeLayeredPeaks(double viewStart, double viewDur, int wi
 {
   int nch = numChannels;
   double timePerPixel = viewDur / (double)width;
+  double sr = (double)m_sampleRate;
 
   for (auto& layer : m_layers) {
-    layer.peakMax.resize((size_t)(width * nch));
-    layer.peakMin.resize((size_t)(width * nch));
-    layer.peakRMS.resize((size_t)(width * nch));
+    size_t total = (size_t)(width * nch);
+    layer.peakMax.assign(total, 0.0);
+    layer.peakMin.assign(total, 0.0);
+    layer.peakRMS.assign(total, 0.0);
 
-    for (int col = 0; col < width; col++) {
+    // Compute column range where this layer has audio — skip everything outside
+    double layerRelStart = (double)layer.audioStartFrame / sr;
+    double layerRelEnd = layerRelStart + (double)layer.audioFrameCount / sr;
+    int colStart = (int)((layerRelStart - viewStart) / timePerPixel);
+    int colEnd = (int)((layerRelEnd - viewStart) / timePerPixel) + 1;
+    colStart = std::max(0, colStart);
+    colEnd = std::min(width, colEnd);
+    if (colStart >= colEnd) continue; // layer not visible
+
+    for (int col = colStart; col < colEnd; col++) {
       double colRelTime = viewStart + (double)col * timePerPixel;
-      int sampleStart = (int)(colRelTime * (double)m_sampleRate);
-      int sampleEnd = (int)((colRelTime + timePerPixel) * (double)m_sampleRate);
+      int sampleStart = (int)(colRelTime * sr);
+      int sampleEnd = (int)((colRelTime + timePerPixel) * sr);
       if (sampleStart < 0) sampleStart = 0;
       if (sampleEnd < sampleStart + 1) sampleEnd = sampleStart + 1;
 
-      int span = sampleEnd - sampleStart;
+      // Clamp to layer's audio range
+      int layerSampleStart = sampleStart - layer.audioStartFrame;
+      int layerSampleEnd = sampleEnd - layer.audioStartFrame;
+      if (layerSampleStart < 0) layerSampleStart = 0;
+      if (layerSampleEnd > layer.audioFrameCount) layerSampleEnd = layer.audioFrameCount;
+      if (layerSampleStart >= layerSampleEnd) continue;
+
+      int span = layerSampleEnd - layerSampleStart;
       int step = 1;
       if (span > 2048) step = span / 1024;
 
@@ -304,13 +322,9 @@ void MultiItemView::ComputeLayeredPeaks(double viewStart, double viewDur, int wi
         double sumSq = 0.0;
         int count = 0;
 
-        for (int s = sampleStart; s < sampleEnd; s += step) {
-          int lf = s - layer.audioStartFrame;
-          double v = 0.0;
-          if (lf >= 0 && lf < layer.audioFrameCount) {
-            size_t ai = (size_t)lf * nch + ch;
-            if (ai < layer.audio.size()) v = layer.audio[ai];
-          }
+        for (int lf = layerSampleStart; lf < layerSampleEnd; lf += step) {
+          size_t ai = (size_t)lf * nch + ch;
+          double v = layer.audio[ai]; // no bounds check needed — clamped above
           if (v > maxVal) maxVal = v;
           if (v < minVal) minVal = v;
           sumSq += v * v;
@@ -376,38 +390,57 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
     });
   }
 
+  // Pre-create all pens (avoid per-layer CreatePen/DeleteObject)
+  struct LayerPens { HPEN peak, rms, peakSel, rmsSel; };
+  std::vector<LayerPens> allPens(m_layers.size());
+  for (int di = 0; di < (int)drawOrder.size(); di++) {
+    int li = drawOrder[di];
+    const auto& layer = m_layers[li];
+    int ci = (m_mode == MultiItemMode::LAYERED_TRACKS) ? layer.trackColorIndex : layer.colorIndex;
+    COLORREF base = kLayerColors[ci % kNumLayerColors];
+    allPens[li].peak    = CreatePen(PS_SOLID, 1, BlendColor(base, bgColor, 0.7f));
+    allPens[li].rms     = CreatePen(PS_SOLID, 1, BlendColor(base, bgColor, 0.9f));
+    allPens[li].peakSel = CreatePen(PS_SOLID, 1, BlendColor(base, g_theme.waveformSelBg, 0.7f));
+    allPens[li].rmsSel  = CreatePen(PS_SOLID, 1, BlendColor(base, g_theme.waveformSelBg, 0.9f));
+  }
+
+  double sr = (double)m_sampleRate;
+  double timePerPixel = viewDur / (double)w;
+
   for (int di = 0; di < (int)drawOrder.size(); di++) {
     int layerIdx = drawOrder[di];
     const auto& layer = m_layers[layerIdx];
     if (layer.peakMax.empty()) continue;
 
-    int ci = (m_mode == MultiItemMode::LAYERED_TRACKS) ? layer.trackColorIndex : layer.colorIndex;
-    COLORREF baseColor = kLayerColors[ci % kNumLayerColors];
-    COLORREF peakColor = BlendColor(baseColor, bgColor, 0.7f);
-    COLORREF rmsColor = BlendColor(baseColor, bgColor, 0.9f);
-    COLORREF peakSelColor = BlendColor(baseColor, g_theme.waveformSelBg, 0.7f);
-    COLORREF rmsSelColor = BlendColor(baseColor, g_theme.waveformSelBg, 0.9f);
+    const auto& pens = allPens[layerIdx];
 
-    HPEN peakPen = CreatePen(PS_SOLID, 1, peakColor);
-    HPEN rmsPen = CreatePen(PS_SOLID, 1, rmsColor);
-    HPEN peakSelPen = CreatePen(PS_SOLID, 1, peakSelColor);
-    HPEN rmsSelPen = CreatePen(PS_SOLID, 1, rmsSelColor);
+    // Compute visible column range for this layer
+    double layerRelStart = (double)layer.audioStartFrame / sr;
+    double layerRelEnd = layerRelStart + (double)layer.audioFrameCount / sr;
+    int colStart = (int)((layerRelStart - viewStart) / timePerPixel);
+    int colEnd = (int)((layerRelEnd - viewStart) / timePerPixel) + 1;
+    colStart = std::max(0, colStart);
+    colEnd = std::min(w, colEnd);
+    if (colStart >= colEnd) continue;
 
     for (int ch = 0; ch < nch; ch++) {
       int chTop = rect.top + ch * (chH + CHANNEL_SEPARATOR_HEIGHT);
       int centerY = chTop + chH / 2;
       float halfH = (float)(chH / 2) * verticalZoom;
 
-      // Peak pass
-      HPEN curPen = peakPen;
+      // Single pass: peak + RMS together per column (halves iteration count)
+      HPEN curPen = pens.peak;
       HPEN oldPen = (HPEN)SelectObject(hdc, curPen);
 
-      for (int col = 0; col < w; col++) {
+      for (int col = colStart; col < colEnd; col++) {
         size_t idx = (size_t)(col * nch + ch);
         if (idx >= layer.peakMax.size()) break;
 
         int x = rect.left + col;
-        HPEN wantPen = (hasSel && x >= selX1 && x < selX2) ? peakSelPen : peakPen;
+        bool inSel = hasSel && x >= selX1 && x < selX2;
+
+        // Peak line
+        HPEN wantPen = inSel ? pens.peakSel : pens.peak;
         if (wantPen != curPen) { SelectObject(hdc, wantPen); curPen = wantPen; }
 
         double maxVal = std::max(-1.0, std::min(1.0, layer.peakMax[idx] * gainOffset));
@@ -421,18 +454,9 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
 
         MoveToEx(hdc, x, yMax, nullptr);
         LineTo(hdc, x, yMin + 1);
-      }
 
-      // RMS pass
-      curPen = rmsPen;
-      SelectObject(hdc, curPen);
-
-      for (int col = 0; col < w; col++) {
-        size_t idx = (size_t)(col * nch + ch);
-        if (idx >= layer.peakRMS.size()) break;
-
-        int x = rect.left + col;
-        HPEN wantPen = (hasSel && x >= selX1 && x < selX2) ? rmsSelPen : rmsPen;
+        // RMS line (overdraw on same column — merged pass)
+        wantPen = inSel ? pens.rmsSel : pens.rms;
         if (wantPen != curPen) { SelectObject(hdc, wantPen); curPen = wantPen; }
 
         double rmsVal = std::min(1.0, layer.peakRMS[idx] * gainOffset);
@@ -447,10 +471,13 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
 
       SelectObject(hdc, oldPen);
     }
+  }
 
-    DeleteObject(peakPen);
-    DeleteObject(rmsPen);
-    DeleteObject(peakSelPen);
-    DeleteObject(rmsSelPen);
+  // Cleanup all pens
+  for (int li = 0; li < (int)m_layers.size(); li++) {
+    DeleteObject(allPens[li].peak);
+    DeleteObject(allPens[li].rms);
+    DeleteObject(allPens[li].peakSel);
+    DeleteObject(allPens[li].rmsSel);
   }
 }
