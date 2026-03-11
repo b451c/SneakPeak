@@ -161,6 +161,8 @@ static void pollSelectionTimer()
 static bool hookCommandProc(int command, int flag)
 {
   if (command == g_cmdToggle) {
+    DBG("[SneakPeak] hookCommandProc: toggle action fired, visible=%d\n",
+        (g_sneakPeak && g_sneakPeak->IsVisible()) ? 1 : 0);
     if (!g_sneakPeak) g_sneakPeak = std::make_unique<SneakPeak>();
     if (!g_sneakPeak->GetHwnd()) {
       g_sneakPeak->Create();

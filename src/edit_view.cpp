@@ -111,7 +111,9 @@ void SneakPeak::Destroy()
 void SneakPeak::Toggle()
 {
   if (!m_hwnd) return;
-  ShowWindow(m_hwnd, IsVisible() ? SW_HIDE : SW_SHOW);
+  // Destroy window to properly remove from docker (SWS pattern)
+  if (g_SetExtState) g_SetExtState("SneakPeak", "was_visible", "0", true);
+  Destroy();
 }
 
 bool SneakPeak::IsVisible() const
@@ -654,6 +656,14 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_COMMAND: {
       int id = LOWORD(wParam);
+      if (id == IDCANCEL) {
+        // Docker [x] button sends IDCANCEL — destroy window (SWS pattern)
+        // The SneakPeak object persists; window is recreated on next toggle.
+        DBG("[SneakPeak] WM_COMMAND IDCANCEL — destroying window\n");
+        if (g_SetExtState) g_SetExtState("SneakPeak", "was_visible", "0", true);
+        Destroy();
+        return 0;
+      }
       if (id >= CM_UNDO && id < CM_LAST) {
         OnContextMenuCommand(id);
         return 0;
@@ -684,8 +694,9 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     case WM_CLOSE:
-      // Docker [x] button or undock — hide window instead of destroying
-      ShowWindow(m_hwnd, SW_HIDE);
+      DBG("[SneakPeak] WM_CLOSE received — destroying window\n");
+      if (g_SetExtState) g_SetExtState("SneakPeak", "was_visible", "0", true);
+      Destroy();
       return 0;
 
     case WM_DESTROY:
