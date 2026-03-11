@@ -1305,10 +1305,22 @@ void WaveformView::UpdateFadeCache()
   }
 
   // Multi-item: D_VOL is already baked into audio data per-segment in SetItems(),
-  // so don't apply it again in draw. Fades also don't apply to concatenated view.
+  // so don't apply it again in draw. Show first item's fade-in and last item's fade-out.
   if (m_segments.size() > 1) {
     m_fadeCache = {};
     m_fadeCache.itemVol = 1.0;
+    // Fade-in from first item
+    MediaItem* first = m_segments.front().item;
+    if (first) {
+      m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(first, "D_FADEINLEN");
+      m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(first, "C_FADEINSHAPE");
+    }
+    // Fade-out from last item
+    MediaItem* last = m_segments.back().item;
+    if (last) {
+      m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(last, "D_FADEOUTLEN");
+      m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(last, "C_FADEOUTSHAPE");
+    }
     return;
   }
 
