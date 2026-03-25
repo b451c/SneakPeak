@@ -91,6 +91,7 @@ extern void (*g_Undo_EndBlock2)(ReaProject* proj, const char* descchange, int ex
 
 // UI refresh
 extern void (*g_UpdateArrange)();
+extern void (*g_PreventUIRefresh)(int prevent_count);
 extern void (*g_UpdateTimeline)();
 
 // Time selection

@@ -275,9 +275,11 @@ void SneakPeak::OnContextMenuCommand(int id)
         int chanMode = pCM ? *pCM : -999;
         int newMode = (chanMode == 2) ? 0 : 2;
         DBG("[SneakPeak] DOWNMIX: pCM=%p chanMode=%d -> newMode=%d\n", (void*)pCM, chanMode, newMode);
-        if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+        if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+          if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
         g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", &newMode);
         if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Toggle Mono Downmix", -1);
+      if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
         m_lastChanMode = newMode;
         if (g_UpdateArrange) g_UpdateArrange();
         if (g_UpdateTimeline) g_UpdateTimeline();

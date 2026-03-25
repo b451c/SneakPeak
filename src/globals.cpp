@@ -89,6 +89,7 @@ bool (*g_GetUserInputs)(const char*, int, const char*, char*, int) = nullptr;
 // UI refresh
 void (*g_UpdateArrange)() = nullptr;
 void (*g_UpdateTimeline)() = nullptr;
+void (*g_PreventUIRefresh)(int) = nullptr;
 
 // Normalization
 double (*g_CalculateNormalization)(PCM_source*, int, double, double, double) = nullptr;

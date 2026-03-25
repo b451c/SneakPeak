@@ -282,6 +282,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           m_fadeDragStartY = y;
           m_fadeDragStartDir = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEINDIR");
           SetCapture(m_hwnd);
+          if (g_PreventUIRefresh) g_PreventUIRefresh(1);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
         }
@@ -290,6 +291,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           m_fadeDragStartY = y;
           m_fadeDragStartDir = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEOUTDIR");
           SetCapture(m_hwnd);
+          if (g_PreventUIRefresh) g_PreventUIRefresh(1);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
         }
@@ -388,6 +390,7 @@ void SneakPeak::OnMouseUp(int x, int y)
       m_waveform.Invalidate();
     } else {
       if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Adjust fade", -1);
+      if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;

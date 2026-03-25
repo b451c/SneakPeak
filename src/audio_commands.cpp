@@ -274,6 +274,7 @@ void SneakPeak::DoPaste()
     "SneakPeak — Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   UndoSave();
 
@@ -298,6 +299,7 @@ void SneakPeak::DoPaste()
   WriteAndRefresh();
 
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Paste", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
@@ -383,6 +385,7 @@ void SneakPeak::DoDelete()
   double selStart = std::min(sel.startTime, sel.endTime);
   double selEnd = std::max(sel.startTime, sel.endTime);
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
   double splitStart = m_waveform.RelTimeToAbsTime(selStart);
@@ -401,6 +404,7 @@ void SneakPeak::DoDelete()
 
   if (g_UpdateArrange) g_UpdateArrange();
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete (non-destructive)", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   // Reload — item pointer may have changed, re-select
   if (rightPart) {
@@ -527,6 +531,7 @@ void SneakPeak::DoSilence()
   double selStart = std::min(sel.startTime, sel.endTime);
   double selEnd = std::max(sel.startTime, sel.endTime);
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
   double splitStart = m_waveform.RelTimeToAbsTime(selStart);
@@ -544,6 +549,7 @@ void SneakPeak::DoSilence()
 
   if (g_UpdateArrange) g_UpdateArrange();
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Silence (non-destructive)", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   m_waveform.ClearItem();
   LoadSelectedItem();
@@ -593,10 +599,12 @@ void SneakPeak::DoNormalize()
   double targetPeak = 0.989; // -0.1 dB
   double newVol = targetPeak / peak;
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   g_SetMediaItemInfo_Value(item, "D_VOL", newVol);
   if (g_UpdateArrange) g_UpdateArrange();
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Normalize (non-destructive)", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
@@ -636,10 +644,12 @@ void SneakPeak::DoFadeIn()
 
   if (fadeLen < 0.001) return;
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   g_SetMediaItemInfo_Value(item, "D_FADEINLEN", fadeLen);
   if (g_UpdateArrange) g_UpdateArrange();
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Fade In", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
@@ -679,10 +689,12 @@ void SneakPeak::DoFadeOut()
 
   if (fadeLen < 0.001) return;
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   g_SetMediaItemInfo_Value(item, "D_FADEOUTLEN", fadeLen);
   if (g_UpdateArrange) g_UpdateArrange();
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Fade Out", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
@@ -701,6 +713,7 @@ void SneakPeak::DoReverse()
     "SneakPeak — Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   UndoSave();
 
@@ -715,6 +728,7 @@ void SneakPeak::DoReverse()
   WriteAndRefresh();
 
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Reverse (destructive)", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
@@ -744,6 +758,7 @@ void SneakPeak::DoGain(double factor)
   double curVol = g_GetMediaItemInfo_Value(item, "D_VOL");
   double newVol = curVol * factor;
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   g_SetMediaItemInfo_Value(item, "D_VOL", newVol);
   if (g_UpdateArrange) g_UpdateArrange();
@@ -769,6 +784,7 @@ void SneakPeak::DoDCRemove()
     "SneakPeak — Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   UndoSave();
 
@@ -783,6 +799,7 @@ void SneakPeak::DoDCRemove()
   WriteAndRefresh();
 
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: DC Offset Remove (destructive)", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
@@ -811,6 +828,7 @@ void SneakPeak::DoNormalizeLUFS(double targetLufs)
   double curVol = g_GetMediaItemInfo_Value(item, "D_VOL");
   double newVol = curVol * gainLin;
 
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
   g_SetMediaItemInfo_Value(item, "D_VOL", newVol);
   if (g_UpdateArrange) g_UpdateArrange();

@@ -62,6 +62,7 @@
 // UI refresh
 #define REAPERAPI_WANT_UpdateArrange
 #define REAPERAPI_WANT_UpdateTimeline
+#define REAPERAPI_WANT_PreventUIRefresh
 
 // Item manipulation
 #define REAPERAPI_WANT_SplitMediaItem
@@ -316,6 +317,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
 
   g_UpdateArrange = UpdateArrange;
   g_UpdateTimeline = UpdateTimeline;
+  g_PreventUIRefresh = PreventUIRefresh;
 
   g_GetSet_LoopTimeRange2 = GetSet_LoopTimeRange2;
 
