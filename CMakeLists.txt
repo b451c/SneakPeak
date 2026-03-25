@@ -31,6 +31,7 @@ add_library(reaper_sneakpeak SHARED
   src/rendering.cpp
   src/input_handling.cpp
   src/waveform_view.cpp
+  src/waveform_rendering.cpp
   src/toolbar.cpp
   src/theme.cpp
   src/audio_engine.cpp
