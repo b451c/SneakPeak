@@ -24,6 +24,7 @@ add_library(reaper_sneakpeak SHARED
   src/main.cpp
   src/globals.cpp
   src/edit_view.cpp
+  src/standalone_file.cpp
   src/waveform_view.cpp
   src/toolbar.cpp
   src/theme.cpp
