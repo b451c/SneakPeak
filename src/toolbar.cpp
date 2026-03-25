@@ -68,10 +68,7 @@ void Toolbar::Paint(HDC hdc)
 
   SetBkMode(hdc, TRANSPARENT);
 
-  HFONT font = CreateFont(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
-  HFONT oldFont = (HFONT)SelectObject(hdc, font);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.toolbar);
 
   for (int i = 0; i < TB_COUNT; i++) {
     RECT& r = m_items[i].rect;
@@ -113,7 +110,6 @@ void Toolbar::Paint(HDC hdc)
   }
 
   SelectObject(hdc, oldFont);
-  DeleteObject(font);
 }
 
 int Toolbar::HitTest(int x, int y) const

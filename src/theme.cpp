@@ -157,6 +157,8 @@ void Theme_CreateFonts() {
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
   g_fonts.normal13 = CreateFont(13,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
+  g_fonts.toolbar  = CreateFont(13,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+                     DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
 }
 
 void Theme_DestroyFonts() {
@@ -168,4 +170,5 @@ void Theme_DestroyFonts() {
   del(g_fonts.bold14);
   del(g_fonts.bold11);
   del(g_fonts.normal13);
+  del(g_fonts.toolbar);
 }

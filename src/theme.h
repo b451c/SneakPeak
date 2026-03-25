@@ -76,6 +76,7 @@ struct ThemeFonts {
   HFONT bold14   = nullptr;  // Arial 14 bold (fade envelope label)
   HFONT bold11   = nullptr;  // Arial 11 bold (markers)
   HFONT normal13 = nullptr;  // Arial 13 normal (spectral loading)
+  HFONT toolbar  = nullptr;  // Arial 13 normal (toolbar buttons)
 };
 extern ThemeFonts g_fonts;
 void Theme_CreateFonts();
