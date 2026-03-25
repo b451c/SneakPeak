@@ -4,6 +4,25 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-03-25
+
+### Added
+- **Save As (Ctrl+Shift+S)** - Save standalone files to a new location via file dialog.
+- **Continuous fade curvature** - Vertical drag on fade handles now controls smooth curvature (REAPER's D_FADEINDIR/D_FADEOUTDIR, -1..1) instead of cycling through preset shapes. Matches REAPER's native fade behavior.
+- **Standalone waveform fade preview** - Waveform visually reacts to fade changes in real-time in standalone mode.
+
+### Changed
+- **Smart Save (Ctrl+S)** - First save on WAV asks to overwrite or Save As. First save on MP3/FLAC auto-creates `[name]_edit.wav` next to original (24-bit PCM). Subsequent saves overwrite silently. Save state persisted across tab switches.
+- **Drag to timeline** - Clean files drag original path (zero copies). Dirty files auto-save first. Selections export as `[name]_sel_HHMMSS.wav`. Files saved to project recording folder when available, next to source file otherwise.
+- **Fade handle UX** - Hit zone increased from 8px to 16px, handle size 10x10px. Curvature range matched to REAPER's visual depth. Fade-in direction corrected to match REAPER timeline.
+
+### Fixed
+- **Fade-in direction** - Fade-in curvature now renders identically to REAPER's timeline display (was inverted).
+- **Drag export file loss** - Exported files no longer go to /tmp where they'd be lost on restart. Saved to project folder or next to source file.
+- **GitHub issue #1** - "Weird fade handle behavior" — fade handles now responsive with proper curvature control.
+
+---
+
 ## [1.5.0] - 2026-03-12
 
 ### Added
