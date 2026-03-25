@@ -375,13 +375,22 @@ std::string AudioEngine::WriteExportWav(const double* samples, int numFrames,
                                          int bitsPerSample, int audioFormat,
                                          const char* sourceFilePath)
 {
-  // Generate unique filename with timestamp
+  // Generate filename: [basename]_sel_HHMMSS.wav (includes original name)
   time_t now = time(nullptr);
   struct tm* t = localtime(&now);
-  char filename[128];
-  snprintf(filename, sizeof(filename), "sneakpeak_%04d%02d%02d_%02d%02d%02d.wav",
-           t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-           t->tm_hour, t->tm_min, t->tm_sec);
+  char baseName[128] = "sneakpeak";
+  if (sourceFilePath && sourceFilePath[0]) {
+    const char* fn = sourceFilePath;
+    const char* lastSlash = strrchr(fn, '/');
+    if (lastSlash) fn = lastSlash + 1;
+    snprintf(baseName, sizeof(baseName), "%s", fn);
+    // Strip extension
+    char* dot = strrchr(baseName, '.');
+    if (dot) *dot = '\0';
+  }
+  char filename[256];
+  snprintf(filename, sizeof(filename), "%s_sel_%02d%02d%02d.wav",
+           baseName, t->tm_hour, t->tm_min, t->tm_sec);
 
   char exportPath[512] = {};
   const char* chosen = nullptr;

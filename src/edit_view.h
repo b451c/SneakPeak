@@ -31,6 +31,8 @@ struct StandaloneFileState {
   WaveformSelection selection;
   bool dirty = false;
   WaveformView::StandaloneFade fade;
+  std::string savedPath;            // where file was last saved (empty = never saved)
+  bool overwriteConfirmed = false;  // user confirmed overwrite of original WAV
 };
 
 // Tab hit-test cache for mode bar
@@ -230,8 +232,12 @@ private:
   // Standalone file mode (drag & drop from disk)
   void LoadStandaloneFile(const char* path);
   void SaveStandaloneFile();
+  void SaveStandaloneFileAs();
+  void BakePendingFades();
   void StandalonePlayStop();
   void StandaloneCleanupPreview();
+  std::string m_savedPath;           // last saved path (empty = never saved)
+  bool m_overwriteConfirmed = false; // confirmed overwrite of original WAV
 
   // Drag & drop export
   bool m_dragExportPending = false;

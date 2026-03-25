@@ -596,8 +596,10 @@ void SneakPeak::UpdateTitle()
   if (!m_hwnd) return;
   char title[512];
   if (m_waveform.IsStandaloneMode()) {
-    const std::string& fp = m_waveform.GetStandaloneFilePath();
-    const char* name = FileNameFromPath(fp.c_str());
+    // Show saved filename if available, otherwise original
+    const std::string& displayPath = m_savedPath.empty()
+        ? m_waveform.GetStandaloneFilePath() : m_savedPath;
+    const char* name = FileNameFromPath(displayPath.c_str());
     snprintf(title, sizeof(title), "%sSneakPeak: %s",
              m_dirty ? "* " : "", name);
   } else {
@@ -2491,7 +2493,11 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case 'S':
     case 's':
       if (ctrl) {
-        SaveStandaloneFile();
+        bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        if (shift && m_waveform.IsStandaloneMode())
+          SaveStandaloneFileAs();
+        else
+          SaveStandaloneFile();
       } else if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
         SyncSelectionToReaper();
         if (m_waveform.HasSelection() && g_Main_OnCommand) {
@@ -3056,6 +3062,8 @@ void SneakPeak::SaveCurrentStandaloneState()
   fs.selection = m_waveform.GetSelection();
   fs.dirty = m_dirty;
   fs.fade = m_waveform.GetStandaloneFade();
+  fs.savedPath = m_savedPath;
+  fs.overwriteConfirmed = m_overwriteConfirmed;
 
   DBG("[SneakPeak] Saved state for tab %d: %s\n", m_activeFileIdx, fs.filePath.c_str());
 }
@@ -3084,6 +3092,8 @@ void SneakPeak::RestoreStandaloneState(int idx)
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_wavBitsPerSample = fs.bitsPerSample;
   m_wavAudioFormat = fs.audioFormat;
+  m_savedPath = fs.savedPath;
+  m_overwriteConfirmed = fs.overwriteConfirmed;
   m_activeFileIdx = idx;
 
   m_gainPanel.ShowStandalone();
@@ -3172,6 +3182,8 @@ void SneakPeak::LoadStandaloneFile(const char* path)
   m_wavAudioFormat = m_waveform.GetStandaloneAudioFormat();
   m_hasUndo = false;
   m_dirty = false;
+  m_savedPath.clear();
+  m_overwriteConfirmed = false;
   m_previewCacheDirty = true;
 
   // Show gain panel in standalone mode
@@ -3250,64 +3262,189 @@ void SneakPeak::AddStandaloneFile(const char* path)
   DBG("[SneakPeak] Added standalone tab %d: %s\n", m_activeFileIdx, path);
 }
 
+// Generate a unique "_edit.wav" path from an original file path.
+static std::string GenerateEditPath(const std::string& originalPath)
+{
+  auto dotPos = originalPath.find_last_of('.');
+  std::string base = (dotPos != std::string::npos) ? originalPath.substr(0, dotPos) : originalPath;
+
+  std::string candidate = base + "_edit.wav";
+  if (access(candidate.c_str(), F_OK) != 0) return candidate;
+
+  for (int i = 2; i < 100; i++) {
+    char suffix[32];
+    snprintf(suffix, sizeof(suffix), "_edit_%d.wav", i);
+    candidate = base + suffix;
+    if (access(candidate.c_str(), F_OK) != 0) return candidate;
+  }
+  return base + "_edit.wav"; // fallback
+}
+
+static bool IsWavExtension(const std::string& path)
+{
+  auto dotPos = path.find_last_of('.');
+  if (dotPos == std::string::npos) return false;
+  std::string ext = path.substr(dotPos + 1);
+  for (auto& c : ext) c = (char)tolower((unsigned char)c);
+  return (ext == "wav" || ext == "wave");
+}
+
+void SneakPeak::BakePendingFades()
+{
+  auto sf = m_waveform.GetStandaloneFade();
+  if (sf.fadeInLen < 0.001 && sf.fadeOutLen < 0.001) return;
+
+  StandaloneUndoSave();
+  auto& data = m_waveform.GetAudioData();
+  int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
+  int totalFrames = m_waveform.GetAudioSampleCount();
+  if (sf.fadeInLen >= 0.001) {
+    int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
+    if (fadeFrames > 0)
+      AudioOps::FadeInShaped(data.data(), fadeFrames, nch, sf.fadeInShape);
+  }
+  if (sf.fadeOutLen >= 0.001) {
+    int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
+    if (fadeFrames > 0) {
+      int startFrame = totalFrames - fadeFrames;
+      AudioOps::FadeOutShaped(data.data() + (size_t)startFrame * nch, fadeFrames, nch, sf.fadeOutShape);
+    }
+  }
+  m_waveform.ClearStandaloneFade();
+  m_waveform.Invalidate();
+}
+
 void SneakPeak::SaveStandaloneFile()
 {
   if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
 
-  std::string path = m_waveform.GetStandaloneFilePath();
-  if (path.empty()) return;
+  std::string origPath = m_waveform.GetStandaloneFilePath();
+  if (origPath.empty()) return;
 
-  // For non-WAV sources, save as WAV next to the original
-  {
-    auto dotPos = path.find_last_of('.');
-    std::string ext;
-    if (dotPos != std::string::npos) ext = path.substr(dotPos + 1);
-    for (auto& c : ext) c = (char)tolower((unsigned char)c);
-    if (ext != "wav" && ext != "wave") {
-      path = path.substr(0, dotPos) + ".wav";
-      // Default to 24-bit PCM for non-WAV exports
-      m_wavBitsPerSample = 24;
-      m_wavAudioFormat = 1;
-    }
-  }
+  std::string savePath;
 
-  // Bake pending non-destructive fade into audio data before saving
-  auto sf = m_waveform.GetStandaloneFade();
-  if (sf.fadeInLen >= 0.001 || sf.fadeOutLen >= 0.001) {
-    StandaloneUndoSave();
-    auto& data = m_waveform.GetAudioData();
-    int nch = m_waveform.GetNumChannels();
-    int sr = m_waveform.GetSampleRate();
-    int totalFrames = m_waveform.GetAudioSampleCount();
-    if (sf.fadeInLen >= 0.001) {
-      int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
-      if (fadeFrames > 0)
-        AudioOps::FadeInShaped(data.data(), fadeFrames, nch, sf.fadeInShape);
-    }
-    if (sf.fadeOutLen >= 0.001) {
-      int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
-      if (fadeFrames > 0) {
-        int startFrame = totalFrames - fadeFrames;
-        AudioOps::FadeOutShaped(data.data() + (size_t)startFrame * nch, fadeFrames, nch, sf.fadeOutShape);
+  if (!m_savedPath.empty()) {
+    // Already saved once — overwrite silently
+    savePath = m_savedPath;
+  } else if (IsWavExtension(origPath)) {
+    // Original is WAV — confirm overwrite first time
+    if (!m_overwriteConfirmed) {
+      char msg[512];
+      snprintf(msg, sizeof(msg), "Overwrite original file?\n%s",
+               FileNameFromPath(origPath.c_str()));
+      int result = MessageBox(m_hwnd, msg, "SneakPeak", MB_YESNO | MB_ICONQUESTION);
+      if (result == IDYES) {
+        m_overwriteConfirmed = true;
+        savePath = origPath;
+      } else {
+        SaveStandaloneFileAs();
+        return;
       }
+    } else {
+      savePath = origPath;
     }
-    m_waveform.ClearStandaloneFade();
-    m_waveform.Invalidate();
+  } else {
+    // Non-WAV (MP3, FLAC, etc.) — auto-create _edit.wav
+    savePath = GenerateEditPath(origPath);
+    m_wavBitsPerSample = 24;
+    m_wavAudioFormat = 1;
   }
+
+  if (savePath.empty()) return;
+
+  BakePendingFades();
 
   const auto& data = m_waveform.GetAudioData();
   int nch = m_waveform.GetNumChannels();
   int sr = m_waveform.GetSampleRate();
   int frames = m_waveform.GetAudioSampleCount();
 
-  if (AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr,
+  if (AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
                                 m_wavBitsPerSample, m_wavAudioFormat)) {
-    DBG("[SneakPeak] Saved standalone file: %s\n", path.c_str());
+    DBG("[SneakPeak] Saved: %s\n", savePath.c_str());
+    m_savedPath = savePath;
     m_dirty = false;
     UpdateTitle();
-    // Update tab dirty state
-    if (m_activeFileIdx >= 0 && m_activeFileIdx < (int)m_standaloneFiles.size())
+    if (m_activeFileIdx >= 0 && m_activeFileIdx < (int)m_standaloneFiles.size()) {
       m_standaloneFiles[m_activeFileIdx].dirty = false;
+      m_standaloneFiles[m_activeFileIdx].savedPath = m_savedPath;
+      m_standaloneFiles[m_activeFileIdx].overwriteConfirmed = m_overwriteConfirmed;
+    }
+    ShowToast("Saved!");
+  } else {
+    MessageBox(m_hwnd, "Failed to save file.", "SneakPeak", MB_OK | MB_ICONERROR);
+  }
+}
+
+void SneakPeak::SaveStandaloneFileAs()
+{
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
+
+  std::string origPath = m_waveform.GetStandaloneFilePath();
+
+  // Determine initial directory and suggested filename
+  std::string initialDir, initialFile;
+  if (!m_savedPath.empty()) {
+    auto lastSlash = m_savedPath.rfind('/');
+    if (lastSlash != std::string::npos) {
+      initialDir = m_savedPath.substr(0, lastSlash);
+      initialFile = m_savedPath.substr(lastSlash + 1);
+    }
+  } else if (!origPath.empty()) {
+    auto lastSlash = origPath.rfind('/');
+    if (lastSlash != std::string::npos) {
+      initialDir = origPath.substr(0, lastSlash);
+      std::string baseName = origPath.substr(lastSlash + 1);
+      auto dotPos = baseName.find_last_of('.');
+      if (dotPos != std::string::npos) baseName.resize(dotPos);
+      initialFile = baseName + "_edit.wav";
+    }
+  }
+
+  char fn[1024] = {};
+  if (!initialFile.empty())
+    snprintf(fn, sizeof(fn), "%s", initialFile.c_str());
+
+  if (!BrowseForSaveFile("Save WAV file",
+                          initialDir.empty() ? nullptr : initialDir.c_str(),
+                          fn[0] ? fn : nullptr,
+                          "WAV files\0*.wav\0All files\0*.*\0",
+                          fn, sizeof(fn))) {
+    return; // user cancelled
+  }
+
+  std::string savePath(fn);
+  // Ensure .wav extension
+  if (savePath.size() < 4 ||
+      strcasecmp(savePath.c_str() + savePath.size() - 4, ".wav") != 0) {
+    savePath += ".wav";
+  }
+
+  BakePendingFades();
+
+  const auto& data = m_waveform.GetAudioData();
+  int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
+  int frames = m_waveform.GetAudioSampleCount();
+
+  if (m_wavBitsPerSample < 24) {
+    m_wavBitsPerSample = 24;
+    m_wavAudioFormat = 1;
+  }
+
+  if (AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
+                                m_wavBitsPerSample, m_wavAudioFormat)) {
+    DBG("[SneakPeak] Saved As: %s\n", savePath.c_str());
+    m_savedPath = savePath;
+    m_overwriteConfirmed = true; // user explicitly chose this path
+    m_dirty = false;
+    UpdateTitle();
+    if (m_activeFileIdx >= 0 && m_activeFileIdx < (int)m_standaloneFiles.size()) {
+      m_standaloneFiles[m_activeFileIdx].dirty = false;
+      m_standaloneFiles[m_activeFileIdx].savedPath = m_savedPath;
+      m_standaloneFiles[m_activeFileIdx].overwriteConfirmed = m_overwriteConfirmed;
+    }
     ShowToast("Saved!");
   } else {
     MessageBox(m_hwnd, "Failed to save file.", "SneakPeak", MB_OK | MB_ICONERROR);
@@ -4099,79 +4236,77 @@ void SneakPeak::CleanupDragTemp()
 
 void SneakPeak::InitiateDragExport()
 {
-  DBG("[SneakPeak] InitiateDragExport: hasItem=%d hasSel=%d\n",
-      m_waveform.HasItem(), m_waveform.HasSelection());
-
   if (!m_waveform.HasItem()) return;
-
   CleanupDragTemp();
 
-  // Unmodified standalone file with no selection → drag original file directly
-  if (m_waveform.IsStandaloneMode() && !m_dirty && !m_waveform.HasSelection()
-      && !m_waveform.HasStandaloneFade()) {
-    const std::string& origPath = m_waveform.GetStandaloneFilePath();
-    if (!origPath.empty()) {
-      m_dragTempPath = origPath;
-      m_dragIsOriginal = true;
-      DBG("[SneakPeak] DragExport: unmodified file, using original: %s\n", origPath.c_str());
-      goto do_drag;  // skip export, drag original
-    }
-  }
+  bool isStandalone = m_waveform.IsStandaloneMode();
+  bool hasSelection = m_waveform.HasSelection();
 
-  {
-  // If no selection, export entire file
-  int startF, endF;
-  if (m_waveform.HasSelection()) {
-    GetSelectionSampleRange(startF, endF);
-  } else {
-    startF = 0;
-    endF = m_waveform.GetAudioSampleCount();
-  }
-  int nch = m_waveform.GetNumChannels();
-  int sr = m_waveform.GetSampleRate();
-  int selFrames = endF - startF;
-
-  DBG("[SneakPeak] DragExport: startF=%d endF=%d nch=%d selFrames=%d dataSize=%d\n",
-      startF, endF, nch, selFrames, (int)m_waveform.GetAudioData().size());
-
-  if (selFrames <= 0 || nch <= 0) return;
-
-  const auto& data = m_waveform.GetAudioData();
-  size_t offset = (size_t)startF * (size_t)nch;
-  size_t needed = offset + (size_t)selFrames * (size_t)nch;
-  if (needed > data.size()) {
-    DBG("[SneakPeak] DragExport: buffer overflow! needed=%d have=%d\n",
-        (int)needed, (int)data.size());
-    return;
-  }
-
-  // Copy selection data so we can bake standalone fade without modifying original
-  std::vector<double> exportBuf(data.begin() + offset, data.begin() + offset + (size_t)selFrames * nch);
-
-  // Bake pending standalone fade into export copy
-  if (m_waveform.IsStandaloneMode()) {
-    auto sf = m_waveform.GetStandaloneFade();
-    int totalFrames = m_waveform.GetAudioSampleCount();
-    if (sf.fadeInLen >= 0.001) {
-      int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
-      // Only process the overlap between selection and fade-in region [0, fadeFrames)
-      if (startF < fadeFrames) {
-        int overlapFrames = std::min(fadeFrames - startF, selFrames);
-        // We need to offset into the fade curve since selection may not start at 0
-        for (int i = 0; i < overlapFrames; i++) {
-          double t = (double)(startF + i) / (double)fadeFrames;
-          double gain = ApplyFadeShape(t, sf.fadeInShape, -sf.fadeInDir);
-          for (int ch = 0; ch < nch; ch++)
-            exportBuf[i * nch + ch] *= gain;
-        }
+  // Standalone full-file drag (no selection)
+  if (isStandalone && !hasSelection) {
+    if (!m_dirty && !m_waveform.HasStandaloneFade()) {
+      // Clean file — drag saved path or original
+      std::string dragPath = m_savedPath.empty()
+          ? m_waveform.GetStandaloneFilePath() : m_savedPath;
+      if (!dragPath.empty()) {
+        m_dragTempPath = dragPath;
+        m_dragIsOriginal = true;
+        DBG("[SneakPeak] DragExport: clean file: %s\n", dragPath.c_str());
+      }
+    } else {
+      // Dirty — auto-save first, then drag the saved file
+      SaveStandaloneFile();
+      if (!m_dirty && !m_savedPath.empty()) {
+        m_dragTempPath = m_savedPath;
+        m_dragIsOriginal = true;
+        DBG("[SneakPeak] DragExport: auto-saved: %s\n", m_savedPath.c_str());
       }
     }
-    if (sf.fadeOutLen >= 0.001) {
-      int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
-      int fadeStart = totalFrames - fadeFrames;
-      int overlapStart = std::max(startF, fadeStart);
-      int overlapEnd = std::min(endF, totalFrames);
-      if (overlapStart < overlapEnd) {
+  }
+
+  // Selection export (standalone or REAPER) — create temp WAV
+  if (m_dragTempPath.empty()) {
+    int startF, endF;
+    if (hasSelection) {
+      GetSelectionSampleRange(startF, endF);
+    } else {
+      startF = 0;
+      endF = m_waveform.GetAudioSampleCount();
+    }
+    int nch = m_waveform.GetNumChannels();
+    int sr = m_waveform.GetSampleRate();
+    int selFrames = endF - startF;
+    if (selFrames <= 0 || nch <= 0) return;
+
+    const auto& data = m_waveform.GetAudioData();
+    size_t offset = (size_t)startF * (size_t)nch;
+    size_t needed = offset + (size_t)selFrames * (size_t)nch;
+    if (needed > data.size()) return;
+
+    std::vector<double> exportBuf(data.begin() + offset,
+                                   data.begin() + offset + (size_t)selFrames * nch);
+
+    // Bake pending standalone fades into export copy
+    if (isStandalone) {
+      auto sf = m_waveform.GetStandaloneFade();
+      int totalFrames = m_waveform.GetAudioSampleCount();
+      if (sf.fadeInLen >= 0.001) {
+        int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
+        if (startF < fadeFrames) {
+          int overlap = std::min(fadeFrames - startF, selFrames);
+          for (int i = 0; i < overlap; i++) {
+            double t = (double)(startF + i) / (double)fadeFrames;
+            double gain = ApplyFadeShape(t, sf.fadeInShape, -sf.fadeInDir);
+            for (int ch = 0; ch < nch; ch++)
+              exportBuf[i * nch + ch] *= gain;
+          }
+        }
+      }
+      if (sf.fadeOutLen >= 0.001) {
+        int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
+        int fadeStart = totalFrames - fadeFrames;
+        int overlapStart = std::max(startF, fadeStart);
+        int overlapEnd = std::min(endF, totalFrames);
         for (int i = overlapStart; i < overlapEnd; i++) {
           double t = (double)(i - fadeStart) / (double)fadeFrames;
           double gain = ApplyFadeShape(1.0 - t, sf.fadeOutShape, sf.fadeOutDir);
@@ -4181,28 +4316,21 @@ void SneakPeak::InitiateDragExport()
         }
       }
     }
+
+    const char* srcPath = isStandalone
+        ? m_waveform.GetStandaloneFilePath().c_str() : nullptr;
+    m_dragTempPath = AudioEngine::WriteExportWav(exportBuf.data(), selFrames, nch,
+                                                  sr, m_wavBitsPerSample, m_wavAudioFormat,
+                                                  srcPath);
+    if (m_dragTempPath.empty()) return;
+    DBG("[SneakPeak] DragExport: temp WAV: %s\n", m_dragTempPath.c_str());
   }
 
-  // Pass source file path for fallback save location (next to original)
-  const char* srcPath = m_waveform.IsStandaloneMode()
-      ? m_waveform.GetStandaloneFilePath().c_str() : nullptr;
-  m_dragTempPath = AudioEngine::WriteExportWav(exportBuf.data(), selFrames, nch,
-                                                sr,
-                                                m_wavBitsPerSample, m_wavAudioFormat,
-                                                srcPath);
-  DBG("[SneakPeak] DragExport: wrote WAV to '%s'\n", m_dragTempPath.c_str());
-  if (m_dragTempPath.empty()) return;
-  } // end export block
-
-do_drag:
+  // Initiate drag
 #ifndef _WIN32
-  // SWELL_InitiateDragDropOfFileList dereferences srcrect — must not be null
   RECT dragRect = { m_dragStartX - 5, m_dragStartY - 5,
                     m_dragStartX + 5, m_dragStartY + 5 };
   const char* files[] = { m_dragTempPath.c_str() };
-  DBG("[SneakPeak] DragExport: calling SWELL_InitiateDragDropOfFileList\n");
   SWELL_InitiateDragDropOfFileList(m_hwnd, &dragRect, files, 1, nullptr);
 #endif
-
-  DBG("[SneakPeak] DragExport: done, path=%s\n", m_dragTempPath.c_str());
 }
