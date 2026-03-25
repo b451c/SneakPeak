@@ -20,6 +20,10 @@
 |:---:|:---:|
 | ![Spectral](docs/images/spectral-view.png) | ![Minimap](docs/images/minimap.gif) |
 
+| Fade handles with continuous curvature |
+|:---:|
+| ![Fades](docs/images/fades.gif) |
+
 ---
 
 ## Why SneakPeak?
@@ -45,7 +49,7 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Precision selection** - Click and drag to select audio regions. Shift+click to extend. Double-click to select all.
 - **Cut / Copy / Paste** - Full clipboard support with sample-accurate editing.
 - **Normalize** - Peak normalization to 0 dB, plus LUFS normalization (-14 / -16 LUFS).
-- **Fades** - 7 fade curves (linear, fast/slow start, fast/slow steep, S-curve, S-curve steep) for both fade-in and fade-out.
+- **Fades** - Drag fade handles with continuous curvature control (horizontal = length, vertical = curve shape). 7 base shapes with smooth curvature matching REAPER's native D_FADEINDIR.
 - **Reverse** - Reverse selection or full item.
 - **Gain adjustment** - Interactive gain knob (+12 to -60 dB) with fine-adjust mode (Cmd+drag). Quick +3/-3 dB from context menu.
 - **DC offset removal** - One-click DC bias correction.
@@ -77,7 +81,8 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 ### Standalone File Mode
 - **Drag & drop WAV files** directly into SneakPeak for offline editing.
 - **Multiple file tabs** - Up to 8 files open simultaneously with independent undo stacks.
-- **Drag-export** - Drag a selection from the waveform to your desktop as a temp WAV file.
+- **Smart Save** - Ctrl+S with overwrite confirmation for WAV, auto `_edit.wav` for MP3/FLAC. Ctrl+Shift+S for Save As.
+- **Drag-export** - Drag files to REAPER timeline. Clean files use original (no copy), dirty files auto-save first. Selections export as named WAV.
 
 ### Markers
 - **Add markers** at cursor position (M key).
@@ -121,6 +126,8 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 | Add marker | `M` |
 | Add region | `Shift+M` |
 | Save (standalone) | `Ctrl/Cmd+S` |
+| Save As (standalone) | `Ctrl/Cmd+Shift+S` |
+| Split at cursor | `S` |
 | Zoom | `Scroll wheel` |
 | Vertical zoom | `Shift+Scroll` or `Alt+Scroll` |
 | Pan | `Ctrl/Cmd+Scroll` |
@@ -274,7 +281,7 @@ SneakPeak is free and open source. If you find it useful in your workflow, pleas
 
 ## Links
 
-- **Forum thread** - *(coming soon)*
+- **Forum thread** - https://forum.cockos.com/showthread.php?t=307499
 - **REAPER** - https://www.reaper.fm
 - **ReaPack** - https://reapack.com
 - **REAPER SDK** - https://github.com/justinfrankel/reaper-sdk
