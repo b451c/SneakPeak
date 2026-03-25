@@ -10,20 +10,30 @@
 #endif
 
 // Shared fade shape curve (used by waveform_view, audio_ops, edit_view)
-inline double ApplyFadeShape(double t, int shape)
+inline double ApplyFadeShape(double t, int shape, double dir = 0.0)
 {
   t = std::max(0.0, std::min(1.0, t));
+  double base;
   switch (shape) {
     default:
-    case 0: return t;                                       // linear
-    case 1: return sqrt(t);                                 // fast start
-    case 2: return t * t;                                   // slow start
-    case 3: return pow(t, 0.25);                            // fast start steep
-    case 4: return t * t * t * t;                           // slow start steep
-    case 5: return 0.5 - 0.5 * cos(M_PI * t);              // S-curve
-    case 6: { double s = 0.5 - 0.5 * cos(M_PI * t);       // S-curve steep
-              return s * s * (3.0 - 2.0 * s); }
+    case 0: base = t; break;                                      // linear
+    case 1: base = sqrt(t); break;                                // fast start
+    case 2: base = t * t; break;                                  // slow start
+    case 3: base = pow(t, 0.25); break;                           // fast start steep
+    case 4: base = t * t * t * t; break;                          // slow start steep
+    case 5: base = 0.5 - 0.5 * cos(M_PI * t); break;             // S-curve
+    case 6: { double s = 0.5 - 0.5 * cos(M_PI * t);              // S-curve steep
+              base = s * s * (3.0 - 2.0 * s); break; }
   }
+  // Apply curvature: dir > 0 pushes curve up (more gain early),
+  //                  dir < 0 pushes curve down (less gain early)
+  if (dir != 0.0 && t > 0.0 && t < 1.0) {
+    // Exponential scaling: symmetric around dir=0
+    // dir=-1 → exponent=4 (steep concave), dir=0 → 1 (no change), dir=+1 → 0.25 (steep convex)
+    double exponent = pow(8.0, -dir);
+    base = pow(base, exponent);
+  }
+  return base;
 }
 
 namespace AudioOps {

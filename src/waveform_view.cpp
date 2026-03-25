@@ -861,12 +861,25 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   int centerY = yTop + height / 2;
   float halfH = (float)(height / 2) * m_verticalZoom;
 
-  // Apply item volume (D_VOL) and fades so waveform reflects changes (from cache)
+  // Apply item volume (D_VOL) and fades so waveform reflects changes
   double itemVol = m_fadeCache.itemVol;
-  double fadeInLen = m_fadeCache.fadeInLen;
-  double fadeOutLen = m_fadeCache.fadeOutLen;
-  int fadeInShape = m_fadeCache.fadeInShape;
-  int fadeOutShape = m_fadeCache.fadeOutShape;
+  double fadeInLen, fadeOutLen, fadeInDir, fadeOutDir;
+  int fadeInShape, fadeOutShape;
+  if (m_standaloneMode) {
+    fadeInLen = m_standaloneFade.fadeInLen;
+    fadeOutLen = m_standaloneFade.fadeOutLen;
+    fadeInShape = m_standaloneFade.fadeInShape;
+    fadeOutShape = m_standaloneFade.fadeOutShape;
+    fadeInDir = m_standaloneFade.fadeInDir;
+    fadeOutDir = m_standaloneFade.fadeOutDir;
+  } else {
+    fadeInLen = m_fadeCache.fadeInLen;
+    fadeOutLen = m_fadeCache.fadeOutLen;
+    fadeInShape = m_fadeCache.fadeInShape;
+    fadeOutShape = m_fadeCache.fadeOutShape;
+    fadeInDir = m_fadeCache.fadeInDir;
+    fadeOutDir = m_fadeCache.fadeOutDir;
+  }
 
 
   // Pens: normal (green) and selected (dark green), plus RMS (darker variants)
@@ -915,9 +928,9 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     // Calculate fade envelope at this column's time position
     double fadeGain = 1.0;
     if (fadeInLen > 0.0 && colTime < fadeInLen)
-      fadeGain *= ApplyFadeShape(colTime / fadeInLen, fadeInShape);
+      fadeGain *= ApplyFadeShape(colTime / fadeInLen, fadeInShape, -fadeInDir);
     if (fadeOutLen > 0.0 && colTime > m_itemDuration - fadeOutLen)
-      fadeGain *= ApplyFadeShape((m_itemDuration - colTime) / fadeOutLen, fadeOutShape);
+      fadeGain *= ApplyFadeShape((m_itemDuration - colTime) / fadeOutLen, fadeOutShape, fadeOutDir);
     if (fadeGain < 0.0) fadeGain = 0.0;
 
     // Standalone gain preview (applies to selection region only)
@@ -963,9 +976,9 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
 
     double fadeGain = 1.0;
     if (fadeInLen > 0.0 && colTime < fadeInLen)
-      fadeGain *= ApplyFadeShape(colTime / fadeInLen, fadeInShape);
+      fadeGain *= ApplyFadeShape(colTime / fadeInLen, fadeInShape, -fadeInDir);
     if (fadeOutLen > 0.0 && colTime > m_itemDuration - fadeOutLen)
-      fadeGain *= ApplyFadeShape((m_itemDuration - colTime) / fadeOutLen, fadeOutShape);
+      fadeGain *= ApplyFadeShape((m_itemDuration - colTime) / fadeOutLen, fadeOutShape, fadeOutDir);
     if (fadeGain < 0.0) fadeGain = 0.0;
 
     double sgain2 = 1.0;
@@ -1436,12 +1449,14 @@ bool WaveformView::UpdateFadeCache()
     if (first) {
       m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(first, "D_FADEINLEN");
       m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(first, "C_FADEINSHAPE");
+      m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(first, "D_FADEINDIR");
     }
     // Fade-out from last item
     MediaItem* last = m_segments.back().item;
     if (last) {
       m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(last, "D_FADEOUTLEN");
       m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(last, "C_FADEOUTSHAPE");
+      m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(last, "D_FADEOUTDIR");
     }
     return oldVol != m_fadeCache.itemVol;
   }
@@ -1457,6 +1472,8 @@ bool WaveformView::UpdateFadeCache()
   m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
   m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
   m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
+  m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(m_item, "D_FADEINDIR");
+  m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTDIR");
 
   // If volume changed, invalidate peaks so clip indicators update
   bool changed = (oldVol != m_fadeCache.itemVol);
@@ -1513,7 +1530,7 @@ bool WaveformView::ClickChannelButton(int x, int y)
 
 void WaveformView::DrawFadeBackground(HDC hdc)
 {
-  double fadeInLen, fadeOutLen;
+  double fadeInLen, fadeOutLen, fadeInDir = 0.0, fadeOutDir = 0.0;
   int fadeInShape, fadeOutShape;
 
   if (m_standaloneMode) {
@@ -1521,11 +1538,15 @@ void WaveformView::DrawFadeBackground(HDC hdc)
     fadeOutLen = m_standaloneFade.fadeOutLen;
     fadeInShape = m_standaloneFade.fadeInShape;
     fadeOutShape = m_standaloneFade.fadeOutShape;
+    fadeInDir = m_standaloneFade.fadeInDir;
+    fadeOutDir = m_standaloneFade.fadeOutDir;
   } else if (m_item) {
     fadeInLen = m_fadeCache.fadeInLen;
     fadeOutLen = m_fadeCache.fadeOutLen;
     fadeInShape = m_fadeCache.fadeInShape;
     fadeOutShape = m_fadeCache.fadeOutShape;
+    fadeInDir = m_fadeCache.fadeInDir;
+    fadeOutDir = m_fadeCache.fadeOutDir;
   } else {
     return;
   }
@@ -1546,7 +1567,7 @@ void WaveformView::DrawFadeBackground(HDC hdc)
     int x1 = std::min(waveR, TimeToX(fadeInLen));
     for (int px = x0; px <= x1; px++) {
       double t = (x1 > x0) ? (double)(px - x0) / (double)(x1 - x0) : 1.0;
-      double gain = ApplyFadeShape(t, fadeInShape);
+      double gain = ApplyFadeShape(t, fadeInShape, -fadeInDir);
       // Curve Y position (gain=1 at top, gain=0 at bottom)
       int curveY = yBot - (int)(gain * yRange);
       // Fill from top down to the curve — the attenuated zone
@@ -1562,7 +1583,7 @@ void WaveformView::DrawFadeBackground(HDC hdc)
     int x1 = std::min(waveR, TimeToX(m_itemDuration));
     for (int px = x0; px <= x1; px++) {
       double t = (x1 > x0) ? (double)(px - x0) / (double)(x1 - x0) : 0.0;
-      double gain = ApplyFadeShape(1.0 - t, fadeOutShape);
+      double gain = ApplyFadeShape(1.0 - t, fadeOutShape, fadeOutDir);
       int curveY = yBot - (int)(gain * yRange);
       if (curveY > yTop) {
         MoveToEx(hdc, px, yTop, nullptr);
@@ -1577,7 +1598,7 @@ void WaveformView::DrawFadeBackground(HDC hdc)
 
 void WaveformView::DrawFadeEnvelope(HDC hdc)
 {
-  double fadeInLen, fadeOutLen;
+  double fadeInLen, fadeOutLen, fadeInDir = 0.0, fadeOutDir = 0.0;
   int fadeInShape, fadeOutShape;
 
   if (m_standaloneMode) {
@@ -1585,11 +1606,15 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
     fadeOutLen = m_standaloneFade.fadeOutLen;
     fadeInShape = m_standaloneFade.fadeInShape;
     fadeOutShape = m_standaloneFade.fadeOutShape;
+    fadeInDir = m_standaloneFade.fadeInDir;
+    fadeOutDir = m_standaloneFade.fadeOutDir;
   } else if (m_item) {
     fadeInLen = m_fadeCache.fadeInLen;
     fadeOutLen = m_fadeCache.fadeOutLen;
     fadeInShape = m_fadeCache.fadeInShape;
     fadeOutShape = m_fadeCache.fadeOutShape;
+    fadeInDir = m_fadeCache.fadeInDir;
+    fadeOutDir = m_fadeCache.fadeOutDir;
   } else {
     return;
   }
@@ -1598,7 +1623,7 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
   int waveL = m_rect.left;
   int waveR = m_rect.right - DB_SCALE_WIDTH;
 
-  // Draw once across full waveform height (not per channel)
+  // Draw once across full waveform height
   int yFull = m_rect.top + 2;           // gain = 1.0
   int yZero = m_rect.bottom - 2;        // gain = 0.0
   int yRange = yZero - yFull;
@@ -1613,17 +1638,17 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
     int x0 = std::max(waveL, TimeToX(0.0));
     int x1 = std::min(waveR, TimeToX(fadeInLen));
     if (x1 > x0) {
-      double g0 = ApplyFadeShape(0.0, fadeInShape);
+      double g0 = ApplyFadeShape(0.0, fadeInShape, -fadeInDir);
       MoveToEx(hdc, x0, yZero - (int)(g0 * yRange), nullptr);
       for (int px = x0 + 1; px <= x1; px++) {
         double t = (double)(px - x0) / (double)(x1 - x0);
-        double gain = ApplyFadeShape(t, fadeInShape);
+        double gain = ApplyFadeShape(t, fadeInShape, -fadeInDir);
         LineTo(hdc, px, yZero - (int)(gain * yRange));
       }
     }
     // Handle at fade-in end
     HBRUSH hb = CreateSolidBrush(envColor);
-    RECT handle = { x1 - 4, yFull - 4, x1 + 4, yFull + 4 };
+    RECT handle = { x1 - 5, yFull - 5, x1 + 5, yFull + 5 };
     FillRect(hdc, &handle, hb);
     DeleteObject(hb);
   }
@@ -1637,13 +1662,13 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
       MoveToEx(hdc, x0, yFull, nullptr);
       for (int px = x0; px <= x1; px++) {
         double t = (double)(px - x0) / (double)(x1 - x0);
-        double gain = ApplyFadeShape(1.0 - t, fadeOutShape);
+        double gain = ApplyFadeShape(1.0 - t, fadeOutShape, fadeOutDir);
         LineTo(hdc, px, yZero - (int)(gain * yRange));
       }
     }
     // Handle at fade-out start
     HBRUSH hb = CreateSolidBrush(envColor);
-    RECT handle = { x0 - 4, yFull - 4, x0 + 4, yFull + 4 };
+    RECT handle = { x0 - 5, yFull - 5, x0 + 5, yFull + 5 };
     FillRect(hdc, &handle, hb);
     DeleteObject(hb);
   }
@@ -1651,15 +1676,16 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
   SelectObject(hdc, oldPen);
   DeleteObject(envPen);
 
-  // Draw shape label during fade drag
+  // Draw curvature label during fade drag
   if (m_fadeDragType != 0) {
     static const char* shapeNames[] = {
       "Linear", "Fast Start", "Slow Start",
       "Fast Steep", "Slow Steep", "S-Curve", "S-Curve Steep"
     };
     int shapeIdx = std::max(0, std::min(6, m_fadeDragShape));
+    double dir = (m_fadeDragType == 1) ? fadeInDir : fadeOutDir;
     char label[64];
-    snprintf(label, sizeof(label), "%d: %s", shapeIdx, shapeNames[shapeIdx]);
+    snprintf(label, sizeof(label), "%s  curve: %+.0f%%", shapeNames[shapeIdx], dir * 100.0);
 
     // Position label near the relevant handle
     int labelX;

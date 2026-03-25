@@ -192,7 +192,7 @@ private:
   enum FadeDragType { FADE_NONE, FADE_IN, FADE_OUT };
   FadeDragType m_fadeDragging = FADE_NONE;
   int m_fadeDragStartY = 0;
-  int m_fadeDragStartShape = 0;
+  double m_fadeDragStartDir = 0.0;  // starting curvature for vertical drag
   bool m_standaloneFadeDrag = false; // true when dragging standalone fade handle
 
   MarkerManager m_markers;

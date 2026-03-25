@@ -1965,49 +1965,49 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         return;
       }
 
-      // Standalone fade handles — always visible at top corners
-      if (m_waveform.IsStandaloneMode() && y < m_waveformRect.top + 20) {
+      // Standalone fade handles — always visible at top corners (16px hit zone)
+      if (m_waveform.IsStandaloneMode()) {
         int waveL = m_waveformRect.left;
         int waveR = m_waveformRect.right - DB_SCALE_WIDTH;
         auto sf = m_waveform.GetStandaloneFade();
         int fiX = (sf.fadeInLen >= 0.001) ? m_waveform.TimeToX(sf.fadeInLen) : waveL;
         int foX = (sf.fadeOutLen >= 0.001) ? m_waveform.TimeToX(m_waveform.GetItemDuration() - sf.fadeOutLen) : waveR;
-        if (abs(x - fiX) <= 8) {
+        if (abs(x - fiX) <= 16 && y < m_waveformRect.top + 30) {
           m_fadeDragging = FADE_IN;
           m_standaloneFadeDrag = true;
           m_fadeDragStartY = y;
-          m_fadeDragStartShape = sf.fadeInShape;
+          m_fadeDragStartDir = sf.fadeInDir;
           SetCapture(m_hwnd);
           return;
         }
-        if (abs(x - foX) <= 8) {
+        if (abs(x - foX) <= 16 && y < m_waveformRect.top + 30) {
           m_fadeDragging = FADE_OUT;
           m_standaloneFadeDrag = true;
           m_fadeDragStartY = y;
-          m_fadeDragStartShape = sf.fadeOutShape;
+          m_fadeDragStartDir = sf.fadeOutDir;
           SetCapture(m_hwnd);
           return;
         }
       }
 
-      // Check REAPER fade handles (8px hit zone around handle)
+      // Check REAPER fade handles (16px hit zone around handle)
       if (!m_waveform.IsStandaloneMode() && g_GetMediaItemInfo_Value) {
         double fadeInLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEINLEN");
         double fadeOutLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEOUTLEN");
         int fiX = m_waveform.TimeToX(fadeInLen);
         int foX = m_waveform.TimeToX(m_waveform.GetItemDuration() - fadeOutLen);
-        if (fadeInLen >= 0.001 && abs(x - fiX) <= 8 && y < (m_waveformRect.top + m_waveformRect.bottom) / 2) {
+        if (fadeInLen >= 0.001 && abs(x - fiX) <= 16 && y < m_waveformRect.top + 30) {
           m_fadeDragging = FADE_IN;
           m_fadeDragStartY = y;
-          m_fadeDragStartShape = (int)g_GetMediaItemInfo_Value(m_waveform.GetItem(), "C_FADEINSHAPE");
+          m_fadeDragStartDir = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEINDIR");
           SetCapture(m_hwnd);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
         }
-        if (fadeOutLen >= 0.001 && abs(x - foX) <= 8 && y < (m_waveformRect.top + m_waveformRect.bottom) / 2) {
+        if (fadeOutLen >= 0.001 && abs(x - foX) <= 16 && y < m_waveformRect.top + 30) {
           m_fadeDragging = FADE_OUT;
           m_fadeDragStartY = y;
-          m_fadeDragStartShape = (int)g_GetMediaItemInfo_Value(m_waveform.GetItem(), "C_FADEOUTSHAPE");
+          m_fadeDragStartDir = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEOUTDIR");
           SetCapture(m_hwnd);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
@@ -2249,40 +2249,40 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     double time = m_waveform.XToTime(x);
     double dur = m_waveform.GetItemDuration();
 
-    // Vertical = fade shape: down = higher number (more curve), up = lower (more linear)
+    // Vertical = curvature: drag changes curve shape
+    // Fade-in: REAPER dir is inverted vs visual, so flip drag direction
     int dy = y - m_fadeDragStartY;
-    int shapeOffset = 0;
-    if (dy > 6) shapeOffset = (dy - 6) / 12 + 1;
-    else if (dy < -6) shapeOffset = (dy + 6) / 12 - 1;
-    int newShape = std::max(0, std::min(6, m_fadeDragStartShape + shapeOffset));
+    double sign = (m_fadeDragging == FADE_IN) ? 1.0 : -1.0;
+    double newDir = m_fadeDragStartDir + sign * (double)dy / 100.0;
+    newDir = std::max(-1.0, std::min(1.0, newDir));
 
     if (m_standaloneFadeDrag) {
-      // Standalone: update preview fade state
       auto sf = m_waveform.GetStandaloneFade();
       if (m_fadeDragging == FADE_IN) {
         sf.fadeInLen = std::max(0.0, std::min(time, dur));
-        sf.fadeInShape = newShape;
+        sf.fadeInDir = newDir;
       } else {
         sf.fadeOutLen = std::max(0.0, dur - time);
         sf.fadeOutLen = std::min(sf.fadeOutLen, dur);
-        sf.fadeOutShape = newShape;
+        sf.fadeOutDir = newDir;
       }
       m_waveform.SetStandaloneFade(sf);
-      m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2, newShape);
+      m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2,
+        (m_fadeDragging == FADE_IN) ? sf.fadeInShape : sf.fadeOutShape);
     } else if (g_SetMediaItemInfo_Value) {
-      // REAPER: update item parameters
       MediaItem* item = m_waveform.GetItem();
       if (m_fadeDragging == FADE_IN) {
         double fadeLen = std::max(0.0, std::min(time, dur));
         g_SetMediaItemInfo_Value(item, "D_FADEINLEN", fadeLen);
+        g_SetMediaItemInfo_Value(item, "D_FADEINDIR", newDir);
       } else {
         double fadeLen = std::max(0.0, dur - time);
         fadeLen = std::min(fadeLen, dur);
         g_SetMediaItemInfo_Value(item, "D_FADEOUTLEN", fadeLen);
+        g_SetMediaItemInfo_Value(item, "D_FADEOUTDIR", newDir);
       }
-      const char* shapeParam = (m_fadeDragging == FADE_IN) ? "C_FADEINSHAPE" : "C_FADEOUTSHAPE";
-      g_SetMediaItemInfo_Value(item, shapeParam, (double)newShape);
-      m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2, newShape);
+      m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2,
+        (int)g_GetMediaItemInfo_Value(item, (m_fadeDragging == FADE_IN) ? "C_FADEINSHAPE" : "C_FADEOUTSHAPE"));
       if (g_UpdateArrange) g_UpdateArrange();
     }
 

@@ -124,6 +124,8 @@ public:
     double fadeOutLen = 0.0;
     int fadeInShape = 0;
     int fadeOutShape = 0;
+    double fadeInDir = 0.0;   // curvature -1..1 (REAPER D_FADEINDIR)
+    double fadeOutDir = 0.0;  // curvature -1..1 (REAPER D_FADEOUTDIR)
     double itemVol = 1.0;
   };
   bool UpdateFadeCache(); // returns true if volume/fade changed
@@ -136,6 +138,8 @@ public:
     double fadeOutLen = 0.0;
     int fadeInShape = 0;
     int fadeOutShape = 0;
+    double fadeInDir = 0.0;   // curvature -1..1
+    double fadeOutDir = 0.0;  // curvature -1..1
   };
   void SetStandaloneFade(const StandaloneFade& f) { m_standaloneFade = f; }
   StandaloneFade GetStandaloneFade() const { return m_standaloneFade; }
