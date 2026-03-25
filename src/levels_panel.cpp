@@ -80,31 +80,19 @@ int LevelsPanel::GetIntegrationHalfWindow(int sampleRate) const
   return sampleRate * 3 / 20;
 }
 
+LevelsPanel::Ballistics LevelsPanel::GetBallistics() const
+{
+  switch (m_mode) {
+    case MeterMode::PEAK: return { 999.0, 0.5, 0.3, 0.3 };
+    case MeterMode::VU:   return { 2.2,   2.2, 0.3, 0.3 };
+    case MeterMode::RMS:
+    default:              return { 999.0, 3.0, 1.5, 1.5 };
+  }
+}
+
 void LevelsPanel::UpdateFromTrackPeak(double peakLinL, double peakLinR, bool playing, int nch)
 {
-  // Same mode-dependent ballistics as Update()
-  double attackRate, decayRate, peakDecay, peakHoldDecay;
-  switch (m_mode) {
-    case MeterMode::PEAK:
-      attackRate = 999.0;
-      decayRate = 0.5;
-      peakDecay = 0.3;
-      peakHoldDecay = 0.3;
-      break;
-    case MeterMode::VU:
-      attackRate = 2.2;
-      decayRate = 2.2;
-      peakDecay = 0.3;
-      peakHoldDecay = 0.3;
-      break;
-    case MeterMode::RMS:
-    default:
-      attackRate = 999.0;
-      decayRate = 3.0;
-      peakDecay = 1.5;
-      peakHoldDecay = 1.5;
-      break;
-  }
+  auto [attackRate, decayRate, peakDecay, peakHoldDecay] = GetBallistics();
 
   if (!playing) {
     if (m_wasPlaying || m_barL > -60.0 || m_barR > -60.0) {
@@ -148,29 +136,7 @@ void LevelsPanel::Update(const std::vector<double>& audio, int startFrame,
                          int endFrame, int sampleRate, int nch, double itemVol, bool playing,
                          const bool* channelActive)
 {
-  // Mode-dependent ballistics (dB per tick at ~33ms)
-  double attackRate, decayRate, peakDecay, peakHoldDecay;
-  switch (m_mode) {
-    case MeterMode::PEAK:
-      attackRate = 999.0;
-      decayRate = 0.5;
-      peakDecay = 0.3;
-      peakHoldDecay = 0.3;
-      break;
-    case MeterMode::VU:
-      attackRate = 2.2;
-      decayRate = 2.2;
-      peakDecay = 0.3;
-      peakHoldDecay = 0.3;
-      break;
-    case MeterMode::RMS:
-    default:
-      attackRate = 999.0;
-      decayRate = 3.0;
-      peakDecay = 1.5;
-      peakHoldDecay = 1.5;
-      break;
-  }
+  auto [attackRate, decayRate, peakDecay, peakHoldDecay] = GetBallistics();
 
   // When not playing, decay all meters to silence
   if (!playing) {

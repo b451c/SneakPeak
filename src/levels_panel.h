@@ -41,6 +41,9 @@ public:
   int GetIntegrationHalfWindow(int sampleRate) const;
 
 private:
+  struct Ballistics { double attackRate, decayRate, peakDecay, peakHoldDecay; };
+  Ballistics GetBallistics() const;
+
   void CreateGdiCache();
   void DestroyGdiCache();
 
