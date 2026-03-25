@@ -356,10 +356,14 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
   std::string path = GetSourceFilePath(take);
   if (path.empty()) return;
 
-  if (g_PCM_Source_CreateFromFile && g_SetMediaItemTake_Source) {
+  // Use P_SOURCE via GetSetMediaItemTakeInfo for proper ownership management.
+  // SetMediaItemTake_Source leaks the old source (REAPER SDK docs: "C/C++ code
+  // should not use this and instead use GetSetMediaItemTakeInfo with P_SOURCE").
+  if (g_PCM_Source_CreateFromFile && g_GetSetMediaItemTakeInfo) {
     PCM_source* newSrc = g_PCM_Source_CreateFromFile(path.c_str());
     if (newSrc) {
-      g_SetMediaItemTake_Source(take, newSrc);
+      // P_SOURCE with set=true transfers ownership; REAPER destroys the old source
+      g_GetSetMediaItemTakeInfo(take, "P_SOURCE", newSrc);
     }
   }
 
