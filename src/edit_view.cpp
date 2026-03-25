@@ -843,7 +843,7 @@ void SneakPeak::OnPaint(HDC hdc)
   } else {
     m_waveform.Paint(hdc);
   }
-  if (m_markers.m_showMarkers) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
+  if (m_markers.GetShowMarkers()) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
   if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect);
   if (m_waveform.HasItem()) DrawSoloButton(hdc);
   if (m_spectralVisible) {
@@ -2566,8 +2566,8 @@ void SneakPeak::OnRightClick(int x, int y)
   bool hasClip = s_clipboard.numFrames > 0;
 
   // If right-clicking near a marker, show marker actions at top level for quick access
-  m_markers.m_rightClickMarkerIdx = m_markers.HitTestMarker(x, m_waveform, 8);
-  if (m_markers.m_rightClickMarkerIdx >= 0) {
+  m_markers.SetRightClickMarkerIdx(m_markers.HitTestMarker(x, m_waveform, 8));
+  if (m_markers.GetRightClickMarkerIdx() >= 0) {
     MenuAppend(menu, MF_STRING, CM_EDIT_MARKER, "Edit Marker...");
     MenuAppend(menu, MF_STRING, CM_DELETE_MARKER, "Delete Marker");
     MenuAppendSeparator(menu);
@@ -2633,11 +2633,11 @@ void SneakPeak::OnRightClick(int x, int y)
   HMENU markerMenu = CreatePopupMenu();
   MenuAppend(markerMenu, hasItem ? MF_STRING : MF_GRAYED, CM_ADD_MARKER, "Add Marker at Cursor\tM");
   MenuAppend(markerMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_ADD_REGION, "Add Region from Selection");
-  m_markers.m_rightClickMarkerIdx = m_markers.HitTestMarker(x, m_waveform);
-  MenuAppend(markerMenu, (m_markers.m_rightClickMarkerIdx >= 0) ? MF_STRING : MF_GRAYED, CM_EDIT_MARKER, "Edit Marker...");
-  MenuAppend(markerMenu, (m_markers.m_rightClickMarkerIdx >= 0) ? MF_STRING : MF_GRAYED, CM_DELETE_MARKER, "Delete Marker");
+  m_markers.SetRightClickMarkerIdx(m_markers.HitTestMarker(x, m_waveform));
+  MenuAppend(markerMenu, (m_markers.GetRightClickMarkerIdx() >= 0) ? MF_STRING : MF_GRAYED, CM_EDIT_MARKER, "Edit Marker...");
+  MenuAppend(markerMenu, (m_markers.GetRightClickMarkerIdx() >= 0) ? MF_STRING : MF_GRAYED, CM_DELETE_MARKER, "Delete Marker");
   MenuAppendSeparator(markerMenu);
-  MenuAppend(markerMenu, m_markers.m_showMarkers ? (MF_STRING | MF_CHECKED) : MF_STRING, CM_SHOW_MARKERS, "Show Markers");
+  MenuAppend(markerMenu, m_markers.GetShowMarkers() ? (MF_STRING | MF_CHECKED) : MF_STRING, CM_SHOW_MARKERS, "Show Markers");
 
   // View submenu
   HMENU viewMenu = CreatePopupMenu();
@@ -2737,14 +2737,14 @@ void SneakPeak::OnContextMenuCommand(int id)
     }
     case CM_ZOOM_FIT:  m_waveform.ZoomToFit(); break;
     case CM_ZOOM_SEL:  m_waveform.ZoomToSelection(); break;
-    case CM_SHOW_MARKERS: m_markers.m_showMarkers = !m_markers.m_showMarkers; break;
+    case CM_SHOW_MARKERS: m_markers.ToggleShowMarkers(); break;
     case CM_ADD_MARKER:  m_markers.AddMarkerAtCursor(m_waveform); break;
     case CM_ADD_REGION:  m_markers.AddRegionFromSelection(m_waveform); break;
     case CM_DELETE_MARKER:
-      if (m_markers.m_rightClickMarkerIdx >= 0) m_markers.DeleteMarkerByEnumIdx(m_markers.m_rightClickMarkerIdx);
+      if (m_markers.GetRightClickMarkerIdx() >= 0) m_markers.DeleteMarkerByEnumIdx(m_markers.GetRightClickMarkerIdx());
       break;
     case CM_EDIT_MARKER:
-      if (m_markers.m_rightClickMarkerIdx >= 0) m_markers.EditMarkerDialog(m_markers.m_rightClickMarkerIdx);
+      if (m_markers.GetRightClickMarkerIdx() >= 0) m_markers.EditMarkerDialog(m_markers.GetRightClickMarkerIdx());
       break;
     case CM_GAIN_PANEL:
       m_gainPanel.Toggle(m_waveform.GetItem());

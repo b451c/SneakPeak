@@ -29,11 +29,16 @@ public:
   bool IsDragging() const { return m_markerDragging; }
   int GetDragEnumIdx() const { return m_dragMarkerEnumIdx; }
 
-  // State
-  bool m_showMarkers = true;
-  int m_rightClickMarkerIdx = -1; // for context menu on marker
+  // State accessors
+  bool GetShowMarkers() const { return m_showMarkers; }
+  void SetShowMarkers(bool v) { m_showMarkers = v; }
+  void ToggleShowMarkers() { m_showMarkers = !m_showMarkers; }
+  int GetRightClickMarkerIdx() const { return m_rightClickMarkerIdx; }
+  void SetRightClickMarkerIdx(int idx) { m_rightClickMarkerIdx = idx; }
 
 private:
+  bool m_showMarkers = true;
+  int m_rightClickMarkerIdx = -1;
   bool m_markerDragging = false;
   int m_dragMarkerEnumIdx = -1;  // enum index of dragged marker
 };
