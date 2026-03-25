@@ -235,22 +235,29 @@ The codebase is built on WDL/SWELL for cross-platform portability. Windows and L
 
 ```
 src/
-  main.cpp              Entry point, REAPER API imports, action registration
-  edit_view.h/cpp       SneakPeak window class, context menu, clipboard, destructive editing
-  waveform_view.h/cpp   Peak rendering, zoom, selection, coordinate conversion
-  toolbar.h/cpp         Button bar with zoom, transport, and editing actions
-  audio_engine.h/cpp    WAV file I/O (16/24/32-bit float), REAPER source refresh
-  audio_ops.h/cpp       Sample processing (normalize, fade, reverse, gain, DC remove)
-  multi_item_view.h/cpp Mix/Layered multi-item view, per-layer audio, absolute timeline
-  spectral_view.h       Async FFT spectrogram with magma colormap
-  minimap_view.h        Resizable minimap overview
-  levels_panel.h/cpp    Peak/RMS/VU level meters with mode-dependent ballistics
-  gain_panel.h          Interactive gain knob with fine-adjust mode
-  marker_manager.h      REAPER marker integration (add, edit, delete, navigate)
-  theme.h               Color palette and visual theming
-  config.h              Layout constants and interaction parameters
-  platform.h            Cross-platform abstraction (Win32/SWELL)
-  globals.h/cpp         REAPER API function pointers and helpers
+  main.cpp                Entry point, REAPER API imports, action registration
+  edit_view.h/cpp         Core: window lifecycle, timer, layout, message dispatch
+  rendering.cpp           Paint routines, mode bar, ruler, master waveform, meters panel
+  input_handling.cpp      Mouse, keyboard, toolbar input dispatch
+  audio_commands.cpp      Clipboard, undo, destructive editing, normalize, fade, reverse
+  standalone_file.cpp     Standalone tab lifecycle, save/load/save-as, preview playback
+  context_menu.cpp        Right-click menu construction and command dispatch
+  drag_export.cpp         Drag & drop WAV export to timeline/desktop
+  waveform_view.h/cpp     Waveform data management, zoom, selection, coordinates
+  waveform_rendering.cpp  Peak computation, waveform drawing, dB scale, fades, cursor
+  toolbar.h/cpp           Button bar with zoom, transport, and editing actions
+  audio_engine.h/cpp      WAV file I/O (16/24/32-bit float), REAPER source refresh
+  audio_ops.h/cpp         Sample processing (normalize, fade, reverse, gain, DC remove)
+  multi_item_view.h/cpp   Mix/Layered multi-item view, per-layer audio, absolute timeline
+  spectral_view.h/cpp     Async FFT spectrogram with magma colormap
+  minimap_view.h/cpp      Resizable minimap overview
+  levels_panel.h/cpp      Peak/RMS/VU level meters with mode-dependent ballistics
+  gain_panel.h/cpp        Interactive gain knob with fine-adjust mode
+  marker_manager.h/cpp    REAPER marker integration (add, edit, delete, navigate)
+  theme.h/cpp             Color palette, visual theming, cached fonts
+  config.h                Layout constants, interaction parameters, shared utilities
+  platform.h              Cross-platform abstraction (Win32/SWELL)
+  globals.h/cpp           REAPER API function pointers and helpers
 ```
 
 The extension loads full audio data via REAPER's AudioAccessor API for accurate waveform display and editing. Double-buffered GDI rendering ensures smooth, flicker-free display.

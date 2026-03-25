@@ -4,6 +4,25 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-03-25
+
+### Changed
+- **Modular architecture** - Monolithic `edit_view.cpp` (4,336 lines) split into 7 focused modules: rendering, input handling, audio commands, standalone file management, context menu, drag export. No file exceeds 1,100 lines.
+- **Waveform rendering** split from data management (waveform_view.cpp → waveform_view.cpp + waveform_rendering.cpp).
+
+### Fixed
+- **Memory leak** - `RefreshItemSource` now uses `P_SOURCE` via `GetSetMediaItemTakeInfo` instead of deprecated `SetMediaItemTake_Source` which leaked the old PCM source on every destructive edit.
+- **WriteAndRefresh** now checks write success before marking item as dirty.
+- **Marker manager** - `m_showMarkers` and `m_rightClickMarkerIdx` properly encapsulated (private with accessors).
+
+### Performance
+- **PreventUIRefresh** - All REAPER undo blocks wrapped with `PreventUIRefresh(1)/-1)` to prevent redundant arrange view redraws during multi-step operations.
+- **Toolbar font caching** - Font created once via theme system instead of per-frame `CreateFont`/`DeleteObject`.
+- **Deduplicated fade parameters** - `GetActiveFadeParams()` replaces 3 identical 12-line blocks in waveform rendering.
+- **Deduplicated meter ballistics** - `GetBallistics()` replaces 2 identical switch blocks with C++17 structured bindings.
+
+---
+
 ## [1.6.0] - 2026-03-25
 
 ### Added
