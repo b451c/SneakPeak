@@ -3589,8 +3589,11 @@ void SneakPeak::WriteAndRefresh()
   int sr = m_waveform.GetSampleRate();
   int frames = m_waveform.GetAudioSampleCount();
 
-  AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr,
-                            m_wavBitsPerSample, m_wavAudioFormat);
+  if (!AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr,
+                                 m_wavBitsPerSample, m_wavAudioFormat)) {
+    MessageBox(m_hwnd, "Failed to write WAV file.", "SneakPeak", MB_OK | MB_ICONERROR);
+    return;
+  }
   AudioEngine::RefreshItemSource(m_waveform.GetItem(), m_waveform.GetTake());
 
   m_waveform.Invalidate();
