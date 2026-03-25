@@ -571,7 +571,7 @@ void SneakPeak::OnTimer()
   }
 }
 
-static const char* FileNameFromPath(const char* path);
+
 
 void SneakPeak::GetItemTitle(char* buf, int bufSize)
 {
@@ -873,14 +873,6 @@ void SneakPeak::DrawSplitter(HDC hdc)
     FillRect(hdc, &d, dot);
   }
   DeleteObject(dot);
-}
-
-// Helper: extract filename from path
-static const char* FileNameFromPath(const char* path)
-{
-  const char* slash = strrchr(path, '/');
-  if (!slash) slash = strrchr(path, '\\');
-  return slash ? slash + 1 : path;
 }
 
 void SneakPeak::DrawModeBar(HDC hdc)

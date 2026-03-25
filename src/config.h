@@ -35,3 +35,15 @@ inline constexpr double ZOOM_FACTOR = 1.25;  // per scroll step
 inline constexpr int EDGE_ZONE = 40;           // pixels from edge for auto-scroll
 inline constexpr int PLAY_GRACE_TICKS = 5;     // ticks to skip auto-stop after play start
 inline constexpr int ZERO_SNAP_RANGE = 512;    // sample search radius for zero-crossing snap
+
+// Utility
+#include <cstring>
+inline const char* FileNameFromPath(const char* path) {
+  if (!path) return "";
+  const char* p = strrchr(path, '/');
+#ifdef _WIN32
+  const char* p2 = strrchr(path, '\\');
+  if (p2 > p) p = p2;
+#endif
+  return p ? p + 1 : path;
+}
