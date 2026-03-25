@@ -129,6 +129,14 @@ public:
     double itemVol = 1.0;
   };
   bool UpdateFadeCache(); // returns true if volume/fade changed
+
+  // Active fade parameters (reads from standalone or cache depending on mode)
+  struct FadeParams {
+    double fadeInLen = 0.0, fadeOutLen = 0.0;
+    int fadeInShape = 0, fadeOutShape = 0;
+    double fadeInDir = 0.0, fadeOutDir = 0.0;
+  };
+  FadeParams GetActiveFadeParams() const;
   FadeCache GetFadeCache() const { return m_fadeCache; }
   void SetItemVol(double vol) { m_fadeCache.itemVol = vol; }
 

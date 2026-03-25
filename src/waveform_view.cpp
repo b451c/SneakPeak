@@ -863,23 +863,10 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
 
   // Apply item volume (D_VOL) and fades so waveform reflects changes
   double itemVol = m_fadeCache.itemVol;
-  double fadeInLen, fadeOutLen, fadeInDir, fadeOutDir;
-  int fadeInShape, fadeOutShape;
-  if (m_standaloneMode) {
-    fadeInLen = m_standaloneFade.fadeInLen;
-    fadeOutLen = m_standaloneFade.fadeOutLen;
-    fadeInShape = m_standaloneFade.fadeInShape;
-    fadeOutShape = m_standaloneFade.fadeOutShape;
-    fadeInDir = m_standaloneFade.fadeInDir;
-    fadeOutDir = m_standaloneFade.fadeOutDir;
-  } else {
-    fadeInLen = m_fadeCache.fadeInLen;
-    fadeOutLen = m_fadeCache.fadeOutLen;
-    fadeInShape = m_fadeCache.fadeInShape;
-    fadeOutShape = m_fadeCache.fadeOutShape;
-    fadeInDir = m_fadeCache.fadeInDir;
-    fadeOutDir = m_fadeCache.fadeOutDir;
-  }
+  auto fp = GetActiveFadeParams();
+  double fadeInLen = fp.fadeInLen, fadeOutLen = fp.fadeOutLen;
+  int fadeInShape = fp.fadeInShape, fadeOutShape = fp.fadeOutShape;
+  double fadeInDir = fp.fadeInDir, fadeOutDir = fp.fadeOutDir;
 
 
   // Pens: normal (green) and selected (dark green), plus RMS (darker variants)
@@ -1483,6 +1470,27 @@ bool WaveformView::UpdateFadeCache()
   return changed;
 }
 
+WaveformView::FadeParams WaveformView::GetActiveFadeParams() const
+{
+  FadeParams fp;
+  if (m_standaloneMode) {
+    fp.fadeInLen = m_standaloneFade.fadeInLen;
+    fp.fadeOutLen = m_standaloneFade.fadeOutLen;
+    fp.fadeInShape = m_standaloneFade.fadeInShape;
+    fp.fadeOutShape = m_standaloneFade.fadeOutShape;
+    fp.fadeInDir = m_standaloneFade.fadeInDir;
+    fp.fadeOutDir = m_standaloneFade.fadeOutDir;
+  } else {
+    fp.fadeInLen = m_fadeCache.fadeInLen;
+    fp.fadeOutLen = m_fadeCache.fadeOutLen;
+    fp.fadeInShape = m_fadeCache.fadeInShape;
+    fp.fadeOutShape = m_fadeCache.fadeOutShape;
+    fp.fadeInDir = m_fadeCache.fadeInDir;
+    fp.fadeOutDir = m_fadeCache.fadeOutDir;
+  }
+  return fp;
+}
+
 void WaveformView::SetFadeDragInfo(int dragType, int shape)
 {
   m_fadeDragType = dragType;
@@ -1530,26 +1538,11 @@ bool WaveformView::ClickChannelButton(int x, int y)
 
 void WaveformView::DrawFadeBackground(HDC hdc)
 {
-  double fadeInLen, fadeOutLen, fadeInDir = 0.0, fadeOutDir = 0.0;
-  int fadeInShape, fadeOutShape;
-
-  if (m_standaloneMode) {
-    fadeInLen = m_standaloneFade.fadeInLen;
-    fadeOutLen = m_standaloneFade.fadeOutLen;
-    fadeInShape = m_standaloneFade.fadeInShape;
-    fadeOutShape = m_standaloneFade.fadeOutShape;
-    fadeInDir = m_standaloneFade.fadeInDir;
-    fadeOutDir = m_standaloneFade.fadeOutDir;
-  } else if (m_item) {
-    fadeInLen = m_fadeCache.fadeInLen;
-    fadeOutLen = m_fadeCache.fadeOutLen;
-    fadeInShape = m_fadeCache.fadeInShape;
-    fadeOutShape = m_fadeCache.fadeOutShape;
-    fadeInDir = m_fadeCache.fadeInDir;
-    fadeOutDir = m_fadeCache.fadeOutDir;
-  } else {
-    return;
-  }
+  if (!m_standaloneMode && !m_item) return;
+  auto fp = GetActiveFadeParams();
+  double fadeInLen = fp.fadeInLen, fadeOutLen = fp.fadeOutLen;
+  int fadeInShape = fp.fadeInShape, fadeOutShape = fp.fadeOutShape;
+  double fadeInDir = fp.fadeInDir, fadeOutDir = fp.fadeOutDir;
   if (fadeInLen < 0.001 && fadeOutLen < 0.001) return;
 
   int waveL = m_rect.left;
@@ -1598,26 +1591,11 @@ void WaveformView::DrawFadeBackground(HDC hdc)
 
 void WaveformView::DrawFadeEnvelope(HDC hdc)
 {
-  double fadeInLen, fadeOutLen, fadeInDir = 0.0, fadeOutDir = 0.0;
-  int fadeInShape, fadeOutShape;
-
-  if (m_standaloneMode) {
-    fadeInLen = m_standaloneFade.fadeInLen;
-    fadeOutLen = m_standaloneFade.fadeOutLen;
-    fadeInShape = m_standaloneFade.fadeInShape;
-    fadeOutShape = m_standaloneFade.fadeOutShape;
-    fadeInDir = m_standaloneFade.fadeInDir;
-    fadeOutDir = m_standaloneFade.fadeOutDir;
-  } else if (m_item) {
-    fadeInLen = m_fadeCache.fadeInLen;
-    fadeOutLen = m_fadeCache.fadeOutLen;
-    fadeInShape = m_fadeCache.fadeInShape;
-    fadeOutShape = m_fadeCache.fadeOutShape;
-    fadeInDir = m_fadeCache.fadeInDir;
-    fadeOutDir = m_fadeCache.fadeOutDir;
-  } else {
-    return;
-  }
+  if (!m_standaloneMode && !m_item) return;
+  auto fp = GetActiveFadeParams();
+  double fadeInLen = fp.fadeInLen, fadeOutLen = fp.fadeOutLen;
+  int fadeInShape = fp.fadeInShape, fadeOutShape = fp.fadeOutShape;
+  double fadeInDir = fp.fadeInDir, fadeOutDir = fp.fadeOutDir;
   if (fadeInLen < 0.001 && fadeOutLen < 0.001) return;
 
   int waveL = m_rect.left;
