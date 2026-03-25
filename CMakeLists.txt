@@ -29,6 +29,7 @@ add_library(reaper_sneakpeak SHARED
   src/context_menu.cpp
   src/drag_export.cpp
   src/rendering.cpp
+  src/input_handling.cpp
   src/waveform_view.cpp
   src/toolbar.cpp
   src/theme.cpp
