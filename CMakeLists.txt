@@ -27,6 +27,7 @@ add_library(reaper_sneakpeak SHARED
   src/standalone_file.cpp
   src/audio_commands.cpp
   src/context_menu.cpp
+  src/drag_export.cpp
   src/waveform_view.cpp
   src/toolbar.cpp
   src/theme.cpp
