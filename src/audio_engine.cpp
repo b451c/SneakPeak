@@ -370,21 +370,62 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
   if (g_UpdateArrange) g_UpdateArrange();
 }
 
-std::string AudioEngine::WriteTempWav(const double* samples, int numFrames,
-                                       int numChannels, int sampleRate,
-                                       int bitsPerSample, int audioFormat)
+std::string AudioEngine::WriteExportWav(const double* samples, int numFrames,
+                                         int numChannels, int sampleRate,
+                                         int bitsPerSample, int audioFormat,
+                                         const char* sourceFilePath)
 {
-  // Generate unique temp path (use $TMPDIR if available)
-  const char* tmpDir = getenv("TMPDIR");
-  if (!tmpDir) tmpDir = "/tmp";
-  char tmpPath[512];
-  snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_export_%d.wav", tmpDir, (int)getpid());
+  // Generate unique filename with timestamp
+  time_t now = time(nullptr);
+  struct tm* t = localtime(&now);
+  char filename[128];
+  snprintf(filename, sizeof(filename), "sneakpeak_%04d%02d%02d_%02d%02d%02d.wav",
+           t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+           t->tm_hour, t->tm_min, t->tm_sec);
 
-  if (!WriteWavFile(tmpPath, samples, numFrames, numChannels, sampleRate,
+  char exportPath[512] = {};
+  const char* chosen = nullptr;
+
+  // Priority 1: project recording folder (if project is saved)
+  if (g_GetProjectPathEx && g_EnumProjects) {
+    char projFile[512] = {};
+    g_EnumProjects(-1, projFile, sizeof(projFile));
+    if (projFile[0]) {
+      char projPath[512] = {};
+      g_GetProjectPathEx(nullptr, projPath, sizeof(projPath));
+      if (projPath[0]) {
+        snprintf(exportPath, sizeof(exportPath), "%s/%s", projPath, filename);
+        chosen = "project";
+      }
+    }
+  }
+
+  // Priority 2: next to source file (standalone mode)
+  if (!chosen && sourceFilePath && sourceFilePath[0]) {
+    // Extract directory from source path
+    std::string srcDir(sourceFilePath);
+    size_t lastSlash = srcDir.rfind('/');
+    if (lastSlash != std::string::npos) {
+      srcDir.resize(lastSlash);
+      snprintf(exportPath, sizeof(exportPath), "%s/%s", srcDir.c_str(), filename);
+      chosen = "source";
+    }
+  }
+
+  // Priority 3: temp directory
+  if (!chosen) {
+    const char* tmpDir = getenv("TMPDIR");
+    if (!tmpDir) tmpDir = "/tmp";
+    snprintf(exportPath, sizeof(exportPath), "%s/%s", tmpDir, filename);
+    chosen = "tmp";
+  }
+
+  if (!WriteWavFile(exportPath, samples, numFrames, numChannels, sampleRate,
                     bitsPerSample, audioFormat)) {
-    DBG("[AudioEngine] WriteTempWav failed\n");
+    DBG("[AudioEngine] WriteExportWav failed: %s\n", exportPath);
     return {};
   }
 
-  return std::string(tmpPath);
+  DBG("[AudioEngine] Exported to: %s (%s)\n", exportPath, chosen);
+  return std::string(exportPath);
 }

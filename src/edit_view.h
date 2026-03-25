@@ -238,6 +238,7 @@ private:
   int m_dragStartX = 0;
   int m_dragStartY = 0;
   std::string m_dragTempPath;
+  bool m_dragIsOriginal = false;  // true when dragging original file (don't delete)
   void InitiateDragExport();
   void CleanupDragTemp();
 

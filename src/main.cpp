@@ -91,6 +91,10 @@
 #define REAPERAPI_WANT_Track_GetPeakInfo
 #define REAPERAPI_WANT_Track_GetPeakHoldDB
 
+// Project path
+#define REAPERAPI_WANT_GetProjectPathEx
+#define REAPERAPI_WANT_EnumProjects
+
 // Pointer validation
 #define REAPERAPI_WANT_ValidatePtr2
 
@@ -319,6 +323,8 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_GetMasterTrack = GetMasterTrack;
   g_Track_GetPeakInfo = Track_GetPeakInfo;
   g_Track_GetPeakHoldDB = Track_GetPeakHoldDB;
+  g_GetProjectPathEx = GetProjectPathEx;
+  g_EnumProjects = EnumProjects;
   g_ValidatePtr2 = ValidatePtr2;
   g_CalculateNormalization = (double(*)(PCM_source*, int, double, double, double))
       rec->GetFunc("CalculateNormalization");

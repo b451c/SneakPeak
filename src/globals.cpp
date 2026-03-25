@@ -76,6 +76,10 @@ MediaTrack* (*g_GetMasterTrack)(ReaProject*) = nullptr;
 double (*g_Track_GetPeakInfo)(MediaTrack*, int) = nullptr;
 double (*g_Track_GetPeakHoldDB)(MediaTrack*, int, bool) = nullptr;
 
+// Project path
+void (*g_GetProjectPathEx)(ReaProject*, char*, int) = nullptr;
+ReaProject* (*g_EnumProjects)(int, char*, int) = nullptr;
+
 // Pointer validation
 bool (*g_ValidatePtr2)(ReaProject*, void*, const char*) = nullptr;
 

@@ -3373,8 +3373,18 @@ void SneakPeak::StandalonePlayStop()
     // Clean up old temp file
     if (!m_previewTempPath.empty()) remove(m_previewTempPath.c_str());
 
-    m_previewTempPath = AudioEngine::WriteTempWav(previewData.data(), frames, nch, sr,
-                                                    m_wavBitsPerSample, m_wavAudioFormat);
+    // Preview is temporary — always use temp dir (file deleted after playback)
+    {
+      const char* tmpDir = getenv("TMPDIR");
+      if (!tmpDir) tmpDir = "/tmp";
+      char tmpPath[512];
+      snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_preview_%d.wav", tmpDir, (int)getpid());
+      if (AudioEngine::WriteWavFile(tmpPath, previewData.data(), frames, nch, sr,
+                                     m_wavBitsPerSample, m_wavAudioFormat))
+        m_previewTempPath = tmpPath;
+      else
+        m_previewTempPath.clear();
+    }
     if (m_previewTempPath.empty()) return;
     m_previewCacheDirty = false;
   }
@@ -4080,10 +4090,11 @@ void SneakPeak::DoNormalizeLUFS(double targetLufs)
 
 void SneakPeak::CleanupDragTemp()
 {
-  if (!m_dragTempPath.empty()) {
+  if (!m_dragTempPath.empty() && !m_dragIsOriginal) {
     remove(m_dragTempPath.c_str());
-    m_dragTempPath.clear();
   }
+  m_dragTempPath.clear();
+  m_dragIsOriginal = false;
 }
 
 void SneakPeak::InitiateDragExport()
@@ -4091,12 +4102,31 @@ void SneakPeak::InitiateDragExport()
   DBG("[SneakPeak] InitiateDragExport: hasItem=%d hasSel=%d\n",
       m_waveform.HasItem(), m_waveform.HasSelection());
 
-  if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
+  if (!m_waveform.HasItem()) return;
 
   CleanupDragTemp();
 
+  // Unmodified standalone file with no selection → drag original file directly
+  if (m_waveform.IsStandaloneMode() && !m_dirty && !m_waveform.HasSelection()
+      && !m_waveform.HasStandaloneFade()) {
+    const std::string& origPath = m_waveform.GetStandaloneFilePath();
+    if (!origPath.empty()) {
+      m_dragTempPath = origPath;
+      m_dragIsOriginal = true;
+      DBG("[SneakPeak] DragExport: unmodified file, using original: %s\n", origPath.c_str());
+      goto do_drag;  // skip export, drag original
+    }
+  }
+
+  {
+  // If no selection, export entire file
   int startF, endF;
-  GetSelectionSampleRange(startF, endF);
+  if (m_waveform.HasSelection()) {
+    GetSelectionSampleRange(startF, endF);
+  } else {
+    startF = 0;
+    endF = m_waveform.GetAudioSampleCount();
+  }
   int nch = m_waveform.GetNumChannels();
   int sr = m_waveform.GetSampleRate();
   int selFrames = endF - startF;
@@ -4130,7 +4160,7 @@ void SneakPeak::InitiateDragExport()
         // We need to offset into the fade curve since selection may not start at 0
         for (int i = 0; i < overlapFrames; i++) {
           double t = (double)(startF + i) / (double)fadeFrames;
-          double gain = ApplyFadeShape(t, sf.fadeInShape);
+          double gain = ApplyFadeShape(t, sf.fadeInShape, -sf.fadeInDir);
           for (int ch = 0; ch < nch; ch++)
             exportBuf[i * nch + ch] *= gain;
         }
@@ -4144,7 +4174,7 @@ void SneakPeak::InitiateDragExport()
       if (overlapStart < overlapEnd) {
         for (int i = overlapStart; i < overlapEnd; i++) {
           double t = (double)(i - fadeStart) / (double)fadeFrames;
-          double gain = ApplyFadeShape(1.0 - t, sf.fadeOutShape);
+          double gain = ApplyFadeShape(1.0 - t, sf.fadeOutShape, sf.fadeOutDir);
           int bufIdx = i - startF;
           for (int ch = 0; ch < nch; ch++)
             exportBuf[bufIdx * nch + ch] *= gain;
@@ -4153,12 +4183,18 @@ void SneakPeak::InitiateDragExport()
     }
   }
 
-  m_dragTempPath = AudioEngine::WriteTempWav(exportBuf.data(), selFrames, nch,
-                                              sr,
-                                              m_wavBitsPerSample, m_wavAudioFormat);
-  DBG("[SneakPeak] DragExport: wrote temp WAV to '%s'\n", m_dragTempPath.c_str());
+  // Pass source file path for fallback save location (next to original)
+  const char* srcPath = m_waveform.IsStandaloneMode()
+      ? m_waveform.GetStandaloneFilePath().c_str() : nullptr;
+  m_dragTempPath = AudioEngine::WriteExportWav(exportBuf.data(), selFrames, nch,
+                                                sr,
+                                                m_wavBitsPerSample, m_wavAudioFormat,
+                                                srcPath);
+  DBG("[SneakPeak] DragExport: wrote WAV to '%s'\n", m_dragTempPath.c_str());
   if (m_dragTempPath.empty()) return;
+  } // end export block
 
+do_drag:
 #ifndef _WIN32
   // SWELL_InitiateDragDropOfFileList dereferences srcrect — must not be null
   RECT dragRect = { m_dragStartX - 5, m_dragStartY - 5,
@@ -4168,5 +4204,5 @@ void SneakPeak::InitiateDragExport()
   SWELL_InitiateDragDropOfFileList(m_hwnd, &dragRect, files, 1, nullptr);
 #endif
 
-  DBG("[SneakPeak] DragExport: done, %d frames\n", selFrames);
+  DBG("[SneakPeak] DragExport: done, path=%s\n", m_dragTempPath.c_str());
 }

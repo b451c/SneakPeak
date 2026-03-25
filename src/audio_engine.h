@@ -41,8 +41,11 @@ public:
   // Refresh REAPER's source after modifying the file on disk
   static void RefreshItemSource(MediaItem* item, MediaItem_Take* take);
 
-  // Write selection to a temp WAV file, returns path or empty on failure
-  static std::string WriteTempWav(const double* samples, int numFrames,
-                                   int numChannels, int sampleRate,
-                                   int bitsPerSample = 16, int audioFormat = 1);
+  // Write audio to WAV file for drag export.
+  // Priority: 1) project recording folder, 2) next to sourceFile, 3) /tmp
+  // Returns path or empty on failure.
+  static std::string WriteExportWav(const double* samples, int numFrames,
+                                     int numChannels, int sampleRate,
+                                     int bitsPerSample = 16, int audioFormat = 1,
+                                     const char* sourceFilePath = nullptr);
 };

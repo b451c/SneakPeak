@@ -101,6 +101,10 @@ extern MediaTrack* (*g_GetMasterTrack)(ReaProject* proj);
 extern double (*g_Track_GetPeakInfo)(MediaTrack* track, int channel);
 extern double (*g_Track_GetPeakHoldDB)(MediaTrack* track, int channel, bool clear);
 
+// Project path
+extern void (*g_GetProjectPathEx)(ReaProject* proj, char* bufOut, int bufOut_sz);
+extern ReaProject* (*g_EnumProjects)(int idx, char* projfnOutOptional, int projfnOutOptional_sz);
+
 // Pointer validation
 extern bool (*g_ValidatePtr2)(ReaProject* proj, void* pointer, const char* ctypename);
 
