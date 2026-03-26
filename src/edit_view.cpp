@@ -523,16 +523,20 @@ void SneakPeak::OnTimer()
     }
     // Batch gain: sync knob offset to waveform for visual feedback
     // But NOT when there's a selection (selection uses per-region preview instead)
-    m_gainPanel.SetSkipBatchWrite(m_waveform.HasSelection());
-    if (m_gainPanel.IsBatch() && !m_waveform.HasSelection()) {
+    // In SET mode with selection: skip D_VOL writes (visual preview + split on release)
+    // In REAPER single-item mode: always write D_VOL (whole item, selection irrelevant)
+    bool skipWrite = m_workingSet.active && m_waveform.HasSelection();
+    m_gainPanel.SetSkipBatchWrite(skipWrite);
+    if (m_gainPanel.IsBatch() && !skipWrite) {
       double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
       m_waveform.SetBatchGainOffset(offsetLin);
     } else {
       m_waveform.SetBatchGainOffset(1.0);
     }
   }
-  // Gain preview: selection-only overlay during knob drag (all modes)
-  if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging() && m_waveform.HasSelection()) {
+  // Gain preview: selection overlay during knob drag (SET + standalone only)
+  if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging() && m_waveform.HasSelection()
+      && (m_workingSet.active || m_waveform.IsStandaloneMode())) {
     double gainLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
     WaveformSelection sel = m_waveform.GetSelection();
     double s = std::min(sel.startTime, sel.endTime);
@@ -595,15 +599,6 @@ void SneakPeak::OnTimer()
   }
 
   // Working set: no periodic refresh - refreshes on explicit user actions
-
-  // Pending view restore (after gain split - re-apply until countdown expires)
-  if (m_pendingViewRestoreTicks > 0 && m_waveform.HasItem() && m_waveform.GetItemDuration() > 0) {
-    m_waveform.SetViewStart(std::min(m_pendingViewStart, m_waveform.GetItemDuration()));
-    m_waveform.SetViewDuration(m_pendingViewDur);
-    m_waveform.Invalidate();
-    m_pendingViewRestoreTicks--;
-    InvalidateRect(m_hwnd, nullptr, FALSE);
-  }
 
   // Cursor + RMS levels - works for both single and multi-item
   if (m_waveform.HasItem()) {

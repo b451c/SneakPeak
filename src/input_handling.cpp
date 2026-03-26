@@ -441,25 +441,19 @@ void SneakPeak::OnMouseUp(int x, int y)
       if (std::abs(db) > 0.01) {
         double factor = pow(10.0, db / 20.0);
 
-        if (m_waveform.HasSelection() && g_SplitMediaItem && g_SetMediaItemInfo_Value &&
-            g_GetMediaItemInfo_Value && g_GetMediaItem_Track) {
-          // Selection: split + D_VOL (handles cross-segment)
+        if (m_workingSet.active && m_waveform.HasSelection() && g_SplitMediaItem &&
+            g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value && m_workingSet.track) {
+          // SET mode with selection: split + D_VOL + crossfade overlap
           WaveformSelection sel = m_waveform.GetSelection();
           double absStart = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
           double absEnd = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
-          MediaTrack* track = nullptr;
-          if (m_workingSet.active && m_workingSet.track) {
-            if (g_ValidatePtr2 && g_ValidatePtr2(nullptr, m_workingSet.track, "MediaTrack*"))
-              track = m_workingSet.track;
-          } else if (m_waveform.GetItem()) {
-            track = g_GetMediaItem_Track(m_waveform.GetItem());
-          }
+          MediaTrack* track = m_workingSet.track;
 
-          if (track && g_GetTrackNumMediaItems && g_GetTrackMediaItem) {
+          if (g_ValidatePtr2 && g_ValidatePtr2(nullptr, track, "MediaTrack*") &&
+              g_GetTrackNumMediaItems && g_GetTrackMediaItem) {
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
-            // Collect items overlapping selection BEFORE any splits
             int count = g_GetTrackNumMediaItems(track);
             std::vector<MediaItem*> overlap;
             for (int i = 0; i < count; i++) {
@@ -471,60 +465,48 @@ void SneakPeak::OnMouseUp(int x, int y)
                 overlap.push_back(mi);
             }
 
-            // Apply D_VOL + extend item by ~10ms to overlap neighbors (auto-crossfade)
             static const double XFADE_SEC = 0.01;
-            auto applyGainWithFade = [&](MediaItem* target) {
+            auto applyGainWithXfade = [&](MediaItem* target) {
               if (!target) return;
               double v = g_GetMediaItemInfo_Value(target, "D_VOL");
               g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
-
               double pos = g_GetMediaItemInfo_Value(target, "D_POSITION");
               double len = g_GetMediaItemInfo_Value(target, "D_LENGTH");
               double xf = std::min(XFADE_SEC, len * 0.2);
-
-              // Extend left: move position back, increase length, adjust take start offset
+              // Extend left to overlap neighbor (auto-crossfade)
               MediaItem_Take* take = g_GetActiveTake ? g_GetActiveTake(target) : nullptr;
               if (take && g_GetSetMediaItemTakeInfo && xf > 0.0) {
-                double* pStartOffs = (double*)g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", nullptr);
-                double startOffs = pStartOffs ? *pStartOffs : 0.0;
-                double leftXf = std::min(xf, startOffs); // can't go before source start
-                if (leftXf > 0.0) {
-                  double newOffs = startOffs - leftXf;
-                  g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", &newOffs);
-                  g_SetMediaItemInfo_Value(target, "D_POSITION", pos - leftXf);
-                  g_SetMediaItemInfo_Value(target, "D_LENGTH", len + leftXf);
-                  len += leftXf;
+                double* pOff = (double*)g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", nullptr);
+                double soff = pOff ? *pOff : 0.0;
+                double lxf = std::min(xf, soff);
+                if (lxf > 0.0) {
+                  double newOff = soff - lxf;
+                  g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", &newOff);
+                  g_SetMediaItemInfo_Value(target, "D_POSITION", pos - lxf);
+                  g_SetMediaItemInfo_Value(target, "D_LENGTH", len + lxf);
+                  len += lxf;
                 }
               }
-              // Extend right: just increase length (source has audio beyond item end)
               g_SetMediaItemInfo_Value(target, "D_LENGTH", len + xf);
             };
 
-            // Process each overlapping item (split + D_VOL + crossfade)
             for (size_t oi = 0; oi < overlap.size(); oi++) {
               MediaItem* mi = overlap[oi];
-              if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, mi, "MediaItem*"))
-                continue;
-
+              if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, mi, "MediaItem*")) continue;
               double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
               double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
-
               if (p >= absStart && e <= absEnd) {
-                // Entire item inside selection
-                applyGainWithFade(mi);
+                applyGainWithXfade(mi);
               } else if (p < absStart && e > absEnd) {
-                // Selection inside one item - split both, gain middle
                 g_SplitMediaItem(mi, absEnd);
                 MediaItem* mid = g_SplitMediaItem(mi, absStart);
-                applyGainWithFade(mid);
+                applyGainWithXfade(mid);
               } else if (p < absStart) {
-                // Item starts before - split, gain right part
                 MediaItem* right = g_SplitMediaItem(mi, absStart);
-                applyGainWithFade(right);
+                applyGainWithXfade(right);
               } else {
-                // Item ends after - split, gain left part
                 g_SplitMediaItem(mi, absEnd);
-                applyGainWithFade(mi);
+                applyGainWithXfade(mi);
               }
             }
 
@@ -534,20 +516,11 @@ void SneakPeak::OnMouseUp(int x, int y)
             if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
             if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-            // Set pending view restore - OnTimer will re-apply for ~5 ticks (~165ms)
-            m_pendingViewRestoreTicks = 5;
-            m_pendingViewStart = m_waveform.GetViewStart();
-            m_pendingViewDur = m_waveform.GetViewDuration();
             m_waveform.ClearSelection();
-            if (m_workingSet.active) {
-              RefreshWorkingSet();
-            } else {
-              m_waveform.ClearItem();
-              LoadSelectedItem();
-            }
+            RefreshWorkingSet();
           }
-        } else if (!m_waveform.HasSelection()) {
-          // No selection: D_VOL on whole item
+        } else {
+          // REAPER single-item mode: D_VOL on whole item (with or without selection)
           MediaItem* item = m_waveform.GetItem();
           if (item && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
