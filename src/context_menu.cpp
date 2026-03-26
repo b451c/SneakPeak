@@ -169,6 +169,10 @@ void SneakPeak::OnRightClick(int x, int y)
              m_waveform.GetSnapToZero() ? "Snap to Zero-Crossing  \xE2\x9C\x93" : "Snap to Zero-Crossing");
   MenuAppend(viewMenu, MF_STRING, CM_MINIMAP,
              m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
+  if (hasItem) {
+    MenuAppend(viewMenu, MF_STRING, CM_RULER_ABSOLUTE,
+               m_rulerAbsolute ? "Ruler: Absolute Time  \xE2\x9C\x93" : "Ruler: Absolute Time");
+  }
   if (!m_waveform.IsStandaloneMode() && hasItem) {
     MenuAppend(viewMenu, MF_STRING, CM_TRACK_VIEW,
                (m_workingSet.active || m_workingSet.dormant)
@@ -313,6 +317,12 @@ void SneakPeak::OnContextMenuCommand(int id)
         RecalcLayout(cr.right, cr.bottom);
         m_waveform.Invalidate();
       }
+      break;
+    case CM_RULER_ABSOLUTE:
+      m_rulerAbsolute = !m_rulerAbsolute;
+      if (g_SetExtState)
+        g_SetExtState("SneakPeak", "ruler_absolute", m_rulerAbsolute ? "1" : "0", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_TRACK_VIEW:
       ToggleTrackView();

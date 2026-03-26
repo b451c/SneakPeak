@@ -400,7 +400,7 @@ void SneakPeak::DrawRuler(HDC hdc)
     // Format as HH:MM:SS;ms (use absolute timeline time in working set mode)
     char label[32];
     {
-      double displayTime = m_waveform.IsTrackView() ? m_waveform.RelTimeToAbsTime(t) : t;
+      double displayTime = m_rulerAbsolute ? m_waveform.RelTimeToAbsTime(t) : t;
       int totalSec = (int)displayTime;
       int hours = totalSec / 3600;
       int mins = (totalSec % 3600) / 60;
@@ -833,7 +833,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
     char line[256];
     if (m_waveform.HasSelection()) {
       WaveformSelection sel = m_waveform.GetSelection();
-      bool tv = m_waveform.IsTrackView();
+      bool tv = m_rulerAbsolute;
       double s1 = tv ? m_waveform.RelTimeToAbsTime(sel.startTime) : sel.startTime;
       double s2 = tv ? m_waveform.RelTimeToAbsTime(sel.endTime) : sel.endTime;
       char sStart[16], sEnd[16], sDur[16];
@@ -844,7 +844,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
       SetTextColor(hdc, RGB(210, 210, 210));
     } else {
       char sCur[16];
-      double ct = m_waveform.IsTrackView()
+      double ct = m_rulerAbsolute
         ? m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime())
         : m_waveform.GetCursorTime();
       FormatTimeHMS(ct, sCur, sizeof(sCur));
@@ -858,8 +858,8 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
   {
     RECT r = { infoLeft, panelTop + rowH, infoRight, panelTop + rowH * 2 };
     char vStart[16], vEnd[16], vDur[16];
-    double vs = m_waveform.IsTrackView() ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewStart()) : m_waveform.GetViewStart();
-    double ve = m_waveform.IsTrackView() ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewEnd()) : m_waveform.GetViewEnd();
+    double vs = m_rulerAbsolute ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewStart()) : m_waveform.GetViewStart();
+    double ve = m_rulerAbsolute ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewEnd()) : m_waveform.GetViewEnd();
     FormatTimeHMS(vs, vStart, sizeof(vStart));
     FormatTimeHMS(ve, vEnd, sizeof(vEnd));
     FormatTimeHMS(m_waveform.GetViewDuration(), vDur, sizeof(vDur));

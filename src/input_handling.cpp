@@ -138,7 +138,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       double time = m_waveform.XToTime(x);
       m_waveform.SetCursorTime(time);
       if (g_SetEditCurPos)
-        g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), false, false);
+        g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), true, false);
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
     return;
@@ -216,7 +216,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         m_waveform.StartSelection(time);
         m_waveform.SetCursorTime(time);
         if (g_SetEditCurPos)
-          g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), false, false);
+          g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), true, false);
       }
       m_dragging = true;
       SetCapture(m_hwnd);
@@ -321,7 +321,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         m_waveform.StartSelection(time);
         m_waveform.SetCursorTime(time);
         if (g_SetEditCurPos)
-          g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), false, false);
+          g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), true, false);
       }
       m_dragging = true;
       SetCapture(m_hwnd);
@@ -339,7 +339,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     double time = m_waveform.XToTime(x);
     m_waveform.SetCursorTime(time);
     if (g_SetEditCurPos)
-      g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), false, false);
+      g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), true, false);
     m_waveform.ClearSelection();
     SyncSelectionToReaper();
     InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -700,7 +700,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case VK_HOME:
       if (m_waveform.HasItem()) {
         m_waveform.SetCursorTime(0.0);
-        if (g_SetEditCurPos) g_SetEditCurPos(m_waveform.RelTimeToAbsTime(0.0), false, false);
+        if (g_SetEditCurPos) g_SetEditCurPos(m_waveform.RelTimeToAbsTime(0.0), true, false);
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
       break;
@@ -786,7 +786,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
         // In track view, set cursor position for split
         if (m_workingSet.active && !m_waveform.HasSelection() && g_SetEditCurPos) {
           double absTime = m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime());
-          g_SetEditCurPos(absTime, false, false);
+          g_SetEditCurPos(absTime, true, false);
         }
         SyncSelectionToReaper();
         if (m_waveform.HasSelection() && g_Main_OnCommand) {
