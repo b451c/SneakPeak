@@ -471,17 +471,33 @@ void SneakPeak::OnMouseUp(int x, int y)
                 overlap.push_back(mi);
             }
 
-            // Apply D_VOL + short fade at edges for smooth transition
-            static const double GAIN_FADE_SEC = 0.005; // ~5ms fade
+            // Apply D_VOL + extend item by ~10ms to overlap neighbors (auto-crossfade)
+            static const double XFADE_SEC = 0.01;
             auto applyGainWithFade = [&](MediaItem* target) {
               if (!target) return;
               double v = g_GetMediaItemInfo_Value(target, "D_VOL");
               g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
+
+              double pos = g_GetMediaItemInfo_Value(target, "D_POSITION");
               double len = g_GetMediaItemInfo_Value(target, "D_LENGTH");
-              double fade = std::min(GAIN_FADE_SEC, len * 0.2);
-              // Equal power fade shape (7) for smooth volume transition
-              g_SetMediaItemInfo_Value(target, "D_FADEINLEN", fade);
-              g_SetMediaItemInfo_Value(target, "D_FADEOUTLEN", fade);
+              double xf = std::min(XFADE_SEC, len * 0.2);
+
+              // Extend left: move position back, increase length, adjust take start offset
+              MediaItem_Take* take = g_GetActiveTake ? g_GetActiveTake(target) : nullptr;
+              if (take && g_GetSetMediaItemTakeInfo && xf > 0.0) {
+                double* pStartOffs = (double*)g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", nullptr);
+                double startOffs = pStartOffs ? *pStartOffs : 0.0;
+                double leftXf = std::min(xf, startOffs); // can't go before source start
+                if (leftXf > 0.0) {
+                  double newOffs = startOffs - leftXf;
+                  g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", &newOffs);
+                  g_SetMediaItemInfo_Value(target, "D_POSITION", pos - leftXf);
+                  g_SetMediaItemInfo_Value(target, "D_LENGTH", len + leftXf);
+                  len += leftXf;
+                }
+              }
+              // Extend right: just increase length (source has audio beyond item end)
+              g_SetMediaItemInfo_Value(target, "D_LENGTH", len + xf);
             };
 
             // Process each overlapping item (split + D_VOL + crossfade)
