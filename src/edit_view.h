@@ -203,6 +203,8 @@ private:
   MarkerManager m_markers;
 
   GainPanel m_gainPanel;
+  MediaItem* m_gainSplitItem = nullptr;   // isolated item from split-on-drag-start
+  double m_gainSplitOrigVol = 1.0;        // original D_VOL before drag
   LevelsPanel m_levels;
   SpectralView m_spectral;
   MinimapView m_minimap;
