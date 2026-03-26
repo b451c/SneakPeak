@@ -110,6 +110,7 @@
 static std::unique_ptr<SneakPeak> g_sneakPeak;
 static int g_cmdToggle = 0;
 static int g_cmdLoadItem = 0;
+static int g_cmdTrackView = 0;
 static MediaItem* g_lastSelectedItem = nullptr;
 static int g_lastSelectedCount = 0;
 
@@ -185,6 +186,10 @@ static bool hookCommandProc(int command, int flag)
   }
   if (command == g_cmdLoadItem) {
     if (g_sneakPeak && g_sneakPeak->GetHwnd()) g_sneakPeak->LoadSelectedItem();
+    return true;
+  }
+  if (command == g_cmdTrackView) {
+    if (g_sneakPeak && g_sneakPeak->GetHwnd()) g_sneakPeak->ToggleTrackView();
     return true;
   }
   return false;
@@ -341,6 +346,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   if (!g_cmdToggle) return 0;
 
   g_cmdLoadItem = rec->Register("command_id", (void*)"SneakPeak_LoadSelectedItem");
+  g_cmdTrackView = rec->Register("command_id", (void*)"SneakPeak_ToggleTrackView");
 
   static gaccel_register_t accelToggle = {{0, 0, 0}, "SneakPeak: Open/Close SneakPeak"};
   accelToggle.accel.cmd = static_cast<unsigned short>(g_cmdToggle);
@@ -349,6 +355,10 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   static gaccel_register_t accelLoad = {{0, 0, 0}, "SneakPeak: Load Selected Item"};
   accelLoad.accel.cmd = static_cast<unsigned short>(g_cmdLoadItem);
   rec->Register("gaccel", &accelLoad);
+
+  static gaccel_register_t accelTrackView = {{0, 0, 0}, "SneakPeak: Toggle Track View"};
+  accelTrackView.accel.cmd = static_cast<unsigned short>(g_cmdTrackView);
+  rec->Register("gaccel", &accelTrackView);
 
   rec->Register("hookcommand", (void*)hookCommandProc);
   rec->Register("toggleaction", (void*)toggleActionCallback);

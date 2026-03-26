@@ -93,6 +93,17 @@ bool SneakPeak::IsVisible() const
   return m_hwnd && IsWindowVisible(m_hwnd);
 }
 
+void SneakPeak::ToggleTrackView()
+{
+  if (m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
+  if (m_trackViewMode) {
+    m_trackViewMode = false;
+    LoadSelectedItem();
+  } else {
+    LoadTrackView();
+  }
+}
+
 void SneakPeak::LoadTrackView()
 {
   MediaItem* item = m_waveform.GetItem();

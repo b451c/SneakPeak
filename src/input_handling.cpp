@@ -781,12 +781,18 @@ void SneakPeak::OnKeyDown(WPARAM key)
         else
           SaveStandaloneFile();
       } else if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+        // In track view, set cursor position for split
+        if (m_trackViewMode && !m_waveform.HasSelection() && g_SetEditCurPos) {
+          double absTime = m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime());
+          g_SetEditCurPos(absTime, false, false);
+        }
         SyncSelectionToReaper();
         if (m_waveform.HasSelection() && g_Main_OnCommand) {
           g_Main_OnCommand(40061, 0); // Split at time selection (both edges)
         } else if (g_Main_OnCommand) {
           g_Main_OnCommand(40012, 0); // Split at edit cursor
         }
+        if (m_trackViewMode) RefreshTrackView();
       }
       break;
     case 'N':
@@ -815,15 +821,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
       }
       break;
     case 'T':
-      if (!ctrl && !m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
-        DBG("[SneakPeak] T key: trackViewMode=%d\n", m_trackViewMode);
-        if (m_trackViewMode) {
-          m_trackViewMode = false;
-          LoadSelectedItem();
-        } else {
-          LoadTrackView();
-        }
-      }
+      if (!ctrl) ToggleTrackView();
       break;
   }
 }

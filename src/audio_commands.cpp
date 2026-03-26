@@ -380,20 +380,35 @@ void SneakPeak::DoDelete()
   // Non-destructive: split item at selection edges, delete middle piece
   if (!g_SplitMediaItem || !g_DeleteTrackMediaItem || !g_GetMediaItem_Track) return;
 
-  MediaItem* item = m_waveform.GetItem();
   WaveformSelection sel = m_waveform.GetSelection();
   double selStart = std::min(sel.startTime, sel.endTime);
   double selEnd = std::max(sel.startTime, sel.endTime);
 
-  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-
   double splitStart = m_waveform.RelTimeToAbsTime(selStart);
   double splitEnd = m_waveform.RelTimeToAbsTime(selEnd);
 
+  // In track view, find the item(s) that contain the selection
+  // In single-item view, use the loaded item
+  MediaItem* item = m_waveform.GetItem();
+  if (m_waveform.IsTrackView()) {
+    // Find segment containing selection start
+    for (const auto& seg : m_waveform.GetSegments()) {
+      double segStart = seg.relativeOffset;
+      double segEnd = segStart + seg.duration;
+      if (selStart >= segStart && selStart < segEnd) {
+        item = seg.item;
+        break;
+      }
+    }
+  }
+  if (!item) return;
+
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+
   // Split at end first (so item pointer stays valid for the first part)
-  MediaItem* rightPart = g_SplitMediaItem(item, splitEnd);
-  // Split at start — item becomes left part, middlePart is the selection
+  g_SplitMediaItem(item, splitEnd);
+  // Split at start - item becomes left part, middlePart is the selection
   MediaItem* middlePart = g_SplitMediaItem(item, splitStart);
 
   // Delete the middle part
@@ -406,14 +421,16 @@ void SneakPeak::DoDelete()
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete (non-destructive)", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-  // Reload — item pointer may have changed, re-select
-  if (rightPart) {
-    // Focus on the right part (or left part if it exists)
+  m_waveform.ClearSelection();
+
+  // Track view: refresh to show updated track (items re-collapse)
+  if (m_trackViewMode) {
+    RefreshTrackView();
+  } else {
     m_waveform.ClearItem();
     LoadSelectedItem();
   }
 
-  m_waveform.ClearSelection();
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 

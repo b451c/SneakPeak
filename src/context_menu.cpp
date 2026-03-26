@@ -314,12 +314,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       }
       break;
     case CM_TRACK_VIEW:
-      if (m_trackViewMode) {
-        m_trackViewMode = false;
-        LoadSelectedItem();
-      } else {
-        LoadTrackView();
-      }
+      ToggleTrackView();
       break;
     case CM_MULTI_MODE_MIX:
       m_waveform.SetMultiItemMode(MultiItemMode::MIX);

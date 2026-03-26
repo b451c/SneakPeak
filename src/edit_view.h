@@ -113,6 +113,7 @@ public:
   HWND GetHwnd() const { return m_hwnd; }
 
   void LoadSelectedItem();
+  void ToggleTrackView();
   void OnTimer();
 
   // Mode bar / standalone tab management
