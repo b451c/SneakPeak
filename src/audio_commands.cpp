@@ -390,37 +390,63 @@ void SneakPeak::DoDelete()
 
   double splitStart = m_waveform.RelTimeToAbsTime(selStart);
   double splitEnd = m_waveform.RelTimeToAbsTime(selEnd);
-
-  // In track view, find the item(s) that contain the selection
-  // In single-item view, use the loaded item
-  MediaItem* item = m_waveform.GetItem();
-  if (m_waveform.IsTrackView()) {
-    // Find segment containing selection start
-    for (const auto& seg : m_waveform.GetSegments()) {
-      double segStart = seg.relativeOffset;
-      double segEnd = segStart + seg.duration;
-      if (selStart >= segStart && selStart < segEnd) {
-        item = seg.item;
-        break;
-      }
-    }
-  }
-  if (!item) return;
+  double deletedDuration = splitEnd - splitStart;
 
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
-  // Split at end first (so item pointer stays valid for the first part)
-  g_SplitMediaItem(item, splitEnd);
-  // Split at start - item becomes left part, middlePart is the selection
-  MediaItem* middlePart = g_SplitMediaItem(item, splitStart);
-
-  // Delete the middle part
-  double deletedDuration = splitEnd - splitStart;
   MediaTrack* track = nullptr;
-  if (middlePart) {
-    track = g_GetMediaItem_Track(middlePart);
-    if (track) g_DeleteTrackMediaItem(track, middlePart);
+
+  if (m_waveform.IsTrackView() && m_workingSet.track) {
+    // Working set: handle cross-segment selection (may span multiple items)
+    track = m_workingSet.track;
+    int count = g_GetTrackNumMediaItems(track);
+
+    // Collect items overlapping [splitStart, splitEnd]
+    std::vector<MediaItem*> overlap;
+    for (int i = 0; i < count; i++) {
+      MediaItem* mi = g_GetTrackMediaItem(track, i);
+      if (!mi) continue;
+      double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+      double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+      if (pos + len > splitStart && pos < splitEnd)
+        overlap.push_back(mi);
+    }
+
+    for (MediaItem* mi : overlap) {
+      double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+      double end = pos + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+
+      if (pos >= splitStart && end <= splitEnd) {
+        // Entire item inside selection - delete whole item
+        g_DeleteTrackMediaItem(track, mi);
+      } else if (pos < splitStart && end > splitEnd) {
+        // Selection inside one item - split both edges, delete middle
+        g_SplitMediaItem(mi, splitEnd);
+        MediaItem* mid = g_SplitMediaItem(mi, splitStart);
+        if (mid) g_DeleteTrackMediaItem(track, mid);
+      } else if (pos < splitStart) {
+        // Item starts before selection - trim right portion
+        MediaItem* right = g_SplitMediaItem(mi, splitStart);
+        if (right) g_DeleteTrackMediaItem(track, right);
+      } else {
+        // Item starts inside selection - trim left portion
+        g_SplitMediaItem(mi, splitEnd);
+        g_DeleteTrackMediaItem(track, mi);
+      }
+    }
+  } else {
+    // Single item: split at selection edges, delete middle
+    MediaItem* item = m_waveform.GetItem();
+    if (!item) {
+      if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete", -1);
+      if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+      return;
+    }
+    track = g_GetMediaItem_Track(item);
+    g_SplitMediaItem(item, splitEnd);
+    MediaItem* mid = g_SplitMediaItem(item, splitStart);
+    if (mid && track) g_DeleteTrackMediaItem(track, mid);
   }
 
   // Working set: ripple edit - pull all subsequent items left by deleted duration

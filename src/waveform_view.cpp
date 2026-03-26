@@ -681,11 +681,19 @@ double WaveformView::RelTimeToAbsTime(double relTime) const
     return m_itemPosition + relTime;
   }
 
-  // Legacy concatenated multi-item
-  for (const auto& seg : m_segments) {
-    if (relTime >= seg.relativeOffset && relTime < seg.relativeOffset + seg.duration) {
+  // Concatenated segments: map through segment boundaries
+  for (size_t i = 0; i < m_segments.size(); i++) {
+    const auto& seg = m_segments[i];
+    double segEnd = seg.relativeOffset + seg.duration;
+
+    if (relTime >= seg.relativeOffset && relTime < segEnd) {
       double timeInSeg = relTime - seg.relativeOffset;
       return seg.position + timeInSeg;
+    }
+
+    // At exact boundary: map to start of next segment (not end of current)
+    if (i + 1 < m_segments.size() && std::abs(relTime - segEnd) < 0.0001) {
+      return m_segments[i + 1].position;
     }
   }
 
