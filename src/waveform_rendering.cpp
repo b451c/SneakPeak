@@ -291,11 +291,11 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
       fadeGain *= ApplyFadeShape((m_itemDuration - colTime) / fadeOutLen, fadeOutShape, fadeOutDir);
     if (fadeGain < 0.0) fadeGain = 0.0;
 
-    // Standalone gain preview (applies to selection region only)
+    // Gain preview (applies to selection region only, all modes)
     double sgain = 1.0;
-    if (m_standaloneMode && m_standaloneGain != 1.0) {
+    if (m_standaloneGain != 1.0) {
       if (m_standaloneGainStart < 0.0) {
-        sgain = m_standaloneGain; // no selection = full file
+        sgain = m_standaloneGain; // no selection = full range
       } else if (colTime >= m_standaloneGainStart && colTime < m_standaloneGainEnd) {
         sgain = m_standaloneGain;
       }
@@ -340,7 +340,7 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     if (fadeGain < 0.0) fadeGain = 0.0;
 
     double sgain2 = 1.0;
-    if (m_standaloneMode && m_standaloneGain != 1.0) {
+    if (m_standaloneGain != 1.0) {
       if (m_standaloneGainStart < 0.0) sgain2 = m_standaloneGain;
       else if (colTime >= m_standaloneGainStart && colTime < m_standaloneGainEnd) sgain2 = m_standaloneGain;
     }

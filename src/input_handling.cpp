@@ -435,6 +435,89 @@ void SneakPeak::OnMouseUp(int x, int y)
       }
     }
 
+    // REAPER mode: non-destructive gain via split + D_VOL on selection
+    if (wasKnobDrag && !m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+      double db = m_gainPanel.GetDb();
+      if (std::abs(db) > 0.01) {
+        double factor = pow(10.0, db / 20.0);
+        m_waveform.ClearStandaloneGain();
+
+        if (m_waveform.HasSelection() && g_SplitMediaItem && g_SetMediaItemInfo_Value &&
+            g_GetMediaItemInfo_Value && g_GetMediaItem_Track) {
+          // Split at selection edges, apply D_VOL to middle piece
+          WaveformSelection sel = m_waveform.GetSelection();
+          double selStart = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
+          double selEnd = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
+
+          // Find the item containing selection start
+          MediaItem* item = m_waveform.GetItem();
+          if (m_waveform.IsTrackView()) {
+            for (const auto& seg : m_waveform.GetSegments()) {
+              double ss = seg.relativeOffset;
+              double se = ss + seg.duration;
+              if (std::min(sel.startTime, sel.endTime) >= ss &&
+                  std::min(sel.startTime, sel.endTime) < se) {
+                item = seg.item;
+                break;
+              }
+            }
+          }
+
+          if (item) {
+            if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+
+            // Split at end first, then start
+            g_SplitMediaItem(item, selEnd);
+            MediaItem* midItem = g_SplitMediaItem(item, selStart);
+
+            // Apply gain to the middle piece
+            if (midItem) {
+              double curVol = g_GetMediaItemInfo_Value(midItem, "D_VOL");
+              g_SetMediaItemInfo_Value(midItem, "D_VOL", curVol * factor);
+            }
+
+            if (g_UpdateArrange) g_UpdateArrange();
+            char desc[64];
+            snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", db);
+            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+            if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+
+            // Refresh working set or reload item
+            if (m_workingSet.active)
+              RefreshWorkingSet();
+            else {
+              m_waveform.ClearItem();
+              LoadSelectedItem();
+            }
+          }
+        } else if (!m_waveform.HasSelection()) {
+          // No selection: D_VOL on whole item (existing behavior)
+          MediaItem* item = m_waveform.GetItem();
+          if (item && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
+            if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            double curVol = g_GetMediaItemInfo_Value(item, "D_VOL");
+            g_SetMediaItemInfo_Value(item, "D_VOL", curVol * factor);
+            if (g_UpdateArrange) g_UpdateArrange();
+            char desc[64];
+            snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
+            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+            if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+          }
+        }
+
+        // Reset knob
+        if (m_gainPanel.IsBatch()) {
+          m_gainPanel.ShowBatch(std::vector<MediaItem*>{m_waveform.GetItem()});
+        } else {
+          m_gainPanel.Show(m_waveform.GetItem());
+        }
+        m_waveform.Invalidate();
+        DBG("[SneakPeak] REAPER gain applied: %.1f dB\n", db);
+      }
+    }
+
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }

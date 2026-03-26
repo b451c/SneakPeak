@@ -528,8 +528,8 @@ void SneakPeak::OnTimer()
       m_waveform.SetBatchGainOffset(1.0);
     }
   }
-  // In standalone mode, reflect gain panel dB in waveform display
-  if (m_waveform.IsStandaloneMode() && m_gainPanel.IsVisible()) {
+  // Reflect gain panel dB in waveform display (visual preview, all modes)
+  if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging()) {
     double gainLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
     if (m_waveform.HasSelection()) {
       WaveformSelection sel = m_waveform.GetSelection();
@@ -537,9 +537,9 @@ void SneakPeak::OnTimer()
       double e = std::max(sel.startTime, sel.endTime);
       m_waveform.SetStandaloneGain(gainLin, s, e);
     } else {
-      m_waveform.SetStandaloneGain(gainLin, -1.0, -1.0); // whole file
+      m_waveform.SetStandaloneGain(gainLin, -1.0, -1.0);
     }
-  } else if (m_waveform.IsStandaloneMode()) {
+  } else {
     m_waveform.ClearStandaloneGain();
   }
 
