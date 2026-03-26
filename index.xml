@@ -36,6 +36,33 @@
 ]]></description>
       </metadata>
 
+      <version name="1.7.0" author="b451c" time="2026-03-26T00:00:00Z">
+        <changelog><![CDATA[Working Set Mode, Selection Gain, Clipping Visualization
+
+New features:
+- Working Set mode: select items, press T to lock as persistent editing set
+- Continuous waveform with gaps collapsed, auto-restores on click back
+- Selection-aware gain: splits at edges with crossfade in SET mode
+- Clipping visualization: peaks above 0dB draw in red
+- Group Set Items: group edited items for timeline manipulation
+- Ripple edit in SET mode: delete pulls items together
+- Bidirectional cursor sync with REAPER timeline
+- Ruler time format toggle (relative / absolute)
+- REAPER action: "SneakPeak: Toggle Track View"
+
+Improvements:
+- Drag export requires Alt/Option (prevents accidental drags)
+- Full codebase refactor: 82% reduction in main file, 8 focused modules
+- PreventUIRefresh on all undo blocks
+
+Fixes:
+- Memory leak in RefreshItemSource (P_SOURCE)
+- Selection edges clamp to waveform area
+- Selection sync at item boundaries
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v1.7.0/reaper_sneakpeak-arm64.dylib</source>
+      </version>
+
       <version name="1.6.0" author="b451c" time="2026-03-25T00:00:00Z">
         <changelog><![CDATA[Fade Handles & Smart Save Workflow
 
