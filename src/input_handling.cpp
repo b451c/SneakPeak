@@ -471,14 +471,15 @@ void SneakPeak::OnMouseUp(int x, int y)
                 overlap.push_back(mi);
             }
 
-            // Apply D_VOL + crossfade to an isolated item
-            static const double GAIN_FADE_SEC = 0.01; // ~10ms crossfade
+            // Apply D_VOL + short fade at edges for smooth transition
+            static const double GAIN_FADE_SEC = 0.005; // ~5ms fade
             auto applyGainWithFade = [&](MediaItem* target) {
               if (!target) return;
               double v = g_GetMediaItemInfo_Value(target, "D_VOL");
               g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
               double len = g_GetMediaItemInfo_Value(target, "D_LENGTH");
-              double fade = std::min(GAIN_FADE_SEC, len * 0.25);
+              double fade = std::min(GAIN_FADE_SEC, len * 0.2);
+              // Equal power fade shape (7) for smooth volume transition
               g_SetMediaItemInfo_Value(target, "D_FADEINLEN", fade);
               g_SetMediaItemInfo_Value(target, "D_FADEOUTLEN", fade);
             };
