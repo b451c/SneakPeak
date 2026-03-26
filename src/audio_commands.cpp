@@ -806,32 +806,120 @@ void SneakPeak::DoGain(double factor)
     StandaloneUndoSave();
     auto& data = m_waveform.GetAudioData();
     int nch = m_waveform.GetNumChannels();
-    int frames = m_waveform.GetAudioSampleCount();
-    if (frames > 0 && nch > 0)
-      AudioOps::Gain(data.data(), frames, nch, factor);
+    int sr = m_waveform.GetSampleRate();
+
+    int startF, endF;
+    GetSelectionSampleRange(startF, endF);
+    int selFrames = endF - startF;
+    bool isPartial = m_waveform.HasSelection() && (startF > 0 || endF < m_waveform.GetAudioSampleCount());
+
+    // Apply gain to selection range
+    if (selFrames > 0 && nch > 0) {
+      size_t offset = (size_t)startF * nch;
+      AudioOps::Gain(data.data() + offset, selFrames, nch, factor);
+
+      // Crossfade at edges to avoid clicks (~5ms each side)
+      if (isPartial) {
+        int fadeLen = std::min(sr / 200, selFrames / 2); // ~5ms
+        if (fadeLen > 1) {
+          // Fade-in at selection start
+          for (int f = 0; f < fadeLen && startF + f < endF; f++) {
+            double t = (double)f / (double)fadeLen;
+            // Already gained, so undo gain and apply blended
+            for (int ch = 0; ch < nch; ch++) {
+              size_t idx = (size_t)(startF + f) * nch + ch;
+              data[idx] = data[idx] / factor * (1.0 + t * (factor - 1.0));
+            }
+          }
+          // Fade-out at selection end
+          for (int f = 0; f < fadeLen && endF - 1 - f >= startF; f++) {
+            double t = (double)f / (double)fadeLen;
+            for (int ch = 0; ch < nch; ch++) {
+              size_t idx = (size_t)(endF - 1 - f) * nch + ch;
+              data[idx] = data[idx] / factor * (1.0 + t * (factor - 1.0));
+            }
+          }
+        }
+      }
+    }
     m_dirty = true;
+    m_previewCacheDirty = true;
     UpdateTitle();
     m_waveform.Invalidate();
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
 
-  // Non-destructive: multiply current D_VOL by factor
+  // REAPER mode: selection-aware gain
   if (!g_SetMediaItemInfo_Value || !g_GetMediaItemInfo_Value) return;
 
-  MediaItem* item = m_waveform.GetItem();
-  double curVol = g_GetMediaItemInfo_Value(item, "D_VOL");
-  double newVol = curVol * factor;
+  if (m_waveform.HasSelection()) {
+    // Partial selection: destructive gain on selection only
+    if (m_waveform.IsMultiItem()) return; // not supported for multi-item yet
 
-  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-  g_SetMediaItemInfo_Value(item, "D_VOL", newVol);
-  if (g_UpdateArrange) g_UpdateArrange();
+    if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+    if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+    UndoSave();
 
-  char desc[64];
-  snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", 20.0 * log10(factor));
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+    int startF, endF;
+    GetSelectionSampleRange(startF, endF);
+    int nch = m_waveform.GetNumChannels();
+    int sr = m_waveform.GetSampleRate();
+    int selFrames = endF - startF;
+    auto& data = m_waveform.GetAudioData();
 
+    if (selFrames > 0 && nch > 0) {
+      size_t offset = (size_t)startF * nch;
+      AudioOps::Gain(data.data() + offset, selFrames, nch, factor);
+
+      // Crossfade at edges (~5ms)
+      bool isPartial = startF > 0 || endF < m_waveform.GetAudioSampleCount();
+      if (isPartial) {
+        int fadeLen = std::min(sr / 200, selFrames / 2);
+        if (fadeLen > 1) {
+          for (int f = 0; f < fadeLen && startF + f < endF; f++) {
+            double t = (double)f / (double)fadeLen;
+            for (int ch = 0; ch < nch; ch++) {
+              size_t idx = (size_t)(startF + f) * nch + ch;
+              data[idx] = data[idx] / factor * (1.0 + t * (factor - 1.0));
+            }
+          }
+          for (int f = 0; f < fadeLen && endF - 1 - f >= startF; f++) {
+            double t = (double)f / (double)fadeLen;
+            for (int ch = 0; ch < nch; ch++) {
+              size_t idx = (size_t)(endF - 1 - f) * nch + ch;
+              data[idx] = data[idx] / factor * (1.0 + t * (factor - 1.0));
+            }
+          }
+        }
+      }
+    }
+
+    WriteAndRefresh();
+
+    char desc[64];
+    snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", 20.0 * log10(factor));
+    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+    if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+  } else {
+    // No selection: non-destructive D_VOL on whole item
+    MediaItem* item = m_waveform.GetItem();
+    if (!item) return;
+    double curVol = g_GetMediaItemInfo_Value(item, "D_VOL");
+    double newVol = curVol * factor;
+
+    if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+    if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+    g_SetMediaItemInfo_Value(item, "D_VOL", newVol);
+    if (g_UpdateArrange) g_UpdateArrange();
+
+    char desc[64];
+    snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", 20.0 * log10(factor));
+    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+    if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+  }
+
+  m_waveform.Invalidate();
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
