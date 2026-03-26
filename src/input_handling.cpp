@@ -297,9 +297,10 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
       double time = m_waveform.XToTime(x);
 
-      // Check if Cmd+clicking inside existing selection — potential drag export
-      // Requires Cmd (macOS) / Ctrl (Windows) to prevent accidental drags
-      if (m_waveform.HasSelection() && (wParam & MK_CONTROL) && !(wParam & MK_SHIFT)) {
+      // Check if Alt+clicking inside existing selection — potential drag export
+      // Requires Alt/Option to prevent accidental drags during selection
+      bool altHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+      if (m_waveform.HasSelection() && altHeld && !(wParam & MK_SHIFT)) {
         WaveformSelection sel = m_waveform.GetSelection();
         double selS = std::min(sel.startTime, sel.endTime);
         double selE = std::max(sel.startTime, sel.endTime);
