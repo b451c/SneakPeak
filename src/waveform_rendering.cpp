@@ -163,8 +163,9 @@ void WaveformView::Paint(HDC hdc)
   if (hasSel) {
     double selStart = std::min(m_selection.startTime, m_selection.endTime);
     double selEnd = std::max(m_selection.startTime, m_selection.endTime);
-    int x1 = std::max(m_rect.left, std::min(m_rect.right, TimeToX(selStart)));
-    int x2 = std::max(m_rect.left, std::min(m_rect.right, TimeToX(selEnd)));
+    int waveR = m_rect.right - DB_SCALE_WIDTH;
+    int x1 = std::max((int)m_rect.left, std::min(waveR, TimeToX(selStart)));
+    int x2 = std::max((int)m_rect.left, std::min(waveR, TimeToX(selEnd)));
     if (x2 > x1) {
       RECT selRect = { x1, m_rect.top, x2, m_rect.bottom };
       HBRUSH selBgBrush = CreateSolidBrush(g_theme.waveformSelBg);
@@ -483,8 +484,9 @@ void WaveformView::DrawSelection(HDC hdc)
   double selStart = std::min(m_selection.startTime, m_selection.endTime);
   double selEnd = std::max(m_selection.startTime, m_selection.endTime);
 
-  int x1 = std::max(m_rect.left, std::min(m_rect.right, TimeToX(selStart)));
-  int x2 = std::max(m_rect.left, std::min(m_rect.right, TimeToX(selEnd)));
+  int waveRight = m_rect.right - DB_SCALE_WIDTH;
+  int x1 = std::max((int)m_rect.left, std::min(waveRight, TimeToX(selStart)));
+  int x2 = std::max((int)m_rect.left, std::min(waveRight, TimeToX(selEnd)));
   if (x2 <= x1) return;
 
   // Thin 1px edge lines

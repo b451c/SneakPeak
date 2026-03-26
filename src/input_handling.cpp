@@ -587,7 +587,10 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
   }
 
   if (m_dragging && m_waveform.HasItem()) {
-    m_waveform.UpdateSelection(m_waveform.XToTime(x));
+    // Clamp x to waveform area (exclude dB scale)
+    int waveRight = m_waveform.GetRect().right - DB_SCALE_WIDTH;
+    int clampedX = std::max((int)m_waveform.GetRect().left, std::min(waveRight, x));
+    m_waveform.UpdateSelection(m_waveform.XToTime(clampedX));
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
