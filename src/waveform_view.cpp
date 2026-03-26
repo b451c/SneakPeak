@@ -32,7 +32,6 @@ void WaveformView::SetItem(MediaItem* item)
   m_standaloneGainStart = -1.0;
   m_standaloneGainEnd = -1.0;
   m_trackViewActive = false;
-  m_trackViewTrack = nullptr;
   m_item = item;
   m_take = nullptr;
   m_segments.clear();
@@ -132,7 +131,6 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
   m_standaloneGainStart = -1.0;
   m_standaloneGainEnd = -1.0;
   m_trackViewActive = false;
-  m_trackViewTrack = nullptr;
   m_item = items[0];
   m_take = nullptr;
   m_peaksValid = false;
@@ -283,7 +281,7 @@ void WaveformView::LoadConcatenated(const std::vector<MediaItem*>& items)
   m_cursorTime = 0.0;
 }
 
-void WaveformView::LoadTrackItems(MediaTrack* track)
+void WaveformView::LoadItemsInRange(MediaTrack* track, double startPos, double endPos)
 {
   if (!track || !g_GetTrackNumMediaItems || !g_GetTrackMediaItem || !g_GetMediaItemInfo_Value)
     return;
@@ -291,30 +289,31 @@ void WaveformView::LoadTrackItems(MediaTrack* track)
   int count = g_GetTrackNumMediaItems(track);
   if (count <= 0) return;
 
-  // Collect all items on this track
+  // Collect items on this track that overlap [startPos, endPos]
   std::vector<MediaItem*> items;
-  items.reserve(count);
   for (int i = 0; i < count; i++) {
     MediaItem* mi = g_GetTrackMediaItem(track, i);
-    if (mi) items.push_back(mi);
+    if (!mi) continue;
+    double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+    if (pos + len > startPos && pos < endPos)
+      items.push_back(mi);
   }
   if (items.empty()) return;
 
-  // Sort by timeline position
   std::sort(items.begin(), items.end(), [](MediaItem* a, MediaItem* b) {
     return g_GetMediaItemInfo_Value(a, "D_POSITION") < g_GetMediaItemInfo_Value(b, "D_POSITION");
   });
 
-  // Set first item as anchor (for coordinate mapping)
   m_item = items[0];
   m_multiItemActive = false;
   m_trackViewActive = true;
-  m_trackViewTrack = track;
 
   LoadConcatenated(items);
   m_peaksValid = false;
 
-  DBG("[SneakPeak] LoadTrackItems: %d items on track, duration=%.3f\n", count, m_itemDuration);
+  DBG("[SneakPeak] LoadItemsInRange: %d items in range [%.3f-%.3f], duration=%.3f\n",
+      (int)items.size(), startPos, endPos, m_itemDuration);
 }
 
 void WaveformView::ClearItem()
@@ -328,7 +327,6 @@ void WaveformView::ClearItem()
   m_segments.clear();
   m_multiItemActive = false;
   m_trackViewActive = false;
-  m_trackViewTrack = nullptr;
   m_multiItem.Clear();
   m_batchGainOffset = 1.0;
   m_peaksValid = false;

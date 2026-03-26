@@ -171,7 +171,8 @@ void SneakPeak::OnRightClick(int x, int y)
              m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
   if (!m_waveform.IsStandaloneMode() && hasItem) {
     MenuAppend(viewMenu, MF_STRING, CM_TRACK_VIEW,
-               m_trackViewMode ? "Track View (T)  \xE2\x9C\x93" : "Track View (T)");
+               (m_workingSet.active || m_workingSet.dormant)
+                   ? "Working Set (T)  \xE2\x9C\x93" : "Working Set (T)");
   }
 
   // Multi-item view mode submenu (only when multi-item active)

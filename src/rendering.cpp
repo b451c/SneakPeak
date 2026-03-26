@@ -116,9 +116,9 @@ void SneakPeak::DrawModeBar(HDC hdc)
     // Mode indicator
     COLORREF accent;
     const char* modeLabel;
-    if (m_trackViewMode && isReaper) {
+    if (m_workingSet.active && isReaper) {
       accent = RGB(80, 200, 100);  // green for track view
-      modeLabel = "TRACK";
+      modeLabel = "SET";
     } else if (isStandalone && !isReaper) {
       accent = g_theme.modeBarStandaloneAccent;
       modeLabel = "STANDALONE";

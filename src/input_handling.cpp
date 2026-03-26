@@ -735,7 +735,9 @@ void SneakPeak::OnKeyDown(WPARAM key)
       break;
     }
     case VK_ESCAPE:
-      if (m_waveform.HasSelection()) {
+      if (m_workingSet.active) {
+        ExitWorkingSet();
+      } else if (m_waveform.HasSelection()) {
         m_waveform.ClearSelection();
         SyncSelectionToReaper();
         InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -782,7 +784,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
           SaveStandaloneFile();
       } else if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
         // In track view, set cursor position for split
-        if (m_trackViewMode && !m_waveform.HasSelection() && g_SetEditCurPos) {
+        if (m_workingSet.active && !m_waveform.HasSelection() && g_SetEditCurPos) {
           double absTime = m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime());
           g_SetEditCurPos(absTime, false, false);
         }
@@ -792,7 +794,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
         } else if (g_Main_OnCommand) {
           g_Main_OnCommand(40012, 0); // Split at edit cursor
         }
-        if (m_trackViewMode) RefreshTrackView();
+        if (m_workingSet.active) RefreshWorkingSet();
       }
       break;
     case 'N':

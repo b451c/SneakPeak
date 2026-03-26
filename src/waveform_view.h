@@ -39,10 +39,9 @@ public:
   bool IsMultiItem() const { return m_multiItemActive || m_trackViewActive || m_segments.size() > 1; }
   const std::vector<ItemSegment>& GetSegments() const { return m_segments; }
 
-  // Track view mode (all items on one track, gaps collapsed)
-  void LoadTrackItems(MediaTrack* track);
+  // Working set (items in a range on one track, gaps collapsed)
+  void LoadItemsInRange(MediaTrack* track, double startPos, double endPos);
   bool IsTrackView() const { return m_trackViewActive; }
-  MediaTrack* GetTrackViewTrack() const { return m_trackViewTrack; }
 
   // Multi-item view mode (Mix/Layered)
   bool IsMultiItemActive() const { return m_multiItemActive; }
@@ -214,9 +213,8 @@ private:
   bool m_showJoinLines = true;
   double m_batchGainOffset = 1.0; // visual gain multiplier for batch mode (linear)
 
-  // Track view (all items on one track, gaps collapsed)
+  // Working set / track view (concatenated items, gaps collapsed)
   bool m_trackViewActive = false;
-  MediaTrack* m_trackViewTrack = nullptr;
 
   // Item data
   MediaItem* m_item = nullptr;

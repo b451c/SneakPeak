@@ -291,11 +291,20 @@ private:
   PCM_source* m_previewSrc = nullptr;
   std::string m_previewTempPath;
 
-  // Track view mode (all items on one track, gaps collapsed)
-  bool m_trackViewMode = false;
-  void LoadTrackView();
-  void RefreshTrackView();
-  int m_trackViewRefreshCounter = 0;
+  // Working set (locked multi-item edit range)
+  struct WorkingSet {
+    MediaTrack* track = nullptr;
+    double startPos = 0.0;   // timeline start of range
+    double endPos = 0.0;     // timeline end of range
+    bool active = false;     // currently displayed
+    bool dormant = false;    // user clicked away, set preserved for restore
+  };
+  WorkingSet m_workingSet;
+  void LoadWorkingSet();
+  void RefreshWorkingSet();
+  void ExitWorkingSet();
+  bool IsWorkingSetItem(MediaItem* item) const;
+  int m_workingSetRefreshCounter = 0;
 
   // Master meter mode (when no item selected)
   bool m_masterMode = false;

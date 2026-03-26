@@ -95,28 +95,58 @@ bool SneakPeak::IsVisible() const
 
 void SneakPeak::ToggleTrackView()
 {
-  if (m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
-  if (m_trackViewMode) {
-    m_trackViewMode = false;
-    LoadSelectedItem();
-  } else {
-    LoadTrackView();
+  if (m_waveform.IsStandaloneMode()) return;
+
+  // If working set exists (active or dormant), exit it
+  if (m_workingSet.active || m_workingSet.dormant) {
+    ExitWorkingSet();
+    return;
   }
+
+  // Create working set from currently selected items
+  if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem ||
+      !g_GetMediaItem_Track || !g_GetMediaItemInfo_Value) return;
+
+  int count = g_CountSelectedMediaItems(nullptr);
+  if (count <= 0) return;
+
+  // Collect items and verify all on same track
+  MediaTrack* track = nullptr;
+  double minPos = 1e30, maxEnd = -1e30;
+  for (int i = 0; i < count; i++) {
+    MediaItem* mi = g_GetSelectedMediaItem(nullptr, i);
+    if (!mi) continue;
+    MediaTrack* t = g_GetMediaItem_Track(mi);
+    if (!track) track = t;
+    else if (t != track) return; // multi-track: not supported
+    double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+    if (pos < minPos) minPos = pos;
+    if (pos + len > maxEnd) maxEnd = pos + len;
+  }
+  if (!track || maxEnd <= minPos) return;
+
+  m_workingSet.track = track;
+  m_workingSet.startPos = minPos;
+  m_workingSet.endPos = maxEnd;
+  LoadWorkingSet();
 }
 
-void SneakPeak::LoadTrackView()
+void SneakPeak::LoadWorkingSet()
 {
-  MediaItem* item = m_waveform.GetItem();
-  if (!item || !g_GetMediaItem_Track) return;
-
-  MediaTrack* track = g_GetMediaItem_Track(item);
-  if (!track) return;
-
+  if (!m_workingSet.track) return;
   if (m_previewActive) StandaloneCleanupPreview();
 
   m_waveform.ClearItem();
-  m_waveform.LoadTrackItems(track);
-  m_trackViewMode = true;
+  m_waveform.LoadItemsInRange(m_workingSet.track, m_workingSet.startPos, m_workingSet.endPos);
+
+  if (!m_waveform.HasItem()) {
+    ExitWorkingSet();
+    return;
+  }
+
+  m_workingSet.active = true;
+  m_workingSet.dormant = false;
 
   m_spectralVisible = false;
   m_spectral.ClearSpectrum();
@@ -134,46 +164,61 @@ void SneakPeak::LoadTrackView()
 
     int itemCount = (int)m_waveform.GetSegments().size();
     char title[512];
-    snprintf(title, sizeof(title), "SneakPeak [Track - %d items]", itemCount);
+    snprintf(title, sizeof(title), "SneakPeak [Set - %d items]", itemCount);
     SetWindowText(m_hwnd, title);
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 }
 
-void SneakPeak::RefreshTrackView()
+void SneakPeak::RefreshWorkingSet()
 {
-  MediaTrack* track = m_waveform.GetTrackViewTrack();
-  if (!track || !g_ValidatePtr2 || !g_ValidatePtr2(nullptr, track, "MediaTrack*")) {
-    m_trackViewMode = false;
-    LoadSelectedItem();
+  if (!m_workingSet.track || !g_ValidatePtr2 ||
+      !g_ValidatePtr2(nullptr, m_workingSet.track, "MediaTrack*")) {
+    ExitWorkingSet();
     return;
   }
 
-  int oldCount = (int)m_waveform.GetSegments().size();
-  int newCount = g_GetTrackNumMediaItems ? g_GetTrackNumMediaItems(track) : 0;
+  double viewStart = m_waveform.GetViewStart();
+  double viewDur = m_waveform.GetViewDuration();
 
-  if (newCount != oldCount) {
-    // Save current view position
-    double viewStart = m_waveform.GetViewStart();
-    double viewDur = m_waveform.GetViewDuration();
+  m_waveform.ClearItem();
+  m_waveform.LoadItemsInRange(m_workingSet.track, m_workingSet.startPos, m_workingSet.endPos);
+  m_waveform.Invalidate();
 
-    m_waveform.LoadTrackItems(track);
-    m_waveform.Invalidate();
-
-    // Try to restore approximate view position
-    if (m_waveform.GetItemDuration() > 0) {
-      m_waveform.SetViewStart(std::min(viewStart, m_waveform.GetItemDuration()));
-      m_waveform.SetViewDuration(viewDur);
-    }
-
-    if (m_hwnd) {
-      int itemCount = (int)m_waveform.GetSegments().size();
-      char title[512];
-      snprintf(title, sizeof(title), "SneakPeak [Track - %d items]", itemCount);
-      SetWindowText(m_hwnd, title);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
-    }
+  if (!m_waveform.HasItem()) {
+    ExitWorkingSet();
+    return;
   }
+
+  // Restore approximate view position
+  if (m_waveform.GetItemDuration() > 0) {
+    m_waveform.SetViewStart(std::min(viewStart, m_waveform.GetItemDuration()));
+    m_waveform.SetViewDuration(viewDur);
+  }
+
+  if (m_hwnd) {
+    int itemCount = (int)m_waveform.GetSegments().size();
+    char title[512];
+    snprintf(title, sizeof(title), "SneakPeak [Set - %d items]", itemCount);
+    SetWindowText(m_hwnd, title);
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+}
+
+void SneakPeak::ExitWorkingSet()
+{
+  m_workingSet = {};
+  LoadSelectedItem();
+}
+
+bool SneakPeak::IsWorkingSetItem(MediaItem* item) const
+{
+  if (!m_workingSet.track || (!m_workingSet.active && !m_workingSet.dormant)) return false;
+  if (!item || !g_GetMediaItem_Track || !g_GetMediaItemInfo_Value) return false;
+  if (g_GetMediaItem_Track(item) != m_workingSet.track) return false;
+  double pos = g_GetMediaItemInfo_Value(item, "D_POSITION");
+  double len = g_GetMediaItemInfo_Value(item, "D_LENGTH");
+  return (pos + len > m_workingSet.startPos) && (pos < m_workingSet.endPos);
 }
 
 void SneakPeak::LoadSelectedItem()
@@ -184,25 +229,39 @@ void SneakPeak::LoadSelectedItem()
 
   int count = g_CountSelectedMediaItems(nullptr);
   if (count <= 0) {
-    m_trackViewMode = false;
-    m_waveform.ClearItem();
-    m_hasUndo = false;
-    if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+    // No selection - don't destroy dormant working set
+    if (!m_workingSet.dormant && !m_workingSet.active) {
+      m_waveform.ClearItem();
+      m_hasUndo = false;
+      if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
     return;
   }
 
   MediaItem* item = g_GetSelectedMediaItem(nullptr, 0);
   if (!item) return;
 
-  // Track view: if selected item is on the same track, just refresh
-  if (m_trackViewMode && g_GetMediaItem_Track) {
-    MediaTrack* itemTrack = g_GetMediaItem_Track(item);
-    if (itemTrack == m_waveform.GetTrackViewTrack()) {
-      RefreshTrackView();
+  // Working set: dormant restore - clicking back on a set item restores the view
+  if (m_workingSet.dormant) {
+    for (int i = 0; i < count; i++) {
+      MediaItem* mi = g_GetSelectedMediaItem(nullptr, i);
+      if (mi && IsWorkingSetItem(mi)) {
+        LoadWorkingSet();
+        return;
+      }
+    }
+    // Selection is outside working set - stay dormant, load normally
+  }
+
+  // Working set active: if selected item is in range, refresh; otherwise go dormant
+  if (m_workingSet.active) {
+    if (IsWorkingSetItem(item)) {
+      RefreshWorkingSet();
       return;
     }
-    // Different track - exit track view
-    m_trackViewMode = false;
+    // Item outside range - go dormant
+    m_workingSet.active = false;
+    m_workingSet.dormant = true;
   }
 
   // Multi-item: show all selected items as one continuous waveform (cross-track)
@@ -529,9 +588,9 @@ void SneakPeak::OnTimer()
   }
 
   // Track view: periodic refresh (detect added/removed items)
-  if (m_trackViewMode && ++m_trackViewRefreshCounter >= 30) {
-    m_trackViewRefreshCounter = 0;
-    RefreshTrackView();
+  if (m_workingSet.active && ++m_workingSetRefreshCounter >= 30) {
+    m_workingSetRefreshCounter = 0;
+    RefreshWorkingSet();
   }
 
   // Cursor + RMS levels - works for both single and multi-item

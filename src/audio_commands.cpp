@@ -57,8 +57,8 @@ void SneakPeak::UndoRestore()
   if (g_Main_OnCommand) {
     g_Main_OnCommand(40029, 0);
     // Reload to reflect undo changes
-    if (m_trackViewMode) {
-      RefreshTrackView();
+    if (m_workingSet.active) {
+      RefreshWorkingSet();
     } else {
       m_waveform.ClearItem();
       LoadSelectedItem();
@@ -424,7 +424,7 @@ void SneakPeak::DoDelete()
   }
 
   // Track view: ripple edit - pull all subsequent items left by deleted duration
-  if (m_trackViewMode && track && g_GetTrackNumMediaItems && g_GetTrackMediaItem &&
+  if (m_workingSet.active && track && g_GetTrackNumMediaItems && g_GetTrackMediaItem &&
       g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value && deletedDuration > 0.0) {
     int count = g_GetTrackNumMediaItems(track);
     for (int i = 0; i < count; i++) {
@@ -444,8 +444,8 @@ void SneakPeak::DoDelete()
   m_waveform.ClearSelection();
 
   // Track view: refresh to show updated track (items re-collapse)
-  if (m_trackViewMode) {
-    RefreshTrackView();
+  if (m_workingSet.active) {
+    RefreshWorkingSet();
   } else {
     m_waveform.ClearItem();
     LoadSelectedItem();
