@@ -307,6 +307,9 @@ private:
   void RefreshWorkingSet();
   void ExitWorkingSet();
   bool IsWorkingSetItem(MediaItem* item) const;
+  void GroupSetItems();
+  void UngroupSetItems();
+  int GetSetGroupId(double rangeStart, double rangeEnd) const; // 0 = not grouped
   int m_workingSetRefreshCounter = 0;
 
   // Master meter mode (when no item selected)

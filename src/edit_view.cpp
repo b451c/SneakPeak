@@ -232,6 +232,103 @@ bool SneakPeak::IsWorkingSetItem(MediaItem* item) const
   return (pos + len > m_workingSet.startPos) && (pos < m_workingSet.endPos);
 }
 
+int SneakPeak::GetSetGroupId(double rangeStart, double rangeEnd) const
+{
+  if (!m_workingSet.track || !g_GetTrackNumMediaItems || !g_GetTrackMediaItem || !g_GetMediaItemInfo_Value)
+    return 0;
+  int groupId = 0;
+  int count = g_GetTrackNumMediaItems(m_workingSet.track);
+  for (int i = 0; i < count; i++) {
+    MediaItem* mi = g_GetTrackMediaItem(m_workingSet.track, i);
+    if (!mi) continue;
+    double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    double l = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+    if (p + l > rangeStart && p < rangeEnd) {
+      int gid = (int)g_GetMediaItemInfo_Value(mi, "I_GROUPID");
+      if (gid == 0) return 0; // at least one ungrouped
+      if (groupId == 0) groupId = gid;
+      else if (gid != groupId) return 0; // mixed groups
+    }
+  }
+  return groupId;
+}
+
+void SneakPeak::GroupSetItems()
+{
+  if (!m_workingSet.active || !m_workingSet.track || !g_SetMediaItemInfo_Value ||
+      !g_GetTrackNumMediaItems || !g_GetTrackMediaItem || !g_GetMediaItemInfo_Value) return;
+
+  // Determine range: selection or full set
+  double rangeStart = m_workingSet.startPos;
+  double rangeEnd = m_workingSet.endPos;
+  if (m_waveform.HasSelection()) {
+    WaveformSelection sel = m_waveform.GetSelection();
+    rangeStart = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
+    rangeEnd = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
+  }
+
+  int newGroupId = (int)(GetTickCount() & 0x7FFFFFFF);
+  if (newGroupId == 0) newGroupId = 1;
+
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+  int count = g_GetTrackNumMediaItems(m_workingSet.track);
+  int grouped = 0;
+  for (int i = 0; i < count; i++) {
+    MediaItem* mi = g_GetTrackMediaItem(m_workingSet.track, i);
+    if (!mi) continue;
+    double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    double l = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+    if (p + l > rangeStart && p < rangeEnd) {
+      g_SetMediaItemInfo_Value(mi, "I_GROUPID", (double)newGroupId);
+      grouped++;
+    }
+  }
+  if (g_UpdateArrange) g_UpdateArrange();
+  char desc[64];
+  snprintf(desc, sizeof(desc), "SneakPeak: Group %d items", grouped);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+  ShowToast(desc);
+  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+void SneakPeak::UngroupSetItems()
+{
+  if (!m_workingSet.active || !m_workingSet.track || !g_SetMediaItemInfo_Value ||
+      !g_GetTrackNumMediaItems || !g_GetTrackMediaItem || !g_GetMediaItemInfo_Value) return;
+
+  double rangeStart = m_workingSet.startPos;
+  double rangeEnd = m_workingSet.endPos;
+  if (m_waveform.HasSelection()) {
+    WaveformSelection sel = m_waveform.GetSelection();
+    rangeStart = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
+    rangeEnd = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
+  }
+
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+  int count = g_GetTrackNumMediaItems(m_workingSet.track);
+  int ungrouped = 0;
+  for (int i = 0; i < count; i++) {
+    MediaItem* mi = g_GetTrackMediaItem(m_workingSet.track, i);
+    if (!mi) continue;
+    double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    double l = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+    if (p + l > rangeStart && p < rangeEnd) {
+      g_SetMediaItemInfo_Value(mi, "I_GROUPID", 0.0);
+      ungrouped++;
+    }
+  }
+  if (g_UpdateArrange) g_UpdateArrange();
+  char desc[64];
+  snprintf(desc, sizeof(desc), "SneakPeak: Ungroup %d items", ungrouped);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+  ShowToast(desc);
+  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
 void SneakPeak::LoadSelectedItem()
 {
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;

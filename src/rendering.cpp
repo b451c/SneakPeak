@@ -436,6 +436,45 @@ void SneakPeak::DrawRuler(HDC hdc)
   DeleteObject(tickPen);
   DeleteObject(minorPen);
   SelectObject(hdc, oldFont);
+
+  // Group indicator bar at bottom of ruler (3px high)
+  if (m_workingSet.active && m_workingSet.track && g_GetTrackNumMediaItems &&
+      g_GetTrackMediaItem && g_GetMediaItemInfo_Value) {
+    static const COLORREF groupColors[] = {
+      RGB(90, 160, 220), RGB(220, 140, 60), RGB(120, 200, 120),
+      RGB(200, 100, 180), RGB(180, 180, 80), RGB(100, 200, 200),
+    };
+    static const int NUM_COLORS = 6;
+    int barH = 3;
+    int barY = m_rulerRect.bottom - barH;
+    int trackCount = g_GetTrackNumMediaItems(m_workingSet.track);
+
+    for (int i = 0; i < trackCount; i++) {
+      MediaItem* mi = g_GetTrackMediaItem(m_workingSet.track, i);
+      if (!mi) continue;
+      double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+      double l = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+      if (p + l <= m_workingSet.startPos || p >= m_workingSet.endPos) continue;
+
+      int gid = (int)g_GetMediaItemInfo_Value(mi, "I_GROUPID");
+      if (gid == 0) continue;
+
+      // Map item position to SneakPeak view coordinates
+      double relStart = m_waveform.AbsTimeToRelTime(p);
+      double relEnd = m_waveform.AbsTimeToRelTime(p + l);
+      int x1 = m_waveform.TimeToX(relStart);
+      int x2 = m_waveform.TimeToX(relEnd);
+      x1 = std::max((int)m_rulerRect.left, x1);
+      x2 = std::min((int)m_rulerRect.right, x2);
+      if (x2 <= x1) continue;
+
+      COLORREF col = groupColors[gid % NUM_COLORS];
+      HBRUSH br = CreateSolidBrush(col);
+      RECT r = { x1, barY, x2, barY + barH };
+      FillRect(hdc, &r, br);
+      DeleteObject(br);
+    }
+  }
 }
 
 void SneakPeak::DrawScrollbar(HDC hdc)

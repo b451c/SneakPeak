@@ -179,7 +179,16 @@ void SneakPeak::OnRightClick(int x, int y)
                    ? "Working Set (T)  \xE2\x9C\x93" : "Working Set (T)");
   }
   if (m_workingSet.active) {
-    MenuAppend(viewMenu, MF_STRING, CM_GROUP_SET, "Group Set Items");
+    // Check if items in range are already grouped
+    double rs = m_workingSet.startPos, re = m_workingSet.endPos;
+    if (m_waveform.HasSelection()) {
+      WaveformSelection sel = m_waveform.GetSelection();
+      rs = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
+      re = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
+    }
+    int gid = GetSetGroupId(rs, re);
+    const char* groupLabel = gid ? "Group  \xE2\x9C\x93" : "Group";
+    MenuAppend(viewMenu, MF_STRING, CM_GROUP_SET, groupLabel);
   }
 
   // Multi-item view mode submenu (only when multi-item active)
@@ -327,35 +336,18 @@ void SneakPeak::OnContextMenuCommand(int id)
         g_SetExtState("SneakPeak", "ruler_absolute", m_rulerAbsolute ? "1" : "0", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
-    case CM_GROUP_SET:
-      if (m_workingSet.active && m_workingSet.track && g_SetMediaItemInfo_Value &&
-          g_GetTrackNumMediaItems && g_GetTrackMediaItem && g_GetMediaItemInfo_Value) {
-        // Use current tick count as unique group ID
-        int newGroupId = (int)(GetTickCount() & 0x7FFFFFFF);
-        if (newGroupId == 0) newGroupId = 1;
-
-        if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-        if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-        int count = g_GetTrackNumMediaItems(m_workingSet.track);
-        int grouped = 0;
-        for (int i = 0; i < count; i++) {
-          MediaItem* mi = g_GetTrackMediaItem(m_workingSet.track, i);
-          if (!mi) continue;
-          double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
-          double l = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
-          if (p + l > m_workingSet.startPos && p < m_workingSet.endPos) {
-            g_SetMediaItemInfo_Value(mi, "I_GROUPID", (double)newGroupId);
-            grouped++;
-          }
-        }
-        if (g_UpdateArrange) g_UpdateArrange();
-        char desc[64];
-        snprintf(desc, sizeof(desc), "SneakPeak: Group %d items", grouped);
-        if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
-        if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-        ShowToast(desc);
+    case CM_GROUP_SET: {
+      double rs = m_workingSet.startPos, re = m_workingSet.endPos;
+      if (m_waveform.HasSelection()) {
+        WaveformSelection sel = m_waveform.GetSelection();
+        rs = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
+        re = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
       }
+      int gid = GetSetGroupId(rs, re);
+      if (gid) UngroupSetItems();
+      else GroupSetItems();
       break;
+    }
     case CM_TRACK_VIEW:
       ToggleTrackView();
       break;
