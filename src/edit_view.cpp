@@ -155,9 +155,17 @@ void SneakPeak::LoadWorkingSet()
   m_spectral.ClearSpectrum();
   m_spectral.Invalidate();
   m_minimap.Invalidate();
-  m_gainPanel.Hide();
   m_hasUndo = false;
   m_dirty = false;
+
+  // Batch gain for all items in the working set
+  {
+    std::vector<MediaItem*> setItems;
+    for (const auto& seg : m_waveform.GetSegments())
+      if (seg.item) setItems.push_back(seg.item);
+    if (!setItems.empty())
+      m_gainPanel.ShowBatch(setItems);
+  }
 
   if (m_hwnd) {
     RECT cr;
