@@ -437,16 +437,19 @@ void SneakPeak::OnMouseUp(int x, int y)
     if (wasKnobDrag && !m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
       double db = m_gainPanel.GetDb();
       m_waveform.ClearStandaloneGain();
+      WaveformSelection savedSel = m_waveform.GetSelection();
+      double savedViewStart = m_waveform.GetViewStart();
+      double savedViewDur = m_waveform.GetViewDuration();
 
       if (std::abs(db) > 0.01) {
         double factor = pow(10.0, db / 20.0);
+        bool hasSel = m_waveform.HasSelection();
 
-        if (m_workingSet.active && m_waveform.HasSelection() && g_SplitMediaItem &&
+        if (m_workingSet.active && hasSel && g_SplitMediaItem &&
             g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value && m_workingSet.track) {
           // SET mode with selection: split + D_VOL + crossfade overlap
-          WaveformSelection sel = m_waveform.GetSelection();
-          double absStart = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
-          double absEnd = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
+          double absStart = m_waveform.RelTimeToAbsTime(std::min(savedSel.startTime, savedSel.endTime));
+          double absEnd = m_waveform.RelTimeToAbsTime(std::max(savedSel.startTime, savedSel.endTime));
           MediaTrack* track = m_workingSet.track;
 
           if (g_ValidatePtr2 && g_ValidatePtr2(nullptr, track, "MediaTrack*") &&
@@ -473,7 +476,6 @@ void SneakPeak::OnMouseUp(int x, int y)
               double pos = g_GetMediaItemInfo_Value(target, "D_POSITION");
               double len = g_GetMediaItemInfo_Value(target, "D_LENGTH");
               double xf = std::min(XFADE_SEC, len * 0.2);
-              // Extend left to overlap neighbor (auto-crossfade)
               MediaItem_Take* take = g_GetActiveTake ? g_GetActiveTake(target) : nullptr;
               if (take && g_GetSetMediaItemTakeInfo && xf > 0.0) {
                 double* pOff = (double*)g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", nullptr);
@@ -515,18 +517,32 @@ void SneakPeak::OnMouseUp(int x, int y)
             snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", db);
             if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
             if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-
-            m_waveform.ClearSelection();
-            RefreshWorkingSet();
           }
+        } else if (m_workingSet.active) {
+          // SET mode without selection: WriteToItem already applied D_VOL during drag
+          if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+          char desc[64];
+          snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
+          if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
         } else {
-          // REAPER single-item mode: WriteToItem() already applied D_VOL during drag
-          // Just create an undo point for the change
+          // REAPER single-item: WriteToItem already applied D_VOL during drag
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           char desc[64];
           snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
           if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
         }
+      }
+
+      // SET mode: reload audio data to reflect new D_VOL (baked into samples)
+      if (m_workingSet.active) {
+        RefreshWorkingSet();
+        // Restore view position and selection
+        if (m_waveform.GetItemDuration() > 0) {
+          m_waveform.SetViewStart(std::min(savedViewStart, m_waveform.GetItemDuration()));
+          m_waveform.SetViewDuration(savedViewDur);
+        }
+        if (savedSel.active)
+          m_waveform.SetSelection(savedSel);
       }
 
       // Reset knob
@@ -538,6 +554,7 @@ void SneakPeak::OnMouseUp(int x, int y)
       } else {
         m_gainPanel.Show(m_waveform.GetItem());
       }
+      m_waveform.SetBatchGainOffset(1.0);
       m_waveform.Invalidate();
     }
 
