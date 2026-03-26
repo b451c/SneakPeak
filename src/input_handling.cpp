@@ -534,8 +534,8 @@ void SneakPeak::OnMouseUp(int x, int y)
             if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
             if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-            // Set pending view restore - LoadSelectedItem (from timer) will apply it
-            m_pendingViewRestore = true;
+            // Set pending view restore - OnTimer will re-apply for ~5 ticks (~165ms)
+            m_pendingViewRestoreTicks = 5;
             m_pendingViewStart = m_waveform.GetViewStart();
             m_pendingViewDur = m_waveform.GetViewDuration();
             m_waveform.ClearSelection();

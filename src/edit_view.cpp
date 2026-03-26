@@ -383,14 +383,6 @@ void SneakPeak::LoadSelectedItem()
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
-  // Restore view position after gain split (or any operation that reloads the item)
-  if (m_pendingViewRestore && m_waveform.GetItemDuration() > 0) {
-    m_waveform.SetViewStart(std::min(m_pendingViewStart, m_waveform.GetItemDuration()));
-    m_waveform.SetViewDuration(m_pendingViewDur);
-    m_waveform.Invalidate();
-    m_pendingViewRestore = false;
-    if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
-  }
 }
 
 void SneakPeak::OnTimer()
@@ -602,9 +594,16 @@ void SneakPeak::OnTimer()
     }
   }
 
-  // Track view: periodic refresh (detect added/removed items)
-  // Working set: no periodic refresh needed - refreshes on explicit user actions
-  // (delete, split, undo) not on timer
+  // Working set: no periodic refresh - refreshes on explicit user actions
+
+  // Pending view restore (after gain split - re-apply until countdown expires)
+  if (m_pendingViewRestoreTicks > 0 && m_waveform.HasItem() && m_waveform.GetItemDuration() > 0) {
+    m_waveform.SetViewStart(std::min(m_pendingViewStart, m_waveform.GetItemDuration()));
+    m_waveform.SetViewDuration(m_pendingViewDur);
+    m_waveform.Invalidate();
+    m_pendingViewRestoreTicks--;
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
 
   // Cursor + RMS levels - works for both single and multi-item
   if (m_waveform.HasItem()) {
