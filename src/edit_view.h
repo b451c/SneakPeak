@@ -283,6 +283,10 @@ private:
   int m_wavBitsPerSample = 16;
   int m_wavAudioFormat = 1; // 1=PCM, 3=float
   bool m_rulerAbsolute = false; // true = show absolute REAPER time on ruler
+  // Pending view restore after gain split (timer-safe)
+  bool m_pendingViewRestore = false;
+  double m_pendingViewStart = 0.0;
+  double m_pendingViewDur = 0.0;
   int m_lastChanMode = -1;  // tracks I_CHANMODE for change detection
   int m_audioChangeCheckCounter = 0;  // poll counter for external audio changes
 

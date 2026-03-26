@@ -382,6 +382,15 @@ void SneakPeak::LoadSelectedItem()
     UpdateTitle();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
+
+  // Restore view position after gain split (or any operation that reloads the item)
+  if (m_pendingViewRestore && m_waveform.GetItemDuration() > 0) {
+    m_waveform.SetViewStart(std::min(m_pendingViewStart, m_waveform.GetItemDuration()));
+    m_waveform.SetViewDuration(m_pendingViewDur);
+    m_waveform.Invalidate();
+    m_pendingViewRestore = false;
+    if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
 }
 
 void SneakPeak::OnTimer()
