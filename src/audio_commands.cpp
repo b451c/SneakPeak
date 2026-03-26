@@ -56,9 +56,13 @@ void SneakPeak::UndoRestore()
   // Action 40029 = Edit: Undo
   if (g_Main_OnCommand) {
     g_Main_OnCommand(40029, 0);
-    // Reload item to reflect undo changes
-    m_waveform.ClearItem();
-    LoadSelectedItem();
+    // Reload to reflect undo changes
+    if (m_trackViewMode) {
+      RefreshTrackView();
+    } else {
+      m_waveform.ClearItem();
+      LoadSelectedItem();
+    }
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 }
