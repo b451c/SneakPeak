@@ -412,9 +412,25 @@ void SneakPeak::DoDelete()
   MediaItem* middlePart = g_SplitMediaItem(item, splitStart);
 
   // Delete the middle part
+  double deletedDuration = splitEnd - splitStart;
+  MediaTrack* track = nullptr;
   if (middlePart) {
-    MediaTrack* track = g_GetMediaItem_Track(middlePart);
+    track = g_GetMediaItem_Track(middlePart);
     if (track) g_DeleteTrackMediaItem(track, middlePart);
+  }
+
+  // Track view: ripple edit - pull all subsequent items left by deleted duration
+  if (m_trackViewMode && track && g_GetTrackNumMediaItems && g_GetTrackMediaItem &&
+      g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value && deletedDuration > 0.0) {
+    int count = g_GetTrackNumMediaItems(track);
+    for (int i = 0; i < count; i++) {
+      MediaItem* mi = g_GetTrackMediaItem(track, i);
+      if (!mi) continue;
+      double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+      if (pos >= splitStart) {
+        g_SetMediaItemInfo_Value(mi, "D_POSITION", pos - deletedDuration);
+      }
+    }
   }
 
   if (g_UpdateArrange) g_UpdateArrange();
