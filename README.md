@@ -70,6 +70,17 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Crossfade indicators** - Join-point lines at crossfade midpoints for easy visual reference.
 - **Batch gain** - One knob adjusts relative gain across all selected items.
 
+### Working Set (Track Editing)
+- **Lock items for editing** - Select items on timeline, press T to create a persistent Working Set. Items are shown as a continuous waveform with gaps collapsed.
+- **Persistent state** - Click elsewhere and come back - the set auto-restores when you click any set item.
+- **Non-destructive editing** - Delete, split, and gain operations work through REAPER API with full undo.
+- **Ripple edit** - Delete in SET mode automatically pulls subsequent items left to close gaps.
+- **Selection-aware gain** - Gain knob with selection splits at edges and applies D_VOL only to the fragment (with 10ms crossfade overlap).
+- **Group Set Items** - Group all items in the set (or selected range) for easy timeline manipulation. Visual colored bar below ruler.
+- **Clipping visualization** - Peaks above 0dB draw in red, proportional to severity.
+- **Absolute time ruler** - Toggle between relative and REAPER timeline time (context menu).
+- **Bidirectional cursor sync** - Click in SneakPeak scrolls REAPER arrange, click on REAPER timeline updates SneakPeak playhead.
+
 ### Metering
 - **Real-time level meters** - Stereo L/R display with peak hold indicators.
 - **Three meter modes** (right-click to switch):
