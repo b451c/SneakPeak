@@ -4,16 +4,28 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.7.0] - 2026-03-25
+## [1.7.0] - 2026-03-26
+
+### Added
+- **Working Set mode** - Select items on timeline, press T (or use REAPER action "SneakPeak: Toggle Track View") to lock them as a persistent editing set. Gaps collapsed into continuous waveform. Click elsewhere and come back - the set auto-restores. Exit with T again or ESC.
+- **Selection-aware gain** - Gain knob respects selection: with selection, applies gain only to the selected fragment (split + D_VOL with 10ms crossfade overlap in SET mode, destructive with crossfade in standalone). Without selection, applies to whole item.
+- **Clipping visualization** - Waveform peaks above 0dB now draw in red (top 30% of peak height), visible at any zoom level. No more clamping at 0dB.
+- **Group Set Items** - Group all items in the working set (or just selected range) for easy timeline manipulation. Toggle via context menu with checkmark. Visual indicator: colored bar below ruler.
+- **Ruler time format toggle** - Switch between relative and absolute REAPER timeline time via context menu (View > Ruler: Absolute Time). Persisted across sessions. Auto-enables in SET mode.
+- **REAPER action: Toggle Track View** - Registered as assignable REAPER action for keyboard shortcut binding.
+- **Bidirectional cursor sync** - Click on REAPER timeline updates SneakPeak playhead. Click in SneakPeak scrolls REAPER arrange view to that position.
 
 ### Changed
 - **Modular architecture** - Monolithic `edit_view.cpp` (4,336 lines) split into 7 focused modules: rendering, input handling, audio commands, standalone file management, context menu, drag export. No file exceeds 1,100 lines.
-- **Waveform rendering** split from data management (waveform_view.cpp → waveform_view.cpp + waveform_rendering.cpp).
+- **Waveform rendering** split from data management (waveform_view.cpp - waveform_view.cpp + waveform_rendering.cpp).
+- **Drag export requires Alt/Option** - Prevents accidental drags during selection. Hold Alt/Option + drag from selection to export.
 
 ### Fixed
 - **Memory leak** - `RefreshItemSource` now uses `P_SOURCE` via `GetSetMediaItemTakeInfo` instead of deprecated `SetMediaItemTake_Source` which leaked the old PCM source on every destructive edit.
 - **WriteAndRefresh** now checks write success before marking item as dirty.
 - **Marker manager** - `m_showMarkers` and `m_rightClickMarkerIdx` properly encapsulated (private with accessors).
+- **Selection edges clamp to waveform area** - Selection lines and highlight no longer bleed onto the dB scale.
+- **Selection sync at item boundaries** - Selection dragged to item edges no longer reverses on the REAPER timeline.
 
 ### Performance
 - **PreventUIRefresh** - All REAPER undo blocks wrapped with `PreventUIRefresh(1)/-1)` to prevent redundant arrange view redraws during multi-step operations.
@@ -38,7 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Fixed
 - **Fade-in direction** - Fade-in curvature now renders identically to REAPER's timeline display (was inverted).
 - **Drag export file loss** - Exported files no longer go to /tmp where they'd be lost on restart. Saved to project folder or next to source file.
-- **GitHub issue #1** - "Weird fade handle behavior" — fade handles now responsive with proper curvature control.
+- **GitHub issue #1** - "Weird fade handle behavior" - fade handles now responsive with proper curvature control.
 
 ---
 
