@@ -518,12 +518,21 @@ void SneakPeak::OnMouseUp(int x, int y)
             if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
             if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
           }
-        } else if (m_workingSet.active) {
-          // SET mode without selection: WriteToItem already applied D_VOL during drag
+        } else if (m_workingSet.active && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
+          // SET mode without selection: apply D_VOL to all items in set
+          if (g_PreventUIRefresh) g_PreventUIRefresh(1);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+          for (const auto& seg : m_waveform.GetSegments()) {
+            if (!seg.item) continue;
+            if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, seg.item, "MediaItem*")) continue;
+            double v = g_GetMediaItemInfo_Value(seg.item, "D_VOL");
+            g_SetMediaItemInfo_Value(seg.item, "D_VOL", v * factor);
+          }
+          if (g_UpdateArrange) g_UpdateArrange();
           char desc[64];
           snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
           if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+          if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
         } else {
           // REAPER single-item: WriteToItem already applied D_VOL during drag
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);

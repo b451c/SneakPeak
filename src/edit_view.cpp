@@ -523,9 +523,9 @@ void SneakPeak::OnTimer()
     }
     // Batch gain: sync knob offset to waveform for visual feedback
     // But NOT when there's a selection (selection uses per-region preview instead)
-    // In SET mode with selection: skip D_VOL writes (visual preview + split on release)
-    // In REAPER single-item mode: always write D_VOL (whole item, selection irrelevant)
-    bool skipWrite = m_workingSet.active && m_waveform.HasSelection();
+    // SET mode: always skip D_VOL writes during drag (visual preview only, apply on release)
+    // REAPER single-item: write D_VOL in real-time
+    bool skipWrite = m_workingSet.active;
     m_gainPanel.SetSkipBatchWrite(skipWrite);
     if (m_gainPanel.IsBatch() && !skipWrite) {
       double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
@@ -534,14 +534,18 @@ void SneakPeak::OnTimer()
       m_waveform.SetBatchGainOffset(1.0);
     }
   }
-  // Gain preview: selection overlay during knob drag (SET + standalone only)
-  if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging() && m_waveform.HasSelection()
+  // Gain preview: visual overlay during knob drag (SET + standalone)
+  if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging()
       && (m_workingSet.active || m_waveform.IsStandaloneMode())) {
     double gainLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
-    WaveformSelection sel = m_waveform.GetSelection();
-    double s = std::min(sel.startTime, sel.endTime);
-    double e = std::max(sel.startTime, sel.endTime);
-    m_waveform.SetStandaloneGain(gainLin, s, e);
+    if (m_waveform.HasSelection()) {
+      WaveformSelection sel = m_waveform.GetSelection();
+      double s = std::min(sel.startTime, sel.endTime);
+      double e = std::max(sel.startTime, sel.endTime);
+      m_waveform.SetStandaloneGain(gainLin, s, e);
+    } else {
+      m_waveform.SetStandaloneGain(gainLin, -1.0, -1.0); // whole range
+    }
   } else {
     m_waveform.ClearStandaloneGain();
   }
