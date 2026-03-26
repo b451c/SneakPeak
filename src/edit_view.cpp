@@ -624,11 +624,14 @@ void SneakPeak::OnTimer()
     } else if (g_GetCursorPosition && !m_waveform.IsStandaloneMode()) {
       double curPos = g_GetCursorPosition();
       double relPos = m_waveform.AbsTimeToRelTime(curPos);
-      // Clamp cursor to item bounds
       double dur = m_waveform.GetItemDuration();
       if (relPos < 0.0) relPos = 0.0;
       if (relPos > dur) relPos = dur;
-      m_waveform.SetCursorTime(relPos);
+      if (std::abs(relPos - m_waveform.GetCursorTime()) > 0.001) {
+        m_waveform.SetCursorTime(relPos);
+        InvalidateRect(m_hwnd, &m_waveformRect, FALSE);
+        InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+      }
     }
 
     // Meter source: master track or item audio
