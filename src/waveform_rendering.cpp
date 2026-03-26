@@ -318,29 +318,36 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     if (yMax > yMin) std::swap(yMax, yMin);
 
     if (clipping) {
-      // Green: full waveform column
-      MoveToEx(hdc, x, yMax, nullptr);
-      LineTo(hdc, x, yMin + 1);
+      // Split column: green for normal range, red for clipping portion
+      // Red = top 30% of peak (proportional to severity)
+      int greenTop = yMax, greenBot = yMin;
 
-      // Red overlay: from peak down to ~70% of peak height (shows severity)
-      // More clipping = more red. At exactly 0dB clip = tiny red tip.
-      SelectObject(hdc, clipPen);
       if (rawMax > 1.0) {
-        double clipDepth = std::min(rawMax, rawMax * 0.7); // red covers top 30% of peak
-        int yRedBottom = centerY - (int)(clipDepth * (double)halfH);
-        yRedBottom = std::max(yTop, std::min(yTop + height - 1, yRedBottom));
+        double redBottom = rawMax * 0.7;
+        int yRedBot = centerY - (int)(redBottom * (double)halfH);
+        yRedBot = std::max(yTop, std::min(yTop + height - 1, yRedBot));
+        // Red: peak to 70% mark
+        SelectObject(hdc, clipPen);
         MoveToEx(hdc, x, yMax, nullptr);
-        LineTo(hdc, x, yRedBottom + 1);
+        LineTo(hdc, x, yRedBot + 1);
+        greenTop = yRedBot + 1; // green starts below red
       }
       if (rawMin < -1.0) {
-        double clipDepth = std::max(rawMin, rawMin * 0.7);
-        int yRedTop = centerY - (int)(clipDepth * (double)halfH);
+        double redTop = rawMin * 0.7;
+        int yRedTop = centerY - (int)(redTop * (double)halfH);
         yRedTop = std::max(yTop, std::min(yTop + height - 1, yRedTop));
+        SelectObject(hdc, clipPen);
         MoveToEx(hdc, x, yRedTop, nullptr);
         LineTo(hdc, x, yMin + 1);
+        greenBot = yRedTop - 1; // green ends above red
       }
+      // Green: remaining middle portion
       bool inSel = hasSel && x >= selX1 && x < selX2;
       SelectObject(hdc, inSel ? selPen : normalPen);
+      if (greenTop <= greenBot) {
+        MoveToEx(hdc, x, greenTop, nullptr);
+        LineTo(hdc, x, greenBot + 1);
+      }
     } else {
       MoveToEx(hdc, x, yMax, nullptr);
       LineTo(hdc, x, yMin + 1);
