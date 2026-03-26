@@ -318,30 +318,26 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     if (yMax > yMin) std::swap(yMax, yMin);
 
     if (clipping) {
-      // Draw normal (green) part within [-1.0, 1.0] range
-      double clampMax = std::max(-1.0, std::min(1.0, rawMax));
-      double clampMin = std::max(-1.0, std::min(1.0, rawMin));
-      int yClampMax = centerY - (int)(clampMax * (double)halfH);
-      int yClampMin = centerY - (int)(clampMin * (double)halfH);
-      yClampMax = std::max(yTop, std::min(yTop + height - 1, yClampMax));
-      yClampMin = std::max(yTop, std::min(yTop + height - 1, yClampMin));
-      if (yClampMax > yClampMin) std::swap(yClampMax, yClampMin);
-      MoveToEx(hdc, x, yClampMax, nullptr);
-      LineTo(hdc, x, yClampMin + 1);
+      // Green: full waveform column
+      MoveToEx(hdc, x, yMax, nullptr);
+      LineTo(hdc, x, yMin + 1);
 
-      // Draw red clipping portions (above 0dB only)
+      // Red overlay: from peak down to ~70% of peak height (shows severity)
+      // More clipping = more red. At exactly 0dB clip = tiny red tip.
       SelectObject(hdc, clipPen);
       if (rawMax > 1.0) {
-        int yClipTop = std::max(yTop, yMax);
-        int y0db = centerY - (int)halfH; // 0dB = top of channel
-        MoveToEx(hdc, x, yClipTop, nullptr);
-        LineTo(hdc, x, std::min(y0db + 1, yClampMax + 1));
+        double clipDepth = std::min(rawMax, rawMax * 0.7); // red covers top 30% of peak
+        int yRedBottom = centerY - (int)(clipDepth * (double)halfH);
+        yRedBottom = std::max(yTop, std::min(yTop + height - 1, yRedBottom));
+        MoveToEx(hdc, x, yMax, nullptr);
+        LineTo(hdc, x, yRedBottom + 1);
       }
       if (rawMin < -1.0) {
-        int yClipBot = std::min(yTop + height - 1, yMin);
-        int y0dbBot = centerY + (int)halfH; // 0dB = bottom of channel
-        MoveToEx(hdc, x, std::max(y0dbBot, yClampMin), nullptr);
-        LineTo(hdc, x, yClipBot + 1);
+        double clipDepth = std::max(rawMin, rawMin * 0.7);
+        int yRedTop = centerY - (int)(clipDepth * (double)halfH);
+        yRedTop = std::max(yTop, std::min(yTop + height - 1, yRedTop));
+        MoveToEx(hdc, x, yRedTop, nullptr);
+        LineTo(hdc, x, yMin + 1);
       }
       bool inSel = hasSel && x >= selX1 && x < selX2;
       SelectObject(hdc, inSel ? selPen : normalPen);
