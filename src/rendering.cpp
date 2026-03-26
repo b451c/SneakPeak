@@ -397,14 +397,15 @@ void SneakPeak::DrawRuler(HDC hdc)
     LineTo(hdc, tx, y + h - 1);
     SelectObject(hdc, op);
 
-    // Format as HH:MM:SS;ms
+    // Format as HH:MM:SS;ms (use absolute timeline time in working set mode)
     char label[32];
     {
-      int totalSec = (int)t;
+      double displayTime = m_waveform.IsTrackView() ? m_waveform.RelTimeToAbsTime(t) : t;
+      int totalSec = (int)displayTime;
       int hours = totalSec / 3600;
       int mins = (totalSec % 3600) / 60;
       int secs = totalSec % 60;
-      int ms = (int)((t - totalSec) * 1000.0 + 0.5);
+      int ms = (int)((displayTime - totalSec) * 1000.0 + 0.5);
       if (ms >= 1000) { ms -= 1000; secs++; }
 
       if (tickInterval >= 60.0) {
@@ -832,15 +833,21 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
     char line[256];
     if (m_waveform.HasSelection()) {
       WaveformSelection sel = m_waveform.GetSelection();
+      bool tv = m_waveform.IsTrackView();
+      double s1 = tv ? m_waveform.RelTimeToAbsTime(sel.startTime) : sel.startTime;
+      double s2 = tv ? m_waveform.RelTimeToAbsTime(sel.endTime) : sel.endTime;
       char sStart[16], sEnd[16], sDur[16];
-      FormatTimeHMS(sel.startTime, sStart, sizeof(sStart));
-      FormatTimeHMS(sel.endTime, sEnd, sizeof(sEnd));
-      FormatTimeHMS(sel.endTime - sel.startTime, sDur, sizeof(sDur));
+      FormatTimeHMS(s1, sStart, sizeof(sStart));
+      FormatTimeHMS(s2, sEnd, sizeof(sEnd));
+      FormatTimeHMS(std::abs(s2 - s1), sDur, sizeof(sDur));
       snprintf(line, sizeof(line), "Sel: %s - %s  Dur: %s", sStart, sEnd, sDur);
       SetTextColor(hdc, RGB(210, 210, 210));
     } else {
       char sCur[16];
-      FormatTimeHMS(m_waveform.GetCursorTime(), sCur, sizeof(sCur));
+      double ct = m_waveform.IsTrackView()
+        ? m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime())
+        : m_waveform.GetCursorTime();
+      FormatTimeHMS(ct, sCur, sizeof(sCur));
       snprintf(line, sizeof(line), "Cursor: %s", sCur);
       SetTextColor(hdc, RGB(170, 170, 170));
     }
@@ -851,8 +858,10 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
   {
     RECT r = { infoLeft, panelTop + rowH, infoRight, panelTop + rowH * 2 };
     char vStart[16], vEnd[16], vDur[16];
-    FormatTimeHMS(m_waveform.GetViewStart(), vStart, sizeof(vStart));
-    FormatTimeHMS(m_waveform.GetViewEnd(), vEnd, sizeof(vEnd));
+    double vs = m_waveform.IsTrackView() ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewStart()) : m_waveform.GetViewStart();
+    double ve = m_waveform.IsTrackView() ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewEnd()) : m_waveform.GetViewEnd();
+    FormatTimeHMS(vs, vStart, sizeof(vStart));
+    FormatTimeHMS(ve, vEnd, sizeof(vEnd));
     FormatTimeHMS(m_waveform.GetViewDuration(), vDur, sizeof(vDur));
     char line[256];
     snprintf(line, sizeof(line), "View: %s - %s  Dur: %s", vStart, vEnd, vDur);

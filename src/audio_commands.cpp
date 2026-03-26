@@ -423,7 +423,7 @@ void SneakPeak::DoDelete()
     if (track) g_DeleteTrackMediaItem(track, middlePart);
   }
 
-  // Track view: ripple edit - pull all subsequent items left by deleted duration
+  // Working set: ripple edit - pull all subsequent items left by deleted duration
   if (m_workingSet.active && track && g_GetTrackNumMediaItems && g_GetTrackMediaItem &&
       g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value && deletedDuration > 0.0) {
     int count = g_GetTrackNumMediaItems(track);
@@ -435,6 +435,8 @@ void SneakPeak::DoDelete()
         g_SetMediaItemInfo_Value(mi, "D_POSITION", pos - deletedDuration);
       }
     }
+    // Shrink working set range to match
+    m_workingSet.endPos -= deletedDuration;
   }
 
   if (g_UpdateArrange) g_UpdateArrange();
