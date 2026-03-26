@@ -521,24 +521,21 @@ void SneakPeak::OnTimer()
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
     // Batch gain: sync knob offset to waveform for visual feedback
-    if (m_gainPanel.IsBatch()) {
+    // But NOT when there's a selection (selection uses per-region preview instead)
+    if (m_gainPanel.IsBatch() && !m_waveform.HasSelection()) {
       double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
       m_waveform.SetBatchGainOffset(offsetLin);
-    } else if (m_waveform.IsMultiItemActive()) {
+    } else {
       m_waveform.SetBatchGainOffset(1.0);
     }
   }
-  // Reflect gain panel dB in waveform display (visual preview, all modes)
-  if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging()) {
+  // Gain preview: selection-only overlay during knob drag (all modes)
+  if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging() && m_waveform.HasSelection()) {
     double gainLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
-    if (m_waveform.HasSelection()) {
-      WaveformSelection sel = m_waveform.GetSelection();
-      double s = std::min(sel.startTime, sel.endTime);
-      double e = std::max(sel.startTime, sel.endTime);
-      m_waveform.SetStandaloneGain(gainLin, s, e);
-    } else {
-      m_waveform.SetStandaloneGain(gainLin, -1.0, -1.0);
-    }
+    WaveformSelection sel = m_waveform.GetSelection();
+    double s = std::min(sel.startTime, sel.endTime);
+    double e = std::max(sel.startTime, sel.endTime);
+    m_waveform.SetStandaloneGain(gainLin, s, e);
   } else {
     m_waveform.ClearStandaloneGain();
   }
