@@ -534,13 +534,19 @@ void SneakPeak::OnMouseUp(int x, int y)
             if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
             if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-            // Defer refresh to avoid crash during paint cycle
+            // Reload item but preserve view position
+            double savedViewStart = m_waveform.GetViewStart();
+            double savedViewDur = m_waveform.GetViewDuration();
             m_waveform.ClearSelection();
-            if (m_workingSet.active)
+            if (m_workingSet.active) {
               RefreshWorkingSet();
-            else {
+            } else {
               m_waveform.ClearItem();
               LoadSelectedItem();
+            }
+            if (m_waveform.GetItemDuration() > 0) {
+              m_waveform.SetViewStart(std::min(savedViewStart, m_waveform.GetItemDuration()));
+              m_waveform.SetViewDuration(savedViewDur);
             }
           }
         } else if (!m_waveform.HasSelection()) {
