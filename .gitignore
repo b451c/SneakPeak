@@ -5,5 +5,7 @@ sdk/
 WDL/
 .kiro/
 AUDIT.md
+REFACTOR_LOG.md
+CLAUDE.md
 forum_post.txt
 .harness/
