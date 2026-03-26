@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SneakPeak User Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0e0e10;--bg-elevated:#161619;--bg-card:#1c1c20;--bg-hover:#222226;
+  --border:#2a2a30;--border-light:#353540;
+  --text:#e0e0e5;--text-muted:#8a8a95;--text-dim:#5a5a65;
+  --accent:#44dd88;--accent-dim:#2a8a5a;--accent-glow:rgba(68,221,136,.12);
+  --red:#ee4455;--amber:#eeaa44;--blue:#4488ee;
+  --font:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',monospace;
+  --radius:6px;
+  --sidebar-w:260px;
+}
+html{scroll-behavior:smooth;font-size:15px}
+body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased}
+::selection{background:var(--accent-dim);color:#fff}
+a{color:var(--accent);text-decoration:none;transition:color .15s}
+a:hover{color:#66eea8}
+
+/* Layout */
+.layout{display:flex;min-height:100vh}
+.sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:var(--bg-elevated);border-right:1px solid var(--border);overflow-y:auto;z-index:100;padding:24px 0;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.content{margin-left:var(--sidebar-w);flex:1;max-width:820px;padding:48px 56px 120px}
+
+/* Sidebar */
+.sidebar-header{padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.sidebar-logo{font-size:1.1rem;font-weight:700;color:var(--accent);letter-spacing:-.02em}
+.sidebar-version{font-size:.7rem;color:var(--text-muted);margin-top:2px;font-family:var(--mono)}
+.nav-group{margin-bottom:8px}
+.nav-group-title{font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);padding:8px 20px 4px;user-select:none}
+.nav-link{display:block;padding:5px 20px 5px 28px;font-size:.82rem;color:var(--text-muted);transition:all .12s;border-left:2px solid transparent}
+.nav-link:hover{color:var(--text);background:var(--bg-hover)}
+.nav-link.active{color:var(--accent);border-left-color:var(--accent);background:var(--accent-glow)}
+
+/* Headings */
+h1{font-size:2rem;font-weight:700;letter-spacing:-.03em;margin-bottom:8px;color:#fff}
+h1 span{color:var(--accent)}
+.subtitle{font-size:1rem;color:var(--text-muted);margin-bottom:48px;font-weight:300}
+h2{font-size:1.35rem;font-weight:600;letter-spacing:-.02em;margin:56px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border);color:#fff;scroll-margin-top:24px}
+h3{font-size:1.05rem;font-weight:600;margin:32px 0 12px;color:var(--text);scroll-margin-top:24px}
+h4{font-size:.9rem;font-weight:600;margin:20px 0 8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
+
+/* Text */
+p{margin-bottom:16px;color:var(--text)}
+p+p{margin-top:0}
+strong{color:#fff;font-weight:600}
+em{color:var(--text-muted);font-style:normal}
+
+/* Kbd */
+kbd{display:inline-block;padding:2px 7px;font-family:var(--mono);font-size:.78rem;color:#fff;background:var(--bg-card);border:1px solid var(--border-light);border-radius:4px;box-shadow:0 1px 0 var(--border);line-height:1.4;white-space:nowrap;vertical-align:baseline}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;margin:16px 0 24px;font-size:.88rem}
+thead th{text-align:left;font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);padding:8px 12px;border-bottom:2px solid var(--border-light)}
+tbody td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+tbody tr:hover{background:var(--bg-hover)}
+td:first-child{white-space:nowrap;color:#fff;font-weight:500}
+
+/* Cards */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;margin:16px 0 24px}
+.card-title{font-size:.9rem;font-weight:600;color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.card-title::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
+
+/* Mode badges */
+.modes{display:flex;gap:6px;margin:8px 0 16px;flex-wrap:wrap}
+.mode{font-size:.68rem;font-weight:600;padding:3px 10px;border-radius:12px;letter-spacing:.02em;text-transform:uppercase}
+.mode-reaper{background:rgba(68,136,238,.15);color:var(--blue);border:1px solid rgba(68,136,238,.25)}
+.mode-set{background:var(--accent-glow);color:var(--accent);border:1px solid rgba(68,221,136,.25)}
+.mode-standalone{background:rgba(238,170,68,.12);color:var(--amber);border:1px solid rgba(238,170,68,.2)}
+.mode-all{background:rgba(224,224,229,.08);color:var(--text-muted);border:1px solid var(--border)}
+
+/* Shortcut grid */
+.shortcut-grid{display:grid;grid-template-columns:140px 1fr;gap:0;margin:12px 0 24px}
+.shortcut-grid .key{padding:6px 0;border-bottom:1px solid var(--border);display:flex;align-items:center}
+.shortcut-grid .desc{padding:6px 0 6px 16px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.88rem}
+
+/* Tip/Warning boxes */
+.tip,.warning{padding:14px 18px;border-radius:var(--radius);margin:16px 0 24px;font-size:.88rem;line-height:1.6}
+.tip{background:rgba(68,221,136,.06);border-left:3px solid var(--accent);color:var(--text)}
+.warning{background:rgba(238,68,85,.06);border-left:3px solid var(--red);color:var(--text)}
+.tip strong,.warning strong{display:block;margin-bottom:4px}
+
+/* Lists */
+ul,ol{margin:8px 0 16px;padding-left:24px}
+li{margin-bottom:6px;color:var(--text)}
+li::marker{color:var(--text-dim)}
+
+/* Code */
+code{font-family:var(--mono);font-size:.84em;background:var(--bg-card);padding:2px 6px;border-radius:3px;color:var(--accent)}
+
+/* Hero section */
+.hero-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:32px 0 48px}
+.hero-mode{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;transition:border-color .2s,transform .2s}
+.hero-mode:hover{border-color:var(--border-light);transform:translateY(-2px)}
+.hero-mode-icon{font-size:1.6rem;margin-bottom:10px}
+.hero-mode-name{font-size:.95rem;font-weight:600;color:#fff;margin-bottom:6px}
+.hero-mode-desc{font-size:.8rem;color:var(--text-muted);line-height:1.5}
+
+/* Separator */
+hr{border:none;border-top:1px solid var(--border);margin:48px 0}
+
+/* Mobile */
+@media(max-width:900px){
+  .sidebar{display:none}
+  .content{margin-left:0;padding:24px 20px 80px;max-width:100%}
+  .hero-modes{grid-template-columns:1fr}
+}
+
+/* Scroll indicator */
+.scroll-top{position:fixed;bottom:24px;right:24px;width:40px;height:40px;background:var(--bg-card);border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:1.2rem;cursor:pointer;opacity:0;transition:opacity .3s;z-index:200}
+.scroll-top.visible{opacity:1}
+.scroll-top:hover{background:var(--bg-hover)}
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">SneakPeak</div>
+    <div class="sidebar-version">v1.7.0 User Guide</div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Getting Started</div>
+    <a href="#installation" class="nav-link">Installation</a>
+    <a href="#first-launch" class="nav-link">First Launch</a>
+    <a href="#three-modes" class="nav-link">Three Editing Modes</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">REAPER Mode</div>
+    <a href="#reaper-basics" class="nav-link">Basics</a>
+    <a href="#waveform-display" class="nav-link">Waveform Display</a>
+    <a href="#selection" class="nav-link">Selection</a>
+    <a href="#zoom-navigation" class="nav-link">Zoom & Navigation</a>
+    <a href="#editing-reaper" class="nav-link">Editing</a>
+    <a href="#fades" class="nav-link">Fades</a>
+    <a href="#gain" class="nav-link">Gain Control</a>
+    <a href="#split" class="nav-link">Split</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">SET Mode (Working Set)</div>
+    <a href="#set-overview" class="nav-link">Overview</a>
+    <a href="#set-entering" class="nav-link">Creating a Set</a>
+    <a href="#set-editing" class="nav-link">Editing in Set</a>
+    <a href="#set-gain" class="nav-link">Gain on Selection</a>
+    <a href="#set-grouping" class="nav-link">Grouping</a>
+    <a href="#set-dormant" class="nav-link">Dormant & Restore</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Standalone Mode</div>
+    <a href="#standalone-overview" class="nav-link">Overview</a>
+    <a href="#standalone-files" class="nav-link">File Management</a>
+    <a href="#standalone-editing" class="nav-link">Editing</a>
+    <a href="#standalone-save" class="nav-link">Save Workflow</a>
+    <a href="#standalone-export" class="nav-link">Drag Export</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Features</div>
+    <a href="#spectral" class="nav-link">Spectral View</a>
+    <a href="#multi-item" class="nav-link">Multi-Item View</a>
+    <a href="#metering" class="nav-link">Metering</a>
+    <a href="#minimap" class="nav-link">Minimap</a>
+    <a href="#markers" class="nav-link">Markers</a>
+    <a href="#master" class="nav-link">Master Mode</a>
+    <a href="#ruler" class="nav-link">Ruler & Time</a>
+    <a href="#clipping" class="nav-link">Clipping Display</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Reference</div>
+    <a href="#shortcuts" class="nav-link">All Shortcuts</a>
+    <a href="#mouse" class="nav-link">Mouse Reference</a>
+    <a href="#context-menu" class="nav-link">Context Menu</a>
+    <a href="#toolbar" class="nav-link">Toolbar Buttons</a>
+  </div>
+</nav>
+
+<main class="content">
+
+<!-- Hero -->
+<h1>Sneak<span>Peak</span> User Guide</h1>
+<p class="subtitle">Precision waveform editor for REAPER - v1.7.0</p>
+
+<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a dockable window. Three editing modes cover everything from quick item inspection to multi-item track assembly.</p>
+
+<div class="hero-modes">
+  <div class="hero-mode">
+    <div class="hero-mode-icon">&#9654;</div>
+    <div class="hero-mode-name">REAPER Mode</div>
+    <div class="hero-mode-desc">Click an item, see its waveform. Non-destructive editing with full REAPER undo.</div>
+  </div>
+  <div class="hero-mode">
+    <div class="hero-mode-icon">&#9776;</div>
+    <div class="hero-mode-name">SET Mode</div>
+    <div class="hero-mode-desc">Lock multiple items as a working set. Edit as one continuous waveform with ripple editing.</div>
+  </div>
+  <div class="hero-mode">
+    <div class="hero-mode-icon">&#9998;</div>
+    <div class="hero-mode-name">Standalone Mode</div>
+    <div class="hero-mode-desc">Drag & drop audio files for offline destructive editing with independent undo.</div>
+  </div>
+</div>
+
+<hr>
+
+<!-- Installation -->
+<h2 id="installation">Installation</h2>
+
+<h3>ReaPack (recommended)</h3>
+<ol>
+  <li>In REAPER: <strong>Extensions > ReaPack > Import repositories...</strong></li>
+  <li>Paste: <code>https://raw.githubusercontent.com/b451c/SneakPeak/main/index.xml</code></li>
+  <li><strong>Extensions > ReaPack > Browse packages</strong>, search "SneakPeak"</li>
+  <li>Right-click > Install, restart REAPER</li>
+</ol>
+
+<h3>Manual install</h3>
+<ol>
+  <li>Download <code>reaper_sneakpeak-arm64.dylib</code> from <a href="https://github.com/b451c/SneakPeak/releases/latest">GitHub Releases</a></li>
+  <li>Copy to <code>~/Library/Application Support/REAPER/UserPlugins/</code></li>
+  <li>Restart REAPER</li>
+</ol>
+
+<div class="warning">
+  <strong>macOS Apple Silicon only (for now)</strong>
+  Windows and Linux builds are planned. The codebase is cross-platform ready (WDL/SWELL).
+</div>
+
+<!-- First Launch -->
+<h2 id="first-launch">First Launch</h2>
+<p>After installing, open SneakPeak from REAPER's action list:</p>
+<ol>
+  <li>Open <strong>Actions > Show action list</strong></li>
+  <li>Search for <strong>"SneakPeak"</strong></li>
+  <li>Run <strong>"SneakPeak: Open/Close SneakPeak"</strong></li>
+  <li>Optionally, assign a keyboard shortcut to this action</li>
+</ol>
+<p>SneakPeak opens as a dockable window. Drag it into any REAPER docker, or leave it floating. It remembers its position across sessions.</p>
+<p>Click any media item on the timeline. SneakPeak immediately loads its waveform.</p>
+
+<!-- Three Modes -->
+<h2 id="three-modes">Three Editing Modes</h2>
+
+<p>SneakPeak has three distinct modes, shown in the mode bar at the top of the window. Each mode serves a different workflow.</p>
+
+<h3>REAPER Mode</h3>
+<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+<p>The default mode. Click an item on the timeline and SneakPeak shows its waveform. All editing goes through the REAPER API - nothing is destructive. Split, gain changes, fade adjustments, and normalization all create REAPER undo points that you can reverse with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+
+<h3>SET Mode (Working Set)</h3>
+<div class="modes"><span class="mode mode-set">SET</span></div>
+<p>Select multiple items on one track, then press <kbd>T</kbd> to lock them as a working set. SneakPeak collapses the gaps between items and shows them as one continuous waveform. You can delete fragments (with ripple edit), adjust gain on selections, and group items - all non-destructively through the REAPER API. The set persists even when you click elsewhere. Click back on any set item and it restores automatically.</p>
+
+<h3>Standalone Mode</h3>
+<div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
+<p>Drag and drop any audio file (WAV, MP3, FLAC) into the SneakPeak window to open it in standalone mode. This is a fully destructive editor with its own undo stack (20 levels). Edit, process, and save - independent of the REAPER project. Up to 8 files can be open in separate tabs.</p>
+
+<hr>
+
+<!-- REAPER Mode Details -->
+<h2 id="reaper-basics">REAPER Mode - Basics</h2>
+<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+
+<p>In REAPER mode, SneakPeak follows your item selection. Click a different item on the timeline and the waveform updates. The mode bar shows "REAPER" with a blue diamond indicator.</p>
+
+<p>Everything you do in this mode uses the REAPER API. The audio files on disk are never modified directly. Gain changes use the item's D_VOL parameter. Fades use D_FADEINLEN and D_FADEOUTLEN. Split uses SplitMediaItem. All reversible with REAPER's undo system.</p>
+
+<h2 id="waveform-display">Waveform Display</h2>
+<div class="modes"><span class="mode mode-all">ALL MODES</span></div>
+
+<p>The main area shows the waveform with peak (outer envelope) and RMS (inner, darker fill) levels. A dB scale on the right side shows amplitude from 0 dB down to the noise floor.</p>
+
+<ul>
+  <li><strong>Green waveform</strong> - normal audio levels</li>
+  <li><strong>Red peaks</strong> - signal exceeding 0 dB (clipping). The red covers the top portion of the peak proportionally to severity, so you can see how far the signal clips even when zoomed out.</li>
+  <li><strong>Center line</strong> - zero amplitude reference</li>
+  <li><strong>Grid lines</strong> - time grid (vertical) and dB grid (horizontal)</li>
+  <li><strong>Red vertical line</strong> - edit cursor position, synced with REAPER's cursor</li>
+</ul>
+
+<h2 id="selection">Selection</h2>
+<div class="modes"><span class="mode mode-all">ALL MODES</span></div>
+
+<p>Click and drag on the waveform to create a time selection. The selected region is highlighted. Most editing operations (cut, copy, normalize, fade, gain) work on the selection when one exists, or on the entire item when there is no selection.</p>
+
+<div class="shortcut-grid">
+  <div class="key"><kbd>Click</kbd> + <kbd>Drag</kbd></div><div class="desc">Create a new selection</div>
+  <div class="key"><kbd>Shift</kbd> + <kbd>Click</kbd></div><div class="desc">Extend selection to clicked position</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>A</kbd></div><div class="desc">Select the entire item</div>
+  <div class="key"><kbd>Double-click</kbd></div><div class="desc">Select all</div>
+  <div class="key"><kbd>Escape</kbd></div><div class="desc">Clear selection</div>
+</div>
+
+<p>Selections sync to REAPER's time selection. When you select a region in SneakPeak, the same region is highlighted on REAPER's timeline.</p>
+
+<div class="tip">
+  <strong>Snap to zero-crossing</strong>
+  Enable via right-click > View > Snap to Zero-Crossing. Selection edges will snap to the nearest zero-crossing point for click-free edits.
+</div>
+
+<h2 id="zoom-navigation">Zoom & Navigation</h2>
+<div class="modes"><span class="mode mode-all">ALL MODES</span></div>
+
+<h4>Horizontal zoom</h4>
+<div class="shortcut-grid">
+  <div class="key"><kbd>Scroll Up</kbd></div><div class="desc">Zoom in (centered on mouse position)</div>
+  <div class="key"><kbd>Scroll Down</kbd></div><div class="desc">Zoom out</div>
+  <div class="key"><kbd>Ctrl</kbd> + <kbd>Scroll</kbd></div><div class="desc">Pan left/right without zooming</div>
+</div>
+
+<h4>Vertical zoom (amplitude)</h4>
+<div class="shortcut-grid">
+  <div class="key"><kbd>Shift</kbd> + <kbd>Scroll</kbd></div><div class="desc">Zoom amplitude up/down</div>
+  <div class="key">Scroll on dB scale</div><div class="desc">Always zooms amplitude (right edge)</div>
+</div>
+
+<h4>Quick navigation</h4>
+<div class="shortcut-grid">
+  <div class="key"><kbd>Home</kbd></div><div class="desc">Go to start of item</div>
+  <div class="key"><kbd>End</kbd></div><div class="desc">Go to end of item</div>
+  <div class="key"><kbd>Tab</kbd></div><div class="desc">Jump to next marker</div>
+  <div class="key"><kbd>Shift</kbd>+<kbd>Tab</kbd></div><div class="desc">Jump to previous marker</div>
+</div>
+
+<p>The toolbar also has Zoom In, Zoom Out, Zoom to Fit, and Zoom to Selection buttons.</p>
+
+<h2 id="editing-reaper">Editing (REAPER Mode)</h2>
+<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+
+<p>Editing in REAPER mode is non-destructive. Operations go through the REAPER API and create undo points.</p>
+
+<div class="shortcut-grid">
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>X</kbd></div><div class="desc">Cut selection</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>C</kbd></div><div class="desc">Copy selection</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>V</kbd></div><div class="desc">Paste at cursor</div>
+  <div class="key"><kbd>Delete</kbd> / <kbd>E</kbd></div><div class="desc">Delete selection (splits item, removes middle)</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>N</kbd></div><div class="desc">Normalize to 0 dB peak</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>Z</kbd></div><div class="desc">Undo (REAPER undo)</div>
+</div>
+
+<p>Additional processing is available from the right-click context menu: LUFS normalization (-14 / -16), reverse, DC offset removal, and silence.</p>
+
+<h2 id="fades">Fades</h2>
+<div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-standalone">STANDALONE</span></div>
+
+<p>Fade handles appear at the top corners of the waveform. Hover near the top-left for fade-in, top-right for fade-out. The cursor changes to a resize arrow when you're in the handle zone.</p>
+
+<ul>
+  <li><strong>Drag left/right</strong> - adjust fade length</li>
+  <li><strong>Drag up/down</strong> - adjust curve shape (curvature from -1 to +1, matching REAPER's native D_FADEINDIR/D_FADEOUTDIR)</li>
+</ul>
+
+<p>In REAPER mode, fades are non-destructive (REAPER item fade parameters). In standalone mode, fades are previewed visually during drag and baked into the audio on save.</p>
+
+<h2 id="gain">Gain Control</h2>
+<div class="modes"><span class="mode mode-all">ALL MODES</span></div>
+
+<p>Press <kbd>G</kbd> to open the floating gain panel. A rotary knob controls volume from -60 dB to +12 dB. Hold <kbd>Ctrl</kbd> while dragging for fine adjustment (0.1 dB per pixel instead of 0.5 dB). Double-click the knob to reset to 0 dB.</p>
+
+<p>Gain behavior depends on the mode:</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>With Selection</th><th>Without Selection</th></tr></thead>
+  <tbody>
+    <tr><td>REAPER</td><td>Changes D_VOL on whole item</td><td>Changes D_VOL on whole item</td></tr>
+    <tr><td>SET</td><td>Splits at edges, applies D_VOL with 10ms crossfade</td><td>Applies D_VOL to all set items</td></tr>
+    <tr><td>Standalone</td><td>Destructive gain with crossfade at edges</td><td>Destructive gain on entire file</td></tr>
+  </tbody>
+</table>
+
+<p>In SET and standalone modes, you see a real-time visual preview of the gain change on the waveform while dragging the knob. The actual change is applied when you release.</p>
+
+<h2 id="split">Split</h2>
+<div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-set">SET</span></div>
+
+<p>Press <kbd>S</kbd> to split the item at the edit cursor position. If you have a selection, the item is split at both selection edges. This uses REAPER's native SplitMediaItem and creates an undo point.</p>
+
+<hr>
+
+<!-- SET Mode -->
+<h2 id="set-overview">SET Mode - Overview</h2>
+<div class="modes"><span class="mode mode-set">SET</span></div>
+
+<p>Working Set mode lets you treat multiple items on a track as a single continuous piece of audio. Gaps between items are collapsed visually. You can cut, split, adjust gain, and group items - all non-destructively. It is designed for dialogue editing, podcast assembly, and any workflow where you need to work across multiple items on one track.</p>
+
+<h2 id="set-entering">Creating a Working Set</h2>
+
+<ol>
+  <li>On REAPER's timeline, select the items you want to work with (all must be on the same track)</li>
+  <li>Press <kbd>T</kbd> or use the REAPER action "SneakPeak: Toggle Track View"</li>
+  <li>The mode bar changes to <strong>SET</strong> (green). Items appear as one continuous waveform.</li>
+</ol>
+
+<p>You can also assign a custom keyboard shortcut to the "SneakPeak: Toggle Track View" action in REAPER's action list.</p>
+
+<div class="tip">
+  <strong>Vertical boundary lines</strong>
+  Gray vertical lines in the waveform show where original item boundaries are. These help you see the structure of the underlying items even though the gaps are collapsed.
+</div>
+
+<h2 id="set-editing">Editing in a Working Set</h2>
+
+<h3>Delete with ripple edit</h3>
+<p>Select a region and press <kbd>Delete</kbd> or <kbd>E</kbd>. The selected audio is removed and all items after the cut point are pulled left to close the gap. This works across item boundaries - if your selection spans two items, both are trimmed correctly.</p>
+
+<h3>Split</h3>
+<p>Press <kbd>S</kbd> to split at the cursor position. The set refreshes to show the new item structure.</p>
+
+<h3>Undo</h3>
+<p>Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo. The working set refreshes to reflect the undone state. You stay in SET mode throughout.</p>
+
+<h2 id="set-gain">Gain on Selection (SET Mode)</h2>
+
+<p>This is one of the most powerful features in SET mode. Select a region, open the gain panel (<kbd>G</kbd>), and adjust the knob. Here's what happens:</p>
+
+<ol>
+  <li>While you drag the knob, you see a visual preview on the waveform (only the selected region changes)</li>
+  <li>When you release the knob, SneakPeak splits the items at the selection edges</li>
+  <li>The isolated fragment gets the new volume (D_VOL)</li>
+  <li>A 10ms overlap is created with neighboring items so REAPER generates an automatic crossfade</li>
+  <li>The working set reloads to reflect the change</li>
+</ol>
+
+<p>Without a selection, gain applies to all items in the set uniformly.</p>
+
+<h2 id="set-grouping">Grouping Items</h2>
+
+<p>After editing in SET mode, you may have many small items from splits and gain changes. Grouping lets you treat them as one unit on the timeline.</p>
+
+<p>Right-click > <strong>Group</strong>. All items in the working set (or in the selection range, if you have one) are assigned the same REAPER group ID. On the timeline, clicking one item selects all grouped items. Moving one moves all.</p>
+
+<p>The group is visualized as a colored bar below the ruler in SneakPeak. Different groups get different colors.</p>
+
+<p>To ungroup, right-click > <strong>Group</strong> again (it toggles). The checkmark indicates the current state.</p>
+
+<h2 id="set-dormant">Dormant State & Auto-Restore</h2>
+
+<p>The working set is persistent. When you click on a different item outside the set, SneakPeak switches to normal REAPER mode for that item. But the set is not destroyed - it goes <em>dormant</em>.</p>
+
+<p>Click back on any item that belongs to the working set, and SneakPeak automatically restores the SET view. No need to press <kbd>T</kbd> again.</p>
+
+<p>To permanently exit the set: press <kbd>T</kbd> again, <kbd>Escape</kbd>, or use the context menu.</p>
+
+<hr>
+
+<!-- Standalone Mode -->
+<h2 id="standalone-overview">Standalone Mode - Overview</h2>
+<div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
+
+<p>Drag any audio file into the SneakPeak window to open it in standalone mode. The mode bar shows an orange "STANDALONE" label. Up to 8 files can be open simultaneously in separate tabs.</p>
+
+<p>Standalone mode is fully destructive - operations modify the audio data in memory. Each file has its own undo stack (20 levels). Changes are not saved to disk until you explicitly save.</p>
+
+<h2 id="standalone-files">File Management</h2>
+
+<ul>
+  <li><strong>Open a file</strong> - drag and drop WAV, MP3, or FLAC into the window</li>
+  <li><strong>Switch tabs</strong> - click a tab in the mode bar</li>
+  <li><strong>Close a tab</strong> - click the X on the active tab. If the file has unsaved changes, you'll be asked to save first.</li>
+  <li><strong>Return to REAPER mode</strong> - click the "REAPER" tab (appears when you have an item selected)</li>
+</ul>
+
+<p>An asterisk (*) on the tab name indicates unsaved changes.</p>
+
+<h2 id="standalone-editing">Editing (Standalone)</h2>
+
+<p>All the same shortcuts work: <kbd>Ctrl</kbd>+<kbd>X</kbd>/<kbd>C</kbd>/<kbd>V</kbd> for clipboard, <kbd>Delete</kbd> for removing audio, <kbd>Ctrl</kbd>+<kbd>N</kbd> for normalize. The difference is that these operations modify the audio data directly.</p>
+
+<p>Delete in standalone mode removes the selected samples and splices the audio together with a short crossfade at the join point to avoid clicks.</p>
+
+<p>Playback: press <kbd>Space</kbd> to play from the cursor position. The playhead advances through the file. Press <kbd>Space</kbd> again to stop.</p>
+
+<h2 id="standalone-save">Save Workflow</h2>
+
+<div class="shortcut-grid">
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>S</kbd></div><div class="desc">Save (Smart Save)</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></div><div class="desc">Save As (choose location)</div>
+</div>
+
+<p><strong>Smart Save</strong> behavior:</p>
+<ul>
+  <li><strong>WAV file</strong> - first save asks "Overwrite original?" Yes overwrites, No opens Save As</li>
+  <li><strong>MP3/FLAC file</strong> - automatically creates <code>filename_edit.wav</code> next to the original (never overwrites non-WAV originals)</li>
+  <li><strong>Previously saved</strong> - saves silently to the same path</li>
+</ul>
+
+<p>Any pending fade previews are baked into the audio data at save time.</p>
+
+<h2 id="standalone-export">Drag Export</h2>
+
+<p>Hold <kbd>Alt</kbd>/<kbd>Option</kbd>, click inside a selection, and drag out of the SneakPeak window to export audio.</p>
+
+<ul>
+  <li><strong>With selection</strong> - exports the selected region as a WAV file</li>
+  <li><strong>Full file (clean)</strong> - references the original file (no copy created)</li>
+  <li><strong>Full file (dirty)</strong> - auto-saves first, then drags the saved file</li>
+</ul>
+
+<p>Drop the dragged file onto REAPER's timeline to insert it as a new item.</p>
+
+<div class="tip">
+  <strong>Why Alt/Option?</strong>
+  Drag export requires a modifier key to prevent accidental drags when you're trying to make a selection. Click inside a selection without Alt to place the cursor instead.
+</div>
+
+<hr>
+
+<!-- Features -->
+<h2 id="spectral">Spectral View</h2>
+<div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-standalone">STANDALONE</span></div>
+
+<p>Toggle the spectrogram via right-click > View > Spectral View. A resizable pane appears below the waveform showing a time-frequency representation of the audio using the magma color scheme (dark = silence, bright = energy).</p>
+
+<p>The spectrogram is computed asynchronously (2048-point FFT) when an item loads. A progress overlay shows computation status. After computation completes, the display updates instantly.</p>
+
+<p>Hold <kbd>Alt</kbd> and click/drag vertically in the spectral view to select a frequency band. This visually isolates the band for inspection.</p>
+
+<p>A draggable splitter between the waveform and spectrogram lets you adjust the space distribution (15% to 85%).</p>
+
+<div class="warning">
+  <strong>Single-item only</strong>
+  Spectral view is not available in multi-item or SET mode. It applies to one item at a time.
+</div>
+
+<h2 id="multi-item">Multi-Item View</h2>
+<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+
+<p>Select two or more items on the timeline. SneakPeak shows all of them together on an absolute timeline. Right-click to choose a display mode:</p>
+
+<ul>
+  <li><strong>Mix (Sum)</strong> - all items mixed into a single waveform, like hearing them all at once</li>
+  <li><strong>Layered (per Item)</strong> - each item drawn in a different color, overlapping. An 8-color palette provides clear visual separation.</li>
+  <li><strong>Layered (per Track)</strong> - items grouped and colored by their parent track</li>
+</ul>
+
+<p>Toggle <strong>Show Join Lines</strong> in the context menu to see vertical lines at crossfade points between items.</p>
+
+<h2 id="metering">Metering</h2>
+<div class="modes"><span class="mode mode-all">ALL MODES</span></div>
+
+<p>The bottom panel shows stereo level meters (L/R) with peak hold indicators. Right-click the meter area to switch between three modes:</p>
+
+<table>
+  <thead><tr><th>Mode</th><th>Behavior</th></tr></thead>
+  <tbody>
+    <tr><td>Peak (PPM)</td><td>True peak metering. Instant attack, slow decay. Peak hold marks.</td></tr>
+    <tr><td>RMS (AES/EBU)</td><td>RMS loudness with 300ms integration window per AES/EBU standard.</td></tr>
+    <tr><td>VU</td><td>Classic VU-meter ballistics. Slow attack, slow decay.</td></tr>
+  </tbody>
+</table>
+
+<p>Enable <strong>Master Output</strong> from the meter context menu to read levels from the master track instead of the current item. This lets you monitor the master bus while editing individual items.</p>
+
+<h2 id="minimap">Minimap</h2>
+<div class="modes"><span class="mode mode-all">ALL MODES</span></div>
+
+<p>Toggle via right-click > View > Minimap. A compact overview of the entire waveform appears above the scrollbar. It shows the full duration at a glance with a highlighted region indicating your current view.</p>
+
+<ul>
+  <li><strong>Click</strong> - center the view on that position</li>
+  <li><strong>Drag</strong> - continuously scroll through the duration</li>
+  <li><strong>Drag the top edge</strong> - resize the minimap height (saved between sessions)</li>
+</ul>
+
+<h2 id="markers">Markers</h2>
+<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+
+<p>SneakPeak integrates with REAPER's marker system. Markers appear as colored triangles in the ruler area.</p>
+
+<div class="shortcut-grid">
+  <div class="key"><kbd>M</kbd></div><div class="desc">Add marker at cursor position</div>
+  <div class="key"><kbd>Shift</kbd>+<kbd>M</kbd></div><div class="desc">Add region from current selection</div>
+  <div class="key"><kbd>Tab</kbd></div><div class="desc">Jump to next marker</div>
+  <div class="key"><kbd>Shift</kbd>+<kbd>Tab</kbd></div><div class="desc">Jump to previous marker</div>
+</div>
+
+<p>Double-click a marker in the ruler to edit its name and color. Right-click a marker for edit/delete options. Drag a marker left or right to move it.</p>
+
+<h2 id="master">Master Mode</h2>
+<div class="modes"><span class="mode mode-all">MASTER</span></div>
+
+<p>Click the <strong>MASTER</strong> label in the top-right corner of the mode bar when no item is selected. SneakPeak shows a rolling waveform of the master track output - a real-time visualization of what's coming out of the master bus.</p>
+
+<p>This is a view-only mode. No editing operations are available. Use it for monitoring during mixing or mastering.</p>
+
+<h2 id="ruler">Ruler & Time Display</h2>
+<div class="modes"><span class="mode mode-all">ALL MODES</span></div>
+
+<p>The ruler at the top shows time positions. By default it shows time relative to the item start (00:00:00). Toggle <strong>Ruler: Absolute Time</strong> from the context menu (right-click > View) to show the absolute REAPER timeline position instead.</p>
+
+<p>In SET mode, absolute time is enabled by default so you can correlate positions between SneakPeak and the REAPER timeline.</p>
+
+<p>The bottom info panel shows cursor position, selection range, view range, sample rate, bit depth, channels, and file size.</p>
+
+<h2 id="clipping">Clipping Display</h2>
+<div class="modes"><span class="mode mode-all">ALL MODES</span></div>
+
+<p>When audio peaks exceed 0 dB (digital full scale), the clipping portion draws in red. The red covers the top ~30% of the peak height, proportional to the severity of clipping. This makes clipping visible even when zoomed out, without flooding the entire waveform with red.</p>
+
+<p>Small red tick marks also appear at the top and bottom of the waveform area on columns where clipping is detected.</p>
+
+<hr>
+
+<!-- Reference -->
+<h2 id="shortcuts">All Keyboard Shortcuts</h2>
+
+<table>
+  <thead><tr><th>Shortcut</th><th>Action</th><th>Mode</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>Space</kbd></td><td>Play / Stop</td><td>All</td></tr>
+    <tr><td><kbd>T</kbd></td><td>Toggle Working Set mode</td><td>REAPER</td></tr>
+    <tr><td><kbd>S</kbd></td><td>Split at cursor / selection</td><td>REAPER, SET</td></tr>
+    <tr><td><kbd>G</kbd></td><td>Toggle gain panel</td><td>All</td></tr>
+    <tr><td><kbd>M</kbd></td><td>Add marker at cursor</td><td>REAPER</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>M</kbd></td><td>Add region from selection</td><td>REAPER</td></tr>
+    <tr><td><kbd>E</kbd></td><td>Delete selection</td><td>All</td></tr>
+    <tr><td><kbd>Escape</kbd></td><td>Exit working set / clear selection / stop</td><td>All</td></tr>
+    <tr><td><kbd>Home</kbd></td><td>Go to item start</td><td>All</td></tr>
+    <tr><td><kbd>End</kbd></td><td>Go to item end</td><td>All</td></tr>
+    <tr><td><kbd>Tab</kbd></td><td>Next marker</td><td>REAPER</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Previous marker</td><td>REAPER</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Select all</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Cut</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Copy</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Paste</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Normalize (peak)</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save</td><td>Standalone</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save As</td><td>Standalone</td></tr>
+    <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Delete selection</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Delete</kbd></td><td>Silence selection</td><td>All</td></tr>
+  </tbody>
+</table>
+
+<h2 id="mouse">Mouse Reference</h2>
+
+<table>
+  <thead><tr><th>Action</th><th>Where</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td>Click</td><td>Waveform</td><td>Place cursor, sync to REAPER</td></tr>
+    <tr><td>Click + Drag</td><td>Waveform</td><td>Create time selection</td></tr>
+    <tr><td>Shift + Click</td><td>Waveform</td><td>Extend selection</td></tr>
+    <tr><td>Alt + Click + Drag</td><td>Inside selection</td><td>Drag export</td></tr>
+    <tr><td>Double-click</td><td>Waveform</td><td>Select all</td></tr>
+    <tr><td>Double-click</td><td>On marker</td><td>Edit marker</td></tr>
+    <tr><td>Right-click</td><td>Waveform</td><td>Context menu</td></tr>
+    <tr><td>Right-click</td><td>Meter panel</td><td>Meter mode menu</td></tr>
+    <tr><td>Scroll</td><td>Waveform</td><td>Horizontal zoom</td></tr>
+    <tr><td>Ctrl + Scroll</td><td>Waveform</td><td>Pan left/right</td></tr>
+    <tr><td>Shift + Scroll</td><td>Waveform</td><td>Vertical zoom</td></tr>
+    <tr><td>Scroll</td><td>dB scale</td><td>Vertical zoom</td></tr>
+    <tr><td>Drag fade handle</td><td>Top corners</td><td>Adjust fade length (H) and curve (V)</td></tr>
+    <tr><td>Click</td><td>Minimap</td><td>Center view</td></tr>
+    <tr><td>Drag</td><td>Minimap</td><td>Scroll view</td></tr>
+    <tr><td>Drag top edge</td><td>Minimap</td><td>Resize height</td></tr>
+    <tr><td>Drag</td><td>Scrollbar</td><td>Scroll horizontally</td></tr>
+    <tr><td>Drag</td><td>Splitter</td><td>Resize waveform/spectral split</td></tr>
+    <tr><td>Click</td><td>Solo button</td><td>Toggle track solo</td></tr>
+    <tr><td>Click</td><td>Channel button</td><td>Mute/unmute channel</td></tr>
+  </tbody>
+</table>
+
+<h2 id="context-menu">Context Menu</h2>
+
+<p>Right-click anywhere on the waveform to access the full context menu. The menu is organized into sections:</p>
+
+<ul>
+  <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Silence, Select All</li>
+  <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix</li>
+  <li><strong>View</strong> - Zoom controls, Spectral View, Snap to Zero-Crossing, Minimap, Ruler time format, Working Set toggle, Group</li>
+  <li><strong>Multi-Item</strong> - Mix/Layered modes, Show Join Lines (when multiple items are loaded)</li>
+  <li><strong>Markers</strong> - Add Marker, Add Region, Edit, Delete, Show/Hide</li>
+  <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal</li>
+</ul>
+
+<h2 id="toolbar">Toolbar Buttons</h2>
+
+<p>The toolbar sits below the mode bar. From left to right:</p>
+
+<table>
+  <thead><tr><th>Button</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td>Zoom In</td><td>Horizontal zoom in</td></tr>
+    <tr><td>Zoom Out</td><td>Horizontal zoom out</td></tr>
+    <tr><td>Zoom Fit</td><td>Show entire duration</td></tr>
+    <tr><td>Zoom Selection</td><td>Zoom to fit current selection</td></tr>
+    <tr><td>Play</td><td>Start playback from cursor</td></tr>
+    <tr><td>Stop</td><td>Stop playback</td></tr>
+    <tr><td>Normalize</td><td>Normalize selection to 0 dB</td></tr>
+    <tr><td>Fade In</td><td>Apply fade in to selection</td></tr>
+    <tr><td>Fade Out</td><td>Apply fade out to selection</td></tr>
+    <tr><td>Reverse</td><td>Reverse audio</td></tr>
+    <tr><td>V Zoom +</td><td>Vertical zoom in</td></tr>
+    <tr><td>V Zoom -</td><td>Vertical zoom out</td></tr>
+    <tr><td>V Reset</td><td>Reset vertical zoom</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<p style="text-align:center;color:var(--text-dim);font-size:.82rem;margin-top:48px">
+  SneakPeak is free and open source (MIT License).<br>
+  <a href="https://github.com/b451c/SneakPeak">GitHub</a> &middot;
+  <a href="https://github.com/b451c/SneakPeak/issues">Report a Bug</a> &middot;
+  <a href="https://ko-fi.com/quickmd">Support Development</a>
+</p>
+
+</main>
+
+<div class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0})">&#8593;</div>
+
+<script>
+// Active nav link tracking
+const sections = document.querySelectorAll('h2[id], h3[id]');
+const navLinks = document.querySelectorAll('.nav-link');
+const scrollTopBtn = document.getElementById('scrollTop');
+
+function updateNav() {
+  let current = '';
+  sections.forEach(s => {
+    if (window.scrollY >= s.offsetTop - 80) current = s.id;
+  });
+  navLinks.forEach(link => {
+    link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+  });
+  scrollTopBtn.classList.toggle('visible', window.scrollY > 400);
+}
+
+window.addEventListener('scroll', updateNav, { passive: true });
+updateNav();
+</script>
+
+</body>
+</html>
