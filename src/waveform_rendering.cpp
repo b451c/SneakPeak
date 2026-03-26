@@ -202,7 +202,7 @@ void WaveformView::Paint(HDC hdc)
   }
 
   // Item boundaries for multi-item view
-  if ((m_multiItemActive || m_segments.size() > 1) && m_showJoinLines) DrawItemBoundaries(hdc);
+  if ((m_multiItemActive || m_trackViewActive || m_segments.size() > 1) && m_showJoinLines) DrawItemBoundaries(hdc);
 
   // Selection edges and cursor
   if (hasSel) DrawSelection(hdc);

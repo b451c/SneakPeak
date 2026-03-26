@@ -253,12 +253,9 @@ void SneakPeak::LoadSelectedItem()
     // Selection is outside working set - stay dormant, load normally
   }
 
-  // Working set active: if selected item is in range, refresh; otherwise go dormant
+  // Working set active: if selected item is in range, ignore selection change
   if (m_workingSet.active) {
-    if (IsWorkingSetItem(item)) {
-      RefreshWorkingSet();
-      return;
-    }
+    if (IsWorkingSetItem(item)) return; // stay locked, don't reload
     // Item outside range - go dormant
     m_workingSet.active = false;
     m_workingSet.dormant = true;
@@ -588,10 +585,8 @@ void SneakPeak::OnTimer()
   }
 
   // Track view: periodic refresh (detect added/removed items)
-  if (m_workingSet.active && ++m_workingSetRefreshCounter >= 30) {
-    m_workingSetRefreshCounter = 0;
-    RefreshWorkingSet();
-  }
+  // Working set: no periodic refresh needed - refreshes on explicit user actions
+  // (delete, split, undo) not on timer
 
   // Cursor + RMS levels - works for both single and multi-item
   if (m_waveform.HasItem()) {
