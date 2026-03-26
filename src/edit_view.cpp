@@ -93,6 +93,78 @@ bool SneakPeak::IsVisible() const
   return m_hwnd && IsWindowVisible(m_hwnd);
 }
 
+void SneakPeak::LoadTrackView()
+{
+  MediaItem* item = m_waveform.GetItem();
+  if (!item || !g_GetMediaItem_Track) return;
+
+  MediaTrack* track = g_GetMediaItem_Track(item);
+  if (!track) return;
+
+  if (m_previewActive) StandaloneCleanupPreview();
+
+  m_waveform.ClearItem();
+  m_waveform.LoadTrackItems(track);
+  m_trackViewMode = true;
+
+  m_spectralVisible = false;
+  m_spectral.ClearSpectrum();
+  m_spectral.Invalidate();
+  m_minimap.Invalidate();
+  m_gainPanel.Hide();
+  m_hasUndo = false;
+  m_dirty = false;
+
+  if (m_hwnd) {
+    RECT cr;
+    GetClientRect(m_hwnd, &cr);
+    RecalcLayout(cr.right, cr.bottom);
+    m_waveform.Invalidate();
+
+    int itemCount = (int)m_waveform.GetSegments().size();
+    char title[512];
+    snprintf(title, sizeof(title), "SneakPeak [Track - %d items]", itemCount);
+    SetWindowText(m_hwnd, title);
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+}
+
+void SneakPeak::RefreshTrackView()
+{
+  MediaTrack* track = m_waveform.GetTrackViewTrack();
+  if (!track || !g_ValidatePtr2 || !g_ValidatePtr2(nullptr, track, "MediaTrack*")) {
+    m_trackViewMode = false;
+    LoadSelectedItem();
+    return;
+  }
+
+  int oldCount = (int)m_waveform.GetSegments().size();
+  int newCount = g_GetTrackNumMediaItems ? g_GetTrackNumMediaItems(track) : 0;
+
+  if (newCount != oldCount) {
+    // Save current view position
+    double viewStart = m_waveform.GetViewStart();
+    double viewDur = m_waveform.GetViewDuration();
+
+    m_waveform.LoadTrackItems(track);
+    m_waveform.Invalidate();
+
+    // Try to restore approximate view position
+    if (m_waveform.GetItemDuration() > 0) {
+      m_waveform.SetViewStart(std::min(viewStart, m_waveform.GetItemDuration()));
+      m_waveform.SetViewDuration(viewDur);
+    }
+
+    if (m_hwnd) {
+      int itemCount = (int)m_waveform.GetSegments().size();
+      char title[512];
+      snprintf(title, sizeof(title), "SneakPeak [Track - %d items]", itemCount);
+      SetWindowText(m_hwnd, title);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+  }
+}
+
 void SneakPeak::LoadSelectedItem()
 {
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
@@ -101,6 +173,7 @@ void SneakPeak::LoadSelectedItem()
 
   int count = g_CountSelectedMediaItems(nullptr);
   if (count <= 0) {
+    m_trackViewMode = false;
     m_waveform.ClearItem();
     m_hasUndo = false;
     if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -109,6 +182,17 @@ void SneakPeak::LoadSelectedItem()
 
   MediaItem* item = g_GetSelectedMediaItem(nullptr, 0);
   if (!item) return;
+
+  // Track view: if selected item is on the same track, just refresh
+  if (m_trackViewMode && g_GetMediaItem_Track) {
+    MediaTrack* itemTrack = g_GetMediaItem_Track(item);
+    if (itemTrack == m_waveform.GetTrackViewTrack()) {
+      RefreshTrackView();
+      return;
+    }
+    // Different track - exit track view
+    m_trackViewMode = false;
+  }
 
   // Multi-item: show all selected items as one continuous waveform (cross-track)
   if (count > 1 && g_GetMediaItemInfo_Value) {
@@ -433,7 +517,13 @@ void SneakPeak::OnTimer()
     }
   }
 
-  // Cursor + RMS levels — works for both single and multi-item
+  // Track view: periodic refresh (detect added/removed items)
+  if (m_trackViewMode && ++m_trackViewRefreshCounter >= 30) {
+    m_trackViewRefreshCounter = 0;
+    RefreshTrackView();
+  }
+
+  // Cursor + RMS levels - works for both single and multi-item
   if (m_waveform.HasItem()) {
     if (m_waveform.IsStandaloneMode() && m_previewActive && m_previewReg) {
       // Track standalone preview cursor

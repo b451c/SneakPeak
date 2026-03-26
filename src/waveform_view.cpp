@@ -173,10 +173,15 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
     return;
   }
 
-  // Fallback: old concatenation code (shouldn't normally get here)
+  // Fallback: concatenation with gaps collapsed
   DBG("[SneakPeak] SetItems: MultiItemView failed, falling back to concat\n");
   m_multiItem.Clear();
+  LoadConcatenated(items);
+}
 
+void WaveformView::LoadConcatenated(const std::vector<MediaItem*>& items)
+{
+  if (items.empty()) return;
   if (!g_GetActiveTake || !g_GetMediaItemInfo_Value || !g_GetMediaItemTake_Source) return;
   if (!g_CreateTakeAudioAccessor || !g_GetAudioAccessorSamples || !g_DestroyAudioAccessor) return;
 
@@ -198,6 +203,10 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
     double d = g_GetMediaItemInfo_Value(it, "D_LENGTH");
     itemInfos.push_back({it, p, d});
   }
+
+  m_audioData.clear();
+  m_audioSampleCount = 0;
+  m_segments.clear();
 
   double totalDuration = 0.0;
   for (size_t idx = 0; idx < itemInfos.size(); idx++) {
@@ -247,7 +256,6 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
     g_DestroyAudioAccessor(accessor);
 
     double itemVol = g_GetMediaItemInfo_Value(item, "D_VOL");
-    // Take volume (the handle in arrange view)
     if (g_GetSetMediaItemTakeInfo && take) {
       double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(take, "D_VOL", nullptr);
       if (pTakeVol) itemVol *= *pTakeVol;
@@ -271,6 +279,40 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
   m_cursorTime = 0.0;
 }
 
+void WaveformView::LoadTrackItems(MediaTrack* track)
+{
+  if (!track || !g_GetTrackNumMediaItems || !g_GetTrackMediaItem || !g_GetMediaItemInfo_Value)
+    return;
+
+  int count = g_GetTrackNumMediaItems(track);
+  if (count <= 0) return;
+
+  // Collect all items on this track
+  std::vector<MediaItem*> items;
+  items.reserve(count);
+  for (int i = 0; i < count; i++) {
+    MediaItem* mi = g_GetTrackMediaItem(track, i);
+    if (mi) items.push_back(mi);
+  }
+  if (items.empty()) return;
+
+  // Sort by timeline position
+  std::sort(items.begin(), items.end(), [](MediaItem* a, MediaItem* b) {
+    return g_GetMediaItemInfo_Value(a, "D_POSITION") < g_GetMediaItemInfo_Value(b, "D_POSITION");
+  });
+
+  // Set first item as anchor (for coordinate mapping)
+  m_item = items[0];
+  m_multiItemActive = false;
+  m_trackViewActive = true;
+  m_trackViewTrack = track;
+
+  LoadConcatenated(items);
+  m_peaksValid = false;
+
+  DBG("[SneakPeak] LoadTrackItems: %d items on track, duration=%.3f\n", count, m_itemDuration);
+}
+
 void WaveformView::ClearItem()
 {
   if (m_liveAccessor && g_DestroyAudioAccessor) {
@@ -281,6 +323,8 @@ void WaveformView::ClearItem()
   m_take = nullptr;
   m_segments.clear();
   m_multiItemActive = false;
+  m_trackViewActive = false;
+  m_trackViewTrack = nullptr;
   m_multiItem.Clear();
   m_batchGainOffset = 1.0;
   m_peaksValid = false;

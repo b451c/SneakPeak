@@ -114,8 +114,18 @@ void SneakPeak::DrawModeBar(HDC hdc)
     DrawText(hdc, "MASTER", -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   } else {
     // Mode indicator
-    COLORREF accent = isStandalone && !isReaper ? g_theme.modeBarStandaloneAccent : g_theme.modeBarReaperAccent;
-    const char* modeLabel = isStandalone && !isReaper ? "STANDALONE" : "REAPER";
+    COLORREF accent;
+    const char* modeLabel;
+    if (m_trackViewMode && isReaper) {
+      accent = RGB(80, 200, 100);  // green for track view
+      modeLabel = "TRACK";
+    } else if (isStandalone && !isReaper) {
+      accent = g_theme.modeBarStandaloneAccent;
+      modeLabel = "STANDALONE";
+    } else {
+      accent = g_theme.modeBarReaperAccent;
+      modeLabel = "REAPER";
+    }
 
     // Draw indicator dot/diamond
     HBRUSH accentBrush = CreateSolidBrush(accent);

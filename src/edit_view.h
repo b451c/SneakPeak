@@ -92,6 +92,7 @@ enum ContextMenuID {
   CM_MULTI_MODE_LAYERED,
   CM_MULTI_MODE_LAYERED_TRACKS,
   CM_SHOW_JOIN_LINES,
+  CM_TRACK_VIEW,
   CM_METER_PEAK,
   CM_METER_RMS,
   CM_METER_VU,
@@ -288,6 +289,12 @@ private:
   void* m_previewReg = nullptr; // preview_register_t* (opaque to avoid header dep)
   PCM_source* m_previewSrc = nullptr;
   std::string m_previewTempPath;
+
+  // Track view mode (all items on one track, gaps collapsed)
+  bool m_trackViewMode = false;
+  void LoadTrackView();
+  void RefreshTrackView();
+  int m_trackViewRefreshCounter = 0;
 
   // Master meter mode (when no item selected)
   bool m_masterMode = false;

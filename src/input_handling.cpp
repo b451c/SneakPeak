@@ -814,6 +814,17 @@ void SneakPeak::OnKeyDown(WPARAM key)
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
       break;
+    case 'T':
+    case 't':
+      if (!ctrl && !m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+        if (m_trackViewMode) {
+          m_trackViewMode = false;
+          LoadSelectedItem();
+        } else {
+          LoadTrackView();
+        }
+      }
+      break;
   }
 }
 

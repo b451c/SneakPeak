@@ -169,6 +169,10 @@ void SneakPeak::OnRightClick(int x, int y)
              m_waveform.GetSnapToZero() ? "Snap to Zero-Crossing  \xE2\x9C\x93" : "Snap to Zero-Crossing");
   MenuAppend(viewMenu, MF_STRING, CM_MINIMAP,
              m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
+  if (!m_waveform.IsStandaloneMode() && hasItem) {
+    MenuAppend(viewMenu, MF_STRING, CM_TRACK_VIEW,
+               m_trackViewMode ? "Track View (T)  \xE2\x9C\x93" : "Track View (T)");
+  }
 
   // Multi-item view mode submenu (only when multi-item active)
   HMENU multiMenu = nullptr;
@@ -307,6 +311,14 @@ void SneakPeak::OnContextMenuCommand(int id)
         GetClientRect(m_hwnd, &cr);
         RecalcLayout(cr.right, cr.bottom);
         m_waveform.Invalidate();
+      }
+      break;
+    case CM_TRACK_VIEW:
+      if (m_trackViewMode) {
+        m_trackViewMode = false;
+        LoadSelectedItem();
+      } else {
+        LoadTrackView();
       }
       break;
     case CM_MULTI_MODE_MIX:
