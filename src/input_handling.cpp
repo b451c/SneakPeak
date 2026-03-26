@@ -471,10 +471,21 @@ void SneakPeak::OnMouseUp(int x, int y)
                 overlap.push_back(mi);
             }
 
-            // Process each overlapping item (split + D_VOL)
+            // Apply D_VOL + crossfade to an isolated item
+            static const double GAIN_FADE_SEC = 0.01; // ~10ms crossfade
+            auto applyGainWithFade = [&](MediaItem* target) {
+              if (!target) return;
+              double v = g_GetMediaItemInfo_Value(target, "D_VOL");
+              g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
+              double len = g_GetMediaItemInfo_Value(target, "D_LENGTH");
+              double fade = std::min(GAIN_FADE_SEC, len * 0.25);
+              g_SetMediaItemInfo_Value(target, "D_FADEINLEN", fade);
+              g_SetMediaItemInfo_Value(target, "D_FADEOUTLEN", fade);
+            };
+
+            // Process each overlapping item (split + D_VOL + crossfade)
             for (size_t oi = 0; oi < overlap.size(); oi++) {
               MediaItem* mi = overlap[oi];
-              // Validate pointer - previous splits may have changed things
               if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, mi, "MediaItem*"))
                 continue;
 
@@ -482,25 +493,21 @@ void SneakPeak::OnMouseUp(int x, int y)
               double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
 
               if (p >= absStart && e <= absEnd) {
-                double v = g_GetMediaItemInfo_Value(mi, "D_VOL");
-                g_SetMediaItemInfo_Value(mi, "D_VOL", v * factor);
+                // Entire item inside selection
+                applyGainWithFade(mi);
               } else if (p < absStart && e > absEnd) {
+                // Selection inside one item - split both, gain middle
                 g_SplitMediaItem(mi, absEnd);
                 MediaItem* mid = g_SplitMediaItem(mi, absStart);
-                if (mid) {
-                  double v = g_GetMediaItemInfo_Value(mid, "D_VOL");
-                  g_SetMediaItemInfo_Value(mid, "D_VOL", v * factor);
-                }
+                applyGainWithFade(mid);
               } else if (p < absStart) {
+                // Item starts before - split, gain right part
                 MediaItem* right = g_SplitMediaItem(mi, absStart);
-                if (right) {
-                  double v = g_GetMediaItemInfo_Value(right, "D_VOL");
-                  g_SetMediaItemInfo_Value(right, "D_VOL", v * factor);
-                }
+                applyGainWithFade(right);
               } else {
+                // Item ends after - split, gain left part
                 g_SplitMediaItem(mi, absEnd);
-                double v = g_GetMediaItemInfo_Value(mi, "D_VOL");
-                g_SetMediaItemInfo_Value(mi, "D_VOL", v * factor);
+                applyGainWithFade(mi);
               }
             }
 
