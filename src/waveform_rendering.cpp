@@ -247,8 +247,10 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   COLORREF selColor = dimmed ? RGB(50, 60, 50) : g_theme.waveformSel;
   COLORREF rmsNormColor = dimmed ? RGB(30, 40, 30) : g_theme.waveformRms;
   COLORREF rmsSelColor = dimmed ? RGB(40, 50, 40) : g_theme.waveformRmsSel;
+  COLORREF clipColor = RGB(220, 50, 50);
   HPEN normalPen = CreatePen(PS_SOLID, 1, normColor);
   HPEN selPen = CreatePen(PS_SOLID, 1, selColor);
+  HPEN clipPen = CreatePen(PS_SOLID, 1, clipColor);
   HPEN rmsNormPen = CreatePen(PS_SOLID, 1, rmsNormColor);
   HPEN rmsSelPen = CreatePen(PS_SOLID, 1, rmsSelColor);
 
@@ -302,19 +304,32 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     }
 
     double vol = itemVol * fadeGain * sgain;
-    double maxVal = std::max(-1.0, std::min(1.0, m_peakMax[idx] * vol));
-    double minVal = std::max(-1.0, std::min(1.0, m_peakMin[idx] * vol));
+    double rawMax = m_peakMax[idx] * vol;
+    double rawMin = m_peakMin[idx] * vol;
+    bool clipping = (rawMax > 1.0 || rawMin < -1.0);
 
-    int yMax = centerY - (int)(maxVal * (double)halfH);
-    int yMin = centerY - (int)(minVal * (double)halfH);
+    // Allow drawing beyond 0dB (don't clamp to 1.0) but clamp to channel bounds
+    int yMax = centerY - (int)(rawMax * (double)halfH);
+    int yMin = centerY - (int)(rawMin * (double)halfH);
 
     yMax = std::max(yTop, std::min(yTop + height - 1, yMax));
     yMin = std::max(yTop, std::min(yTop + height - 1, yMin));
 
     if (yMax > yMin) std::swap(yMax, yMin);
 
+    // Red pen for clipping columns
+    if (clipping) {
+      SelectObject(hdc, clipPen);
+    }
+
     MoveToEx(hdc, x, yMax, nullptr);
     LineTo(hdc, x, yMin + 1);
+
+    // Restore normal pen after clip column
+    if (clipping) {
+      bool inSel = hasSel && x >= selX1 && x < selX2;
+      SelectObject(hdc, inSel ? selPen : normalPen);
+    }
   }
 
   // Draw RMS overlay (narrower, darker)
@@ -345,7 +360,7 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
       else if (colTime >= m_standaloneGainStart && colTime < m_standaloneGainEnd) sgain2 = m_standaloneGain;
     }
     double vol = itemVol * fadeGain * sgain2;
-    double rmsVal = std::min(1.0, m_peakRMS[idx] * vol);
+    double rmsVal = m_peakRMS[idx] * vol;
 
     int yRmsTop = centerY - (int)(rmsVal * (double)halfH);
     int yRmsBot = centerY + (int)(rmsVal * (double)halfH);
@@ -359,6 +374,7 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   SelectObject(hdc, oldPen);
   DeleteObject(normalPen);
   DeleteObject(selPen);
+  DeleteObject(clipPen);
   DeleteObject(rmsNormPen);
   DeleteObject(rmsSelPen);
 }
