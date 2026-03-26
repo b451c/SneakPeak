@@ -58,6 +58,12 @@ private:
   std::vector<MediaItem*> m_batchItems;
   std::vector<double> m_batchOrigVols; // original D_VOL per item (linear)
 
+  // When true, skip batch D_VOL writes (visual preview + split on release instead)
+  bool m_skipBatchWrite = false;
+public:
+  void SetSkipBatchWrite(bool skip) { m_skipBatchWrite = skip; }
+private:
+
   // Panel position offset from default center position
   int m_offsetX = 0;
   int m_offsetY = 0;

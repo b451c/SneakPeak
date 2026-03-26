@@ -522,6 +522,7 @@ void SneakPeak::OnTimer()
     }
     // Batch gain: sync knob offset to waveform for visual feedback
     // But NOT when there's a selection (selection uses per-region preview instead)
+    m_gainPanel.SetSkipBatchWrite(m_waveform.HasSelection());
     if (m_gainPanel.IsBatch() && !m_waveform.HasSelection()) {
       double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
       m_waveform.SetBatchGainOffset(offsetLin);
