@@ -209,8 +209,12 @@ void SneakPeak::SyncSelectionToReaper()
   if (!g_GetSet_LoopTimeRange2) return;
   if (m_waveform.HasSelection()) {
     WaveformSelection sel = m_waveform.GetSelection();
-    double s = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
-    double e = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
+    double dur = m_waveform.GetItemDuration();
+    double selMin = std::max(0.0, std::min(sel.startTime, sel.endTime));
+    double selMax = std::min(dur, std::max(sel.startTime, sel.endTime));
+    double s = m_waveform.RelTimeToAbsTime(selMin);
+    double e = m_waveform.RelTimeToAbsTime(selMax);
+    if (s > e) std::swap(s, e);
     g_GetSet_LoopTimeRange2(nullptr, true, false, &s, &e, false);
   } else {
     // Clear time selection
