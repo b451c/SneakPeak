@@ -69,11 +69,11 @@ void GainPanel::ReadFromItem()
 void GainPanel::WriteToItem()
 {
   if (!g_SetMediaItemInfo_Value || !g_UpdateArrange) return;
+  // Selection active: skip all D_VOL writes during drag (visual preview only)
+  if (m_skipBatchWrite) return;
 
   // Batch mode: apply relative offset to each item's original volume
-  // When selection is active, skip - visual preview handles it, split+D_VOL on release
   if (!m_batchItems.empty()) {
-    if (m_skipBatchWrite) return;
     double offsetLinear = pow(10.0, m_db / 20.0);
     for (size_t i = 0; i < m_batchItems.size(); i++) {
       if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, m_batchItems[i], "MediaItem*"))
