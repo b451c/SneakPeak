@@ -520,19 +520,12 @@ void SneakPeak::OnMouseUp(int x, int y)
             RefreshWorkingSet();
           }
         } else {
-          // REAPER single-item mode: D_VOL on whole item (with or without selection)
-          MediaItem* item = m_waveform.GetItem();
-          if (item && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
-            if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-            double curVol = g_GetMediaItemInfo_Value(item, "D_VOL");
-            g_SetMediaItemInfo_Value(item, "D_VOL", curVol * factor);
-            if (g_UpdateArrange) g_UpdateArrange();
-            char desc[64];
-            snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
-            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
-            if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-          }
+          // REAPER single-item mode: WriteToItem() already applied D_VOL during drag
+          // Just create an undo point for the change
+          if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+          char desc[64];
+          snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
+          if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
         }
       }
 
