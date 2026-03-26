@@ -815,8 +815,8 @@ void SneakPeak::OnKeyDown(WPARAM key)
       }
       break;
     case 'T':
-    case 't':
       if (!ctrl && !m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+        DBG("[SneakPeak] T key: trackViewMode=%d\n", m_trackViewMode);
         if (m_trackViewMode) {
           m_trackViewMode = false;
           LoadSelectedItem();

@@ -463,26 +463,6 @@ void WaveformView::DrawItemBoundaries(HDC hdc)
   }
 
   // Concat/Track view boundaries
-  // Highlight active segment (containing cursor) with subtle tint
-  if (m_trackViewActive && !m_segments.empty()) {
-    for (size_t i = 0; i < m_segments.size(); i++) {
-      double segStart = m_segments[i].relativeOffset;
-      double segEnd = segStart + m_segments[i].duration;
-      if (m_cursorTime >= segStart && m_cursorTime < segEnd) {
-        int x1 = std::max((int)m_rect.left, TimeToX(segStart));
-        int x2 = std::min((int)m_rect.right - DB_SCALE_WIDTH, TimeToX(segEnd));
-        if (x2 > x1) {
-          COLORREF tint = RGB(60, 90, 60);
-          HBRUSH br = CreateSolidBrush(tint);
-          RECT r = { x1, m_rect.top, x2, m_rect.bottom };
-          FillRect(hdc, &r, br);
-          DeleteObject(br);
-        }
-        break;
-      }
-    }
-  }
-
   HPEN pen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
   HPEN oldPen = (HPEN)SelectObject(hdc, pen);
 
