@@ -31,6 +31,8 @@ void WaveformView::SetItem(MediaItem* item)
   m_standaloneGain = 1.0;
   m_standaloneGainStart = -1.0;
   m_standaloneGainEnd = -1.0;
+  m_trackViewActive = false;
+  m_trackViewTrack = nullptr;
   m_item = item;
   m_take = nullptr;
   m_segments.clear();
@@ -129,6 +131,8 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
   m_standaloneGain = 1.0;
   m_standaloneGainStart = -1.0;
   m_standaloneGainEnd = -1.0;
+  m_trackViewActive = false;
+  m_trackViewTrack = nullptr;
   m_item = items[0];
   m_take = nullptr;
   m_peaksValid = false;
