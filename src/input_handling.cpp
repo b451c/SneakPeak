@@ -440,6 +440,7 @@ void SneakPeak::OnMouseUp(int x, int y)
       WaveformSelection savedSel = m_waveform.GetSelection();
       double savedViewStart = m_waveform.GetViewStart();
       double savedViewDur = m_waveform.GetViewDuration();
+      double savedCursor = m_waveform.GetCursorTime();
 
       if (std::abs(db) > 0.01) {
         double factor = pow(10.0, db / 20.0);
@@ -552,6 +553,7 @@ void SneakPeak::OnMouseUp(int x, int y)
         }
         if (savedSel.active)
           m_waveform.SetSelection(savedSel);
+        m_waveform.SetCursorTime(std::min(savedCursor, m_waveform.GetItemDuration()));
       }
 
       // Reset knob
