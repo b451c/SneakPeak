@@ -447,13 +447,19 @@ void SneakPeak::OnMouseUp(int x, int y)
           WaveformSelection sel = m_waveform.GetSelection();
           double absStart = m_waveform.RelTimeToAbsTime(std::min(sel.startTime, sel.endTime));
           double absEnd = m_waveform.RelTimeToAbsTime(std::max(sel.startTime, sel.endTime));
-          MediaTrack* track = m_workingSet.active ? m_workingSet.track : g_GetMediaItem_Track(m_waveform.GetItem());
+          MediaTrack* track = nullptr;
+          if (m_workingSet.active && m_workingSet.track) {
+            if (g_ValidatePtr2 && g_ValidatePtr2(nullptr, m_workingSet.track, "MediaTrack*"))
+              track = m_workingSet.track;
+          } else if (m_waveform.GetItem()) {
+            track = g_GetMediaItem_Track(m_waveform.GetItem());
+          }
 
-          if (track) {
+          if (track && g_GetTrackNumMediaItems && g_GetTrackMediaItem) {
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
-            // Collect items overlapping selection
+            // Collect items overlapping selection BEFORE any splits
             int count = g_GetTrackNumMediaItems(track);
             std::vector<MediaItem*> overlap;
             for (int i = 0; i < count; i++) {
@@ -465,17 +471,20 @@ void SneakPeak::OnMouseUp(int x, int y)
                 overlap.push_back(mi);
             }
 
-            // Split at selection edges and apply D_VOL to isolated pieces
-            for (MediaItem* mi : overlap) {
+            // Process each overlapping item (split + D_VOL)
+            for (size_t oi = 0; oi < overlap.size(); oi++) {
+              MediaItem* mi = overlap[oi];
+              // Validate pointer - previous splits may have changed things
+              if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, mi, "MediaItem*"))
+                continue;
+
               double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
               double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
 
               if (p >= absStart && e <= absEnd) {
-                // Entire item inside selection - just change D_VOL
                 double v = g_GetMediaItemInfo_Value(mi, "D_VOL");
                 g_SetMediaItemInfo_Value(mi, "D_VOL", v * factor);
               } else if (p < absStart && e > absEnd) {
-                // Selection inside one item - split both, gain middle
                 g_SplitMediaItem(mi, absEnd);
                 MediaItem* mid = g_SplitMediaItem(mi, absStart);
                 if (mid) {
@@ -483,14 +492,12 @@ void SneakPeak::OnMouseUp(int x, int y)
                   g_SetMediaItemInfo_Value(mid, "D_VOL", v * factor);
                 }
               } else if (p < absStart) {
-                // Item starts before selection - split, gain right part
                 MediaItem* right = g_SplitMediaItem(mi, absStart);
                 if (right) {
                   double v = g_GetMediaItemInfo_Value(right, "D_VOL");
                   g_SetMediaItemInfo_Value(right, "D_VOL", v * factor);
                 }
               } else {
-                // Item starts inside selection - split, gain left part
                 g_SplitMediaItem(mi, absEnd);
                 double v = g_GetMediaItemInfo_Value(mi, "D_VOL");
                 g_SetMediaItemInfo_Value(mi, "D_VOL", v * factor);
@@ -503,6 +510,8 @@ void SneakPeak::OnMouseUp(int x, int y)
             if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
             if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
+            // Defer refresh to avoid crash during paint cycle
+            m_waveform.ClearSelection();
             if (m_workingSet.active)
               RefreshWorkingSet();
             else {
