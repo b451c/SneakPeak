@@ -260,6 +260,15 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>SneakPeak opens as a floating, resizable window. You can dock it into any REAPER docker via right-click menu (<strong>"Dock SneakPeak in Docker"</strong>) or leave it floating. To undock, right-click and choose <strong>"Undock SneakPeak"</strong>. Your floating position, size, and dock state are remembered across sessions.</p>
 <p>Click any media item on the timeline. SneakPeak immediately loads its waveform.</p>
 
+<h3>Custom Icons</h3>
+<p>SneakPeak ships with custom toolbar and track icons in three states (active, hover, inactive) at multiple scales (100%, 150%, 200%). To set up a toolbar button with the SneakPeak icon:</p>
+<ol>
+  <li>Copy the toolbar icons from <code>docs/images/icons/toolbar_icons/</code> to your REAPER toolbar icon folder</li>
+  <li>Right-click the REAPER toolbar, choose <strong>Customize toolbar</strong></li>
+  <li>Add the <strong>"SneakPeak: Open/Close SneakPeak"</strong> action and select the SneakPeak icon</li>
+</ol>
+<p>Track icons (<code>docs/images/icons/track_icons/</code>) can be assigned to tracks via the track manager for visual identification.</p>
+
 <!-- Three Modes -->
 <h2 id="three-modes">Three Editing Modes</h2>
 
