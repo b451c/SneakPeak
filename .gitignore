@@ -9,3 +9,5 @@ REFACTOR_LOG.md
 CLAUDE.md
 forum_post.txt
 .harness/
+forum_post*.txt
+forum_reply*.txt
