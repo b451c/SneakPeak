@@ -100,6 +100,8 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_COPY, "Copy\tCtrl+C");
   MenuAppend(editMenu, (hasItem && hasClip) ? MF_STRING : MF_GRAYED, CM_PASTE, "Paste (destructive)\tCtrl+V");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_DELETE, "Delete\tDel");
+  bool canSplit = hasItem && !m_waveform.IsStandaloneMode();
+  MenuAppend(editMenu, canSplit ? MF_STRING : MF_GRAYED, CM_SPLIT, "Split at Cursor\tS");
   bool canSilence = hasItem && (hasSel || m_waveform.IsStandaloneMode());
   MenuAppend(editMenu, canSilence ? MF_STRING : MF_GRAYED, CM_SILENCE,
              (m_waveform.IsStandaloneMode() && !hasSel) ? "Insert Silence...\tCtrl+Del" : "Silence\tCtrl+Del");
@@ -243,6 +245,20 @@ void SneakPeak::OnContextMenuCommand(int id)
     case CM_COPY:      DoCopy(); break;
     case CM_PASTE:     DoPaste(); break;
     case CM_DELETE:    DoDelete(); break;
+    case CM_SPLIT:
+      if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+        if (m_workingSet.active && !m_waveform.HasSelection() && g_SetEditCurPos) {
+          double absTime = m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime());
+          g_SetEditCurPos(absTime, false, false);
+        }
+        SyncSelectionToReaper();
+        if (m_waveform.HasSelection() && g_Main_OnCommand)
+          g_Main_OnCommand(40061, 0);
+        else if (g_Main_OnCommand)
+          g_Main_OnCommand(40012, 0);
+        if (m_workingSet.active) RefreshWorkingSet();
+      }
+      break;
     case CM_SILENCE:   DoSilence(); break;
     case CM_SELECT_ALL:
       if (m_waveform.HasItem()) {
