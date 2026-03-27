@@ -59,6 +59,9 @@ void SneakPeak::UndoRestore()
     // Reload to reflect undo changes
     if (m_workingSet.active) {
       RefreshWorkingSet();
+    } else if (m_waveform.IsTimelineView()) {
+      m_timelineEditGuard = 5;
+      RefreshTimelineView();
     } else {
       m_waveform.ClearItem();
       LoadSelectedItem();
@@ -443,8 +446,8 @@ void SneakPeak::DoDelete()
         g_DeleteTrackMediaItem(track, mi);
       }
     }
-  } else if (m_waveform.IsTimelineView()) {
-    // Timeline view: handle delete across segments (like working set but no ripple)
+  } else if (m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive()) {
+    // Timeline/Multi-item view: handle delete across segments (no ripple)
     track = g_GetMediaItem_Track(m_waveform.GetItem());
     if (track) {
       int count = g_GetTrackNumMediaItems(track);
@@ -538,8 +541,8 @@ void SneakPeak::DoDelete()
   // Track view: refresh to show updated track (items re-collapse)
   if (m_workingSet.active) {
     RefreshWorkingSet();
-  } else if (m_waveform.IsTimelineView()) {
-    // Rebuild timeline from surviving segment items only (no track scan)
+  } else if (m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive()) {
+    // Rebuild view from surviving segment items
     double savedViewStart = m_waveform.GetViewStart();
     double savedViewDur = m_waveform.GetViewDuration();
     std::vector<MediaItem*> items;
@@ -562,6 +565,10 @@ void SneakPeak::DoDelete()
     m_waveform.ClearItem();
     if (items.size() >= 2) {
       m_waveform.LoadTimelineView(items);
+      { std::vector<MediaItem*> segItems;
+        for (const auto& seg : m_waveform.GetSegments()) if (seg.item) segItems.push_back(seg.item);
+        if (!segItems.empty()) m_gainPanel.ShowBatch(segItems);
+      }
       double dur = m_waveform.GetItemDuration();
       if (dur > 0 && savedViewDur < dur * 0.99) {
         m_waveform.SetViewStart(std::min(savedViewStart, std::max(0.0, dur - savedViewDur)));
@@ -583,6 +590,11 @@ void SneakPeak::DoDelete()
     m_waveform.ClearItem();
     if (survivors.size() >= 2) {
       m_waveform.LoadTimelineView(survivors);
+      // Switch gain panel to batch mode (offset from 0, not absolute dB)
+      { std::vector<MediaItem*> segItems;
+        for (const auto& seg : m_waveform.GetSegments()) if (seg.item) segItems.push_back(seg.item);
+        if (!segItems.empty()) m_gainPanel.ShowBatch(segItems);
+      }
       DBG("[SneakPeak] LoadTimelineView done: hasItem=%d dur=%.3f timelineActive=%d\n",
           m_waveform.HasItem(), m_waveform.GetItemDuration(), m_waveform.IsTimelineView());
     } else {

@@ -304,6 +304,10 @@ void SneakPeak::RefreshTimelineView()
 
   m_waveform.ClearItem();
   m_waveform.LoadTimelineView(items);
+  { std::vector<MediaItem*> segItems;
+    for (const auto& seg : m_waveform.GetSegments()) if (seg.item) segItems.push_back(seg.item);
+    if (!segItems.empty()) m_gainPanel.ShowBatch(segItems);
+  }
 
   if (m_waveform.HasItem() && m_waveform.GetItemDuration() > 0) {
     double dur = m_waveform.GetItemDuration();
@@ -749,9 +753,13 @@ void SneakPeak::OnTimer()
     // But NOT when there's a selection (selection uses per-region preview instead)
     // SET mode: always skip D_VOL writes during drag (visual preview only, apply on release)
     // REAPER single-item: write D_VOL in real-time
-    bool skipWrite = m_workingSet.active;
+    bool skipWrite = m_workingSet.active || m_waveform.IsTimelineView();
     m_gainPanel.SetSkipBatchWrite(skipWrite);
-    if (m_gainPanel.IsBatch() && !skipWrite) {
+    if (m_gainPanel.IsBatch() && skipWrite && m_gainPanel.IsDragging()) {
+      // SET/Timeline: visual preview only (D_VOL applied on release)
+      double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
+      m_waveform.SetBatchGainOffset(offsetLin);
+    } else if (m_gainPanel.IsBatch() && !skipWrite) {
       double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
       m_waveform.SetBatchGainOffset(offsetLin);
     } else {

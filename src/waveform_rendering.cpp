@@ -186,8 +186,8 @@ void WaveformView::Paint(HDC hdc)
     DrawDbGridLines(hdc, ch, chTop, chH);
   }
 
-  // Timeline view: draw gap regions (darker background where no items exist)
-  if (m_timelineViewActive && m_segments.size() >= 2) {
+  // Draw gap regions between segments (timeline view + multi-item MIX mode)
+  if ((m_timelineViewActive || m_multiItemActive) && m_segments.size() >= 2) {
     int waveL = m_rect.left;
     int waveR = m_rect.right - DB_SCALE_WIDTH;
     HBRUSH gapBrush = CreateSolidBrush(RGB(20, 20, 20));
@@ -859,7 +859,7 @@ bool WaveformView::UpdateFadeCache()
   // Multi-item / SET: D_VOL is already baked into audio data per-segment,
   // so don't apply it again in draw. Batch gain offset reflects knob adjustment.
   // Show first item's fade-in and last item's fade-out.
-  if (m_segments.size() > 1 || m_trackViewActive) {
+  if (m_segments.size() > 1 || m_trackViewActive || m_timelineViewActive) {
     m_fadeCache = {};
     m_fadeCache.itemVol = m_batchGainOffset;
     MediaItem* first = m_segments.front().item;
