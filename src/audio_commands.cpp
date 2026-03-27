@@ -389,8 +389,10 @@ void SneakPeak::DoDelete()
   if (!g_SplitMediaItem || !g_DeleteTrackMediaItem || !g_GetMediaItem_Track) return;
 
   WaveformSelection sel = m_waveform.GetSelection();
-  double selStart = std::min(sel.startTime, sel.endTime);
-  double selEnd = std::max(sel.startTime, sel.endTime);
+  double dur = m_waveform.GetItemDuration();
+  double selStart = std::max(0.0, std::min(dur, std::min(sel.startTime, sel.endTime)));
+  double selEnd = std::max(0.0, std::min(dur, std::max(sel.startTime, sel.endTime)));
+  if (selEnd <= selStart) return;
 
   double splitStart = m_waveform.RelTimeToAbsTime(selStart);
   double splitEnd = m_waveform.RelTimeToAbsTime(selEnd);
