@@ -858,9 +858,9 @@ bool WaveformView::UpdateFadeCache()
     return oldVol != m_fadeCache.itemVol;
   }
 
-  double oldVol = m_fadeCache.itemVol;
+  FadeCache old = m_fadeCache;
+
   m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
-  // Take volume (the handle in arrange view controls take D_VOL, not item D_VOL)
   if (g_GetSetMediaItemTakeInfo && m_take) {
     double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_take, "D_VOL", nullptr);
     if (pTakeVol) m_fadeCache.itemVol *= *pTakeVol;
@@ -872,12 +872,15 @@ bool WaveformView::UpdateFadeCache()
   m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(m_item, "D_FADEINDIR");
   m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTDIR");
 
-  // If volume changed, invalidate peaks so clip indicators update
-  bool changed = (oldVol != m_fadeCache.itemVol);
-  if (changed) {
-    m_peaksValid = false;
-  }
-  return changed;
+  bool volChanged = (old.itemVol != m_fadeCache.itemVol);
+  bool fadeChanged = (old.fadeInLen != m_fadeCache.fadeInLen)
+                  || (old.fadeOutLen != m_fadeCache.fadeOutLen)
+                  || (old.fadeInDir != m_fadeCache.fadeInDir)
+                  || (old.fadeOutDir != m_fadeCache.fadeOutDir)
+                  || (old.fadeInShape != m_fadeCache.fadeInShape)
+                  || (old.fadeOutShape != m_fadeCache.fadeOutShape);
+  if (volChanged) m_peaksValid = false;
+  return volChanged || fadeChanged;
 }
 
 WaveformView::FadeParams WaveformView::GetActiveFadeParams() const
