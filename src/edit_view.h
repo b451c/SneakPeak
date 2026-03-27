@@ -254,6 +254,7 @@ private:
 
   // Drag & drop export
   bool m_dragExportPending = false;
+  bool m_dragExportImmediate = false; // Alt+drag = immediate, no-Alt = on window exit
   int m_dragStartX = 0;
   int m_dragStartY = 0;
   std::string m_dragTempPath;

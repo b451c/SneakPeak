@@ -315,16 +315,16 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         }
       }
 
-      // Check if Alt+clicking inside existing selection — potential drag export
-      // Requires Alt/Option to prevent accidental drags during selection
-      if (m_waveform.HasSelection() && altHeld && !(wParam & MK_SHIFT)) {
+      // Drag export: click inside existing selection
+      // Alt+drag: immediate drag export (for external apps / Finder)
+      // No modifier: drag export starts when mouse leaves waveform area (for REAPER timeline)
+      if (m_waveform.HasSelection() && !(wParam & MK_SHIFT)) {
         WaveformSelection sel = m_waveform.GetSelection();
         double selS = std::min(sel.startTime, sel.endTime);
         double selE = std::max(sel.startTime, sel.endTime);
         if (time >= selS && time <= selE) {
-          DBG("[SneakPeak] Drag export pending: click at t=%.3f inside sel [%.3f..%.3f]\n",
-              time, selS, selE);
           m_dragExportPending = true;
+          m_dragExportImmediate = altHeld; // Alt = immediate, no Alt = on window exit
           m_dragStartX = x;
           m_dragStartY = y;
           SetCapture(m_hwnd);
@@ -350,8 +350,9 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 void SneakPeak::OnMouseUp(int x, int y)
 {
   if (m_dragExportPending) {
-    // Didn't meet drag threshold — treat as click inside selection (place cursor)
+    // Didn't drag outside — treat as click inside selection (place cursor)
     m_dragExportPending = false;
+    m_dragExportImmediate = false;
     ReleaseCapture();
     double time = m_waveform.XToTime(x);
     m_waveform.SetCursorTime(time);
@@ -784,9 +785,18 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
   if (m_dragExportPending) {
     int dx = x - m_dragStartX;
     int dy = y - m_dragStartY;
-    if (dx * dx + dy * dy > 25) {  // 5px threshold
-      DBG("[SneakPeak] Drag threshold met: dx=%d dy=%d, initiating export\n", dx, dy);
+    bool shouldExport = false;
+    if (m_dragExportImmediate) {
+      // Alt+drag: immediate on 5px threshold
+      shouldExport = (dx * dx + dy * dy > 25);
+    } else {
+      // No modifier: export when mouse leaves waveform area
+      shouldExport = (y < m_waveformRect.top || y > m_waveformRect.bottom ||
+                      x < m_waveformRect.left || x > m_waveformRect.right);
+    }
+    if (shouldExport) {
       m_dragExportPending = false;
+      m_dragExportImmediate = false;
       InitiateDragExport();
       ReleaseCapture();
       return;
