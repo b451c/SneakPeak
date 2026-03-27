@@ -25,6 +25,7 @@ struct ItemSegment {
   int audioFrameCount = 0;
 };
 
+
 class WaveformView {
 public:
   WaveformView();
@@ -170,6 +171,7 @@ public:
   bool IsChannelActive(int ch) const { return m_channelActive[ch]; } // ch: 0=L, 1=R
   int GetChanMode() const; // returns I_CHANMODE value based on active state
   bool ClickChannelButton(int x, int y); // returns true if hit
+
 
   // External audio change detection (via AudioAccessor)
   bool CheckAudioChanged();

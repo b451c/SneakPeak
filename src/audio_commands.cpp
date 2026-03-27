@@ -454,19 +454,15 @@ void SneakPeak::DoDelete()
     bool atEnd = (itemEnd - splitEnd) < 0.0001;
 
     if (atStart && atEnd) {
-      // Selection covers entire item - delete whole item
       g_DeleteTrackMediaItem(track, item);
     } else if (atStart) {
-      // Selection starts at item beginning - split at end, delete left portion
       MediaItem* right = g_SplitMediaItem(item, splitEnd);
       if (track) g_DeleteTrackMediaItem(track, item);
       (void)right;
     } else if (atEnd) {
-      // Selection ends at item end - split at start, delete right portion
       MediaItem* right = g_SplitMediaItem(item, splitStart);
       if (right && track) g_DeleteTrackMediaItem(track, right);
     } else {
-      // Selection in the middle - split both edges, delete middle
       g_SplitMediaItem(item, splitEnd);
       MediaItem* mid = g_SplitMediaItem(item, splitStart);
       if (mid && track) g_DeleteTrackMediaItem(track, mid);

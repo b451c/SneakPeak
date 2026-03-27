@@ -299,9 +299,24 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
       double time = m_waveform.XToTime(x);
 
+      // Option+click in SET mode: snap selection to segment boundaries
+      bool altHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+      if (altHeld && m_waveform.IsTrackView() && !(wParam & MK_SHIFT)) {
+        auto& segs = m_waveform.GetSegments();
+        for (const auto& seg : segs) {
+          if (time >= seg.relativeOffset && time < seg.relativeOffset + seg.duration) {
+            m_waveform.StartSelection(seg.relativeOffset);
+            m_waveform.UpdateSelection(seg.relativeOffset + seg.duration);
+            m_waveform.EndSelection();
+            SyncSelectionToReaper();
+            InvalidateRect(m_hwnd, nullptr, FALSE);
+            return;
+          }
+        }
+      }
+
       // Check if Alt+clicking inside existing selection — potential drag export
       // Requires Alt/Option to prevent accidental drags during selection
-      bool altHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
       if (m_waveform.HasSelection() && altHeld && !(wParam & MK_SHIFT)) {
         WaveformSelection sel = m_waveform.GetSelection();
         double selS = std::min(sel.startTime, sel.endTime);

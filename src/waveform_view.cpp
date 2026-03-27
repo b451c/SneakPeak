@@ -67,8 +67,6 @@ void WaveformView::SetItem(MediaItem* item)
   }
   m_numChannels = srcChannels;
 
-  m_viewStartTime = 0.0;
-  m_viewDuration = m_itemDuration;
   m_cursorTime = 0.0;
 
   // Load all audio samples at source channel count
@@ -113,6 +111,9 @@ void WaveformView::SetItem(MediaItem* item)
       m_numChannels = 1;
     }
   }
+
+  m_viewStartTime = 0.0;
+  m_viewDuration = m_itemDuration;
 
   DBG("[SneakPeak] SetItem: pos=%.3f dur=%.3f offset=%.3f ch=%d sr=%d samples=%d\n",
       m_itemPosition, m_itemDuration, m_takeOffset, m_numChannels, m_sampleRate, m_audioSampleCount);
@@ -524,7 +525,6 @@ void WaveformView::ZoomHorizontal(double factor, double centerTime)
   m_viewStartTime = centerTime - ratio * newDuration;
   m_viewDuration = newDuration;
 
-  // Clamp to item bounds — no empty space beyond item
   if (m_viewStartTime < 0.0)
     m_viewStartTime = 0.0;
   if (m_viewStartTime + m_viewDuration > m_itemDuration)
@@ -542,9 +542,8 @@ void WaveformView::ZoomVertical(float factor)
 void WaveformView::ScrollH(double deltaTime)
 {
   m_viewStartTime += deltaTime;
-  double minStart = 0.0;
   double maxStart = std::max(0.0, m_itemDuration - m_viewDuration);
-  m_viewStartTime = std::max(minStart, std::min(maxStart, m_viewStartTime));
+  m_viewStartTime = std::max(0.0, std::min(maxStart, m_viewStartTime));
   m_peaksValid = false;
 }
 
