@@ -130,7 +130,7 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
     if (k == VK_HOME || k == VK_END || k == VK_SPACE || k == VK_ESCAPE || k == VK_TAB) handled = true;
     else if (k == VK_DELETE || k == VK_BACK) handled = true;
     else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A' || k == 'S')) handled = true;
-    else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S')) handled = true;
+    else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S' || k == 'T')) handled = true;
     if (handled) {
       SendMessage(ourHwnd, WM_KEYDOWN, msg->wParam, msg->lParam);
       return 1;
@@ -179,6 +179,11 @@ static bool hookCommandProc(int command, int flag)
     if (!g_sneakPeak->GetHwnd()) {
       g_sneakPeak->Create();
       g_sneakPeak->LoadSelectedItem();
+    } else if (!g_sneakPeak->IsVisible()) {
+      // Window exists but hidden (e.g., docker closed) - recreate
+      g_sneakPeak->Destroy();
+      g_sneakPeak->Create();
+      g_sneakPeak->LoadSelectedItem();
     } else {
       g_sneakPeak->Toggle();
     }
@@ -198,7 +203,9 @@ static bool hookCommandProc(int command, int flag)
 static int toggleActionCallback(int command)
 {
   if (command == g_cmdToggle) {
-    return (g_sneakPeak && g_sneakPeak->IsVisible()) ? 1 : 0;
+    if (!g_sneakPeak || !g_sneakPeak->GetHwnd()) return 0;
+    if (g_sneakPeak->IsPendingClose()) return 0;
+    return g_sneakPeak->IsVisible() ? 1 : 0;
   }
   return -1;
 }

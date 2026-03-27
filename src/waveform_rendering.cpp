@@ -834,51 +834,47 @@ bool WaveformView::UpdateFadeCache()
     return false;
   }
 
-  // Multi-item: D_VOL is already baked into audio data per-segment in SetItems(),
+  FadeCache old = m_fadeCache;
+
+  // Multi-item / SET: D_VOL is already baked into audio data per-segment,
   // so don't apply it again in draw. Batch gain offset reflects knob adjustment.
   // Show first item's fade-in and last item's fade-out.
-  if (m_segments.size() > 1) {
-    double oldVol = m_fadeCache.itemVol;
+  if (m_segments.size() > 1 || m_trackViewActive) {
     m_fadeCache = {};
     m_fadeCache.itemVol = m_batchGainOffset;
-    // Fade-in from first item
     MediaItem* first = m_segments.front().item;
     if (first) {
       m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(first, "D_FADEINLEN");
       m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(first, "C_FADEINSHAPE");
       m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(first, "D_FADEINDIR");
     }
-    // Fade-out from last item
     MediaItem* last = m_segments.back().item;
     if (last) {
       m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(last, "D_FADEOUTLEN");
       m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(last, "C_FADEOUTSHAPE");
       m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(last, "D_FADEOUTDIR");
     }
-    return oldVol != m_fadeCache.itemVol;
+  } else {
+    m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
+    if (g_GetSetMediaItemTakeInfo && m_take) {
+      double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_take, "D_VOL", nullptr);
+      if (pTakeVol) m_fadeCache.itemVol *= *pTakeVol;
+    }
+    m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
+    m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
+    m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
+    m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
+    m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(m_item, "D_FADEINDIR");
+    m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTDIR");
   }
-
-  FadeCache old = m_fadeCache;
-
-  m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
-  if (g_GetSetMediaItemTakeInfo && m_take) {
-    double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_take, "D_VOL", nullptr);
-    if (pTakeVol) m_fadeCache.itemVol *= *pTakeVol;
-  }
-  m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
-  m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
-  m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
-  m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
-  m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(m_item, "D_FADEINDIR");
-  m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTDIR");
 
   bool volChanged = (old.itemVol != m_fadeCache.itemVol);
   bool fadeChanged = (old.fadeInLen != m_fadeCache.fadeInLen)
                   || (old.fadeOutLen != m_fadeCache.fadeOutLen)
-                  || (old.fadeInDir != m_fadeCache.fadeInDir)
-                  || (old.fadeOutDir != m_fadeCache.fadeOutDir)
                   || (old.fadeInShape != m_fadeCache.fadeInShape)
-                  || (old.fadeOutShape != m_fadeCache.fadeOutShape);
+                  || (old.fadeOutShape != m_fadeCache.fadeOutShape)
+                  || (old.fadeInDir != m_fadeCache.fadeInDir)
+                  || (old.fadeOutDir != m_fadeCache.fadeOutDir);
   if (volChanged) m_peaksValid = false;
   return volChanged || fadeChanged;
 }
@@ -1009,7 +1005,6 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
   double fadeInLen = fp.fadeInLen, fadeOutLen = fp.fadeOutLen;
   int fadeInShape = fp.fadeInShape, fadeOutShape = fp.fadeOutShape;
   double fadeInDir = fp.fadeInDir, fadeOutDir = fp.fadeOutDir;
-  if (fadeInLen < 0.001 && fadeOutLen < 0.001) return;
 
   int waveL = m_rect.left;
   int waveR = m_rect.right - DB_SCALE_WIDTH;
@@ -1024,11 +1019,11 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
   HPEN envPen = CreatePen(PS_SOLID, 2, envColor);
   HPEN oldPen = (HPEN)SelectObject(hdc, envPen);
 
-  // Fade In curve
-  if (fadeInLen >= 0.001) {
+  // Fade In curve + handle
+  {
     int x0 = std::max(waveL, TimeToX(0.0));
     int x1 = std::min(waveR, TimeToX(fadeInLen));
-    if (x1 > x0) {
+    if (fadeInLen >= 0.001 && x1 > x0) {
       double g0 = ApplyFadeShape(0.0, fadeInShape, -fadeInDir);
       MoveToEx(hdc, x0, yZero - (int)(g0 * yRange), nullptr);
       for (int px = x0 + 1; px <= x1; px++) {
@@ -1037,19 +1032,20 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
         LineTo(hdc, px, yZero - (int)(gain * yRange));
       }
     }
-    // Handle at fade-in end
+    // Handle always visible at fade-in position (or item start if no fade)
+    int hx = (fadeInLen >= 0.001) ? x1 : x0;
     HBRUSH hb = CreateSolidBrush(envColor);
-    RECT handle = { x1 - 5, yFull - 5, x1 + 5, yFull + 5 };
+    RECT handle = { hx - 5, yFull - 5, hx + 5, yFull + 5 };
     FillRect(hdc, &handle, hb);
     DeleteObject(hb);
   }
 
-  // Fade Out curve
-  if (fadeOutLen >= 0.001) {
+  // Fade Out curve + handle
+  {
     double foStart = m_itemDuration - fadeOutLen;
     int x0 = std::max(waveL, TimeToX(foStart));
     int x1 = std::min(waveR, TimeToX(m_itemDuration));
-    if (x1 > x0) {
+    if (fadeOutLen >= 0.001 && x1 > x0) {
       MoveToEx(hdc, x0, yFull, nullptr);
       for (int px = x0; px <= x1; px++) {
         double t = (double)(px - x0) / (double)(x1 - x0);
@@ -1057,9 +1053,10 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
         LineTo(hdc, px, yZero - (int)(gain * yRange));
       }
     }
-    // Handle at fade-out start
+    // Handle always visible at fade-out position (or item end if no fade)
+    int hx = (fadeOutLen >= 0.001) ? x0 : x1;
     HBRUSH hb = CreateSolidBrush(envColor);
-    RECT handle = { x0 - 5, yFull - 5, x0 + 5, yFull + 5 };
+    RECT handle = { hx - 5, yFull - 5, hx + 5, yFull + 5 };
     FillRect(hdc, &handle, hb);
     DeleteObject(hb);
   }

@@ -23,16 +23,28 @@ void SneakPeak::Create()
   if (m_hwnd) return;
 
   m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this);
-  if (!m_hwnd) {
-    DBG("[SneakPeak] Failed to create dialog\n");
-    return;
-  }
+  if (!m_hwnd) return;
 
-  if (g_DockWindowAddEx) {
-    g_DockWindowAddEx(m_hwnd, "SneakPeak", "SneakPeak_main", true);
+  // Restore dock state: if previously docked, re-dock; otherwise show floating
+  if (g_GetExtState && g_DockWindowAddEx) {
+    const char* docked = g_GetExtState("SneakPeak", "was_docked");
+    if (docked && docked[0] == '1') {
+      g_DockWindowAddEx(m_hwnd, "SneakPeak", "SneakPeak_main", true);
+      m_isDocked = true;
+    }
   }
-
-  ShowWindow(m_hwnd, SW_SHOW);
+  if (!m_isDocked) {
+    // Restore saved floating position/size
+    if (g_GetExtState) {
+      const char* wr = g_GetExtState("SneakPeak", "win_rect");
+      if (wr && wr[0]) {
+        int x, y, w, h;
+        if (sscanf(wr, "%d %d %d %d", &x, &y, &w, &h) == 4 && w > 100 && h > 80)
+          SetWindowPos(m_hwnd, nullptr, x, y, w, h, SWP_NOZORDER);
+      }
+    }
+    ShowWindow(m_hwnd, SW_SHOW);
+  }
   SetTimer(m_hwnd, TIMER_REFRESH, TIMER_INTERVAL_MS, nullptr);
 
   // Restore persisted settings
@@ -75,9 +87,21 @@ void SneakPeak::Create()
 void SneakPeak::Destroy()
 {
   if (!m_hwnd) return;
+  // Save dock state before destroying
+  if (g_SetExtState)
+    g_SetExtState("SneakPeak", "was_docked", m_isDocked ? "1" : "0", true);
   StandaloneCleanupPreview();
   if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
   CleanupDragTemp();
+  // Save floating window position/size
+  if (!m_isDocked && g_SetExtState) {
+    RECT wr;
+    GetWindowRect(m_hwnd, &wr);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%d %d %d %d", (int)wr.left, (int)wr.top,
+             (int)(wr.right - wr.left), (int)(wr.bottom - wr.top));
+    g_SetExtState("SneakPeak", "win_rect", buf, true);
+  }
   KillTimer(m_hwnd, TIMER_REFRESH);
   if (g_DockWindowRemove) g_DockWindowRemove(m_hwnd);
   DestroyWindow(m_hwnd);
@@ -201,10 +225,14 @@ void SneakPeak::RefreshWorkingSet()
     return;
   }
 
-  // Restore approximate view position
-  if (m_waveform.GetItemDuration() > 0) {
-    m_waveform.SetViewStart(std::min(viewStart, m_waveform.GetItemDuration()));
-    m_waveform.SetViewDuration(viewDur);
+  // Restore approximate view position, clamped to new duration
+  double dur = m_waveform.GetItemDuration();
+  if (dur > 0) {
+    double vs = std::min(viewStart, dur);
+    double vd = std::min(viewDur, dur - vs);
+    if (vd <= 0) { vs = 0; vd = dur; }
+    m_waveform.SetViewStart(vs);
+    m_waveform.SetViewDuration(vd);
   }
 
   if (m_hwnd) {
@@ -618,15 +646,18 @@ void SneakPeak::OnTimer()
       // Volume changed in REAPER — repaint waveform + meters
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
-    // Gain system:
-    // SET mode: skip D_VOL writes, visual preview only (apply on release)
-    // REAPER multi-item: WriteToItem handles D_VOL, no visual offset needed
-    // REAPER single-item: WriteToItem handles D_VOL directly
+    // Batch gain: sync knob offset to waveform for visual feedback
+    // But NOT when there's a selection (selection uses per-region preview instead)
+    // SET mode: always skip D_VOL writes during drag (visual preview only, apply on release)
+    // REAPER single-item: write D_VOL in real-time
     bool skipWrite = m_workingSet.active;
     m_gainPanel.SetSkipBatchWrite(skipWrite);
-    // Never use batchGainOffset - it doubles with WriteToItem.
-    // WriteToItem changes D_VOL -> UpdateFadeCache reads it -> waveform updates.
-    m_waveform.SetBatchGainOffset(1.0);
+    if (m_gainPanel.IsBatch() && !skipWrite) {
+      double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
+      m_waveform.SetBatchGainOffset(offsetLin);
+    } else {
+      m_waveform.SetBatchGainOffset(1.0);
+    }
   }
   // Gain preview: visual overlay during knob drag (SET + standalone)
   if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging()
@@ -661,16 +692,14 @@ void SneakPeak::OnTimer()
   if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() && !m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
     double pos = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_POSITION");
     double len = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_LENGTH");
-    if (len != m_waveform.GetItemDuration()) {
-      // Item length changed externally - reload audio data
+    if (pos != m_waveform.GetItemPosition() || len != m_waveform.GetItemDuration()) {
       m_waveform.SetItemPosition(pos);
       m_waveform.SetItemDuration(len);
       m_waveform.ReloadAudio();
-      m_waveform.Invalidate();
+      if (m_waveform.GetViewStart() + m_waveform.GetViewDuration() > len)
+        m_waveform.ZoomToFit();
       m_minimap.Invalidate();
       InvalidateRect(m_hwnd, nullptr, FALSE);
-    } else if (pos != m_waveform.GetItemPosition()) {
-      m_waveform.SetItemPosition(pos);
     }
 
     bool bothActive = m_waveform.IsChannelActive(0) && m_waveform.IsChannelActive(1);
@@ -950,7 +979,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       pt.y = (short)HIWORD(lParam);
       ScreenToClient(m_hwnd, &pt);
       OnMouseWheel(pt.x, pt.y, delta, wParam);
-      return 0;
+      return 1;
     }
 
     case WM_KEYDOWN:

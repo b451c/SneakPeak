@@ -269,37 +269,29 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         }
       }
 
-      // Check REAPER fade handles (16px hit zone around handle position, or item edge if no fade)
-      if (!m_waveform.IsStandaloneMode() && !m_waveform.IsTrackView() &&
-          g_GetMediaItemInfo_Value && m_waveform.GetItem()) {
-        double fadeInLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEINLEN");
-        double fadeOutLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEOUTLEN");
-        // Handle position: at fade edge if exists, at item edge if no fade
+      // Check REAPER fade handles (16px hit zone around handle)
+      if (!m_waveform.IsStandaloneMode() && g_GetMediaItemInfo_Value) {
+        auto& segs = m_waveform.GetSegments();
+        bool multi = segs.size() > 1 || m_waveform.IsTrackView();
+        MediaItem* fadeInItem = (multi && !segs.empty()) ? segs.front().item : m_waveform.GetItem();
+        MediaItem* fadeOutItem = (multi && !segs.empty()) ? segs.back().item : m_waveform.GetItem();
+        double fadeInLen = fadeInItem ? g_GetMediaItemInfo_Value(fadeInItem, "D_FADEINLEN") : 0.0;
+        double fadeOutLen = fadeOutItem ? g_GetMediaItemInfo_Value(fadeOutItem, "D_FADEOUTLEN") : 0.0;
         int fiX = m_waveform.TimeToX(fadeInLen);
         int foX = m_waveform.TimeToX(m_waveform.GetItemDuration() - fadeOutLen);
-        int waveL = m_waveformRect.left;
-        int waveR = m_waveformRect.right - DB_SCALE_WIDTH;
-        // Fade in: near handle or near left edge (allow creating new fade)
-        bool hitFadeIn = (y < m_waveformRect.top + 30) &&
-            ((fadeInLen >= 0.001 && abs(x - fiX) <= 16) || (fadeInLen < 0.001 && x - waveL < 20));
-        // Fade out: near handle or near right edge
-        bool hitFadeOut = (y < m_waveformRect.top + 30) &&
-            ((fadeOutLen >= 0.001 && abs(x - foX) <= 16) || (fadeOutLen < 0.001 && waveR - x < 20));
-        if (hitFadeIn) {
+        if (abs(x - fiX) <= 16 && y < m_waveformRect.top + 30) {
           m_fadeDragging = FADE_IN;
           m_fadeDragStartY = y;
-          m_fadeDragStartDir = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEINDIR");
+          m_fadeDragStartDir = fadeInItem ? g_GetMediaItemInfo_Value(fadeInItem, "D_FADEINDIR") : 0.0;
           SetCapture(m_hwnd);
-          if (g_PreventUIRefresh) g_PreventUIRefresh(1);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
         }
-        if (hitFadeOut) {
+        if (abs(x - foX) <= 16 && y < m_waveformRect.top + 30) {
           m_fadeDragging = FADE_OUT;
           m_fadeDragStartY = y;
-          m_fadeDragStartDir = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEOUTDIR");
+          m_fadeDragStartDir = fadeOutItem ? g_GetMediaItemInfo_Value(fadeOutItem, "D_FADEOUTDIR") : 0.0;
           SetCapture(m_hwnd);
-          if (g_PreventUIRefresh) g_PreventUIRefresh(1);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
         }
@@ -400,7 +392,6 @@ void SneakPeak::OnMouseUp(int x, int y)
       m_waveform.Invalidate();
     } else {
       if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Adjust fade", -1);
-      if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
@@ -482,46 +473,59 @@ void SneakPeak::OnMouseUp(int x, int y)
             }
 
             static const double XFADE_SEC = 0.01;
-            auto applyGainWithXfade = [&](MediaItem* target) {
-              if (!target) return;
-              double v = g_GetMediaItemInfo_Value(target, "D_VOL");
-              g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
-              double pos = g_GetMediaItemInfo_Value(target, "D_POSITION");
-              double len = g_GetMediaItemInfo_Value(target, "D_LENGTH");
-              double xf = std::min(XFADE_SEC, len * 0.2);
-              MediaItem_Take* take = g_GetActiveTake ? g_GetActiveTake(target) : nullptr;
-              if (take && g_GetSetMediaItemTakeInfo && xf > 0.0) {
-                double* pOff = (double*)g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", nullptr);
-                double soff = pOff ? *pOff : 0.0;
-                double lxf = std::min(xf, soff);
-                if (lxf > 0.0) {
-                  double newOff = soff - lxf;
-                  g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", &newOff);
-                  g_SetMediaItemInfo_Value(target, "D_POSITION", pos - lxf);
-                  g_SetMediaItemInfo_Value(target, "D_LENGTH", len + lxf);
-                  len += lxf;
-                }
-              }
-              g_SetMediaItemInfo_Value(target, "D_LENGTH", len + xf);
-            };
+            static const double EDGE_EPS = 0.015; // must be > XFADE_SEC to detect crossfade-extended edges
 
             for (size_t oi = 0; oi < overlap.size(); oi++) {
               MediaItem* mi = overlap[oi];
               if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, mi, "MediaItem*")) continue;
               double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
               double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
-              if (p >= absStart && e <= absEnd) {
-                applyGainWithXfade(mi);
-              } else if (p < absStart && e > absEnd) {
+
+              MediaItem* target = mi;
+              bool startAligned = std::abs(p - absStart) < EDGE_EPS;
+              bool endAligned = std::abs(e - absEnd) < EDGE_EPS;
+              bool didSplitStart = false, didSplitEnd = false;
+
+              if (p >= absStart - EDGE_EPS && e <= absEnd + EDGE_EPS) {
+                target = mi;
+              } else if (p < absStart - EDGE_EPS && e > absEnd + EDGE_EPS) {
                 g_SplitMediaItem(mi, absEnd);
-                MediaItem* mid = g_SplitMediaItem(mi, absStart);
-                applyGainWithXfade(mid);
-              } else if (p < absStart) {
-                MediaItem* right = g_SplitMediaItem(mi, absStart);
-                applyGainWithXfade(right);
+                target = g_SplitMediaItem(mi, absStart);
+                didSplitStart = didSplitEnd = true;
+              } else if (p < absStart - EDGE_EPS) {
+                target = g_SplitMediaItem(mi, absStart);
+                didSplitStart = true;
               } else {
                 g_SplitMediaItem(mi, absEnd);
-                applyGainWithXfade(mi);
+                target = mi;
+                didSplitEnd = true;
+              }
+
+              if (!target) continue;
+              double v = g_GetMediaItemInfo_Value(target, "D_VOL");
+              g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
+
+              // Crossfade overlap only at freshly created split points
+              double tpos = g_GetMediaItemInfo_Value(target, "D_POSITION");
+              double tlen = g_GetMediaItemInfo_Value(target, "D_LENGTH");
+              double xf = std::min(XFADE_SEC, tlen * 0.2);
+              MediaItem_Take* take = g_GetActiveTake ? g_GetActiveTake(target) : nullptr;
+
+              if (didSplitStart && take && g_GetSetMediaItemTakeInfo && xf > 0.0) {
+                double* pOff = (double*)g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", nullptr);
+                double soff = pOff ? *pOff : 0.0;
+                double lxf = std::min(xf, soff);
+                if (lxf > 0.0) {
+                  double newOff = soff - lxf;
+                  g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", &newOff);
+                  g_SetMediaItemInfo_Value(target, "D_POSITION", tpos - lxf);
+                  g_SetMediaItemInfo_Value(target, "D_LENGTH", tlen + lxf);
+                }
+              }
+
+              if (didSplitEnd) {
+                double curLen = g_GetMediaItemInfo_Value(target, "D_LENGTH");
+                g_SetMediaItemInfo_Value(target, "D_LENGTH", curLen + xf);
               }
             }
 
@@ -689,31 +693,39 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     if (m_standaloneFadeDrag) {
       auto sf = m_waveform.GetStandaloneFade();
       if (m_fadeDragging == FADE_IN) {
-        sf.fadeInLen = std::max(0.0, std::min(time, dur));
+        sf.fadeInLen = std::max(0.0, std::min(time, dur - sf.fadeOutLen));
         sf.fadeInDir = newDir;
       } else {
         sf.fadeOutLen = std::max(0.0, dur - time);
-        sf.fadeOutLen = std::min(sf.fadeOutLen, dur);
+        sf.fadeOutLen = std::min(sf.fadeOutLen, dur - sf.fadeInLen);
         sf.fadeOutDir = newDir;
       }
       m_waveform.SetStandaloneFade(sf);
       m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2,
         (m_fadeDragging == FADE_IN) ? sf.fadeInShape : sf.fadeOutShape);
     } else if (g_SetMediaItemInfo_Value) {
-      MediaItem* item = m_waveform.GetItem();
+      auto& segs = m_waveform.GetSegments();
+      bool multi = segs.size() > 1 || m_waveform.IsTrackView();
       if (m_fadeDragging == FADE_IN) {
-        double fadeLen = std::max(0.0, std::min(time, dur));
+        MediaItem* item = (multi && !segs.empty()) ? segs.front().item : m_waveform.GetItem();
+        double maxLen = (multi && !segs.empty()) ? segs.front().duration : dur;
+        double fadeOutLen = g_GetMediaItemInfo_Value(item, "D_FADEOUTLEN");
+        double fadeLen = std::max(0.0, std::min(time, maxLen - fadeOutLen));
         g_SetMediaItemInfo_Value(item, "D_FADEINLEN", fadeLen);
         g_SetMediaItemInfo_Value(item, "D_FADEINDIR", newDir);
+        m_waveform.SetFadeDragInfo(1, (int)g_GetMediaItemInfo_Value(item, "C_FADEINSHAPE"));
       } else {
+        MediaItem* item = (multi && !segs.empty()) ? segs.back().item : m_waveform.GetItem();
+        double maxLen = (multi && !segs.empty()) ? segs.back().duration : dur;
+        double fadeInLen = g_GetMediaItemInfo_Value(item, "D_FADEINLEN");
         double fadeLen = std::max(0.0, dur - time);
-        fadeLen = std::min(fadeLen, dur);
+        fadeLen = std::min(fadeLen, maxLen - fadeInLen);
         g_SetMediaItemInfo_Value(item, "D_FADEOUTLEN", fadeLen);
         g_SetMediaItemInfo_Value(item, "D_FADEOUTDIR", newDir);
+        m_waveform.SetFadeDragInfo(2, (int)g_GetMediaItemInfo_Value(item, "C_FADEOUTSHAPE"));
       }
-      m_waveform.SetFadeDragInfo((m_fadeDragging == FADE_IN) ? 1 : 2,
-        (int)g_GetMediaItemInfo_Value(item, (m_fadeDragging == FADE_IN) ? "C_FADEINSHAPE" : "C_FADEOUTSHAPE"));
       if (g_UpdateArrange) g_UpdateArrange();
+      if (g_UpdateTimeline) g_UpdateTimeline();
     }
 
     InvalidateRect(m_hwnd, nullptr, FALSE);

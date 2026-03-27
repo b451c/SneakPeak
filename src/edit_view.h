@@ -59,7 +59,6 @@ enum ContextMenuID {
   CM_PASTE,
   CM_DELETE,
   CM_SILENCE,
-  CM_SPLIT,
   CM_SELECT_ALL,
   CM_SEPARATOR_EDIT,
   CM_NORMALIZE,
@@ -95,6 +94,8 @@ enum ContextMenuID {
   CM_SHOW_JOIN_LINES,
   CM_TRACK_VIEW,
   CM_GROUP_SET,
+  CM_SPLIT,
+  CM_DOCK_WINDOW,
   CM_RULER_ABSOLUTE,
   CM_METER_PEAK,
   CM_METER_RMS,
@@ -112,6 +113,7 @@ public:
   void Destroy();
   void Toggle();
   bool IsVisible() const;
+  bool IsPendingClose() const { return m_pendingClose; }
   bool IsStandaloneMode() const { return m_waveform.IsStandaloneMode(); }
   HWND GetHwnd() const { return m_hwnd; }
 
@@ -190,6 +192,7 @@ private:
   Toolbar m_toolbar;
 
   bool m_pendingClose = false;
+  bool m_isDocked = false;
   bool m_dragging = false;
   bool m_scrollbarDragging = false;
   int m_lastMouseX = 0;

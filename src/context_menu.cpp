@@ -100,13 +100,15 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_COPY, "Copy\tCtrl+C");
   MenuAppend(editMenu, (hasItem && hasClip) ? MF_STRING : MF_GRAYED, CM_PASTE, "Paste (destructive)\tCtrl+V");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_DELETE, "Delete\tDel");
-  bool canSplit = hasItem && !m_waveform.IsStandaloneMode();
-  MenuAppend(editMenu, canSplit ? MF_STRING : MF_GRAYED, CM_SPLIT, "Split at Cursor\tS");
   bool canSilence = hasItem && (hasSel || m_waveform.IsStandaloneMode());
   MenuAppend(editMenu, canSilence ? MF_STRING : MF_GRAYED, CM_SILENCE,
              (m_waveform.IsStandaloneMode() && !hasSel) ? "Insert Silence...\tCtrl+Del" : "Silence\tCtrl+Del");
   MenuAppendSeparator(editMenu);
   MenuAppend(editMenu, hasItem ? MF_STRING : MF_GRAYED, CM_SELECT_ALL, "Select All\tCtrl+A");
+  if (!m_waveform.IsStandaloneMode() && hasReaperItem) {
+    MenuAppendSeparator(editMenu);
+    MenuAppend(editMenu, MF_STRING, CM_SPLIT, "Split at Cursor\tS");
+  }
 
   // Process submenu — organized by category
   HMENU procMenu = CreatePopupMenu();
@@ -221,6 +223,9 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppendSubmenu(menu, viewMenu, "View");
   MenuAppendSeparator(menu);
   MenuAppendSubmenu(menu, supportMenu, "Support");
+  MenuAppendSeparator(menu);
+  MenuAppend(menu, MF_STRING, CM_DOCK_WINDOW,
+             m_isDocked ? "Undock SneakPeak" : "Dock SneakPeak in Docker");
 
   POINT pt = { x, y };
   ClientToScreen(m_hwnd, &pt);
@@ -245,20 +250,6 @@ void SneakPeak::OnContextMenuCommand(int id)
     case CM_COPY:      DoCopy(); break;
     case CM_PASTE:     DoPaste(); break;
     case CM_DELETE:    DoDelete(); break;
-    case CM_SPLIT:
-      if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
-        if (m_workingSet.active && !m_waveform.HasSelection() && g_SetEditCurPos) {
-          double absTime = m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime());
-          g_SetEditCurPos(absTime, false, false);
-        }
-        SyncSelectionToReaper();
-        if (m_waveform.HasSelection() && g_Main_OnCommand)
-          g_Main_OnCommand(40061, 0);
-        else if (g_Main_OnCommand)
-          g_Main_OnCommand(40012, 0);
-        if (m_workingSet.active) RefreshWorkingSet();
-      }
-      break;
     case CM_SILENCE:   DoSilence(); break;
     case CM_SELECT_ALL:
       if (m_waveform.HasItem()) {
@@ -267,6 +258,20 @@ void SneakPeak::OnContextMenuCommand(int id)
         m_waveform.EndSelection();
         SyncSelectionToReaper();
         InvalidateRect(m_hwnd, nullptr, FALSE);
+      }
+      break;
+    case CM_SPLIT:
+      if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+        if (m_workingSet.active && !m_waveform.HasSelection() && g_SetEditCurPos) {
+          double absTime = m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime());
+          g_SetEditCurPos(absTime, true, false);
+        }
+        SyncSelectionToReaper();
+        if (m_waveform.HasSelection() && g_Main_OnCommand)
+          g_Main_OnCommand(40061, 0);
+        else if (g_Main_OnCommand)
+          g_Main_OnCommand(40012, 0);
+        if (m_workingSet.active) RefreshWorkingSet();
       }
       break;
     case CM_NORMALIZE:      DoNormalize(); break;
@@ -442,6 +447,33 @@ void SneakPeak::OnContextMenuCommand(int id)
 #else
       system("/usr/bin/open 'https://www.paypal.com/paypalme/b451c'");
 #endif
+      break;
+    case CM_DOCK_WINDOW:
+      if (m_isDocked) {
+        // Undock: destroy docked window, recreate as floating
+        KillTimer(m_hwnd, TIMER_REFRESH);
+        if (g_DockWindowRemove) g_DockWindowRemove(m_hwnd);
+        DestroyWindow(m_hwnd);
+        m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this);
+        if (g_GetExtState) {
+          const char* wr = g_GetExtState("SneakPeak", "win_rect");
+          if (wr && wr[0]) {
+            int x, y, w, h;
+            if (sscanf(wr, "%d %d %d %d", &x, &y, &w, &h) == 4 && w > 100 && h > 80)
+              SetWindowPos(m_hwnd, nullptr, x, y, w, h, SWP_NOZORDER);
+          }
+        }
+        ShowWindow(m_hwnd, SW_SHOW);
+        SetTimer(m_hwnd, TIMER_REFRESH, TIMER_INTERVAL_MS, nullptr);
+        { RECT cr; GetClientRect(m_hwnd, &cr); RecalcLayout(cr.right, cr.bottom); }
+        m_isDocked = false;
+      } else {
+        if (g_DockWindowAddEx)
+          g_DockWindowAddEx(m_hwnd, "SneakPeak", "SneakPeak_main", true);
+        m_isDocked = true;
+      }
+      if (g_SetExtState)
+        g_SetExtState("SneakPeak", "was_docked", m_isDocked ? "1" : "0", true);
       break;
   }
   InvalidateRect(m_hwnd, nullptr, FALSE);

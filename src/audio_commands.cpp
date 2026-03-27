@@ -389,10 +389,8 @@ void SneakPeak::DoDelete()
   if (!g_SplitMediaItem || !g_DeleteTrackMediaItem || !g_GetMediaItem_Track) return;
 
   WaveformSelection sel = m_waveform.GetSelection();
-  double dur = m_waveform.GetItemDuration();
-  double selStart = std::max(0.0, std::min(dur, std::min(sel.startTime, sel.endTime)));
-  double selEnd = std::max(0.0, std::min(dur, std::max(sel.startTime, sel.endTime)));
-  if (selEnd <= selStart) return;
+  double selStart = std::min(sel.startTime, sel.endTime);
+  double selEnd = std::max(sel.startTime, sel.endTime);
 
   double splitStart = m_waveform.RelTimeToAbsTime(selStart);
   double splitEnd = m_waveform.RelTimeToAbsTime(selEnd);
@@ -450,9 +448,29 @@ void SneakPeak::DoDelete()
       return;
     }
     track = g_GetMediaItem_Track(item);
-    g_SplitMediaItem(item, splitEnd);
-    MediaItem* mid = g_SplitMediaItem(item, splitStart);
-    if (mid && track) g_DeleteTrackMediaItem(track, mid);
+    double itemPos = g_GetMediaItemInfo_Value(item, "D_POSITION");
+    double itemEnd = itemPos + g_GetMediaItemInfo_Value(item, "D_LENGTH");
+    bool atStart = (splitStart - itemPos) < 0.0001;
+    bool atEnd = (itemEnd - splitEnd) < 0.0001;
+
+    if (atStart && atEnd) {
+      // Selection covers entire item - delete whole item
+      g_DeleteTrackMediaItem(track, item);
+    } else if (atStart) {
+      // Selection starts at item beginning - split at end, delete left portion
+      MediaItem* right = g_SplitMediaItem(item, splitEnd);
+      if (track) g_DeleteTrackMediaItem(track, item);
+      (void)right;
+    } else if (atEnd) {
+      // Selection ends at item end - split at start, delete right portion
+      MediaItem* right = g_SplitMediaItem(item, splitStart);
+      if (right && track) g_DeleteTrackMediaItem(track, right);
+    } else {
+      // Selection in the middle - split both edges, delete middle
+      g_SplitMediaItem(item, splitEnd);
+      MediaItem* mid = g_SplitMediaItem(item, splitStart);
+      if (mid && track) g_DeleteTrackMediaItem(track, mid);
+    }
   }
 
   // Working set: ripple edit - pull all subsequent items left by deleted duration
