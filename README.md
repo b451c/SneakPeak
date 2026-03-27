@@ -62,11 +62,19 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Frequency selection** - Alt+drag to select frequency bands for visual isolation.
 - **Per-channel display** - Stereo spectral view with stacked channels.
 
+### Timeline View
+- **Post-cut continuity** - After cutting a section from an item, all surviving fragments are shown with gaps preserved, matching the REAPER timeline 1:1. Dark background marks gap regions.
+- **Repeated editing** - Continue cutting, adjusting gain, and editing within timeline view. Zoom position preserved across operations.
+- **Auto lifecycle** - Enters automatically after cut, exits when you click a single item on REAPER timeline.
+- **Option+click segment snap** - Option+click on any segment to instantly select its full range for gain adjustment without creating new splits.
+
 ### Multi-Item View
 - **Cross-track editing** - Select 2+ items in REAPER and view them together on an absolute timeline.
 - **Mix mode** - Sum all items into a single waveform (like a folder track).
 - **Layered mode (per Item)** - Each item displayed in a distinct color with transparency, overlaid on each other. 8-color palette for clear visual separation.
 - **Layered mode (per Track)** - Items colored by their parent track for track-aware visualization.
+- **Gap visualization** - Dark regions between items for clear visual context.
+- **Cross-segment editing** - Delete and gain operations work across item boundaries.
 - **Crossfade indicators** - Join-point lines at crossfade midpoints for easy visual reference.
 - **Batch gain** - One knob adjusts relative gain across all selected items.
 
@@ -107,11 +115,12 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Standalone preview** - Play audio directly from standalone tabs.
 
 ### Integration
-- **Dockable window** - Docks into REAPER's native docker system.
+- **Floating or docked** - Starts as resizable floating window. Dock/undock via context menu ("Dock SneakPeak in Docker"). Position and size remembered across sessions.
 - **Auto-follow selection** - Automatically loads the selected item when you click in the arrange view.
+- **Drag export** - Drag a selection outside SneakPeak to place it on REAPER timeline. Alt+drag for immediate export to Finder.
 - **Track solo** - Solo button (S) for quick track isolation.
 - **REAPER markers** - Full integration with REAPER's project markers.
-- **Persistent settings** - All preferences (meter mode, view mode, minimap, snap) survive REAPER restarts.
+- **Persistent settings** - All preferences (meter mode, view mode, minimap, snap, dock state) survive REAPER restarts.
 
 ---
 

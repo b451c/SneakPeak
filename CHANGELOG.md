@@ -4,6 +4,42 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-03-27
+
+### Added
+- **Timeline View** - After cutting a section from an item, SneakPeak now shows all surviving fragments with gaps preserved (1:1 with REAPER timeline). Dark background marks gap regions. Continues working through repeated cuts with zoom preserved.
+- **Dock/Undock control** - Window starts floating by default (resizable). Context menu: "Dock SneakPeak in Docker" / "Undock SneakPeak". Floating position and size remembered across sessions.
+- **Option+click segment snap** - In SET, timeline, and multi-item views, Option+click on a segment instantly selects its full range. Enables quick re-selection of previously split fragments for gain adjustment without new splits.
+- **Selection-aware gain in all views** - Gain knob with selection now works consistently across REAPER view (split + D_VOL), timeline view, multi-item view, and SET mode. Live visual preview on selection range only.
+- **Multi-item gap visualization** - Dark gap regions between items in multi-item MIX mode, same as timeline view.
+- **Multi-item editing** - Delete and gain operations work across segments in multi-item view.
+- **Drag export without Alt** - Drag a selection outside the SneakPeak window to export to REAPER timeline. Alt+drag still works for immediate export to Finder/external apps.
+- **Split at Cursor in context menu** - Edit > Split at Cursor (S) added to context menu.
+
+### Fixed
+- **Dock scroll propagation** - Mouse wheel in docked SneakPeak no longer scrolls REAPER arrangement.
+- **T key macOS beep** - T key intercepted by accelerator hook before REAPER processes it.
+- **Fade real-time sync** - Bidirectional: fades changed in REAPER update SneakPeak instantly, fades dragged in SneakPeak update REAPER timeline in real-time (removed PreventUIRefresh from fade drag).
+- **Fade handles always visible** - Grab zones shown even with zero fade length, enabling creation of new fades from item edges.
+- **Fade-out targets correct item** - In multi-item/SET mode, fade-out handle reads/writes to last segment item (not first).
+- **Fade-in/out clamped to segment** - Fade length limited to segment duration in multi-item mode.
+- **Fade-in and fade-out block each other** - Fades stop at meeting point in both REAPER and standalone modes.
+- **Volume mismatch REAPER to SET** - Fixed double D_VOL application when SET has single segment.
+- **Item length change detection** - External item length changes in REAPER properly reload audio and clamp view. Position-only changes skip reload (fixes lag when dragging items).
+- **Repeated gain without split accumulation** - EDGE_EPS detects pre-existing boundaries from previous gain operations. Crossfade only applied at fresh split points.
+- **Delete at item start/end** - Edge case handling for selections covering item beginning or end.
+- **View preserved after delete** - Zoom position maintained after cut operations.
+- **Gain flash eliminated** - UpdateFadeCache called immediately after batchGainOffset reset, preventing one-frame stale cache.
+- **Gain preview matches result** - standaloneGain used only for selection range (prevents double-apply with batchGainOffset).
+- **Selection preserved after gain** - Selection stays active after gain knob release in all view modes.
+- **Undo refreshes timeline view** - Ctrl+Z properly rebuilds timeline view segments.
+- **Docker close + reopen** - Window properly recreated when toggled after docker tab closed.
+- **Toggle action state** - Icon correctly reflects visibility (IsPendingClose check).
+
+### Performance
+- **Instant gain in timeline view** - ScaleAudioBuffer/ScaleAudioRange modifies audio in-place instead of full reload.
+- **No audio reload on item position change** - Only length changes trigger reload (eliminates lag during item dragging).
+
 ## [1.7.0] - 2026-03-26
 
 ### Added

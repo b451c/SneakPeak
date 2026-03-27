@@ -36,6 +36,38 @@
 ]]></description>
       </metadata>
 
+      <version name="1.8.0" author="b451c" time="2026-03-27T00:00:00Z">
+        <changelog><![CDATA[Timeline View, Dock Control, Gain Consistency, Bug Fixes
+
+New features:
+- Timeline View: after cutting an item, all fragments shown with gaps preserved
+- Dock/Undock via context menu, floating window resizable with position memory
+- Option+click snaps selection to segment boundaries (SET, timeline, multi-item)
+- Selection-aware gain works consistently across all view modes
+- Multi-item gap visualization and editing (delete, gain)
+- Drag export without Alt (drag selection outside window)
+- Split at Cursor in context menu
+
+Bug fixes (thanks saxmand!):
+- Dock scroll no longer propagates to REAPER arrangement
+- T key no longer produces macOS error beep
+- Fade sync bidirectional in real-time
+- Fade handles always visible, correct item targeting in multi-item
+- Fade-in/out block each other at meeting point
+- Volume mismatch REAPER to SET fixed
+- Item length changes properly detected and reloaded
+- Repeated gain operations don't accumulate splits
+- Delete works at item start/end edges
+- Zoom preserved after cut, gain flash eliminated
+- Selection preserved after gain, undo refreshes timeline
+
+Performance:
+- Instant gain via in-place audio buffer scaling
+- No audio reload on item position change
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v1.8.0/reaper_sneakpeak-arm64.dylib</source>
+      </version>
+
       <version name="1.7.0" author="b451c" time="2026-03-26T00:00:00Z">
         <changelog><![CDATA[Working Set Mode, Selection Gain, Clipping Visualization
 
