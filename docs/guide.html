@@ -127,7 +127,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <nav class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div class="sidebar-logo">SneakPeak</div>
-    <div class="sidebar-version">v1.7.0 User Guide</div>
+    <div class="sidebar-version">v1.8.0 User Guide</div>
   </div>
 
   <div class="nav-group">
@@ -157,6 +157,14 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <a href="#set-gain" class="nav-link">Gain on Selection</a>
     <a href="#set-grouping" class="nav-link">Grouping</a>
     <a href="#set-dormant" class="nav-link">Dormant & Restore</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Timeline View</div>
+    <a href="#timeline-overview" class="nav-link">Overview</a>
+    <a href="#timeline-editing" class="nav-link">Editing Fragments</a>
+    <a href="#timeline-gain" class="nav-link">Gain on Fragments</a>
+    <a href="#timeline-lifecycle" class="nav-link">Entering & Exiting</a>
   </div>
 
   <div class="nav-group">
@@ -195,7 +203,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h1>Sneak<span>Peak</span> User Guide</h1>
 <p class="subtitle">Precision waveform editor for REAPER - v1.7.0</p>
 
-<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a dockable window. Three editing modes cover everything from quick item inspection to multi-item track assembly.</p>
+<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts.</p>
 
 <div class="hero-modes">
   <div class="hero-mode">
@@ -249,7 +257,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li>Run <strong>"SneakPeak: Open/Close SneakPeak"</strong></li>
   <li>Optionally, assign a keyboard shortcut to this action</li>
 </ol>
-<p>SneakPeak opens as a dockable window. Drag it into any REAPER docker, or leave it floating. It remembers its position across sessions.</p>
+<p>SneakPeak opens as a floating, resizable window. You can dock it into any REAPER docker via right-click menu (<strong>"Dock SneakPeak in Docker"</strong>) or leave it floating. To undock, right-click and choose <strong>"Undock SneakPeak"</strong>. Your floating position, size, and dock state are remembered across sessions.</p>
 <p>Click any media item on the timeline. SneakPeak immediately loads its waveform.</p>
 
 <!-- Three Modes -->
@@ -260,6 +268,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h3>REAPER Mode</h3>
 <div class="modes"><span class="mode mode-reaper">REAPER</span></div>
 <p>The default mode. Click an item on the timeline and SneakPeak shows its waveform. All editing goes through the REAPER API - nothing is destructive. Split, gain changes, fade adjustments, and normalization all create REAPER undo points that you can reverse with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+<p>When you cut a section from an item, SneakPeak automatically enters <strong>Timeline View</strong> - showing all surviving fragments with gaps preserved, so you can continue editing without losing context. See the <a href="#timeline-overview">Timeline View</a> section for details.</p>
 
 <h3>SET Mode (Working Set)</h3>
 <div class="modes"><span class="mode mode-set">SET</span></div>
@@ -357,14 +366,16 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="fades">Fades</h2>
 <div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-standalone">STANDALONE</span></div>
 
-<p>Fade handles appear at the top corners of the waveform. Hover near the top-left for fade-in, top-right for fade-out. The cursor changes to a resize arrow when you're in the handle zone.</p>
+<p>Fade handles appear at the top corners of the waveform as small squares. They are always visible - even when no fade exists yet - so you can grab them to create new fades.</p>
 
 <ul>
   <li><strong>Drag left/right</strong> - adjust fade length</li>
   <li><strong>Drag up/down</strong> - adjust curve shape (curvature from -1 to +1, matching REAPER's native D_FADEINDIR/D_FADEOUTDIR)</li>
 </ul>
 
-<p>In REAPER mode, fades are non-destructive (REAPER item fade parameters). In standalone mode, fades are previewed visually during drag and baked into the audio on save.</p>
+<p>Fade-in and fade-out block each other - neither can be dragged past the other's position. In multi-item and SET views, fade-in targets the first item and fade-out targets the last item, each clamped to its segment's duration.</p>
+
+<p>In REAPER mode, fades sync bidirectionally in real-time - change a fade in REAPER's arrange view and see it update instantly in SneakPeak, and vice versa. In standalone mode, fades are previewed visually and baked into the audio on save.</p>
 
 <h2 id="gain">Gain Control</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
@@ -376,13 +387,20 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <table>
   <thead><tr><th>Mode</th><th>With Selection</th><th>Without Selection</th></tr></thead>
   <tbody>
-    <tr><td>REAPER</td><td>Changes D_VOL on whole item</td><td>Changes D_VOL on whole item</td></tr>
+    <tr><td>REAPER</td><td>Splits at selection edges, applies D_VOL to fragment</td><td>Changes D_VOL on whole item</td></tr>
+    <tr><td>Timeline View</td><td>Splits at edges, applies D_VOL to fragment</td><td>Applies D_VOL to all fragments</td></tr>
+    <tr><td>Multi-item</td><td>Splits at edges, applies D_VOL across segments</td><td>Applies D_VOL to all items</td></tr>
     <tr><td>SET</td><td>Splits at edges, applies D_VOL with 10ms crossfade</td><td>Applies D_VOL to all set items</td></tr>
     <tr><td>Standalone</td><td>Destructive gain with crossfade at edges</td><td>Destructive gain on entire file</td></tr>
   </tbody>
 </table>
 
-<p>In SET and standalone modes, you see a real-time visual preview of the gain change on the waveform while dragging the knob. The actual change is applied when you release.</p>
+<p>In all modes, you see a real-time visual preview of the gain change on the waveform while dragging the knob. With a selection, only the selected region is previewed. The actual change is applied when you release.</p>
+
+<div class="tip">
+  <strong>Option+click segment snap:</strong>
+  In SET, timeline, and multi-item views, hold <kbd>Option</kbd> and click on a segment to instantly select its full range. This lets you re-adjust gain on a previously split fragment without creating new splits.
+</div>
 
 <h2 id="split">Split</h2>
 <div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-set">SET</span></div>
@@ -457,6 +475,48 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <hr>
 
+<!-- Timeline View -->
+<h2 id="timeline-overview">Timeline View - Overview</h2>
+<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+
+<p>Timeline View activates automatically when you cut a section from an item in REAPER mode. Instead of showing only the remaining left portion, SneakPeak displays <strong>all surviving fragments</strong> with gaps preserved - matching the REAPER timeline 1:1. Dark background regions mark the gaps where audio was removed.</p>
+
+<p>This lets you continue editing across all fragments without losing visual context. Your zoom position is preserved through cuts, and you can make multiple edits in succession.</p>
+
+<h2 id="timeline-editing">Editing Fragments</h2>
+
+<p>In Timeline View, all standard editing operations work across fragments:</p>
+<ul>
+  <li><strong>Selection</strong> - click and drag to select across any fragment, including spanning gaps</li>
+  <li><strong>Delete</strong> (<kbd>E</kbd>) - removes the selected region from any overlapping fragment</li>
+  <li><strong>Split</strong> (<kbd>S</kbd>) - splits fragments at the cursor position</li>
+  <li><strong>Undo</strong> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) - reverses the last operation and refreshes the view</li>
+</ul>
+
+<h2 id="timeline-gain">Gain on Fragments</h2>
+
+<p>The gain knob works on all fragments in Timeline View:</p>
+<ul>
+  <li><strong>Without selection</strong> - adjusts volume on all fragments simultaneously (instant, no reload)</li>
+  <li><strong>With selection</strong> - splits at selection edges and applies gain only to the selected region</li>
+  <li><strong>Option+click</strong> a fragment to instantly select its full range, then adjust gain without creating new splits</li>
+</ul>
+
+<p>Live visual preview shows the gain change in real-time while dragging the knob. When you release, the change is applied to the REAPER items and the waveform updates seamlessly.</p>
+
+<h2 id="timeline-lifecycle">Entering & Exiting</h2>
+
+<p><strong>Entering:</strong> Timeline View activates automatically when a delete or selection-aware gain operation in REAPER mode produces two or more fragments from the same item.</p>
+
+<p><strong>Exiting:</strong> Click any single item on the REAPER timeline. SneakPeak exits Timeline View and loads that item normally. You can also press <kbd>T</kbd> to enter SET mode if you want gap-collapsed editing instead.</p>
+
+<div class="tip">
+  <strong>Timeline View vs SET Mode:</strong>
+  Timeline View preserves gaps between fragments exactly as they appear on the REAPER timeline. SET mode collapses gaps into a continuous waveform with ripple editing. Use Timeline View for precise positional editing, SET mode for assembly workflows.
+</div>
+
+<hr>
+
 <!-- Standalone Mode -->
 <h2 id="standalone-overview">Standalone Mode - Overview</h2>
 <div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
@@ -502,8 +562,15 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="standalone-export">Drag Export</h2>
 
-<p>Hold <kbd>Alt</kbd>/<kbd>Option</kbd>, click inside a selection, and drag out of the SneakPeak window to export audio.</p>
+<p>Click inside a selection and drag outside the SneakPeak window to export audio to the REAPER timeline or other applications.</p>
 
+<p><strong>Two drag modes:</strong></p>
+<ul>
+  <li><strong>Drag outside window</strong> (no modifier) - export starts when the mouse leaves the SneakPeak window area. Ideal for dragging onto the REAPER timeline.</li>
+  <li><strong><kbd>Alt</kbd>/<kbd>Option</kbd> + drag</strong> - immediate export on 5px threshold. Use this for dragging to Finder or external applications.</li>
+</ul>
+
+<p><strong>What gets exported:</strong></p>
 <ul>
   <li><strong>With selection</strong> - exports the selected region as a WAV file</li>
   <li><strong>Full file (clean)</strong> - references the original file (no copy created)</li>
@@ -513,8 +580,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Drop the dragged file onto REAPER's timeline to insert it as a new item.</p>
 
 <div class="tip">
-  <strong>Why Alt/Option?</strong>
-  Drag export requires a modifier key to prevent accidental drags when you're trying to make a selection. Click inside a selection without Alt to place the cursor instead.
+  <strong>Tip:</strong>
+  Clicking inside a selection without dragging simply places the cursor - no accidental exports. The drag only triggers when you move the mouse outside the window boundary.
 </div>
 
 <hr>
@@ -539,7 +606,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="multi-item">Multi-Item View</h2>
 <div class="modes"><span class="mode mode-reaper">REAPER</span></div>
 
-<p>Select two or more items on the timeline. SneakPeak shows all of them together on an absolute timeline. Right-click to choose a display mode:</p>
+<p>Select two or more items on the timeline. SneakPeak shows all of them together on an absolute timeline. Dark background regions mark gaps between items. Right-click to choose a display mode:</p>
 
 <ul>
   <li><strong>Mix (Sum)</strong> - all items mixed into a single waveform, like hearing them all at once</li>
@@ -548,6 +615,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </ul>
 
 <p>Toggle <strong>Show Join Lines</strong> in the context menu to see vertical lines at crossfade points between items.</p>
+
+<p><strong>Editing in Multi-Item View:</strong> Delete and gain operations work across item boundaries. Select a region spanning multiple items and press <kbd>E</kbd> to delete, or use the gain knob with a selection to apply volume changes. Use <kbd>Option</kbd>+click to snap selection to a specific item's boundaries for precise gain re-adjustment.</p>
 
 <h2 id="metering">Metering</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
@@ -654,7 +723,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Click</td><td>Waveform</td><td>Place cursor, sync to REAPER</td></tr>
     <tr><td>Click + Drag</td><td>Waveform</td><td>Create time selection</td></tr>
     <tr><td>Shift + Click</td><td>Waveform</td><td>Extend selection</td></tr>
-    <tr><td>Alt + Click + Drag</td><td>Inside selection</td><td>Drag export</td></tr>
+    <tr><td>Drag outside window</td><td>Inside selection</td><td>Drag export to REAPER timeline</td></tr>
+    <tr><td>Alt + Click + Drag</td><td>Inside selection</td><td>Immediate drag export (Finder/external)</td></tr>
+    <tr><td>Option + Click</td><td>Segment (SET/timeline/multi)</td><td>Snap selection to segment boundaries</td></tr>
     <tr><td>Double-click</td><td>Waveform</td><td>Select all</td></tr>
     <tr><td>Double-click</td><td>On marker</td><td>Edit marker</td></tr>
     <tr><td>Right-click</td><td>Waveform</td><td>Context menu</td></tr>
@@ -679,12 +750,13 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Right-click anywhere on the waveform to access the full context menu. The menu is organized into sections:</p>
 
 <ul>
-  <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Silence, Select All</li>
+  <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Silence, Select All, Split at Cursor (S)</li>
   <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix</li>
   <li><strong>View</strong> - Zoom controls, Spectral View, Snap to Zero-Crossing, Minimap, Ruler time format, Working Set toggle, Group</li>
   <li><strong>Multi-Item</strong> - Mix/Layered modes, Show Join Lines (when multiple items are loaded)</li>
   <li><strong>Markers</strong> - Add Marker, Add Region, Edit, Delete, Show/Hide</li>
   <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal</li>
+  <li><strong>Dock SneakPeak in Docker / Undock SneakPeak</strong> - toggle between floating and docked window</li>
 </ul>
 
 <h2 id="toolbar">Toolbar Buttons</h2>
