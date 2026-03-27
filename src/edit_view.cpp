@@ -664,9 +664,16 @@ void SneakPeak::OnTimer()
   if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() && !m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
     double pos = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_POSITION");
     double len = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_LENGTH");
-    if (pos != m_waveform.GetItemPosition() || len != m_waveform.GetItemDuration()) {
+    if (len != m_waveform.GetItemDuration()) {
+      // Item length changed externally - reload audio data
       m_waveform.SetItemPosition(pos);
       m_waveform.SetItemDuration(len);
+      m_waveform.ReloadAudio();
+      m_waveform.Invalidate();
+      m_minimap.Invalidate();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    } else if (pos != m_waveform.GetItemPosition()) {
+      m_waveform.SetItemPosition(pos);
     }
 
     bool bothActive = m_waveform.IsChannelActive(0) && m_waveform.IsChannelActive(1);
