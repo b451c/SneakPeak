@@ -250,6 +250,71 @@ void SneakPeak::ExitWorkingSet()
   LoadSelectedItem();
 }
 
+std::vector<MediaItem*> SneakPeak::FindSiblingItems(MediaTrack* track, MediaItem* sourceItem)
+{
+  std::vector<MediaItem*> siblings;
+  if (!track || !sourceItem || !g_GetTrackNumMediaItems || !g_GetTrackMediaItem) return siblings;
+  if (!g_GetActiveTake || !g_GetMediaItemTake_Source || !g_GetMediaSourceFileName) return siblings;
+
+  // Get source file of the reference item
+  MediaItem_Take* refTake = g_GetActiveTake(sourceItem);
+  if (!refTake) return siblings;
+  PCM_source* refSrc = g_GetMediaItemTake_Source(refTake);
+  if (!refSrc) return siblings;
+  char refPath[1024] = {};
+  g_GetMediaSourceFileName(refSrc, refPath, sizeof(refPath));
+  if (!refPath[0]) return siblings;
+
+  int count = g_GetTrackNumMediaItems(track);
+  for (int i = 0; i < count; i++) {
+    MediaItem* mi = g_GetTrackMediaItem(track, i);
+    if (!mi) continue;
+    MediaItem_Take* take = g_GetActiveTake(mi);
+    if (!take) continue;
+    PCM_source* src = g_GetMediaItemTake_Source(take);
+    if (!src) continue;
+    char path[1024] = {};
+    g_GetMediaSourceFileName(src, path, sizeof(path));
+    if (strcmp(path, refPath) == 0)
+      siblings.push_back(mi);
+  }
+  return siblings;
+}
+
+void SneakPeak::RefreshTimelineView()
+{
+  if (!m_waveform.IsTimelineView()) return;
+  auto& segs = m_waveform.GetSegments();
+  if (segs.empty()) return;
+
+  // Collect current segment items, validate pointers
+  std::vector<MediaItem*> items;
+  for (const auto& seg : segs) {
+    if (seg.item && (!g_ValidatePtr2 || g_ValidatePtr2(nullptr, seg.item, "MediaItem*")))
+      items.push_back(seg.item);
+  }
+  if (items.empty()) {
+    m_waveform.ClearItem();
+    LoadSelectedItem();
+    return;
+  }
+
+  double viewStart = m_waveform.GetViewStart();
+  double viewDur = m_waveform.GetViewDuration();
+
+  m_waveform.ClearItem();
+  m_waveform.LoadTimelineView(items);
+
+  if (m_waveform.HasItem() && m_waveform.GetItemDuration() > 0) {
+    double dur = m_waveform.GetItemDuration();
+    double vs = std::min(viewStart, std::max(0.0, dur - viewDur));
+    m_waveform.SetViewStart(vs);
+    m_waveform.SetViewDuration(std::min(viewDur, dur));
+  }
+  m_waveform.Invalidate();
+  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
 bool SneakPeak::IsWorkingSetItem(MediaItem* item) const
 {
   if (!m_workingSet.track || (!m_workingSet.active && !m_workingSet.dormant)) return false;
@@ -361,9 +426,42 @@ void SneakPeak::LoadSelectedItem()
 {
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
+  int selCount = g_CountSelectedMediaItems(nullptr);
+  MediaItem* firstSel = (selCount > 0) ? g_GetSelectedMediaItem(nullptr, 0) : nullptr;
+  DBG("[SneakPeak] LoadSelectedItem: count=%d firstSel=%p isTimeline=%d isTrackView=%d\n",
+      selCount, (void*)firstSel, m_waveform.IsTimelineView(), m_waveform.IsTrackView());
+
+  // Timeline view lifecycle:
+  // - Stay when multiple segment items are selected (during/after edit operations)
+  // - Exit when user clicks a single item (load it normally)
+  // - Exit when selection is outside our segments
+  if (m_waveform.IsTimelineView()) {
+    if (selCount <= 0) return; // no selection - stay
+    if (m_timelineEditGuard > 0) return; // recently edited - don't exit yet
+    if (selCount == 1) {
+      // Single item selected by user - exit timeline, load it normally
+      DBG("[SneakPeak] Timeline: single item selected, exiting timeline view\n");
+      m_waveform.ClearItem();
+      // fall through to normal loading
+    } else {
+      // Multiple items - check if all are our segments
+      bool allInTimeline = true;
+      for (int i = 0; i < selCount && allInTimeline; i++) {
+        MediaItem* sel = g_GetSelectedMediaItem(nullptr, i);
+        bool found = false;
+        for (const auto& seg : m_waveform.GetSegments()) {
+          if (seg.item == sel) { found = true; break; }
+        }
+        if (!found) allInTimeline = false;
+      }
+      if (allInTimeline) return; // stay in timeline
+      m_waveform.ClearItem(); // exit
+    }
+  }
+
   if (m_previewActive) StandaloneCleanupPreview();
 
-  int count = g_CountSelectedMediaItems(nullptr);
+  int count = selCount;
   if (count <= 0) {
     // No selection - don't destroy dormant working set
     if (!m_workingSet.dormant && !m_workingSet.active) {
@@ -519,6 +617,7 @@ void SneakPeak::OnTimer()
     return;
   }
   if (!m_hwnd || !IsVisible()) return;
+  if (m_timelineEditGuard > 0) m_timelineEditGuard--;
 
   // Validate cached item pointer — may become dangling after split/snap/delete in arrange
   if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() && g_ValidatePtr2 &&

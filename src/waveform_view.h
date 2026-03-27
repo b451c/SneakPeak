@@ -37,12 +37,18 @@ public:
   void ClearItem();
   bool HasItem() const { return m_item != nullptr || m_standaloneMode; }
   MediaItem* GetItem() const { return m_item; }
-  bool IsMultiItem() const { return m_multiItemActive || m_trackViewActive || m_segments.size() > 1; }
+  bool IsMultiItem() const { return m_multiItemActive || m_trackViewActive || m_timelineViewActive || m_segments.size() > 1; }
   const std::vector<ItemSegment>& GetSegments() const { return m_segments; }
 
   // Working set (items in a range on one track, gaps collapsed)
   void LoadItemsInRange(MediaTrack* track, double startPos, double endPos);
   bool IsTrackView() const { return m_trackViewActive; }
+
+  // Timeline view (sibling items with gaps preserved, 1:1 with REAPER timeline)
+  void LoadTimelineView(const std::vector<MediaItem*>& items);
+  bool IsTimelineView() const { return m_timelineViewActive; }
+  double GetTimelineOrigin() const { return m_timelineOrigin; }
+  const ItemSegment* GetSegmentAtTime(double relTime) const;
 
   // Multi-item view mode (Mix/Layered)
   bool IsMultiItemActive() const { return m_multiItemActive; }
@@ -217,6 +223,10 @@ private:
 
   // Working set / track view (concatenated items, gaps collapsed)
   bool m_trackViewActive = false;
+
+  // Timeline view (sibling items with gaps preserved)
+  bool m_timelineViewActive = false;
+  double m_timelineOrigin = 0.0; // absolute position of first item
 
   // Item data
   MediaItem* m_item = nullptr;

@@ -186,6 +186,26 @@ void WaveformView::Paint(HDC hdc)
     DrawDbGridLines(hdc, ch, chTop, chH);
   }
 
+  // Timeline view: draw gap regions (darker background where no items exist)
+  if (m_timelineViewActive && m_segments.size() >= 2) {
+    int waveL = m_rect.left;
+    int waveR = m_rect.right - DB_SCALE_WIDTH;
+    HBRUSH gapBrush = CreateSolidBrush(RGB(20, 20, 20));
+    for (size_t i = 0; i + 1 < m_segments.size(); i++) {
+      double gapStart = m_segments[i].relativeOffset + m_segments[i].duration;
+      double gapEnd = m_segments[i + 1].relativeOffset;
+      if (gapEnd > gapStart) {
+        int x1 = std::max(waveL, TimeToX(gapStart));
+        int x2 = std::min(waveR, TimeToX(gapEnd));
+        if (x2 > x1) {
+          RECT gapRect = { x1, m_rect.top, x2, m_rect.bottom };
+          FillRect(hdc, &gapRect, gapBrush);
+        }
+      }
+    }
+    DeleteObject(gapBrush);
+  }
+
   // LAYERED mode: draw per-layer waveforms. MIX mode: standard single draw.
   if (m_multiItemActive && m_multiItem.GetMode() != MultiItemMode::MIX) {
     m_multiItem.DrawLayers(hdc, m_rect, m_numChannels,

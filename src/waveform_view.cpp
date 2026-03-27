@@ -317,6 +317,121 @@ void WaveformView::LoadItemsInRange(MediaTrack* track, double startPos, double e
       (int)items.size(), startPos, endPos, m_itemDuration);
 }
 
+void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
+{
+  if (items.empty()) return;
+  if (!g_GetActiveTake || !g_GetMediaItemInfo_Value || !g_GetMediaItemTake_Source) return;
+  if (!g_CreateTakeAudioAccessor || !g_GetAudioAccessorSamples || !g_DestroyAudioAccessor) return;
+
+  // Sort by position
+  std::vector<MediaItem*> sorted = items;
+  std::sort(sorted.begin(), sorted.end(), [](MediaItem* a, MediaItem* b) {
+    return g_GetMediaItemInfo_Value(a, "D_POSITION") < g_GetMediaItemInfo_Value(b, "D_POSITION");
+  });
+
+  MediaItem_Take* firstTake = g_GetActiveTake(sorted[0]);
+  if (!firstTake) return;
+  PCM_source* src = g_GetMediaItemTake_Source(firstTake);
+  if (!src) return;
+
+  m_sampleRate = (int)src->GetSampleRate();
+  m_numChannels = src->GetNumChannels();
+  if (m_numChannels < 1) m_numChannels = 1;
+  if (m_numChannels > 2) m_numChannels = 2;
+
+  double firstPos = g_GetMediaItemInfo_Value(sorted.front(), "D_POSITION");
+  double lastEnd = 0.0;
+  for (auto* it : sorted) {
+    double e = g_GetMediaItemInfo_Value(it, "D_POSITION") + g_GetMediaItemInfo_Value(it, "D_LENGTH");
+    if (e > lastEnd) lastEnd = e;
+  }
+  double totalSpan = lastEnd - firstPos;
+
+  // Sanity: don't allocate huge buffers for unreasonable gaps
+  double totalItemDur = 0.0;
+  for (auto* it : sorted) totalItemDur += g_GetMediaItemInfo_Value(it, "D_LENGTH");
+  if (totalSpan > totalItemDur * 10.0 || totalSpan > 600.0) return; // fallback
+
+  int totalFrames = (int)(totalSpan * m_sampleRate);
+  if (totalFrames <= 0) return;
+
+  m_audioData.assign((size_t)totalFrames * m_numChannels, 0.0); // silence-filled
+  m_segments.clear();
+
+  for (auto* it : sorted) {
+    MediaItem_Take* take = g_GetActiveTake(it);
+    if (!take) continue;
+
+    double pos = g_GetMediaItemInfo_Value(it, "D_POSITION");
+    double dur = g_GetMediaItemInfo_Value(it, "D_LENGTH");
+    double relOff = pos - firstPos;
+    int startFrame = (int)(relOff * m_sampleRate);
+    int frames = (int)(dur * m_sampleRate);
+    if (startFrame < 0 || startFrame + frames > totalFrames) continue;
+
+    AudioAccessor* accessor = g_CreateTakeAudioAccessor(take);
+    if (!accessor) continue;
+
+    static const int CHUNK = 65536;
+    int loaded = 0;
+    while (loaded < frames) {
+      int chunk = std::min(CHUNK, frames - loaded);
+      double t = (double)loaded / (double)m_sampleRate;
+      g_GetAudioAccessorSamples(accessor, m_sampleRate, m_numChannels, t, chunk,
+        m_audioData.data() + (size_t)(startFrame + loaded) * m_numChannels);
+      loaded += chunk;
+    }
+    g_DestroyAudioAccessor(accessor);
+
+    // Bake D_VOL
+    double vol = g_GetMediaItemInfo_Value(it, "D_VOL");
+    if (g_GetSetMediaItemTakeInfo && take) {
+      double* pv = (double*)g_GetSetMediaItemTakeInfo(take, "D_VOL", nullptr);
+      if (pv) vol *= *pv;
+    }
+    if (vol != 1.0 && vol > 0.0) {
+      size_t off = (size_t)startFrame * m_numChannels;
+      size_t count = (size_t)frames * m_numChannels;
+      for (size_t s = 0; s < count; s++)
+        m_audioData[off + s] *= vol;
+    }
+
+    ItemSegment seg;
+    seg.item = it;
+    seg.take = take;
+    seg.position = pos;
+    seg.duration = dur;
+    seg.relativeOffset = relOff;
+    seg.audioStartFrame = startFrame;
+    seg.audioFrameCount = frames;
+    m_segments.push_back(seg);
+  }
+
+  m_item = sorted[0];
+  m_take = firstTake;
+  m_itemPosition = firstPos;
+  m_itemDuration = totalSpan;
+  m_audioSampleCount = totalFrames;
+  m_takeOffset = 0.0;
+  m_timelineViewActive = true;
+  m_timelineOrigin = firstPos;
+  m_trackViewActive = false;
+  m_multiItemActive = false;
+  m_peaksValid = false;
+
+  DBG("[SneakPeak] LoadTimelineView: %d items, span=%.3f, origin=%.3f\n",
+      (int)sorted.size(), totalSpan, firstPos);
+}
+
+const ItemSegment* WaveformView::GetSegmentAtTime(double relTime) const
+{
+  for (const auto& seg : m_segments) {
+    if (relTime >= seg.relativeOffset && relTime < seg.relativeOffset + seg.duration)
+      return &seg;
+  }
+  return nullptr;
+}
+
 void WaveformView::ClearItem()
 {
   if (m_liveAccessor && g_DestroyAudioAccessor) {
@@ -328,6 +443,8 @@ void WaveformView::ClearItem()
   m_segments.clear();
   m_multiItemActive = false;
   m_trackViewActive = false;
+  m_timelineViewActive = false;
+  m_timelineOrigin = 0.0;
   m_multiItem.Clear();
   m_batchGainOffset = 1.0;
   m_peaksValid = false;
@@ -644,6 +761,9 @@ int WaveformView::TimeToX(double time) const {
 
 double WaveformView::AbsTimeToRelTime(double absTime) const
 {
+  // Timeline view: simple offset from origin
+  if (m_timelineViewActive) return absTime - m_timelineOrigin;
+
   // Multi-item active: absolute timeline, simple offset
   if (m_multiItemActive || m_segments.size() <= 1) {
     return absTime - m_itemPosition;
@@ -675,6 +795,9 @@ double WaveformView::AbsTimeToRelTime(double absTime) const
 
 double WaveformView::RelTimeToAbsTime(double relTime) const
 {
+  // Timeline view: simple offset from origin
+  if (m_timelineViewActive) return m_timelineOrigin + relTime;
+
   // Multi-item active: absolute timeline, simple offset
   if (m_multiItemActive || m_segments.size() <= 1) {
     return m_itemPosition + relTime;

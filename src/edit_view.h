@@ -168,6 +168,10 @@ private:
   void NavigateToMarker(bool forward);
   void DoLoopSelection();
 
+  // Timeline view (post-cut sibling items with gaps)
+  std::vector<MediaItem*> FindSiblingItems(MediaTrack* track, MediaItem* sourceItem);
+  void RefreshTimelineView();
+
   // Helpers for destructive ops
   void GetSelectionSampleRange(int& startFrame, int& endFrame) const;
   void WriteAndRefresh();
@@ -193,6 +197,7 @@ private:
 
   bool m_pendingClose = false;
   bool m_isDocked = false;
+  int m_timelineEditGuard = 0; // ticks to suppress timeline exit after edit operation
   bool m_dragging = false;
   bool m_scrollbarDragging = false;
   int m_lastMouseX = 0;
