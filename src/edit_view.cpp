@@ -692,13 +692,17 @@ void SneakPeak::OnTimer()
   if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() && !m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
     double pos = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_POSITION");
     double len = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_LENGTH");
-    if (pos != m_waveform.GetItemPosition() || len != m_waveform.GetItemDuration()) {
+    bool posChanged = pos != m_waveform.GetItemPosition();
+    bool lenChanged = len != m_waveform.GetItemDuration();
+    if (posChanged || lenChanged) {
       m_waveform.SetItemPosition(pos);
       m_waveform.SetItemDuration(len);
-      m_waveform.ReloadAudio();
-      if (m_waveform.GetViewStart() + m_waveform.GetViewDuration() > len)
-        m_waveform.ZoomToFit();
-      m_minimap.Invalidate();
+      if (lenChanged) {
+        m_waveform.ReloadAudio();
+        if (m_waveform.GetViewStart() + m_waveform.GetViewDuration() > len)
+          m_waveform.ZoomToFit();
+        m_minimap.Invalidate();
+      }
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
 

@@ -495,8 +495,23 @@ void SneakPeak::DoDelete()
   if (m_workingSet.active) {
     RefreshWorkingSet();
   } else {
+    double savedViewStart = m_waveform.GetViewStart();
+    double savedViewDur = m_waveform.GetViewDuration();
+    double savedCursor = m_waveform.GetCursorTime();
     m_waveform.ClearItem();
     LoadSelectedItem();
+    // Restore zoom/scroll position after reload
+    if (m_waveform.HasItem()) {
+      double dur = m_waveform.GetItemDuration();
+      if (dur > 0 && savedViewDur < dur * 0.99) {
+        // Was zoomed in - restore position, clamped to new bounds
+        double vs = std::min(savedViewStart, std::max(0.0, dur - savedViewDur));
+        m_waveform.SetViewStart(vs);
+        m_waveform.SetViewDuration(std::min(savedViewDur, dur));
+      }
+      m_waveform.SetCursorTime(std::min(savedCursor, dur));
+      m_waveform.Invalidate();
+    }
   }
 
   InvalidateRect(m_hwnd, nullptr, FALSE);
