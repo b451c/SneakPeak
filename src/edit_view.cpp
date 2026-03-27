@@ -618,18 +618,15 @@ void SneakPeak::OnTimer()
       // Volume changed in REAPER — repaint waveform + meters
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
-    // Batch gain: sync knob offset to waveform for visual feedback
-    // But NOT when there's a selection (selection uses per-region preview instead)
-    // SET mode: always skip D_VOL writes during drag (visual preview only, apply on release)
-    // REAPER single-item: write D_VOL in real-time
+    // Gain system:
+    // SET mode: skip D_VOL writes, visual preview only (apply on release)
+    // REAPER multi-item: WriteToItem handles D_VOL, no visual offset needed
+    // REAPER single-item: WriteToItem handles D_VOL directly
     bool skipWrite = m_workingSet.active;
     m_gainPanel.SetSkipBatchWrite(skipWrite);
-    if (m_gainPanel.IsBatch() && !skipWrite) {
-      double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
-      m_waveform.SetBatchGainOffset(offsetLin);
-    } else {
-      m_waveform.SetBatchGainOffset(1.0);
-    }
+    // Never use batchGainOffset - it doubles with WriteToItem.
+    // WriteToItem changes D_VOL -> UpdateFadeCache reads it -> waveform updates.
+    m_waveform.SetBatchGainOffset(1.0);
   }
   // Gain preview: visual overlay during knob drag (SET + standalone)
   if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging()
