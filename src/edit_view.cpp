@@ -435,13 +435,14 @@ void SneakPeak::LoadSelectedItem()
   DBG("[SneakPeak] LoadSelectedItem: count=%d firstSel=%p isTimeline=%d isTrackView=%d\n",
       selCount, (void*)firstSel, m_waveform.IsTimelineView(), m_waveform.IsTrackView());
 
+  // Timeline/Multi-item view: suppress reload during edit operations
+  if (m_timelineEditGuard > 0 && (m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive())) {
+    return;
+  }
+
   // Timeline view lifecycle:
-  // - Stay when multiple segment items are selected (during/after edit operations)
-  // - Exit when user clicks a single item (load it normally)
-  // - Exit when selection is outside our segments
   if (m_waveform.IsTimelineView()) {
-    if (selCount <= 0) return; // no selection - stay
-    if (m_timelineEditGuard > 0) return; // recently edited - don't exit yet
+    if (selCount <= 0) return;
     if (selCount == 1) {
       // Single item selected by user - exit timeline, load it normally
       DBG("[SneakPeak] Timeline: single item selected, exiting timeline view\n");
@@ -753,10 +754,12 @@ void SneakPeak::OnTimer()
     // But NOT when there's a selection (selection uses per-region preview instead)
     // SET mode: always skip D_VOL writes during drag (visual preview only, apply on release)
     // REAPER single-item: write D_VOL in real-time
-    bool skipWrite = m_workingSet.active || m_waveform.IsTimelineView();
+    bool hasSelPreview = m_waveform.HasSelection() && m_gainPanel.IsDragging();
+    bool skipWrite = m_workingSet.active || m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive() || hasSelPreview;
     m_gainPanel.SetSkipBatchWrite(skipWrite);
-    if (m_gainPanel.IsBatch() && skipWrite && m_gainPanel.IsDragging()) {
-      // SET/Timeline: visual preview only (D_VOL applied on release)
+    if (m_gainPanel.IsBatch() && skipWrite && m_gainPanel.IsDragging()
+        && !m_waveform.HasSelection()) {
+      // SET/Timeline without selection: visual preview on whole waveform
       double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
       m_waveform.SetBatchGainOffset(offsetLin);
     } else if (m_gainPanel.IsBatch() && !skipWrite) {
@@ -766,17 +769,21 @@ void SneakPeak::OnTimer()
       m_waveform.SetBatchGainOffset(1.0);
     }
   }
-  // Gain preview: visual overlay during knob drag (SET + standalone)
-  if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging()
-      && (m_workingSet.active || m_waveform.IsStandaloneMode())) {
-    double gainLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
+  // Gain preview: visual overlay during knob drag
+  // Use standaloneGain ONLY for selection range (batchGainOffset handles whole-range)
+  if (m_gainPanel.IsVisible() && m_gainPanel.IsDragging() && m_waveform.HasItem()) {
     if (m_waveform.HasSelection()) {
+      double gainLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
       WaveformSelection sel = m_waveform.GetSelection();
       double s = std::min(sel.startTime, sel.endTime);
       double e = std::max(sel.startTime, sel.endTime);
       m_waveform.SetStandaloneGain(gainLin, s, e);
+    } else if (m_waveform.IsStandaloneMode()) {
+      // Standalone: no batchGainOffset, use standaloneGain for whole range
+      double gainLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
+      m_waveform.SetStandaloneGain(gainLin, -1.0, -1.0);
     } else {
-      m_waveform.SetStandaloneGain(gainLin, -1.0, -1.0); // whole range
+      m_waveform.ClearStandaloneGain();
     }
   } else {
     m_waveform.ClearStandaloneGain();

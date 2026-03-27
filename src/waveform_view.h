@@ -49,6 +49,8 @@ public:
   bool IsTimelineView() const { return m_timelineViewActive; }
   double GetTimelineOrigin() const { return m_timelineOrigin; }
   const ItemSegment* GetSegmentAtTime(double relTime) const;
+  void ScaleAudioBuffer(double factor); // multiply all audio samples in-place
+  void ScaleAudioRange(double factor, double startTime, double endTime); // multiply range only
 
   // Multi-item view mode (Mix/Layered)
   bool IsMultiItemActive() const { return m_multiItemActive; }

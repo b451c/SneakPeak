@@ -299,9 +299,9 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
       double time = m_waveform.XToTime(x);
 
-      // Option+click in SET mode: snap selection to segment boundaries
+      // Option+click: snap selection to segment boundaries (SET, timeline, multi-item)
       bool altHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-      if (altHeld && m_waveform.IsTrackView() && !(wParam & MK_SHIFT)) {
+      if (altHeld && m_waveform.IsMultiItem() && !(wParam & MK_SHIFT)) {
         auto& segs = m_waveform.GetSegments();
         for (const auto& seg : segs) {
           if (time >= seg.relativeOffset && time < seg.relativeOffset + seg.duration) {
@@ -454,7 +454,14 @@ void SneakPeak::OnMouseUp(int x, int y)
     // REAPER mode: apply gain on knob release
     if (wasKnobDrag && !m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
       double db = m_gainPanel.GetDb();
-      m_waveform.ClearStandaloneGain();
+      bool isTimeline = m_waveform.IsTimelineView();
+      bool isMulti = m_waveform.IsMultiItemActive();
+      bool hasSel0 = m_waveform.HasSelection();
+      DBG("[SneakPeak] GainRelease: db=%.2f isTimeline=%d isMulti=%d isTrackView=%d hasSel=%d batchGainOff=%.4f standaloneGain=%.4f\n",
+          db, isTimeline, isMulti, m_waveform.IsTrackView(), hasSel0,
+          m_waveform.GetBatchGainOffset(), 1.0 /*no getter for standalone gain*/);
+      bool deferClearGain = isTimeline || isMulti || hasSel0;
+      if (!deferClearGain) m_waveform.ClearStandaloneGain();
       WaveformSelection savedSel = m_waveform.GetSelection();
       double savedViewStart = m_waveform.GetViewStart();
       double savedViewDur = m_waveform.GetViewDuration();
@@ -565,8 +572,52 @@ void SneakPeak::OnMouseUp(int x, int y)
           snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
           if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
           if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-        } else if (m_waveform.IsTimelineView() && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
-          // Timeline view: apply D_VOL to all segments
+        } else if ((m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive()) && hasSel && g_SplitMediaItem &&
+            g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
+          DBG("[SneakPeak] GainPath: TIMELINE/MULTI+SEL split+D_VOL factor=%.4f\n", factor);
+          double absStart = m_waveform.RelTimeToAbsTime(std::min(savedSel.startTime, savedSel.endTime));
+          double absEnd = m_waveform.RelTimeToAbsTime(std::max(savedSel.startTime, savedSel.endTime));
+          MediaTrack* trk = g_GetMediaItem_Track ? g_GetMediaItem_Track(m_waveform.GetItem()) : nullptr;
+          if (trk && g_GetTrackNumMediaItems && g_GetTrackMediaItem) {
+            if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            static const double EDGE_EPS = 0.001;
+            int count = g_GetTrackNumMediaItems(trk);
+            std::vector<MediaItem*> overlap;
+            for (int i = 0; i < count; i++) {
+              MediaItem* mi = g_GetTrackMediaItem(trk, i);
+              if (!mi) continue;
+              double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+              double l = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+              if (p + l > absStart && p < absEnd) overlap.push_back(mi);
+            }
+            for (auto* mi : overlap) {
+              double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+              double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+              MediaItem* target = mi;
+              bool didSplitStart = false, didSplitEnd = false;
+              if (p >= absStart - EDGE_EPS && e <= absEnd + EDGE_EPS) {
+                target = mi;
+              } else if (p < absStart - EDGE_EPS && e > absEnd + EDGE_EPS) {
+                g_SplitMediaItem(mi, absEnd); didSplitEnd = true;
+                target = g_SplitMediaItem(mi, absStart); didSplitStart = true;
+              } else if (p < absStart - EDGE_EPS) {
+                target = g_SplitMediaItem(mi, absStart); didSplitStart = true;
+              } else {
+                g_SplitMediaItem(mi, absEnd); didSplitEnd = true;
+              }
+              if (!target) continue;
+              double v = g_GetMediaItemInfo_Value(target, "D_VOL");
+              g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
+            }
+            if (g_UpdateArrange) g_UpdateArrange();
+            char desc[64];
+            snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", db);
+            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+            if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+          }
+        } else if ((m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive()) && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
+          DBG("[SneakPeak] GainPath: TIMELINE/MULTI noSel D_VOL all segs factor=%.4f\n", factor);
           if (g_PreventUIRefresh) g_PreventUIRefresh(1);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           for (const auto& seg : m_waveform.GetSegments()) {
@@ -580,8 +631,43 @@ void SneakPeak::OnMouseUp(int x, int y)
           snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
           if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
           if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+        } else if (hasSel && g_SplitMediaItem && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
+          DBG("[SneakPeak] GainPath: SINGLE+SEL split+D_VOL factor=%.4f\n", factor);
+          MediaItem* item = m_waveform.GetItem();
+          MediaTrack* trk = g_GetMediaItem_Track ? g_GetMediaItem_Track(item) : nullptr;
+          if (item && trk) {
+            double absStart = m_waveform.RelTimeToAbsTime(std::min(savedSel.startTime, savedSel.endTime));
+            double absEnd = m_waveform.RelTimeToAbsTime(std::max(savedSel.startTime, savedSel.endTime));
+            double itemPos = g_GetMediaItemInfo_Value(item, "D_POSITION");
+            double itemEnd = itemPos + g_GetMediaItemInfo_Value(item, "D_LENGTH");
+            static const double EPS = 0.001;
+            if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            MediaItem* target = item;
+            bool startAtEdge = std::abs(absStart - itemPos) < EPS;
+            bool endAtEdge = std::abs(absEnd - itemEnd) < EPS;
+            if (startAtEdge && endAtEdge) {
+              // Selection = entire item
+            } else if (startAtEdge) {
+              g_SplitMediaItem(item, absEnd);
+            } else if (endAtEdge) {
+              target = g_SplitMediaItem(item, absStart);
+            } else {
+              g_SplitMediaItem(item, absEnd);
+              target = g_SplitMediaItem(item, absStart);
+            }
+            if (target) {
+              double v = g_GetMediaItemInfo_Value(target, "D_VOL");
+              g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
+            }
+            if (g_UpdateArrange) g_UpdateArrange();
+            char desc[64];
+            snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", db);
+            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
+            if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+          }
         } else {
-          // REAPER single-item: WriteToItem already applied D_VOL during drag
+          DBG("[SneakPeak] GainPath: SINGLE noSel (WriteToItem already applied)\n");
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           char desc[64];
           snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
@@ -589,7 +675,7 @@ void SneakPeak::OnMouseUp(int x, int y)
         }
       }
 
-      // SET/Timeline mode: reload audio data to reflect new D_VOL
+      // Reload after gain changes
       if (m_workingSet.active) {
         RefreshWorkingSet();
         if (m_waveform.GetItemDuration() > 0) {
@@ -599,18 +685,60 @@ void SneakPeak::OnMouseUp(int x, int y)
         if (savedSel.active)
           m_waveform.SetSelection(savedSel);
         m_waveform.SetCursorTime(std::min(savedCursor, m_waveform.GetItemDuration()));
+      } else if (m_waveform.IsMultiItemActive()) {
+        DBG("[SneakPeak] GainReload: MULTI - ClearItem+LoadSelectedItem\n");
+        m_waveform.ClearItem();
+        LoadSelectedItem();
+        if (savedSel.active) m_waveform.SetSelection(savedSel);
       } else if (m_waveform.IsTimelineView()) {
+        DBG("[SneakPeak] GainReload: TIMELINE - ScaleAudioRange/Buffer\n");
         m_timelineEditGuard = 5;
-        // Keep batchGainOffset as instant visual feedback while reload happens
-        // RefreshTimelineView will reset offset after audio is reloaded
-        RefreshTimelineView();
-        if (m_waveform.GetItemDuration() > 0) {
-          m_waveform.SetViewStart(std::min(savedViewStart, m_waveform.GetItemDuration()));
-          m_waveform.SetViewDuration(savedViewDur);
-        }
-        if (savedSel.active)
+        if (savedSel.active && std::abs(db) > 0.01) {
+          double selS = std::min(savedSel.startTime, savedSel.endTime);
+          double selE = std::max(savedSel.startTime, savedSel.endTime);
+          double f = pow(10.0, db / 20.0);
+          m_waveform.ScaleAudioRange(f, selS, selE);
           m_waveform.SetSelection(savedSel);
+        } else if (std::abs(db) > 0.01) {
+          double f = pow(10.0, db / 20.0);
+          m_waveform.ScaleAudioBuffer(f);
+        }
+      } else if (savedSel.active && std::abs(db) > 0.01) {
+        // Single-item after split: enter timeline view with all fragments
+        MediaItem* curItem = m_waveform.GetItem();
+        MediaTrack* trk = g_GetMediaItem_Track ? g_GetMediaItem_Track(curItem) : nullptr;
+        if (trk && g_GetTrackNumMediaItems && g_GetTrackMediaItem) {
+          double itemPos = g_GetMediaItemInfo_Value(curItem, "D_POSITION");
+          double origEnd = itemPos + m_waveform.GetItemDuration();
+          std::vector<MediaItem*> siblings;
+          int cnt = g_GetTrackNumMediaItems(trk);
+          for (int i = 0; i < cnt; i++) {
+            MediaItem* mi = g_GetTrackMediaItem(trk, i);
+            if (!mi) continue;
+            double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+            double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+            if (p >= itemPos - 0.001 && e <= origEnd + 0.001)
+              siblings.push_back(mi);
+          }
+          if (siblings.size() >= 2) {
+            m_waveform.ClearItem();
+            m_waveform.LoadTimelineView(siblings);
+            { std::vector<MediaItem*> segItems;
+              for (const auto& seg : m_waveform.GetSegments()) if (seg.item) segItems.push_back(seg.item);
+              if (!segItems.empty()) m_gainPanel.ShowBatch(segItems);
+            }
+            m_timelineEditGuard = 5;
+            if (m_waveform.GetItemDuration() > 0) {
+              m_waveform.SetViewStart(std::min(savedViewStart, m_waveform.GetItemDuration()));
+              m_waveform.SetViewDuration(savedViewDur);
+            }
+          }
+        }
+        if (savedSel.active) m_waveform.SetSelection(savedSel);
       }
+
+      // Clear visual preview AFTER buffer is updated (no flash)
+      if (deferClearGain) m_waveform.ClearStandaloneGain();
 
       // Reset knob
       if (m_gainPanel.IsBatch()) {
@@ -622,7 +750,10 @@ void SneakPeak::OnMouseUp(int x, int y)
         m_gainPanel.Show(m_waveform.GetItem());
       }
       m_waveform.SetBatchGainOffset(1.0);
+      m_waveform.UpdateFadeCache(); // sync fadeCache.itemVol immediately (prevents one-frame double-apply)
       m_waveform.Invalidate();
+      // Restore selection after all resets
+      if (savedSel.active) m_waveform.SetSelection(savedSel);
     }
 
     InvalidateRect(m_hwnd, nullptr, FALSE);
