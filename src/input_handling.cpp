@@ -269,13 +269,23 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         }
       }
 
-      // Check REAPER fade handles (16px hit zone around handle)
-      if (!m_waveform.IsStandaloneMode() && g_GetMediaItemInfo_Value) {
+      // Check REAPER fade handles (16px hit zone around handle position, or item edge if no fade)
+      if (!m_waveform.IsStandaloneMode() && !m_waveform.IsTrackView() &&
+          g_GetMediaItemInfo_Value && m_waveform.GetItem()) {
         double fadeInLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEINLEN");
         double fadeOutLen = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEOUTLEN");
+        // Handle position: at fade edge if exists, at item edge if no fade
         int fiX = m_waveform.TimeToX(fadeInLen);
         int foX = m_waveform.TimeToX(m_waveform.GetItemDuration() - fadeOutLen);
-        if (fadeInLen >= 0.001 && abs(x - fiX) <= 16 && y < m_waveformRect.top + 30) {
+        int waveL = m_waveformRect.left;
+        int waveR = m_waveformRect.right - DB_SCALE_WIDTH;
+        // Fade in: near handle or near left edge (allow creating new fade)
+        bool hitFadeIn = (y < m_waveformRect.top + 30) &&
+            ((fadeInLen >= 0.001 && abs(x - fiX) <= 16) || (fadeInLen < 0.001 && x - waveL < 20));
+        // Fade out: near handle or near right edge
+        bool hitFadeOut = (y < m_waveformRect.top + 30) &&
+            ((fadeOutLen >= 0.001 && abs(x - foX) <= 16) || (fadeOutLen < 0.001 && waveR - x < 20));
+        if (hitFadeIn) {
           m_fadeDragging = FADE_IN;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEINDIR");
@@ -284,7 +294,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
         }
-        if (fadeOutLen >= 0.001 && abs(x - foX) <= 16 && y < m_waveformRect.top + 30) {
+        if (hitFadeOut) {
           m_fadeDragging = FADE_OUT;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_FADEOUTDIR");
