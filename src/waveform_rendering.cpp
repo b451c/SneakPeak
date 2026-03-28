@@ -190,7 +190,7 @@ void WaveformView::Paint(HDC hdc)
   if ((m_timelineViewActive || m_multiItemActive) && m_segments.size() >= 2) {
     int waveL = m_rect.left;
     int waveR = m_rect.right - DB_SCALE_WIDTH;
-    HBRUSH gapBrush = CreateSolidBrush(RGB(20, 20, 20));
+    OwnedBrush gapBrush(RGB(20, 20, 20));
     for (size_t i = 0; i + 1 < m_segments.size(); i++) {
       double gapStart = m_segments[i].relativeOffset + m_segments[i].duration;
       double gapEnd = m_segments[i + 1].relativeOffset;
@@ -199,11 +199,10 @@ void WaveformView::Paint(HDC hdc)
         int x2 = std::min(waveR, TimeToX(gapEnd));
         if (x2 > x1) {
           RECT gapRect = { x1, m_rect.top, x2, m_rect.bottom };
-          FillRect(hdc, &gapRect, gapBrush);
+          gapBrush.Fill(hdc, &gapRect);
         }
       }
     }
-    DeleteObject(gapBrush);
   }
 
   // LAYERED mode: draw per-layer waveforms. MIX mode: standard single draw.
@@ -423,12 +422,10 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
 
 void WaveformView::DrawCenterLine(HDC hdc, int yCenter)
 {
-  HPEN pen = CreatePen(PS_SOLID, 1, g_theme.centerLine);
-  HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+  OwnedPen pen(PS_SOLID, 1, g_theme.centerLine);
+  DCPenScope scope(hdc, pen);
   MoveToEx(hdc, m_rect.left, yCenter, nullptr);
   LineTo(hdc, m_rect.right - DB_SCALE_WIDTH, yCenter);
-  SelectObject(hdc, oldPen);
-  DeleteObject(pen);
 }
 
 void WaveformView::DrawClipIndicators(HDC hdc)
@@ -1043,8 +1040,9 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
 
   // Fade envelope curves
   COLORREF envColor = RGB(255, 200, 50);
-  HPEN envPen = CreatePen(PS_SOLID, 2, envColor);
-  HPEN oldPen = (HPEN)SelectObject(hdc, envPen);
+  OwnedPen envPen(PS_SOLID, 2, envColor);
+  DCPenScope penScope(hdc, envPen);
+  OwnedBrush handleBrush(envColor);
 
   // Fade In curve + handle
   {
@@ -1059,12 +1057,9 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
         LineTo(hdc, px, yZero - (int)(gain * yRange));
       }
     }
-    // Handle always visible at fade-in position (or item start if no fade)
     int hx = (fadeInLen >= FADE_MIN_LEN) ? x1 : x0;
-    HBRUSH hb = CreateSolidBrush(envColor);
     RECT handle = { hx - FADE_HANDLE_HALF_SIZE, yFull - FADE_HANDLE_HALF_SIZE, hx + FADE_HANDLE_HALF_SIZE, yFull + FADE_HANDLE_HALF_SIZE };
-    FillRect(hdc, &handle, hb);
-    DeleteObject(hb);
+    handleBrush.Fill(hdc, &handle);
   }
 
   // Fade Out curve + handle
@@ -1080,16 +1075,10 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
         LineTo(hdc, px, yZero - (int)(gain * yRange));
       }
     }
-    // Handle always visible at fade-out position (or item end if no fade)
     int hx = (fadeOutLen >= FADE_MIN_LEN) ? x0 : x1;
-    HBRUSH hb = CreateSolidBrush(envColor);
     RECT handle = { hx - FADE_HANDLE_HALF_SIZE, yFull - FADE_HANDLE_HALF_SIZE, hx + FADE_HANDLE_HALF_SIZE, yFull + FADE_HANDLE_HALF_SIZE };
-    FillRect(hdc, &handle, hb);
-    DeleteObject(hb);
+    handleBrush.Fill(hdc, &handle);
   }
-
-  SelectObject(hdc, oldPen);
-  DeleteObject(envPen);
 
   // Draw curvature label during fade drag
   if (m_fadeDragType != 0) {
@@ -1132,22 +1121,19 @@ void WaveformView::DrawStandaloneFadeHandles(HDC hdc)
   int waveR = m_rect.right - DB_SCALE_WIDTH;
   int yTop = m_rect.top + 2;
 
-  COLORREF handleColor = RGB(255, 200, 50);
-  HBRUSH hb = CreateSolidBrush(handleColor);
+  OwnedBrush hb(RGB(255, 200, 50));
 
-  // Fade-in handle: at top-left (or at fade-in end if active)
+  // Fade-in handle
   int fiX = waveL;
   if (m_standaloneFade.fadeInLen >= FADE_MIN_LEN)
     fiX = std::min(waveR, TimeToX(m_standaloneFade.fadeInLen));
   RECT fiHandle = { fiX - FADE_HANDLE_HALF_SIZE, yTop - FADE_HANDLE_HALF_SIZE, fiX + FADE_HANDLE_HALF_SIZE, yTop + FADE_HANDLE_HALF_SIZE };
-  FillRect(hdc, &fiHandle, hb);
+  hb.Fill(hdc, &fiHandle);
 
-  // Fade-out handle: at top-right (or at fade-out start if active)
+  // Fade-out handle
   int foX = waveR;
   if (m_standaloneFade.fadeOutLen >= FADE_MIN_LEN)
     foX = std::max(waveL, TimeToX(m_itemDuration - m_standaloneFade.fadeOutLen));
   RECT foHandle = { foX - FADE_HANDLE_HALF_SIZE, yTop - FADE_HANDLE_HALF_SIZE, foX + FADE_HANDLE_HALF_SIZE, yTop + FADE_HANDLE_HALF_SIZE };
-  FillRect(hdc, &foHandle, hb);
-
-  DeleteObject(hb);
+  hb.Fill(hdc, &foHandle);
 }

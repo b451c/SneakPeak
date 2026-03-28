@@ -76,3 +76,38 @@ inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param) {
   return SWELL_CreateDialog(&res, nullptr, parent, dlgProc, param);
 }
 #endif
+
+// RAII wrappers for GDI objects - prevent leaks on early return
+class OwnedPen {
+public:
+  OwnedPen(int style, int width, COLORREF color) : m_pen(CreatePen(style, width, color)) {}
+  ~OwnedPen() { if (m_pen) DeleteObject(m_pen); }
+  operator HPEN() const { return m_pen; }
+  OwnedPen(const OwnedPen&) = delete;
+  OwnedPen& operator=(const OwnedPen&) = delete;
+private:
+  HPEN m_pen;
+};
+
+class OwnedBrush {
+public:
+  OwnedBrush(COLORREF color) : m_brush(CreateSolidBrush(color)) {}
+  ~OwnedBrush() { if (m_brush) DeleteObject(m_brush); }
+  operator HBRUSH() const { return m_brush; }
+  void Fill(HDC hdc, const RECT* r) { FillRect(hdc, r, m_brush); }
+  OwnedBrush(const OwnedBrush&) = delete;
+  OwnedBrush& operator=(const OwnedBrush&) = delete;
+private:
+  HBRUSH m_brush;
+};
+
+class DCPenScope {
+public:
+  DCPenScope(HDC hdc, HPEN pen) : m_hdc(hdc), m_old((HPEN)SelectObject(hdc, pen)) {}
+  ~DCPenScope() { SelectObject(m_hdc, m_old); }
+  DCPenScope(const DCPenScope&) = delete;
+  DCPenScope& operator=(const DCPenScope&) = delete;
+private:
+  HDC m_hdc;
+  HPEN m_old;
+};
