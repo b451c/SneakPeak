@@ -132,6 +132,7 @@ private:
   void OnSize(int w, int h);
   void OnPaint(HDC hdc);
   void OnMouseDown(int x, int y, WPARAM wParam);
+  void OnMouseDownWaveform(int x, int y, WPARAM wParam);
   void OnMouseUp(int x, int y);
   void OnMouseMove(int x, int y, WPARAM wParam);
   void OnMouseWheel(int x, int y, int delta, WPARAM wParam);

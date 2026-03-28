@@ -225,6 +225,12 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   }
 
   if (y >= m_waveformRect.top && y < m_waveformRect.bottom) {
+    OnMouseDownWaveform(x, y, wParam);
+  }
+}
+
+void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
+{
     if (m_waveform.HasItem()) {
       // Solo button
       if (ClickSoloButton(x, y)) {
@@ -345,7 +351,6 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       SetCapture(m_hwnd);
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
-  }
 }
 
 void SneakPeak::OnMouseUp(int x, int y)
