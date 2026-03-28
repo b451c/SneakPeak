@@ -572,7 +572,7 @@ void SneakPeak::OnMouseUp(int x, int y)
           snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
           if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
           if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-        } else if ((m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive()) && hasSel && g_SplitMediaItem &&
+        } else if ((m_waveform.IsTimelineOrMultiItem()) && hasSel && g_SplitMediaItem &&
             g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
           DBG("[SneakPeak] GainPath: TIMELINE/MULTI+SEL split+D_VOL factor=%.4f\n", factor);
           double absStart = m_waveform.RelTimeToAbsTime(std::min(savedSel.startTime, savedSel.endTime));
@@ -616,7 +616,7 @@ void SneakPeak::OnMouseUp(int x, int y)
             if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
             if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
           }
-        } else if ((m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive()) && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
+        } else if ((m_waveform.IsTimelineOrMultiItem()) && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
           DBG("[SneakPeak] GainPath: TIMELINE/MULTI noSel D_VOL all segs factor=%.4f\n", factor);
           if (g_PreventUIRefresh) g_PreventUIRefresh(1);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);

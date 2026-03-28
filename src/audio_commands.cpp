@@ -446,7 +446,7 @@ void SneakPeak::DoDelete()
         g_DeleteTrackMediaItem(track, mi);
       }
     }
-  } else if (m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive()) {
+  } else if (m_waveform.IsTimelineOrMultiItem()) {
     // Timeline/Multi-item view: handle delete across segments (no ripple)
     track = g_GetMediaItem_Track(m_waveform.GetItem());
     if (track) {
@@ -541,7 +541,7 @@ void SneakPeak::DoDelete()
   // Track view: refresh to show updated track (items re-collapse)
   if (m_workingSet.active) {
     RefreshWorkingSet();
-  } else if (m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive()) {
+  } else if (m_waveform.IsTimelineOrMultiItem()) {
     // Rebuild view from surviving segment items
     double savedViewStart = m_waveform.GetViewStart();
     double savedViewDur = m_waveform.GetViewDuration();

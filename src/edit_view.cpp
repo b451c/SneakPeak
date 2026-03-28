@@ -436,7 +436,7 @@ void SneakPeak::LoadSelectedItem()
       selCount, (void*)firstSel, m_waveform.IsTimelineView(), m_waveform.IsTrackView());
 
   // Timeline/Multi-item view: suppress reload during edit operations
-  if (m_timelineEditGuard > 0 && (m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive())) {
+  if (m_timelineEditGuard > 0 && (m_waveform.IsTimelineOrMultiItem())) {
     return;
   }
 
@@ -755,7 +755,7 @@ void SneakPeak::OnTimer()
     // SET mode: always skip D_VOL writes during drag (visual preview only, apply on release)
     // REAPER single-item: write D_VOL in real-time
     bool hasSelPreview = m_waveform.HasSelection() && m_gainPanel.IsDragging();
-    bool skipWrite = m_workingSet.active || m_waveform.IsTimelineView() || m_waveform.IsMultiItemActive() || hasSelPreview;
+    bool skipWrite = m_workingSet.active || m_waveform.IsTimelineOrMultiItem() || hasSelPreview;
     m_gainPanel.SetSkipBatchWrite(skipWrite);
     if (m_gainPanel.IsBatch() && skipWrite && m_gainPanel.IsDragging()
         && !m_waveform.HasSelection()) {

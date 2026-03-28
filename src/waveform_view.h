@@ -38,6 +38,7 @@ public:
   bool HasItem() const { return m_item != nullptr || m_standaloneMode; }
   MediaItem* GetItem() const { return m_item; }
   bool IsMultiItem() const { return m_multiItemActive || m_trackViewActive || m_timelineViewActive || m_segments.size() > 1; }
+  bool IsTimelineOrMultiItem() const { return m_timelineViewActive || m_multiItemActive; }
   const std::vector<ItemSegment>& GetSegments() const { return m_segments; }
 
   // Working set (items in a range on one track, gaps collapsed)
