@@ -846,6 +846,46 @@ void WaveformView::DrawCursor(HDC hdc)
   }
 }
 
+void WaveformView::UpdateFadeCacheMulti()
+{
+  m_fadeCache = {};
+  m_fadeCache.itemVol = m_batchGainOffset;
+  MediaItem* first = m_segments.front().item;
+  if (first) {
+    m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(first, "D_FADEINLEN");
+    m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(first, "C_FADEINSHAPE");
+    m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(first, "D_FADEINDIR");
+  }
+  MediaItem* last = m_segments.back().item;
+  if (last) {
+    m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(last, "D_FADEOUTLEN");
+    m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(last, "C_FADEOUTSHAPE");
+    m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(last, "D_FADEOUTDIR");
+  }
+}
+
+void WaveformView::UpdateFadeCacheSingle()
+{
+  m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
+  if (g_GetSetMediaItemTakeInfo && m_take) {
+    double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_take, "D_VOL", nullptr);
+    if (pTakeVol) m_fadeCache.itemVol *= *pTakeVol;
+  }
+  m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
+  m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
+  m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
+  m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
+  m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(m_item, "D_FADEINDIR");
+  m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTDIR");
+}
+
+bool WaveformView::CompareFadeParams(const FadeCache& a, const FadeCache& b) const
+{
+  return a.fadeInLen != b.fadeInLen || a.fadeOutLen != b.fadeOutLen
+      || a.fadeInShape != b.fadeInShape || a.fadeOutShape != b.fadeOutShape
+      || a.fadeInDir != b.fadeInDir || a.fadeOutDir != b.fadeOutDir;
+}
+
 bool WaveformView::UpdateFadeCache()
 {
   if (!m_item || !g_GetMediaItemInfo_Value || m_standaloneMode) {
@@ -856,47 +896,14 @@ bool WaveformView::UpdateFadeCache()
 
   FadeCache old = m_fadeCache;
 
-  // Multi-item / SET: D_VOL is already baked into audio data per-segment,
-  // so don't apply it again in draw. Batch gain offset reflects knob adjustment.
-  // Show first item's fade-in and last item's fade-out.
-  if (m_segments.size() > 1 || m_trackViewActive || m_timelineViewActive) {
-    m_fadeCache = {};
-    m_fadeCache.itemVol = m_batchGainOffset;
-    MediaItem* first = m_segments.front().item;
-    if (first) {
-      m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(first, "D_FADEINLEN");
-      m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(first, "C_FADEINSHAPE");
-      m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(first, "D_FADEINDIR");
-    }
-    MediaItem* last = m_segments.back().item;
-    if (last) {
-      m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(last, "D_FADEOUTLEN");
-      m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(last, "C_FADEOUTSHAPE");
-      m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(last, "D_FADEOUTDIR");
-    }
-  } else {
-    m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
-    if (g_GetSetMediaItemTakeInfo && m_take) {
-      double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_take, "D_VOL", nullptr);
-      if (pTakeVol) m_fadeCache.itemVol *= *pTakeVol;
-    }
-    m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(m_item, "D_FADEINLEN");
-    m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTLEN");
-    m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEINSHAPE");
-    m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(m_item, "C_FADEOUTSHAPE");
-    m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(m_item, "D_FADEINDIR");
-    m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(m_item, "D_FADEOUTDIR");
-  }
+  if (m_segments.size() > 1 || m_trackViewActive || m_timelineViewActive)
+    UpdateFadeCacheMulti();
+  else
+    UpdateFadeCacheSingle();
 
   bool volChanged = (old.itemVol != m_fadeCache.itemVol);
-  bool fadeChanged = (old.fadeInLen != m_fadeCache.fadeInLen)
-                  || (old.fadeOutLen != m_fadeCache.fadeOutLen)
-                  || (old.fadeInShape != m_fadeCache.fadeInShape)
-                  || (old.fadeOutShape != m_fadeCache.fadeOutShape)
-                  || (old.fadeInDir != m_fadeCache.fadeInDir)
-                  || (old.fadeOutDir != m_fadeCache.fadeOutDir);
   if (volChanged) m_peaksValid = false;
-  return volChanged || fadeChanged;
+  return volChanged || CompareFadeParams(old, m_fadeCache);
 }
 
 WaveformView::FadeParams WaveformView::GetActiveFadeParams() const

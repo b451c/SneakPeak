@@ -202,6 +202,9 @@ public:
 private:
   void LoadAudioData();
   void LoadConcatenated(const std::vector<MediaItem*>& items);
+  void UpdateFadeCacheMulti();
+  void UpdateFadeCacheSingle();
+  bool CompareFadeParams(const FadeCache& a, const FadeCache& b) const;
   void UpdatePeaks();
   void DrawWaveformChannel(HDC hdc, int channel, int yTop, int height);
   void DrawSelection(HDC hdc);
