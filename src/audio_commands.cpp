@@ -317,81 +317,82 @@ void SneakPeak::DoPaste()
 
 void SneakPeak::DoDelete()
 {
-  DBG("[SneakPeak] DoDelete: hasItem=%d hasSel=%d isTimeline=%d isTrackView=%d isMulti=%d\n",
-      m_waveform.HasItem(), m_waveform.HasSelection(), m_waveform.IsTimelineView(),
-      m_waveform.IsTrackView(), m_waveform.IsMultiItem());
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
+  if (m_waveform.IsStandaloneMode()) { DoDeleteStandalone(); return; }
+  DoDeleteNonDestructive();
+}
 
-  // Standalone: remove selected samples from audio data
-  if (m_waveform.IsStandaloneMode()) {
-    StandaloneUndoSave();
-    auto& data = m_waveform.GetAudioData();
-    int nch = m_waveform.GetNumChannels();
-    int sr = m_waveform.GetSampleRate();
-    int totalFrames = m_waveform.GetAudioSampleCount();
+void SneakPeak::DoDeleteStandalone()
+{
+  StandaloneUndoSave();
+  auto& data = m_waveform.GetAudioData();
+  int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
+  int totalFrames = m_waveform.GetAudioSampleCount();
 
-    WaveformSelection sel = m_waveform.GetSelection();
-    int startFrame = (int)(std::min(sel.startTime, sel.endTime) * sr);
-    int endFrame = (int)(std::max(sel.startTime, sel.endTime) * sr);
-    startFrame = std::max(0, std::min(totalFrames, startFrame));
-    endFrame = std::max(0, std::min(totalFrames, endFrame));
+  WaveformSelection sel = m_waveform.GetSelection();
+  int startFrame = (int)(std::min(sel.startTime, sel.endTime) * sr);
+  int endFrame = (int)(std::max(sel.startTime, sel.endTime) * sr);
+  startFrame = std::max(0, std::min(totalFrames, startFrame));
+  endFrame = std::max(0, std::min(totalFrames, endFrame));
 
-    if (endFrame > startFrame) {
-      size_t startSample = (size_t)startFrame * nch;
-      size_t endSample = (size_t)endFrame * nch;
-      data.erase(data.begin() + startSample, data.begin() + endSample);
+  if (endFrame > startFrame) {
+    size_t startSample = (size_t)startFrame * nch;
+    size_t endSample = (size_t)endFrame * nch;
+    data.erase(data.begin() + startSample, data.begin() + endSample);
 
-      int newFrames = (int)data.size() / nch;
+    int newFrames = (int)data.size() / nch;
 
-      // Short crossfade at the splice point to avoid clicks (~10ms each side)
-      int fadeLen = std::min(sr / 100, std::min(startFrame, newFrames - startFrame));
-      if (fadeLen > 1) {
-        for (int f = 0; f < fadeLen; f++) {
-          double t = (double)f / (double)fadeLen;
-          double fadeOut = 0.5 * (1.0 + cos(t * M_PI));       // 1→0
-          double fadeIn = 0.5 * (1.0 - cos(t * M_PI));        // 0→1
-          int leftFrame = startFrame - fadeLen + f;
-          int rightFrame = startFrame + f;
-          if (leftFrame < 0 || rightFrame >= newFrames) break;
-          for (int ch = 0; ch < nch; ch++) {
-            size_t li = (size_t)leftFrame * nch + ch;
-            size_t ri = (size_t)rightFrame * nch + ch;
-            double blended = data[li] * fadeOut + data[ri] * fadeIn;
-            data[li] = blended;
-          }
+    // Short crossfade at the splice point to avoid clicks (~10ms each side)
+    int fadeLen = std::min(sr / 100, std::min(startFrame, newFrames - startFrame));
+    if (fadeLen > 1) {
+      for (int f = 0; f < fadeLen; f++) {
+        double t = (double)f / (double)fadeLen;
+        double fadeOut = 0.5 * (1.0 + cos(t * M_PI));       // 1→0
+        double fadeIn = 0.5 * (1.0 - cos(t * M_PI));        // 0→1
+        int leftFrame = startFrame - fadeLen + f;
+        int rightFrame = startFrame + f;
+        if (leftFrame < 0 || rightFrame >= newFrames) break;
+        for (int ch = 0; ch < nch; ch++) {
+          size_t li = (size_t)leftFrame * nch + ch;
+          size_t ri = (size_t)rightFrame * nch + ch;
+          double blended = data[li] * fadeOut + data[ri] * fadeIn;
+          data[li] = blended;
         }
-        // Remove the right side of the crossfade (now blended into left)
-        size_t spliceStart = (size_t)startFrame * nch;
-        size_t spliceEnd = (size_t)(startFrame + fadeLen) * nch;
-        if (spliceEnd <= data.size())
-          data.erase(data.begin() + spliceStart, data.begin() + spliceEnd);
-        newFrames = (int)data.size() / nch;
       }
-      double newDur = (double)newFrames / (double)sr;
-      m_waveform.SetAudioSampleCount(newFrames);
-      m_waveform.SetItemDuration(newDur);
-
-      // Clamp view to new duration
-      if (m_waveform.GetViewStart() + m_waveform.GetViewDuration() > newDur) {
-        double vs = std::max(0.0, newDur - m_waveform.GetViewDuration());
-        m_waveform.SetViewStart(vs);
-        if (m_waveform.GetViewDuration() > newDur)
-          m_waveform.SetViewDuration(newDur);
-      }
-      // Place cursor at delete point
-      double cursorTime = (double)startFrame / (double)sr;
-      m_waveform.SetCursorTime(cursorTime);
-      m_waveform.ClearSelection();
-      m_waveform.Invalidate();
-      m_minimap.Invalidate();
-      m_dirty = true;
-      UpdateTitle();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      // Remove the right side of the crossfade (now blended into left)
+      size_t spliceStart = (size_t)startFrame * nch;
+      size_t spliceEnd = (size_t)(startFrame + fadeLen) * nch;
+      if (spliceEnd <= data.size())
+        data.erase(data.begin() + spliceStart, data.begin() + spliceEnd);
+      newFrames = (int)data.size() / nch;
     }
-    return;
-  }
+    double newDur = (double)newFrames / (double)sr;
+    m_waveform.SetAudioSampleCount(newFrames);
+    m_waveform.SetItemDuration(newDur);
 
-  // Non-destructive: split item at selection edges, delete middle piece
+    // Clamp view to new duration
+    if (m_waveform.GetViewStart() + m_waveform.GetViewDuration() > newDur) {
+      double vs = std::max(0.0, newDur - m_waveform.GetViewDuration());
+      m_waveform.SetViewStart(vs);
+      if (m_waveform.GetViewDuration() > newDur)
+        m_waveform.SetViewDuration(newDur);
+    }
+    // Place cursor at delete point
+    double cursorTime = (double)startFrame / (double)sr;
+    m_waveform.SetCursorTime(cursorTime);
+    m_waveform.ClearSelection();
+    m_waveform.Invalidate();
+    m_minimap.Invalidate();
+    m_dirty = true;
+    UpdateTitle();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+}
+
+void SneakPeak::DoDeleteNonDestructive()
+{
+  // Split item at selection edges, delete middle piece
   if (!g_SplitMediaItem || !g_DeleteTrackMediaItem || !g_GetMediaItem_Track) return;
 
   WaveformSelection sel = m_waveform.GetSelection();

@@ -163,6 +163,8 @@ private:
   void DoCut();
   void DoPaste();
   void DoDelete();
+  void DoDeleteStandalone();
+  void DoDeleteNonDestructive();
   void DoSilence();
 
   // Destructive processing
