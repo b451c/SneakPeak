@@ -60,7 +60,7 @@ void SneakPeak::UndoRestore()
     if (m_workingSet.active) {
       RefreshWorkingSet();
     } else if (m_waveform.IsTimelineView()) {
-      m_timelineEditGuard = 5;
+      m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
       RefreshTimelineView();
     } else {
       m_waveform.ClearItem();
@@ -536,7 +536,7 @@ void SneakPeak::DoDelete()
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   m_waveform.ClearSelection();
-  m_timelineEditGuard = 5; // suppress timeline exit for ~150ms after edit
+  m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS; // suppress timeline exit for ~150ms after edit
 
   // Track view: refresh to show updated track (items re-collapse)
   if (m_workingSet.active) {

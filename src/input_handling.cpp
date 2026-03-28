@@ -251,7 +251,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         auto sf = m_waveform.GetStandaloneFade();
         int fiX = (sf.fadeInLen >= 0.001) ? m_waveform.TimeToX(sf.fadeInLen) : waveL;
         int foX = (sf.fadeOutLen >= 0.001) ? m_waveform.TimeToX(m_waveform.GetItemDuration() - sf.fadeOutLen) : waveR;
-        if (abs(x - fiX) <= 16 && y < m_waveformRect.top + 30) {
+        if (abs(x - fiX) <= FADE_HANDLE_HIT_ZONE && y < m_waveformRect.top + FADE_HANDLE_TOP_ZONE) {
           m_fadeDragging = FADE_IN;
           m_standaloneFadeDrag = true;
           m_fadeDragStartY = y;
@@ -259,7 +259,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           SetCapture(m_hwnd);
           return;
         }
-        if (abs(x - foX) <= 16 && y < m_waveformRect.top + 30) {
+        if (abs(x - foX) <= FADE_HANDLE_HIT_ZONE && y < m_waveformRect.top + FADE_HANDLE_TOP_ZONE) {
           m_fadeDragging = FADE_OUT;
           m_standaloneFadeDrag = true;
           m_fadeDragStartY = y;
@@ -279,7 +279,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         double fadeOutLen = fadeOutItem ? g_GetMediaItemInfo_Value(fadeOutItem, "D_FADEOUTLEN") : 0.0;
         int fiX = m_waveform.TimeToX(fadeInLen);
         int foX = m_waveform.TimeToX(m_waveform.GetItemDuration() - fadeOutLen);
-        if (abs(x - fiX) <= 16 && y < m_waveformRect.top + 30) {
+        if (abs(x - fiX) <= FADE_HANDLE_HIT_ZONE && y < m_waveformRect.top + FADE_HANDLE_TOP_ZONE) {
           m_fadeDragging = FADE_IN;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = fadeInItem ? g_GetMediaItemInfo_Value(fadeInItem, "D_FADEINDIR") : 0.0;
@@ -287,7 +287,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
         }
-        if (abs(x - foX) <= 16 && y < m_waveformRect.top + 30) {
+        if (abs(x - foX) <= FADE_HANDLE_HIT_ZONE && y < m_waveformRect.top + FADE_HANDLE_TOP_ZONE) {
           m_fadeDragging = FADE_OUT;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = fadeOutItem ? g_GetMediaItemInfo_Value(fadeOutItem, "D_FADEOUTDIR") : 0.0;
@@ -495,8 +495,7 @@ void SneakPeak::OnMouseUp(int x, int y)
                 overlap.push_back(mi);
             }
 
-            static const double XFADE_SEC = 0.01;
-            static const double EDGE_EPS = 0.015; // must be > XFADE_SEC to detect crossfade-extended edges
+            // Constants from config.h: GAIN_XFADE_SEC, GAIN_EDGE_EPS_SET
 
             for (size_t oi = 0; oi < overlap.size(); oi++) {
               MediaItem* mi = overlap[oi];
@@ -505,17 +504,17 @@ void SneakPeak::OnMouseUp(int x, int y)
               double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
 
               MediaItem* target = mi;
-              bool startAligned = std::abs(p - absStart) < EDGE_EPS;
-              bool endAligned = std::abs(e - absEnd) < EDGE_EPS;
+              bool startAligned = std::abs(p - absStart) < GAIN_EDGE_EPS_SET;
+              bool endAligned = std::abs(e - absEnd) < GAIN_EDGE_EPS_SET;
               bool didSplitStart = false, didSplitEnd = false;
 
-              if (p >= absStart - EDGE_EPS && e <= absEnd + EDGE_EPS) {
+              if (p >= absStart - GAIN_EDGE_EPS_SET && e <= absEnd + GAIN_EDGE_EPS_SET) {
                 target = mi;
-              } else if (p < absStart - EDGE_EPS && e > absEnd + EDGE_EPS) {
+              } else if (p < absStart - GAIN_EDGE_EPS_SET && e > absEnd + GAIN_EDGE_EPS_SET) {
                 g_SplitMediaItem(mi, absEnd);
                 target = g_SplitMediaItem(mi, absStart);
                 didSplitStart = didSplitEnd = true;
-              } else if (p < absStart - EDGE_EPS) {
+              } else if (p < absStart - GAIN_EDGE_EPS_SET) {
                 target = g_SplitMediaItem(mi, absStart);
                 didSplitStart = true;
               } else {
@@ -531,7 +530,7 @@ void SneakPeak::OnMouseUp(int x, int y)
               // Crossfade overlap only at freshly created split points
               double tpos = g_GetMediaItemInfo_Value(target, "D_POSITION");
               double tlen = g_GetMediaItemInfo_Value(target, "D_LENGTH");
-              double xf = std::min(XFADE_SEC, tlen * 0.2);
+              double xf = std::min(GAIN_XFADE_SEC, tlen * 0.2);
               MediaItem_Take* take = g_GetActiveTake ? g_GetActiveTake(target) : nullptr;
 
               if (didSplitStart && take && g_GetSetMediaItemTakeInfo && xf > 0.0) {
@@ -582,7 +581,7 @@ void SneakPeak::OnMouseUp(int x, int y)
           if (trk && g_GetTrackNumMediaItems && g_GetTrackMediaItem) {
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-            static const double EDGE_EPS = 0.001;
+            // Uses GAIN_EDGE_EPS from config.h
             int count = g_GetTrackNumMediaItems(trk);
             std::vector<MediaItem*> overlap;
             for (int i = 0; i < count; i++) {
@@ -597,12 +596,12 @@ void SneakPeak::OnMouseUp(int x, int y)
               double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
               MediaItem* target = mi;
               bool didSplitStart = false, didSplitEnd = false;
-              if (p >= absStart - EDGE_EPS && e <= absEnd + EDGE_EPS) {
+              if (p >= absStart - GAIN_EDGE_EPS && e <= absEnd + GAIN_EDGE_EPS) {
                 target = mi;
-              } else if (p < absStart - EDGE_EPS && e > absEnd + EDGE_EPS) {
+              } else if (p < absStart - GAIN_EDGE_EPS && e > absEnd + GAIN_EDGE_EPS) {
                 g_SplitMediaItem(mi, absEnd); didSplitEnd = true;
                 target = g_SplitMediaItem(mi, absStart); didSplitStart = true;
-              } else if (p < absStart - EDGE_EPS) {
+              } else if (p < absStart - GAIN_EDGE_EPS) {
                 target = g_SplitMediaItem(mi, absStart); didSplitStart = true;
               } else {
                 g_SplitMediaItem(mi, absEnd); didSplitEnd = true;
@@ -641,12 +640,12 @@ void SneakPeak::OnMouseUp(int x, int y)
             double absEnd = m_waveform.RelTimeToAbsTime(std::max(savedSel.startTime, savedSel.endTime));
             double itemPos = g_GetMediaItemInfo_Value(item, "D_POSITION");
             double itemEnd = itemPos + g_GetMediaItemInfo_Value(item, "D_LENGTH");
-            static const double EPS = 0.001;
+            // Uses GAIN_EDGE_EPS from config.h
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
             MediaItem* target = item;
-            bool startAtEdge = std::abs(absStart - itemPos) < EPS;
-            bool endAtEdge = std::abs(absEnd - itemEnd) < EPS;
+            bool startAtEdge = std::abs(absStart - itemPos) < GAIN_EDGE_EPS;
+            bool endAtEdge = std::abs(absEnd - itemEnd) < GAIN_EDGE_EPS;
             if (startAtEdge && endAtEdge) {
               // Selection = entire item
             } else if (startAtEdge) {
@@ -693,7 +692,7 @@ void SneakPeak::OnMouseUp(int x, int y)
         if (savedSel.active) m_waveform.SetSelection(savedSel);
       } else if (m_waveform.IsTimelineView()) {
         DBG("[SneakPeak] GainReload: TIMELINE - ScaleAudioRange/Buffer\n");
-        m_timelineEditGuard = 5;
+        m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
         if (savedSel.active && std::abs(db) > 0.01) {
           double selS = std::min(savedSel.startTime, savedSel.endTime);
           double selE = std::max(savedSel.startTime, savedSel.endTime);
@@ -728,7 +727,7 @@ void SneakPeak::OnMouseUp(int x, int y)
               for (const auto& seg : m_waveform.GetSegments()) if (seg.item) segItems.push_back(seg.item);
               if (!segItems.empty()) m_gainPanel.ShowBatch(segItems);
             }
-            m_timelineEditGuard = 5;
+            m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
             if (m_waveform.GetItemDuration() > 0) {
               m_waveform.SetViewStart(std::min(savedViewStart, m_waveform.GetItemDuration()));
               m_waveform.SetViewDuration(savedViewDur);

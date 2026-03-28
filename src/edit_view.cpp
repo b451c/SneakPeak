@@ -637,7 +637,7 @@ void SneakPeak::OnTimer()
   if (m_dragging && m_waveform.HasItem()) {
     int edgeZone = EDGE_ZONE;
     int mx = m_lastMouseX;
-    double scrollSpeed = m_waveform.GetViewDuration() * 0.08; // 8% of view per tick
+    double scrollSpeed = m_waveform.GetViewDuration() * AUTO_SCROLL_SPEED;
 
     if (mx < m_waveformRect.left + edgeZone) {
       // Scroll left — faster the closer to edge
