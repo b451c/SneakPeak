@@ -155,6 +155,9 @@ private:
   void GetItemTitle(char* buf, int bufSize);
   void RecalcLayout(int w, int h);
 
+  // LoadSelectedItem sub-methods
+  bool LoadSelectedItemMulti(int count); // returns true if handled
+
   // Post-gain reload dispatcher
   void ReloadAfterGainChange(double savedViewStart, double savedViewDur,
                              const WaveformSelection& savedSel, double savedCursor, double db);

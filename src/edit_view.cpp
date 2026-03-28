@@ -426,6 +426,62 @@ void SneakPeak::UngroupSetItems()
   if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
+bool SneakPeak::LoadSelectedItemMulti(int count)
+{
+  if (!g_GetMediaItemInfo_Value || !g_GetSelectedMediaItem) return false;
+  std::vector<MediaItem*> items;
+  for (int i = 0; i < count; i++) {
+    MediaItem* mi = g_GetSelectedMediaItem(nullptr, i);
+    if (mi) items.push_back(mi);
+  }
+  std::sort(items.begin(), items.end(), [](MediaItem* a, MediaItem* b) {
+    return g_GetMediaItemInfo_Value(a, "D_POSITION") < g_GetMediaItemInfo_Value(b, "D_POSITION");
+  });
+  DBG("[SneakPeak] Multi-item: %d items selected\n", (int)items.size());
+#ifdef SNEAKPEAK_DEBUG
+  for (size_t i = 0; i < items.size() && i < 8; i++) {
+    double p = g_GetMediaItemInfo_Value(items[i], "D_POSITION");
+    double l = g_GetMediaItemInfo_Value(items[i], "D_LENGTH");
+    DBG("[SneakPeak]   item[%d]: pos=%.3f len=%.3f\n", (int)i, p, l);
+  }
+#endif
+  if (items.size() <= 1) return false;
+
+  m_waveform.SetItems(items);
+  m_waveform.UpdateFadeCache();
+  m_spectralVisible = false;
+  m_spectral.ClearSpectrum();
+  m_spectral.Invalidate();
+  m_minimap.Invalidate();
+
+  bool multiTrack = false;
+  if (g_GetMediaItem_Track) {
+    MediaTrack* firstTrack = g_GetMediaItem_Track(items[0]);
+    for (size_t i = 1; i < items.size(); i++) {
+      if (g_GetMediaItem_Track(items[i]) != firstTrack) { multiTrack = true; break; }
+    }
+  }
+  if (multiTrack) m_gainPanel.Hide();
+  else m_gainPanel.ShowBatch(items);
+
+  m_hasUndo = false;
+  m_dirty = false;
+  if (m_hwnd) {
+    RECT cr;
+    GetClientRect(m_hwnd, &cr);
+    RecalcLayout(cr.right, cr.bottom);
+    m_waveform.Invalidate();
+    char title[512];
+    snprintf(title, sizeof(title), "SneakPeak [%d items]", (int)items.size());
+    SetWindowText(m_hwnd, title);
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+  DBG("[SneakPeak] Multi-item loaded: segments=%d audioFrames=%d dur=%.3f\n",
+      (int)m_waveform.GetSegments().size(), m_waveform.GetAudioSampleCount(),
+      m_waveform.GetItemDuration());
+  return true;
+}
+
 void SneakPeak::LoadSelectedItem()
 {
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
@@ -500,68 +556,8 @@ void SneakPeak::LoadSelectedItem()
     m_workingSet.dormant = true;
   }
 
-  // Multi-item: show all selected items as one continuous waveform (cross-track)
-  if (count > 1 && g_GetMediaItemInfo_Value) {
-    std::vector<MediaItem*> items;
-    for (int i = 0; i < count; i++) {
-      MediaItem* mi = g_GetSelectedMediaItem(nullptr, i);
-      if (mi) items.push_back(mi);
-    }
-
-    // Sort by timeline position
-    std::sort(items.begin(), items.end(), [](MediaItem* a, MediaItem* b) {
-      return g_GetMediaItemInfo_Value(a, "D_POSITION") < g_GetMediaItemInfo_Value(b, "D_POSITION");
-    });
-
-    DBG("[SneakPeak] Multi-item: %d items selected\n", (int)items.size());
-#ifdef SNEAKPEAK_DEBUG
-    for (size_t i = 0; i < items.size() && i < 8; i++) {
-      double p = g_GetMediaItemInfo_Value(items[i], "D_POSITION");
-      double l = g_GetMediaItemInfo_Value(items[i], "D_LENGTH");
-      DBG("[SneakPeak]   item[%d]: pos=%.3f len=%.3f\n", (int)i, p, l);
-    }
-#endif
-
-    if (items.size() > 1) {
-      m_waveform.SetItems(items);
-      m_waveform.UpdateFadeCache(); // clear stale single-item fades immediately
-      m_spectralVisible = false;  // spectral is per-item, reset on switch
-      m_spectral.ClearSpectrum();
-      m_spectral.Invalidate();
-      m_minimap.Invalidate();
-
-      // Hide gain panel if items span multiple tracks (changing D_VOL across tracks is ambiguous)
-      // Same track: batch mode (knob applies relative offset to all items)
-      bool multiTrack = false;
-      if (g_GetMediaItem_Track) {
-        MediaTrack* firstTrack = g_GetMediaItem_Track(items[0]);
-        for (size_t i = 1; i < items.size(); i++) {
-          if (g_GetMediaItem_Track(items[i]) != firstTrack) { multiTrack = true; break; }
-        }
-      }
-      if (multiTrack) {
-        m_gainPanel.Hide();
-      } else {
-        m_gainPanel.ShowBatch(items);
-      }
-      m_hasUndo = false;
-      m_dirty = false;
-      if (m_hwnd) {
-        RECT cr;
-        GetClientRect(m_hwnd, &cr);
-        RecalcLayout(cr.right, cr.bottom);
-        m_waveform.Invalidate();
-        char title[512];
-        snprintf(title, sizeof(title), "SneakPeak [%d items]", (int)items.size());
-        SetWindowText(m_hwnd, title);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
-      }
-      DBG("[SneakPeak] Multi-item loaded: segments=%d audioFrames=%d dur=%.3f\n",
-          (int)m_waveform.GetSegments().size(), m_waveform.GetAudioSampleCount(),
-          m_waveform.GetItemDuration());
-      return;
-    }
-  }
+  // Multi-item: show all selected items as one continuous waveform
+  if (count > 1 && LoadSelectedItemMulti(count)) return;
 
   // Clear first to exit multi-item mode if active
   if (m_waveform.IsMultiItem()) m_waveform.ClearItem();
