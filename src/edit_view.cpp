@@ -615,24 +615,41 @@ void SneakPeak::LoadSelectedItem()
 
 void SneakPeak::OnTimer()
 {
+  if (HandlePendingClose()) return;
+  if (!m_hwnd || !IsVisible()) return;
+  if (m_timelineEditGuard > 0) m_timelineEditGuard--;
+
+  ValidateItemPointers();
+  UpdateAutoScroll();
+  UpdatePlaybackFollow();
+  UpdateGainPreview();
+  UpdateItemState();
+}
+
+bool SneakPeak::HandlePendingClose()
+{
   if (m_pendingClose) {
     m_pendingClose = false;
     if (g_SetExtState) g_SetExtState("SneakPeak", "was_visible", "0", true);
     Destroy();
-    return;
+    return true;
   }
-  if (!m_hwnd || !IsVisible()) return;
-  if (m_timelineEditGuard > 0) m_timelineEditGuard--;
+  return false;
+}
 
+void SneakPeak::ValidateItemPointers()
+{
   // Validate cached item pointer — may become dangling after split/snap/delete in arrange
   if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() && g_ValidatePtr2 &&
       !g_ValidatePtr2(nullptr, (void*)m_waveform.GetItem(), "MediaItem*")) {
     m_waveform.ClearItem();
     m_hasUndo = false;
     InvalidateRect(m_hwnd, nullptr, FALSE);
-    return;
   }
+}
 
+void SneakPeak::UpdateAutoScroll()
+{
   // Auto-scroll when dragging selection near edges
   if (m_dragging && m_waveform.HasItem()) {
     int edgeZone = EDGE_ZONE;
@@ -657,7 +674,10 @@ void SneakPeak::OnTimer()
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
   }
+}
 
+void SneakPeak::UpdatePlaybackFollow()
+{
   if (g_GetPlayState) {
     int state = g_GetPlayState();
     bool playing = (state & 1) != 0;
@@ -743,7 +763,10 @@ void SneakPeak::OnTimer()
     InvalidateRect(m_hwnd, &m_spectralRect, FALSE);
     if (m_spectral.IsReady()) m_spectralPainted = true;
   }
+}
 
+void SneakPeak::UpdateGainPreview()
+{
   // Update fade/volume cache for paint (not in standalone mode)
   if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode()) {
     if (m_waveform.UpdateFadeCache()) {
@@ -798,7 +821,10 @@ void SneakPeak::OnTimer()
       }
     }
   }
+}
 
+void SneakPeak::UpdateItemState()
+{
   // Update solo state from REAPER (polled, not in paint, not in standalone)
   if (!m_waveform.IsStandaloneMode()) UpdateSoloState();
 

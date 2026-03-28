@@ -137,6 +137,12 @@ private:
   void OnMouseWheel(int x, int y, int delta, WPARAM wParam);
   void OnDoubleClick(int x, int y);
   void OnKeyDown(WPARAM key);
+  bool HandlePendingClose();
+  void ValidateItemPointers();
+  void UpdateAutoScroll();
+  void UpdatePlaybackFollow();
+  void UpdateGainPreview();
+  void UpdateItemState();
   void OnToolbarClick(int button);
   void OnRightClick(int x, int y);
   void OnContextMenuCommand(int id);
