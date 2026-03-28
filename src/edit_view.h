@@ -154,6 +154,10 @@ private:
   void GetItemTitle(char* buf, int bufSize);
   void RecalcLayout(int w, int h);
 
+  // Post-gain reload dispatcher
+  void ReloadAfterGainChange(double savedViewStart, double savedViewDur,
+                             const WaveformSelection& savedSel, double savedCursor, double db);
+
   // Clipboard operations
   void DoCopy();
   void DoCut();
