@@ -11,6 +11,7 @@
 #include "edit_view.h"
 #include "audio_engine.h"
 #include "audio_ops.h"
+#include "item_split_ops.h"
 #include "theme.h"
 #include "debug.h"
 #include "reaper_plugin.h"
@@ -472,85 +473,16 @@ void SneakPeak::OnMouseUp(int x, int y)
         double factor = pow(10.0, db / 20.0);
         bool hasSel = m_waveform.HasSelection();
 
-        if (m_workingSet.active && hasSel && g_SplitMediaItem &&
-            g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value && m_workingSet.track) {
+        if (m_workingSet.active && hasSel && m_workingSet.track) {
           // SET mode with selection: split + D_VOL + crossfade overlap
           double absStart = m_waveform.RelTimeToAbsTime(std::min(savedSel.startTime, savedSel.endTime));
           double absEnd = m_waveform.RelTimeToAbsTime(std::max(savedSel.startTime, savedSel.endTime));
           MediaTrack* track = m_workingSet.track;
-
-          if (g_ValidatePtr2 && g_ValidatePtr2(nullptr, track, "MediaTrack*") &&
-              g_GetTrackNumMediaItems && g_GetTrackMediaItem) {
+          if (g_ValidatePtr2 && g_ValidatePtr2(nullptr, track, "MediaTrack*")) {
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-
-            int count = g_GetTrackNumMediaItems(track);
-            std::vector<MediaItem*> overlap;
-            for (int i = 0; i < count; i++) {
-              MediaItem* mi = g_GetTrackMediaItem(track, i);
-              if (!mi) continue;
-              double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
-              double l = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
-              if (p + l > absStart && p < absEnd)
-                overlap.push_back(mi);
-            }
-
-            // Constants from config.h: GAIN_XFADE_SEC, GAIN_EDGE_EPS_SET
-
-            for (size_t oi = 0; oi < overlap.size(); oi++) {
-              MediaItem* mi = overlap[oi];
-              if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, mi, "MediaItem*")) continue;
-              double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
-              double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
-
-              MediaItem* target = mi;
-              bool startAligned = std::abs(p - absStart) < GAIN_EDGE_EPS_SET;
-              bool endAligned = std::abs(e - absEnd) < GAIN_EDGE_EPS_SET;
-              bool didSplitStart = false, didSplitEnd = false;
-
-              if (p >= absStart - GAIN_EDGE_EPS_SET && e <= absEnd + GAIN_EDGE_EPS_SET) {
-                target = mi;
-              } else if (p < absStart - GAIN_EDGE_EPS_SET && e > absEnd + GAIN_EDGE_EPS_SET) {
-                g_SplitMediaItem(mi, absEnd);
-                target = g_SplitMediaItem(mi, absStart);
-                didSplitStart = didSplitEnd = true;
-              } else if (p < absStart - GAIN_EDGE_EPS_SET) {
-                target = g_SplitMediaItem(mi, absStart);
-                didSplitStart = true;
-              } else {
-                g_SplitMediaItem(mi, absEnd);
-                target = mi;
-                didSplitEnd = true;
-              }
-
-              if (!target) continue;
-              double v = g_GetMediaItemInfo_Value(target, "D_VOL");
-              g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
-
-              // Crossfade overlap only at freshly created split points
-              double tpos = g_GetMediaItemInfo_Value(target, "D_POSITION");
-              double tlen = g_GetMediaItemInfo_Value(target, "D_LENGTH");
-              double xf = std::min(GAIN_XFADE_SEC, tlen * 0.2);
-              MediaItem_Take* take = g_GetActiveTake ? g_GetActiveTake(target) : nullptr;
-
-              if (didSplitStart && take && g_GetSetMediaItemTakeInfo && xf > 0.0) {
-                double* pOff = (double*)g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", nullptr);
-                double soff = pOff ? *pOff : 0.0;
-                double lxf = std::min(xf, soff);
-                if (lxf > 0.0) {
-                  double newOff = soff - lxf;
-                  g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", &newOff);
-                  g_SetMediaItemInfo_Value(target, "D_POSITION", tpos - lxf);
-                  g_SetMediaItemInfo_Value(target, "D_LENGTH", tlen + lxf);
-                }
-              }
-
-              if (didSplitEnd) {
-                double curLen = g_GetMediaItemInfo_Value(target, "D_LENGTH");
-                g_SetMediaItemInfo_Value(target, "D_LENGTH", curLen + xf);
-              }
-            }
-
+            SplitGainParams p{absStart, absEnd, factor, GAIN_EDGE_EPS_SET, GAIN_XFADE_SEC};
+            SplitAndApplyGain(track, p);
             if (g_UpdateArrange) g_UpdateArrange();
             char desc[64];
             snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", db);
@@ -572,44 +504,16 @@ void SneakPeak::OnMouseUp(int x, int y)
           snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
           if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
           if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-        } else if ((m_waveform.IsTimelineOrMultiItem()) && hasSel && g_SplitMediaItem &&
-            g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
-          DBG("[SneakPeak] GainPath: TIMELINE/MULTI+SEL split+D_VOL factor=%.4f\n", factor);
+        } else if (m_waveform.IsTimelineOrMultiItem() && hasSel) {
+          // Timeline/Multi-item with selection: split + D_VOL (no crossfade)
           double absStart = m_waveform.RelTimeToAbsTime(std::min(savedSel.startTime, savedSel.endTime));
           double absEnd = m_waveform.RelTimeToAbsTime(std::max(savedSel.startTime, savedSel.endTime));
           MediaTrack* trk = g_GetMediaItem_Track ? g_GetMediaItem_Track(m_waveform.GetItem()) : nullptr;
-          if (trk && g_GetTrackNumMediaItems && g_GetTrackMediaItem) {
+          if (trk) {
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-            // Uses GAIN_EDGE_EPS from config.h
-            int count = g_GetTrackNumMediaItems(trk);
-            std::vector<MediaItem*> overlap;
-            for (int i = 0; i < count; i++) {
-              MediaItem* mi = g_GetTrackMediaItem(trk, i);
-              if (!mi) continue;
-              double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
-              double l = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
-              if (p + l > absStart && p < absEnd) overlap.push_back(mi);
-            }
-            for (auto* mi : overlap) {
-              double p = g_GetMediaItemInfo_Value(mi, "D_POSITION");
-              double e = p + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
-              MediaItem* target = mi;
-              bool didSplitStart = false, didSplitEnd = false;
-              if (p >= absStart - GAIN_EDGE_EPS && e <= absEnd + GAIN_EDGE_EPS) {
-                target = mi;
-              } else if (p < absStart - GAIN_EDGE_EPS && e > absEnd + GAIN_EDGE_EPS) {
-                g_SplitMediaItem(mi, absEnd); didSplitEnd = true;
-                target = g_SplitMediaItem(mi, absStart); didSplitStart = true;
-              } else if (p < absStart - GAIN_EDGE_EPS) {
-                target = g_SplitMediaItem(mi, absStart); didSplitStart = true;
-              } else {
-                g_SplitMediaItem(mi, absEnd); didSplitEnd = true;
-              }
-              if (!target) continue;
-              double v = g_GetMediaItemInfo_Value(target, "D_VOL");
-              g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
-            }
+            SplitGainParams p{absStart, absEnd, factor, GAIN_EDGE_EPS, 0.0};
+            SplitAndApplyGain(trk, p);
             if (g_UpdateArrange) g_UpdateArrange();
             char desc[64];
             snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", db);
@@ -631,35 +535,16 @@ void SneakPeak::OnMouseUp(int x, int y)
           snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB", db);
           if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
           if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-        } else if (hasSel && g_SplitMediaItem && g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value) {
-          DBG("[SneakPeak] GainPath: SINGLE+SEL split+D_VOL factor=%.4f\n", factor);
+        } else if (hasSel) {
+          // Single-item with selection: split + D_VOL
           MediaItem* item = m_waveform.GetItem();
-          MediaTrack* trk = g_GetMediaItem_Track ? g_GetMediaItem_Track(item) : nullptr;
-          if (item && trk) {
+          if (item) {
             double absStart = m_waveform.RelTimeToAbsTime(std::min(savedSel.startTime, savedSel.endTime));
             double absEnd = m_waveform.RelTimeToAbsTime(std::max(savedSel.startTime, savedSel.endTime));
-            double itemPos = g_GetMediaItemInfo_Value(item, "D_POSITION");
-            double itemEnd = itemPos + g_GetMediaItemInfo_Value(item, "D_LENGTH");
-            // Uses GAIN_EDGE_EPS from config.h
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-            MediaItem* target = item;
-            bool startAtEdge = std::abs(absStart - itemPos) < GAIN_EDGE_EPS;
-            bool endAtEdge = std::abs(absEnd - itemEnd) < GAIN_EDGE_EPS;
-            if (startAtEdge && endAtEdge) {
-              // Selection = entire item
-            } else if (startAtEdge) {
-              g_SplitMediaItem(item, absEnd);
-            } else if (endAtEdge) {
-              target = g_SplitMediaItem(item, absStart);
-            } else {
-              g_SplitMediaItem(item, absEnd);
-              target = g_SplitMediaItem(item, absStart);
-            }
-            if (target) {
-              double v = g_GetMediaItemInfo_Value(target, "D_VOL");
-              g_SetMediaItemInfo_Value(target, "D_VOL", v * factor);
-            }
+            SplitGainParams p{absStart, absEnd, factor, GAIN_EDGE_EPS, 0.0};
+            SplitAndApplyGainSingle(item, p);
             if (g_UpdateArrange) g_UpdateArrange();
             char desc[64];
             snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", db);

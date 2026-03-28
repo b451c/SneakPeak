@@ -36,6 +36,7 @@ add_library(reaper_sneakpeak SHARED
   src/theme.cpp
   src/audio_engine.cpp
   src/audio_ops.cpp
+  src/item_split_ops.cpp
   src/gain_panel.cpp
   src/marker_manager.cpp
   src/levels_panel.cpp
