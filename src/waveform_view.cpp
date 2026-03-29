@@ -490,6 +490,11 @@ bool WaveformView::CheckAudioChanged()
 
 void WaveformView::ReloadAfterExternalChange()
 {
+  // Validate take pointer before reload (may be dangling after undo)
+  if (m_take && g_ValidatePtr2 && !g_ValidatePtr2(nullptr, m_take, "MediaItem_Take*")) {
+    m_take = nullptr;
+    return;
+  }
   if (m_liveAccessor && g_AudioAccessorValidateState)
     g_AudioAccessorValidateState(m_liveAccessor);
   LoadAudioData();
