@@ -858,7 +858,9 @@ void SneakPeak::UpdateItemState()
   }
 
   // External audio change detection (every 30 ticks ≈ 1 second)
-  if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+  // Skip in multi-item/timeline modes (ScaleAudioBuffer handles gain changes in-place)
+  if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()
+      && !m_waveform.IsMultiItemActive() && !m_waveform.IsTimelineView()) {
     if (++m_audioChangeCheckCounter >= 30) {
       m_audioChangeCheckCounter = 0;
       if (m_waveform.CheckAudioChanged()) {

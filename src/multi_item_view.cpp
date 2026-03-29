@@ -15,6 +15,7 @@ void MultiItemView::ScaleLayerAudio(double factor)
   for (auto& layer : m_layers) {
     for (size_t i = 0; i < layer.audio.size(); i++)
       layer.audio[i] *= factor;
+    layer.itemVol *= factor; // sync with new D_VOL to prevent CheckVolumeChanged reload
   }
   m_peaksValid = false;
 }
@@ -27,7 +28,6 @@ void MultiItemView::ScaleLayerAudioRange(double factor, double startTime, double
   for (auto& layer : m_layers) {
     double layerStart = layer.position;
     double layerEnd = layer.position + layer.duration;
-    // Overlap check
     if (layerEnd <= absStart || layerStart >= absEnd) continue;
     double overlapStart = std::max(layerStart, absStart);
     double overlapEnd = std::min(layerEnd, absEnd);
@@ -39,6 +39,15 @@ void MultiItemView::ScaleLayerAudioRange(double factor, double startTime, double
     for (int f = f0; f < f1; f++) {
       for (int ch = 0; ch < nch; ch++)
         layer.audio[(size_t)f * nch + ch] *= factor;
+    }
+    // Sync itemVol with current D_VOL to prevent CheckVolumeChanged reload
+    if (layer.item && g_GetMediaItemInfo_Value) {
+      double vol = g_GetMediaItemInfo_Value(layer.item, "D_VOL");
+      if (g_GetSetMediaItemTakeInfo && layer.take) {
+        double* pv = (double*)g_GetSetMediaItemTakeInfo(layer.take, "D_VOL", nullptr);
+        if (pv) vol *= *pv;
+      }
+      if (vol > 0.0) layer.itemVol = vol;
     }
   }
   m_peaksValid = false;
