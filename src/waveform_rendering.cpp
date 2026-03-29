@@ -847,14 +847,15 @@ void WaveformView::UpdateFadeCacheMulti()
 {
   m_fadeCache = {};
   m_fadeCache.itemVol = m_batchGainOffset;
+  if (m_segments.empty()) return;
   MediaItem* first = m_segments.front().item;
-  if (first) {
+  if (first && (!g_ValidatePtr2 || g_ValidatePtr2(nullptr, first, "MediaItem*"))) {
     m_fadeCache.fadeInLen = g_GetMediaItemInfo_Value(first, "D_FADEINLEN");
     m_fadeCache.fadeInShape = (int)g_GetMediaItemInfo_Value(first, "C_FADEINSHAPE");
     m_fadeCache.fadeInDir = g_GetMediaItemInfo_Value(first, "D_FADEINDIR");
   }
   MediaItem* last = m_segments.back().item;
-  if (last) {
+  if (last && (!g_ValidatePtr2 || g_ValidatePtr2(nullptr, last, "MediaItem*"))) {
     m_fadeCache.fadeOutLen = g_GetMediaItemInfo_Value(last, "D_FADEOUTLEN");
     m_fadeCache.fadeOutShape = (int)g_GetMediaItemInfo_Value(last, "C_FADEOUTSHAPE");
     m_fadeCache.fadeOutDir = g_GetMediaItemInfo_Value(last, "D_FADEOUTDIR");
@@ -863,8 +864,9 @@ void WaveformView::UpdateFadeCacheMulti()
 
 void WaveformView::UpdateFadeCacheSingle()
 {
+  if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, m_item, "MediaItem*")) return;
   m_fadeCache.itemVol = g_GetMediaItemInfo_Value(m_item, "D_VOL");
-  if (g_GetSetMediaItemTakeInfo && m_take) {
+  if (g_GetSetMediaItemTakeInfo && m_take && (!g_ValidatePtr2 || g_ValidatePtr2(nullptr, m_take, "MediaItem_Take*"))) {
     double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_take, "D_VOL", nullptr);
     if (pTakeVol) m_fadeCache.itemVol *= *pTakeVol;
   }
