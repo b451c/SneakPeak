@@ -607,6 +607,11 @@ void SneakPeak::LoadSelectedItem()
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
+  // Restore selection after reload if pending from gain operation
+  if (m_pendingSelRestore.active) {
+    m_waveform.SetSelection(m_pendingSelRestore);
+    m_pendingSelRestore = {};
+  }
 }
 
 void SneakPeak::OnTimer()
@@ -858,9 +863,10 @@ void SneakPeak::UpdateItemState()
   }
 
   // External audio change detection (every 30 ticks ≈ 1 second)
-  // Skip in multi-item/timeline modes (ScaleAudioBuffer handles gain changes in-place)
+  // Skip during/after gain operations (editGuard) and in multi-item/timeline modes
   if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()
-      && !m_waveform.IsMultiItemActive() && !m_waveform.IsTimelineView()) {
+      && !m_waveform.IsMultiItemActive() && !m_waveform.IsTimelineView()
+      && m_timelineEditGuard <= 0) {
     if (++m_audioChangeCheckCounter >= 30) {
       m_audioChangeCheckCounter = 0;
       if (m_waveform.CheckAudioChanged()) {

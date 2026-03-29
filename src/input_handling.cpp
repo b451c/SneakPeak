@@ -1017,6 +1017,10 @@ void SneakPeak::OnToolbarClick(int button)
 void SneakPeak::ReloadAfterGainChange(double savedViewStart, double savedViewDur,
                                        const WaveformSelection& savedSel, double savedCursor, double db)
 {
+  // Suppress external audio change detection and preserve selection after any gain change
+  m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
+  m_pendingSelRestore = savedSel;
+
   if (m_workingSet.active) {
     RefreshWorkingSet();
     if (m_waveform.GetItemDuration() > 0) {

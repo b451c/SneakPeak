@@ -214,6 +214,7 @@ private:
   bool m_pendingClose = false;
   bool m_isDocked = false;
   int m_timelineEditGuard = 0; // ticks to suppress timeline exit after edit operation
+  WaveformSelection m_pendingSelRestore = {}; // selection to restore after guarded reload
   bool m_dragging = false;
   bool m_scrollbarDragging = false;
   int m_lastMouseX = 0;
