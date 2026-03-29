@@ -69,6 +69,8 @@ public:
                      std::vector<double>& out) const;
 
   void Invalidate() { m_peaksValid = false; }
+  void ScaleLayerAudio(double factor); // multiply all layer audio in-place
+  void ScaleLayerAudioRange(double factor, double startTime, double endTime, int sampleRate); // multiply range
   void Clear();
 
   // Check if any layer's volume changed since load — caller should reload if true

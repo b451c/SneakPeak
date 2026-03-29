@@ -1026,9 +1026,19 @@ void SneakPeak::ReloadAfterGainChange(double savedViewStart, double savedViewDur
     if (savedSel.active) m_waveform.SetSelection(savedSel);
     m_waveform.SetCursorTime(std::min(savedCursor, m_waveform.GetItemDuration()));
   } else if (m_waveform.IsMultiItemActive()) {
-    m_waveform.ClearItem();
-    LoadSelectedItem();
-    if (savedSel.active) m_waveform.SetSelection(savedSel);
+    m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
+    if (savedSel.active && std::abs(db) > 0.01) {
+      // Selection gain: scale the visible range in multi-item layers
+      // D_VOL already written to REAPER items; defer full reload to timer
+      double f = pow(10.0, db / 20.0);
+      double selS = std::min(savedSel.startTime, savedSel.endTime);
+      double selE = std::max(savedSel.startTime, savedSel.endTime);
+      m_waveform.ScaleAudioRange(f, selS, selE);
+      m_waveform.SetSelection(savedSel);
+    } else if (std::abs(db) > 0.01) {
+      double f = pow(10.0, db / 20.0);
+      m_waveform.ScaleAudioBuffer(f);
+    }
   } else if (m_waveform.IsTimelineView()) {
     m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
     if (savedSel.active && std::abs(db) > 0.01) {

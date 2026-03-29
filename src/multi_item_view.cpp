@@ -9,6 +9,41 @@
 #include <cmath>
 #include <cstring>
 
+void MultiItemView::ScaleLayerAudio(double factor)
+{
+  if (factor == 1.0) return;
+  for (auto& layer : m_layers) {
+    for (size_t i = 0; i < layer.audio.size(); i++)
+      layer.audio[i] *= factor;
+  }
+  m_peaksValid = false;
+}
+
+void MultiItemView::ScaleLayerAudioRange(double factor, double startTime, double endTime, int sampleRate)
+{
+  if (factor == 1.0 || startTime >= endTime || sampleRate <= 0) return;
+  double absStart = m_timelineStart + startTime;
+  double absEnd = m_timelineStart + endTime;
+  for (auto& layer : m_layers) {
+    double layerStart = layer.position;
+    double layerEnd = layer.position + layer.duration;
+    // Overlap check
+    if (layerEnd <= absStart || layerStart >= absEnd) continue;
+    double overlapStart = std::max(layerStart, absStart);
+    double overlapEnd = std::min(layerEnd, absEnd);
+    int f0 = (int)((overlapStart - layerStart) * sampleRate);
+    int f1 = (int)((overlapEnd - layerStart) * sampleRate);
+    f0 = std::max(0, std::min(f0, layer.audioFrameCount));
+    f1 = std::max(f0, std::min(f1, layer.audioFrameCount));
+    int nch = (int)layer.audio.size() / std::max(1, layer.audioFrameCount);
+    for (int f = f0; f < f1; f++) {
+      for (int ch = 0; ch < nch; ch++)
+        layer.audio[(size_t)f * nch + ch] *= factor;
+    }
+  }
+  m_peaksValid = false;
+}
+
 void MultiItemView::Clear()
 {
   m_layers.clear();

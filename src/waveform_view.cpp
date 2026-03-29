@@ -425,20 +425,28 @@ void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
 
 void WaveformView::ScaleAudioBuffer(double factor)
 {
-  if (factor == 1.0 || m_audioData.empty()) return;
-  for (size_t i = 0; i < m_audioData.size(); i++)
-    m_audioData[i] *= factor;
+  if (factor == 1.0) return;
+  if (m_multiItemActive) {
+    m_multiItem.ScaleLayerAudio(factor);
+  } else if (!m_audioData.empty()) {
+    for (size_t i = 0; i < m_audioData.size(); i++)
+      m_audioData[i] *= factor;
+  }
   m_peaksValid = false;
 }
 
 void WaveformView::ScaleAudioRange(double factor, double startTime, double endTime)
 {
-  if (factor == 1.0 || m_audioData.empty() || startTime >= endTime) return;
-  int f0 = std::max(0, (int)(startTime * m_sampleRate));
-  int f1 = std::min(m_audioSampleCount, (int)(endTime * m_sampleRate));
-  for (int f = f0; f < f1; f++) {
-    for (int ch = 0; ch < m_numChannels; ch++)
-      m_audioData[(size_t)f * m_numChannels + ch] *= factor;
+  if (factor == 1.0 || startTime >= endTime) return;
+  if (m_multiItemActive) {
+    m_multiItem.ScaleLayerAudioRange(factor, startTime, endTime, m_sampleRate);
+  } else if (!m_audioData.empty()) {
+    int f0 = std::max(0, (int)(startTime * m_sampleRate));
+    int f1 = std::min(m_audioSampleCount, (int)(endTime * m_sampleRate));
+    for (int f = f0; f < f1; f++) {
+      for (int ch = 0; ch < m_numChannels; ch++)
+        m_audioData[(size_t)f * m_numChannels + ch] *= factor;
+    }
   }
   m_peaksValid = false;
 }
