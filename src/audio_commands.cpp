@@ -543,26 +543,61 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
 
   // Track view: refresh to show updated track (items re-collapse)
   if (m_workingSet.active) {
+    // Rebuild items list from track (split/delete created new items not in original list)
+    if (track && g_GetTrackNumMediaItems && g_GetTrackMediaItem) {
+      m_workingSet.items.clear();
+      int cnt = g_GetTrackNumMediaItems(track);
+      for (int i = 0; i < cnt; i++) {
+        MediaItem* mi = g_GetTrackMediaItem(track, i);
+        if (!mi) continue;
+        double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+        double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+        if (pos + len > m_workingSet.startPos && pos < m_workingSet.endPos)
+          m_workingSet.items.push_back(mi);
+      }
+    }
     RefreshWorkingSet();
   } else if (m_waveform.IsTimelineOrMultiItem()) {
-    // Rebuild view from surviving segment items
+    // Rebuild view from surviving items on track
+    // Collect valid segment items + split survivors, then find all track items in their span
     double savedViewStart = m_waveform.GetViewStart();
     double savedViewDur = m_waveform.GetViewDuration();
-    std::vector<MediaItem*> items;
+
+    std::vector<MediaItem*> known; // known surviving items
     for (const auto& seg : m_waveform.GetSegments()) {
       if (!seg.item) continue;
       if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, seg.item, "MediaItem*")) continue;
-      // Item may have been split - collect all sub-items at its position
-      double segPos = g_GetMediaItemInfo_Value(seg.item, "D_POSITION");
-      double segEnd = segPos + g_GetMediaItemInfo_Value(seg.item, "D_LENGTH");
-      if (segEnd > segPos) items.push_back(seg.item);
+      known.push_back(seg.item);
     }
-    // Also add survivors from the delete operation (new split fragments)
     for (auto* s : survivors) {
       if (!s) continue;
+      if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, s, "MediaItem*")) continue;
       bool found = false;
-      for (auto* e : items) if (e == s) { found = true; break; }
-      if (!found) items.push_back(s);
+      for (auto* e : known) if (e == s) { found = true; break; }
+      if (!found) known.push_back(s);
+    }
+
+    // Determine actual span from surviving items' current positions
+    double tlStart = 1e30, tlEnd = -1e30;
+    for (auto* mi : known) {
+      double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+      double end = pos + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+      if (pos < tlStart) tlStart = pos;
+      if (end > tlEnd) tlEnd = end;
+    }
+
+    // Collect all track items within that span (includes any we missed)
+    std::vector<MediaItem*> items;
+    if (track && g_GetTrackNumMediaItems && g_GetTrackMediaItem && tlEnd > tlStart) {
+      int cnt = g_GetTrackNumMediaItems(track);
+      for (int i = 0; i < cnt; i++) {
+        MediaItem* mi = g_GetTrackMediaItem(track, i);
+        if (!mi) continue;
+        double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+        double end = pos + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+        if (pos >= tlStart - 0.001 && end <= tlEnd + 0.001 && end > pos)
+          items.push_back(mi);
+      }
     }
     DBG("[SneakPeak] Timeline refresh: %d items\n", (int)items.size());
     m_waveform.ClearItem();
@@ -573,9 +608,11 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
         if (!segItems.empty()) m_gainPanel.ShowBatch(segItems);
       }
       double dur = m_waveform.GetItemDuration();
-      if (dur > 0 && savedViewDur < dur * 0.99) {
-        m_waveform.SetViewStart(std::min(savedViewStart, std::max(0.0, dur - savedViewDur)));
-        m_waveform.SetViewDuration(std::min(savedViewDur, dur));
+      if (dur > 0) {
+        double vd = std::min(savedViewDur, dur);
+        double vs = std::min(savedViewStart, std::max(0.0, dur - vd));
+        m_waveform.SetViewStart(vs);
+        m_waveform.SetViewDuration(vd);
       }
       m_waveform.Invalidate();
     } else if (!items.empty()) {
@@ -604,13 +641,14 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
       LoadSelectedItem();
     }
 
-    // Restore zoom position
+    // Restore zoom position, clamped to new duration
     if (m_waveform.HasItem()) {
       double dur = m_waveform.GetItemDuration();
-      if (dur > 0 && savedViewDur < dur * 0.99) {
-        double vs = std::min(savedViewStart, std::max(0.0, dur - savedViewDur));
+      if (dur > 0) {
+        double vd = std::min(savedViewDur, dur);
+        double vs = std::min(savedViewStart, std::max(0.0, dur - vd));
         m_waveform.SetViewStart(vs);
-        m_waveform.SetViewDuration(std::min(savedViewDur, dur));
+        m_waveform.SetViewDuration(vd);
       }
       m_waveform.SetCursorTime(std::min(savedCursor, dur));
       m_waveform.Invalidate();
