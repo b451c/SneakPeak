@@ -1217,12 +1217,26 @@ void SneakPeak::OnKeyDown(WPARAM key)
         g_UpdateArrange();
       }
 
-      // Scroll to show the segment
+      // Move cursor into segment and sync to REAPER
+      m_waveform.SetCursorTime(seg.relativeOffset);
+      if (g_SetEditCurPos)
+        g_SetEditCurPos(m_waveform.RelTimeToAbsTime(seg.relativeOffset), false, false);
+
+      // If playing, jump playback to the new segment
+      bool isPlaying = g_GetPlayState && (g_GetPlayState() & 1);
+      if (isPlaying) {
+        SyncSelectionToReaper();
+        DoLoopSelection();
+      }
+
+      // Scroll to show the segment, clamped to audio bounds
       double segEnd = seg.relativeOffset + seg.duration;
       if (seg.relativeOffset < m_waveform.GetViewStart() ||
           segEnd > m_waveform.GetViewEnd()) {
         double pad = m_waveform.GetViewDuration() * 0.1;
-        m_waveform.SetViewStart(std::max(0.0, seg.relativeOffset - pad));
+        double vs = std::max(0.0, seg.relativeOffset - pad);
+        double maxStart = std::max(0.0, m_waveform.GetItemDuration() - m_waveform.GetViewDuration());
+        m_waveform.SetViewStart(std::min(vs, maxStart));
       }
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
