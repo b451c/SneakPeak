@@ -71,6 +71,7 @@ extern bool (*g_DeleteTrackMediaItem)(MediaTrack* tr, MediaItem* it);
 extern MediaTrack* (*g_GetMediaItem_Track)(MediaItem* item);
 extern MediaItem* (*g_AddMediaItemToTrack)(MediaTrack* tr);
 extern MediaItem_Take* (*g_AddTakeToMediaItem)(MediaItem* item);
+extern void (*g_UpdateItemInProject)(MediaItem* item);
 
 // Track items (for track follow)
 extern int (*g_GetTrackNumMediaItems)(MediaTrack* tr);

@@ -433,7 +433,9 @@ void SneakPeak::DoPaste()
   // Force REAPER to rebuild peaks for new item
   if (g_UpdateArrange) g_UpdateArrange();
   if (g_UpdateTimeline) g_UpdateTimeline();
-  if (g_Main_OnCommand) g_Main_OnCommand(40048, 0);
+  // Force REAPER to show waveform in pasted item
+  if (newItem && g_UpdateItemInProject) g_UpdateItemInProject(newItem);
+  if (g_Main_OnCommand) g_Main_OnCommand(40047, 0); // Peaks: Build any missing peaks
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
