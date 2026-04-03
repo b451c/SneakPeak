@@ -276,6 +276,10 @@ void SneakPeak::DoCut()
 void SneakPeak::DoPaste()
 {
   if (!m_waveform.HasItem() || s_clipboard.numFrames <= 0) return;
+  if (m_waveform.IsMultiItemActive()) {
+    MessageBox(m_hwnd, "Paste in multi-item view coming soon.", "SneakPeak", MB_OK);
+    return;
+  }
   // Standalone mode: destructive paste (no REAPER track)
   if (m_waveform.IsStandaloneMode()) {
     DoPasteDestructive();

@@ -108,6 +108,12 @@ extern double (*g_Track_GetPeakHoldDB)(MediaTrack* track, int channel, bool clea
 extern void (*g_GetProjectPathEx)(ReaProject* proj, char* bufOut, int bufOut_sz);
 extern ReaProject* (*g_EnumProjects)(int idx, char* projfnOutOptional, int projfnOutOptional_sz);
 
+// Tempo map (bars/beats ruler)
+extern double (*g_TimeMap2_timeToBeats)(ReaProject* proj, double tpos, int* measuresOut, int* cmlOut, double* fullbeatsOut, int* cdenomOut);
+extern double (*g_TimeMap2_beatsToTime)(ReaProject* proj, double tpos, const int* measuresIn);
+extern void (*g_TimeMap_GetTimeSigAtTime)(ReaProject* proj, double time, int* timesig_numOut, int* timesig_denomOut, double* tempoOut);
+extern double (*g_TimeMap_GetMeasureInfo)(ReaProject* proj, int measure, double* qn_startOut, double* qn_endOut, int* timesig_numOut, int* timesig_denomOut, double* tempoOut);
+
 // Pointer validation
 extern bool (*g_ValidatePtr2)(ReaProject* proj, void* pointer, const char* ctypename);
 

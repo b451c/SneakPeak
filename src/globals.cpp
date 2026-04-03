@@ -82,6 +82,12 @@ double (*g_Track_GetPeakHoldDB)(MediaTrack*, int, bool) = nullptr;
 void (*g_GetProjectPathEx)(ReaProject*, char*, int) = nullptr;
 ReaProject* (*g_EnumProjects)(int, char*, int) = nullptr;
 
+// Tempo map
+double (*g_TimeMap2_timeToBeats)(ReaProject*, double, int*, int*, double*, int*) = nullptr;
+double (*g_TimeMap2_beatsToTime)(ReaProject*, double, const int*) = nullptr;
+void (*g_TimeMap_GetTimeSigAtTime)(ReaProject*, double, int*, int*, double*) = nullptr;
+double (*g_TimeMap_GetMeasureInfo)(ReaProject*, int, double*, double*, int*, int*, double*) = nullptr;
+
 // Pointer validation
 bool (*g_ValidatePtr2)(ReaProject*, void*, const char*) = nullptr;
 

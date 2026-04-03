@@ -83,6 +83,12 @@
 // Time selection
 #define REAPERAPI_WANT_GetSet_LoopTimeRange2
 
+// Tempo map (bars/beats ruler)
+#define REAPERAPI_WANT_TimeMap2_timeToBeats
+#define REAPERAPI_WANT_TimeMap2_beatsToTime
+#define REAPERAPI_WANT_TimeMap_GetTimeSigAtTime
+#define REAPERAPI_WANT_TimeMap_GetMeasureInfo
+
 // UI / dialogs
 #define REAPERAPI_WANT_GetUserInputs
 
@@ -337,6 +343,11 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_PreventUIRefresh = PreventUIRefresh;
 
   g_GetSet_LoopTimeRange2 = GetSet_LoopTimeRange2;
+
+  g_TimeMap2_timeToBeats = TimeMap2_timeToBeats;
+  g_TimeMap2_beatsToTime = TimeMap2_beatsToTime;
+  g_TimeMap_GetTimeSigAtTime = TimeMap_GetTimeSigAtTime;
+  g_TimeMap_GetMeasureInfo = TimeMap_GetMeasureInfo;
 
   g_GetUserInputs = GetUserInputs;
   g_GetMasterTrack = GetMasterTrack;

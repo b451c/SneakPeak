@@ -178,8 +178,12 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(viewMenu, MF_STRING, CM_MINIMAP,
              m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
   if (hasItem) {
+    MenuAppend(viewMenu, MF_STRING, CM_RULER_RELATIVE,
+               m_rulerMode == RulerMode::Relative ? "Ruler: Relative Time  \xE2\x9C\x93" : "Ruler: Relative Time");
     MenuAppend(viewMenu, MF_STRING, CM_RULER_ABSOLUTE,
-               m_rulerAbsolute ? "Ruler: Absolute Time  \xE2\x9C\x93" : "Ruler: Absolute Time");
+               m_rulerMode == RulerMode::Absolute ? "Ruler: Absolute Time  \xE2\x9C\x93" : "Ruler: Absolute Time");
+    MenuAppend(viewMenu, MF_STRING, CM_RULER_BARS_BEATS,
+               m_rulerMode == RulerMode::BarsBeats ? "Ruler: Bars & Beats  \xE2\x9C\x93" : "Ruler: Bars & Beats");
   }
   if (!m_waveform.IsStandaloneMode() && hasItem) {
     MenuAppend(viewMenu, MF_STRING, CM_TRACK_VIEW,
@@ -356,10 +360,19 @@ void SneakPeak::OnContextMenuCommand(int id)
         m_waveform.Invalidate();
       }
       break;
+    case CM_RULER_RELATIVE:
+      m_rulerMode = RulerMode::Relative;
+      if (g_SetExtState) g_SetExtState("SneakPeak", "ruler_mode", "0", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
     case CM_RULER_ABSOLUTE:
-      m_rulerAbsolute = !m_rulerAbsolute;
-      if (g_SetExtState)
-        g_SetExtState("SneakPeak", "ruler_absolute", m_rulerAbsolute ? "1" : "0", true);
+      m_rulerMode = RulerMode::Absolute;
+      if (g_SetExtState) g_SetExtState("SneakPeak", "ruler_mode", "1", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_RULER_BARS_BEATS:
+      m_rulerMode = RulerMode::BarsBeats;
+      if (g_SetExtState) g_SetExtState("SneakPeak", "ruler_mode", "2", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_GROUP_SET: {

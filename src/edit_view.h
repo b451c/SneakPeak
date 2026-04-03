@@ -97,7 +97,9 @@ enum ContextMenuID {
   CM_GROUP_SET,
   CM_SPLIT,
   CM_DOCK_WINDOW,
+  CM_RULER_RELATIVE,
   CM_RULER_ABSOLUTE,
+  CM_RULER_BARS_BEATS,
   CM_METER_PEAK,
   CM_METER_RMS,
   CM_METER_VU,
@@ -150,6 +152,7 @@ private:
   void OnContextMenuCommand(int id);
 
   void DrawRuler(HDC hdc);
+  void DrawRulerBarsBeats(HDC hdc);
   void DrawBottomPanel(HDC hdc);
   void DrawScrollbar(HDC hdc);
   void DrawSplitter(HDC hdc);
@@ -312,7 +315,8 @@ private:
   // WAV format info (preserved for writing back)
   int m_wavBitsPerSample = 16;
   int m_wavAudioFormat = 1; // 1=PCM, 3=float
-  bool m_rulerAbsolute = false; // true = show absolute REAPER time on ruler
+  enum class RulerMode { Relative = 0, Absolute = 1, BarsBeats = 2 };
+  RulerMode m_rulerMode = RulerMode::Relative;
   int m_lastChanMode = -1;  // tracks I_CHANMODE for change detection
   int m_audioChangeCheckCounter = 0;  // poll counter for external audio changes
 

@@ -360,6 +360,7 @@ void SneakPeak::DrawRuler(HDC hdc)
   DeleteObject(borderPen);
 
   if (!m_waveform.HasItem()) return;
+  if (m_rulerMode == RulerMode::BarsBeats) { DrawRulerBarsBeats(hdc); return; }
 
   double viewStart = m_waveform.GetViewStart();
   double viewDur = m_waveform.GetViewDuration();
@@ -400,7 +401,7 @@ void SneakPeak::DrawRuler(HDC hdc)
     // Format as HH:MM:SS;ms (use absolute timeline time in working set mode)
     char label[32];
     {
-      double displayTime = m_rulerAbsolute ? m_waveform.RelTimeToAbsTime(t) : t;
+      double displayTime = (m_rulerMode != RulerMode::Relative) ? m_waveform.RelTimeToAbsTime(t) : t;
       int totalSec = (int)displayTime;
       int hours = totalSec / 3600;
       int mins = (totalSec % 3600) / 60;
@@ -872,7 +873,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
     char line[256];
     if (m_waveform.HasSelection()) {
       WaveformSelection sel = m_waveform.GetSelection();
-      bool tv = m_rulerAbsolute;
+      bool tv = (m_rulerMode != RulerMode::Relative);
       double s1 = tv ? m_waveform.RelTimeToAbsTime(sel.startTime) : sel.startTime;
       double s2 = tv ? m_waveform.RelTimeToAbsTime(sel.endTime) : sel.endTime;
       char sStart[16], sEnd[16], sDur[16];
@@ -883,7 +884,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
       SetTextColor(hdc, RGB(210, 210, 210));
     } else {
       char sCur[16];
-      double ct = m_rulerAbsolute
+      double ct = (m_rulerMode != RulerMode::Relative)
         ? m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime())
         : m_waveform.GetCursorTime();
       FormatTimeHMS(ct, sCur, sizeof(sCur));
@@ -897,8 +898,8 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
   {
     RECT r = { infoLeft, panelTop + rowH, infoRight, panelTop + rowH * 2 };
     char vStart[16], vEnd[16], vDur[16];
-    double vs = m_rulerAbsolute ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewStart()) : m_waveform.GetViewStart();
-    double ve = m_rulerAbsolute ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewEnd()) : m_waveform.GetViewEnd();
+    double vs = (m_rulerMode != RulerMode::Relative) ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewStart()) : m_waveform.GetViewStart();
+    double ve = (m_rulerMode != RulerMode::Relative) ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewEnd()) : m_waveform.GetViewEnd();
     FormatTimeHMS(vs, vStart, sizeof(vStart));
     FormatTimeHMS(ve, vEnd, sizeof(vEnd));
     FormatTimeHMS(m_waveform.GetViewDuration(), vDur, sizeof(vDur));
@@ -977,5 +978,97 @@ void SneakPeak::DrawToast(HDC hdc)
   int g = (alpha * 230) / 255;
   SetTextColor(hdc, RGB(g, g, g));
   DrawText(hdc, m_toastText, -1, &pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+}
+
+// --- Bars & Beats ruler ---
+
+void SneakPeak::DrawRulerBarsBeats(HDC hdc)
+{
+  if (!g_TimeMap2_timeToBeats || !g_TimeMap_GetMeasureInfo || !g_TimeMap_GetTimeSigAtTime) return;
+
+  int w = m_rulerRect.right - m_rulerRect.left;
+  int h = m_rulerRect.bottom - m_rulerRect.top;
+  int y = m_rulerRect.top;
+
+  double viewStart = m_waveform.GetViewStart();
+  double viewDur = m_waveform.GetViewDuration();
+  if (viewDur <= 0) return;
+
+  // Convert view bounds to absolute time for tempo map queries
+  double absStart = m_waveform.RelTimeToAbsTime(viewStart);
+  double absEnd = m_waveform.RelTimeToAbsTime(viewStart + viewDur);
+
+  // Find starting measure
+  int startMeasure = 0;
+  g_TimeMap2_timeToBeats(nullptr, absStart, &startMeasure, nullptr, nullptr, nullptr);
+  if (startMeasure > 0) startMeasure--;
+
+  SetBkMode(hdc, TRANSPARENT);
+  SetTextColor(hdc, g_theme.rulerText);
+  HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
+
+  HPEN majorPen = CreatePen(PS_SOLID, 1, g_theme.rulerTick);
+  HPEN minorPen = CreatePen(PS_SOLID, 1, g_theme.rulerTickMinor);
+
+  // Iterate measures until we pass the visible range
+  for (int m = startMeasure; ; m++) {
+    double qnStart, qnEnd;
+    int tsNum, tsDenom;
+    double tempo;
+    double measTime = g_TimeMap_GetMeasureInfo(nullptr, m, &qnStart, &qnEnd, &tsNum, &tsDenom, &tempo);
+    if (measTime > absEnd + 1.0) break; // past visible range
+
+    double nextMeasTime = g_TimeMap_GetMeasureInfo(nullptr, m + 1, nullptr, nullptr, nullptr, nullptr, nullptr);
+    double measDur = nextMeasTime - measTime;
+    if (measDur <= 0) break;
+
+    // Convert to relative time for pixel positioning
+    double relMeasTime = m_waveform.AbsTimeToRelTime(measTime);
+    int mx = m_waveform.TimeToX(relMeasTime);
+
+    // Draw major tick (measure start) + label
+    if (mx >= m_rulerRect.left && mx < m_rulerRect.right) {
+      HPEN op = (HPEN)SelectObject(hdc, majorPen);
+      MoveToEx(hdc, mx, y + h - 8, nullptr);
+      LineTo(hdc, mx, y + h - 1);
+      SelectObject(hdc, op);
+
+      char label[32];
+      snprintf(label, sizeof(label), "%d", m + 1); // 1-based measure number
+      RECT lr = { mx + 3, y + 1, mx + 60, y + h - 2 };
+      DrawText(hdc, label, -1, &lr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
+
+    // Draw beat subdivisions within this measure
+    if (tsNum <= 0) tsNum = 4;
+    double beatDur = measDur / (double)tsNum;
+    double minBeatPx = 20.0; // minimum pixels between beat ticks
+    double beatPx = beatDur / viewDur * (double)w;
+    if (beatPx < minBeatPx) continue; // too dense, skip beats
+
+    for (int b = 1; b < tsNum; b++) {
+      double beatTime = measTime + beatDur * (double)b;
+      double relBeat = m_waveform.AbsTimeToRelTime(beatTime);
+      int bx = m_waveform.TimeToX(relBeat);
+      if (bx >= m_rulerRect.left && bx < m_rulerRect.right) {
+        HPEN op = (HPEN)SelectObject(hdc, minorPen);
+        MoveToEx(hdc, bx, y + h - 5, nullptr);
+        LineTo(hdc, bx, y + h - 1);
+        SelectObject(hdc, op);
+
+        // Beat label at higher zoom
+        if (beatPx > 50.0) {
+          char bl[16];
+          snprintf(bl, sizeof(bl), "%d:%d", m + 1, b + 1);
+          RECT br = { bx + 2, y + 1, bx + 50, y + h - 2 };
+          DrawText(hdc, bl, -1, &br, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
+      }
+    }
+  }
+
+  DeleteObject(majorPen);
+  DeleteObject(minorPen);
+  SelectObject(hdc, oldFont);
 }
 

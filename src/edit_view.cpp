@@ -63,8 +63,8 @@ void SneakPeak::Create()
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED);
     else if (multiMode && strcmp(multiMode, "layered_tracks") == 0)
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED_TRACKS);
-    const char* rulerAbs = g_GetExtState("SneakPeak", "ruler_absolute");
-    if (rulerAbs && rulerAbs[0] == '1') m_rulerAbsolute = true;
+    const char* rulerMode = g_GetExtState("SneakPeak", "ruler_mode");
+    if (rulerMode) m_rulerMode = static_cast<RulerMode>(atoi(rulerMode));
     const char* joinLines = g_GetExtState("SneakPeak", "show_join_lines");
     if (joinLines && joinLines[0] == '0') m_waveform.SetShowJoinLines(false);
     const char* meterMode = g_GetExtState("SneakPeak", "meter_mode");
@@ -176,7 +176,7 @@ void SneakPeak::LoadWorkingSet()
 
   m_workingSet.active = true;
   m_workingSet.dormant = false;
-  m_rulerAbsolute = true; // default to absolute time in working set
+  m_rulerMode = RulerMode::Absolute; // default to absolute time in working set
 
   m_spectralVisible = false;
   m_spectral.ClearSpectrum();
