@@ -68,6 +68,8 @@
 #define REAPERAPI_WANT_SplitMediaItem
 #define REAPERAPI_WANT_DeleteTrackMediaItem
 #define REAPERAPI_WANT_GetMediaItem_Track
+#define REAPERAPI_WANT_AddMediaItemToTrack
+#define REAPERAPI_WANT_AddTakeToMediaItem
 
 // Track items (for track follow)
 #define REAPERAPI_WANT_GetTrackNumMediaItems
@@ -312,6 +314,8 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_SplitMediaItem = SplitMediaItem;
   g_DeleteTrackMediaItem = DeleteTrackMediaItem;
   g_GetMediaItem_Track = GetMediaItem_Track;
+  g_AddMediaItemToTrack = AddMediaItemToTrack;
+  g_AddTakeToMediaItem = AddTakeToMediaItem;
 
   g_GetTrackNumMediaItems = GetTrackNumMediaItems;
   g_GetTrackMediaItem = GetTrackMediaItem;

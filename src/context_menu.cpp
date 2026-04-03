@@ -98,7 +98,9 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppendSeparator(editMenu);
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_CUT, "Cut\tCtrl+X");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_COPY, "Copy\tCtrl+C");
-  MenuAppend(editMenu, (hasItem && hasClip) ? MF_STRING : MF_GRAYED, CM_PASTE, "Paste (destructive)\tCtrl+V");
+  bool isStandalone = m_waveform.IsStandaloneMode();
+  MenuAppend(editMenu, (hasItem && hasClip) ? MF_STRING : MF_GRAYED, CM_PASTE,
+             isStandalone ? "Paste (destructive)\tCtrl+V" : "Paste\tCtrl+V");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_DELETE, "Delete\tDel");
   bool canRipple = hasItem && hasSel && !m_waveform.IsStandaloneMode();
   MenuAppend(editMenu, canRipple ? MF_STRING : MF_GRAYED, CM_RIPPLE_DELETE, "Ripple Delete\tShift+Del");

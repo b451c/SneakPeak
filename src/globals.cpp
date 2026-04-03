@@ -51,6 +51,8 @@ bool (*g_SetProjectMarkerByIndex2)(ReaProject*, int, bool, double, double, int, 
 MediaItem* (*g_SplitMediaItem)(MediaItem*, double) = nullptr;
 bool (*g_DeleteTrackMediaItem)(MediaTrack*, MediaItem*) = nullptr;
 MediaTrack* (*g_GetMediaItem_Track)(MediaItem*) = nullptr;
+MediaItem* (*g_AddMediaItemToTrack)(MediaTrack*) = nullptr;
+MediaItem_Take* (*g_AddTakeToMediaItem)(MediaItem*) = nullptr;
 
 // Track items (for track follow)
 int (*g_GetTrackNumMediaItems)(MediaTrack*) = nullptr;

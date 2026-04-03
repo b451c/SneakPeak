@@ -167,6 +167,7 @@ private:
   void DoCopy();
   void DoCut();
   void DoPaste();
+  void DoPasteDestructive();
   void DoDelete(bool ripple = false);
   void DoDeleteStandalone();
   void DoDeleteNonDestructive(bool ripple = false);

@@ -16,6 +16,8 @@
 #include <cstring>
 #include <cstdio>
 #include <cmath>
+#include <ctime>
+#include <unistd.h>
 #include <algorithm>
 
 
@@ -274,15 +276,170 @@ void SneakPeak::DoCut()
 void SneakPeak::DoPaste()
 {
   if (!m_waveform.HasItem() || s_clipboard.numFrames <= 0) return;
-  if (s_clipboard.numChannels != m_waveform.GetNumChannels()) return;
-  if (m_waveform.IsMultiItem()) {
-    MessageBox(m_hwnd, "Paste is not supported in multi-item view.", "SneakPeak", MB_OK);
+  // Standalone mode: destructive paste (no REAPER track)
+  if (m_waveform.IsStandaloneMode()) {
+    DoPasteDestructive();
     return;
   }
 
+  // --- Non-destructive insert-paste (all modes) ---
+  // 1. Find item under cursor, resolve its track
+  // 2. Split that item at cursor
+  // 3. Ripple all subsequent items on that track right by clipboard duration
+  // 4. Insert new item in the gap
+  // 5. Rebuild view
+
+  if (!g_AddMediaItemToTrack || !g_AddTakeToMediaItem || !g_PCM_Source_CreateFromFile ||
+      !g_GetMediaItem_Track || !g_GetSetMediaItemTakeInfo || !g_SplitMediaItem ||
+      !g_GetTrackNumMediaItems || !g_GetTrackMediaItem) return;
+
+  // Resolve absolute cursor position and track from segments
+  // (RelTimeToAbsTime may be wrong in multi-item/concatenated views)
+  MediaTrack* track = nullptr;
+  double cursorRel = m_waveform.GetCursorTime();
+  double absPos = 0.0;
+  if (m_workingSet.active) {
+    track = m_workingSet.track;
+    absPos = m_waveform.RelTimeToAbsTime(cursorRel);
+  } else {
+    // Find segment containing cursor, compute absPos from segment data
+    bool found = false;
+    for (const auto& seg : m_waveform.GetSegments()) {
+      if (!seg.item) continue;
+      if (cursorRel >= seg.relativeOffset - 0.001 &&
+          cursorRel <= seg.relativeOffset + seg.duration + 0.001) {
+        absPos = seg.position + (cursorRel - seg.relativeOffset);
+        track = g_GetMediaItem_Track(seg.item);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // Cursor outside any segment - use RelTimeToAbsTime as fallback
+      absPos = m_waveform.RelTimeToAbsTime(cursorRel);
+      if (m_waveform.GetItem())
+        track = g_GetMediaItem_Track(m_waveform.GetItem());
+    }
+  }
+  if (!track) return;
+
+  // Write clipboard to temp WAV
+  char tempPath[512];
+  snprintf(tempPath, sizeof(tempPath), "/tmp/sneakpeak_paste_%d_%lld.wav",
+           (int)getpid(), (long long)time(nullptr));
+  if (!AudioEngine::WriteWavFile(tempPath, s_clipboard.samples.data(),
+      s_clipboard.numFrames, s_clipboard.numChannels, s_clipboard.sampleRate, 32, 3))
+    return;
+
+  double clipDur = (double)s_clipboard.numFrames / (double)s_clipboard.sampleRate;
+
+  // Compute original range of items we're managing (for view rebuild)
+  double origStart, origEnd;
+  if (m_waveform.IsTimelineOrMultiItem() || m_waveform.IsTrackView()) {
+    const auto& segs = m_waveform.GetSegments();
+    origStart = segs.front().position;
+    origEnd = segs.back().position + segs.back().duration;
+  } else {
+    origStart = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_POSITION");
+    origEnd = origStart + g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_LENGTH");
+  }
+
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+
+  // Find and split the item under cursor (scan track, not just first segment)
+  int cnt = g_GetTrackNumMediaItems(track);
+  for (int i = 0; i < cnt; i++) {
+    MediaItem* mi = g_GetTrackMediaItem(track, i);
+    if (!mi) continue;
+    double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    double end = pos + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+    if (absPos > pos + 0.001 && absPos < end - 0.001) {
+      g_SplitMediaItem(mi, absPos);
+      break;
+    }
+  }
+
+  // Ripple: shift all items at or after cursor right by clipboard duration
+  cnt = g_GetTrackNumMediaItems(track); // re-count after split
+  for (int i = cnt - 1; i >= 0; i--) { // reverse to avoid double-shift
+    MediaItem* mi = g_GetTrackMediaItem(track, i);
+    if (!mi) continue;
+    double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    if (pos >= absPos - 0.0001)
+      g_SetMediaItemInfo_Value(mi, "D_POSITION", pos + clipDur);
+  }
+
+  // Create new item in the gap
+  MediaItem* newItem = g_AddMediaItemToTrack(track);
+  if (newItem) {
+    MediaItem_Take* newTake = g_AddTakeToMediaItem(newItem);
+    if (newTake) {
+      PCM_source* src = g_PCM_Source_CreateFromFile(tempPath);
+      if (src) g_GetSetMediaItemTakeInfo(newTake, "P_SOURCE", src);
+    }
+    g_SetMediaItemInfo_Value(newItem, "D_POSITION", absPos);
+    g_SetMediaItemInfo_Value(newItem, "D_LENGTH", clipDur);
+  }
+
+  if (g_UpdateArrange) g_UpdateArrange();
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Paste", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+
+  // Rebuild view: collect all items in expanded range from track
+  m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
+  double newEnd = origEnd + clipDur;
+  std::vector<MediaItem*> rebuilt;
+  cnt = g_GetTrackNumMediaItems(track);
+  for (int i = 0; i < cnt; i++) {
+    MediaItem* mi = g_GetTrackMediaItem(track, i);
+    if (!mi) continue;
+    double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    double end = pos + g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+    if (pos >= origStart - 0.001 && end <= newEnd + 0.001)
+      rebuilt.push_back(mi);
+  }
+
+  // Rebuild appropriate view mode
+  if (m_workingSet.active) {
+    m_workingSet.items = rebuilt;
+    m_workingSet.endPos += clipDur;
+    RefreshWorkingSet();
+  } else if (m_waveform.IsMultiItemActive()) {
+    // Multi-item: reload from REAPER selection (items may have shifted)
+    LoadSelectedItem();
+  } else if (rebuilt.size() >= 2) {
+    m_waveform.ClearItem();
+    m_waveform.LoadTimelineView(rebuilt);
+    { std::vector<MediaItem*> si;
+      for (const auto& s : m_waveform.GetSegments()) if (s.item) si.push_back(s.item);
+      if (!si.empty()) m_gainPanel.ShowBatch(si);
+    }
+  }
+
+  // Select pasted region in SneakPeak
+  if (m_waveform.HasItem()) {
+    double relPos = m_waveform.AbsTimeToRelTime(absPos);
+    m_waveform.StartSelection(relPos);
+    m_waveform.UpdateSelection(relPos + clipDur);
+    m_waveform.EndSelection();
+    m_waveform.SetCursorTime(relPos);
+  }
+
+  // Force REAPER to rebuild peaks for new item
+  if (g_UpdateArrange) g_UpdateArrange();
+  if (g_UpdateTimeline) g_UpdateTimeline();
+  if (g_Main_OnCommand) g_Main_OnCommand(40048, 0);
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+void SneakPeak::DoPasteDestructive()
+{
+  if (s_clipboard.numChannels != m_waveform.GetNumChannels()) return;
+
   int ret = MessageBox(m_hwnd,
     "Paste modifies the audio file on disk. Continue?",
-    "SneakPeak — Destructive Operation", MB_YESNO | MB_ICONWARNING);
+    "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);

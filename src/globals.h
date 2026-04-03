@@ -69,6 +69,8 @@ extern bool (*g_SetProjectMarkerByIndex2)(ReaProject* proj, int markrgnidx, bool
 extern MediaItem* (*g_SplitMediaItem)(MediaItem* item, double position);
 extern bool (*g_DeleteTrackMediaItem)(MediaTrack* tr, MediaItem* it);
 extern MediaTrack* (*g_GetMediaItem_Track)(MediaItem* item);
+extern MediaItem* (*g_AddMediaItemToTrack)(MediaTrack* tr);
+extern MediaItem_Take* (*g_AddTakeToMediaItem)(MediaItem* item);
 
 // Track items (for track follow)
 extern int (*g_GetTrackNumMediaItems)(MediaTrack* tr);
