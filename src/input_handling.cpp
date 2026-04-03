@@ -899,8 +899,19 @@ void SneakPeak::OnKeyDown(WPARAM key)
         if (g_GetPlayState() & 1) {
           g_OnStopButton();
         } else if (m_waveform.HasItem() && m_waveform.HasSelection()) {
-          // Play selection (sets loop range + plays from start)
-          DoLoopSelection();
+          // Play selection only if cursor is inside it; otherwise play from cursor
+          WaveformSelection sel = m_waveform.GetSelection();
+          double selMin = std::min(sel.startTime, sel.endTime);
+          double selMax = std::max(sel.startTime, sel.endTime);
+          double cursor = m_waveform.GetCursorTime();
+          if (cursor >= selMin && cursor <= selMax) {
+            DoLoopSelection();
+          } else {
+            m_startedPlayback = true;
+            m_autoStopped = false;
+            m_playGraceTicks = PLAY_GRACE_TICKS;
+            g_OnPlayButton();
+          }
         } else {
           // No selection: play from cursor
           m_startedPlayback = true;
