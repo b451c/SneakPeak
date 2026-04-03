@@ -833,6 +833,7 @@ void SneakPeak::DoFadeIn()
   }
 
   // Non-destructive: set item fade-in length via D_FADEINLEN
+  // With selection: fade from item start to selection end
   if (!g_SetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();
@@ -840,9 +841,9 @@ void SneakPeak::DoFadeIn()
 
   if (m_waveform.HasSelection()) {
     WaveformSelection sel = m_waveform.GetSelection();
-    fadeLen = fabs(sel.endTime - sel.startTime);
+    fadeLen = std::max(sel.startTime, sel.endTime); // from item start to selection end
   } else {
-    fadeLen = m_waveform.GetItemDuration(); // fade entire item
+    fadeLen = m_waveform.GetItemDuration();
   }
 
   if (fadeLen < 0.001) return;
@@ -878,6 +879,7 @@ void SneakPeak::DoFadeOut()
   }
 
   // Non-destructive: set item fade-out length via D_FADEOUTLEN
+  // With selection: fade from selection start to item end
   if (!g_SetMediaItemInfo_Value) return;
 
   MediaItem* item = m_waveform.GetItem();
@@ -885,7 +887,8 @@ void SneakPeak::DoFadeOut()
 
   if (m_waveform.HasSelection()) {
     WaveformSelection sel = m_waveform.GetSelection();
-    fadeLen = fabs(sel.endTime - sel.startTime);
+    double selStart = std::min(sel.startTime, sel.endTime);
+    fadeLen = m_waveform.GetItemDuration() - selStart; // from selection start to item end
   } else {
     fadeLen = m_waveform.GetItemDuration();
   }
