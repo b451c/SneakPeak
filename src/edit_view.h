@@ -58,6 +58,7 @@ enum ContextMenuID {
   CM_COPY,
   CM_PASTE,
   CM_DELETE,
+  CM_RIPPLE_DELETE,
   CM_SILENCE,
   CM_SELECT_ALL,
   CM_SEPARATOR_EDIT,
@@ -166,9 +167,9 @@ private:
   void DoCopy();
   void DoCut();
   void DoPaste();
-  void DoDelete();
+  void DoDelete(bool ripple = false);
   void DoDeleteStandalone();
-  void DoDeleteNonDestructive();
+  void DoDeleteNonDestructive(bool ripple = false);
   void DoSilence();
 
   // Destructive processing

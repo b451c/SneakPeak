@@ -315,11 +315,11 @@ void SneakPeak::DoPaste()
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
-void SneakPeak::DoDelete()
+void SneakPeak::DoDelete(bool ripple)
 {
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
   if (m_waveform.IsStandaloneMode()) { DoDeleteStandalone(); return; }
-  DoDeleteNonDestructive();
+  DoDeleteNonDestructive(ripple);
 }
 
 void SneakPeak::DoDeleteStandalone()
@@ -390,7 +390,7 @@ void SneakPeak::DoDeleteStandalone()
   }
 }
 
-void SneakPeak::DoDeleteNonDestructive()
+void SneakPeak::DoDeleteNonDestructive(bool ripple)
 {
   // Split item at selection edges, delete middle piece
   if (!g_SplitMediaItem || !g_DeleteTrackMediaItem || !g_GetMediaItem_Track) return;
@@ -516,8 +516,9 @@ void SneakPeak::DoDeleteNonDestructive()
     }
   }
 
-  // Working set: ripple edit - pull all subsequent items left by deleted duration
-  if (m_workingSet.active && track && g_GetTrackNumMediaItems && g_GetTrackMediaItem &&
+  // Ripple edit: pull all subsequent items left by deleted duration
+  // Always ripple in SET mode; optional via Shift+Delete in other modes
+  if ((m_workingSet.active || ripple) && track && g_GetTrackNumMediaItems && g_GetTrackMediaItem &&
       g_SetMediaItemInfo_Value && g_GetMediaItemInfo_Value && deletedDuration > 0.0) {
     int count = g_GetTrackNumMediaItems(track);
     for (int i = 0; i < count; i++) {
@@ -533,7 +534,8 @@ void SneakPeak::DoDeleteNonDestructive()
   }
 
   if (g_UpdateArrange) g_UpdateArrange();
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete (non-destructive)", -1);
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr,
+      ripple ? "SneakPeak: Ripple Delete" : "SneakPeak: Delete (non-destructive)", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
   m_waveform.ClearSelection();

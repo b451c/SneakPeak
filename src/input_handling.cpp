@@ -928,13 +928,15 @@ void SneakPeak::OnKeyDown(WPARAM key)
       }
       break;
     case VK_DELETE:
-    case VK_BACK:
+    case VK_BACK: {
+      bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
       if (ctrl) {
         DoSilence();
       } else {
-        DoDelete();
+        DoDelete(shift); // Shift+Delete = ripple delete
       }
       break;
+    }
     case 'A':
       if (ctrl && m_waveform.HasItem()) {
         m_waveform.StartSelection(0.0);
@@ -984,7 +986,10 @@ void SneakPeak::OnKeyDown(WPARAM key)
       break;
     case 'E':
     case 'e':
-      if (!ctrl) DoDelete();
+      if (!ctrl) {
+        bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        DoDelete(shift); // Shift+E = ripple delete
+      }
       break;
     case 'M':
     case 'm': {

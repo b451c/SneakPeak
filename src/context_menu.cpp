@@ -100,6 +100,8 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_COPY, "Copy\tCtrl+C");
   MenuAppend(editMenu, (hasItem && hasClip) ? MF_STRING : MF_GRAYED, CM_PASTE, "Paste (destructive)\tCtrl+V");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_DELETE, "Delete\tDel");
+  bool canRipple = hasItem && hasSel && !m_waveform.IsStandaloneMode();
+  MenuAppend(editMenu, canRipple ? MF_STRING : MF_GRAYED, CM_RIPPLE_DELETE, "Ripple Delete\tShift+Del");
   bool canSilence = hasItem && (hasSel || m_waveform.IsStandaloneMode());
   MenuAppend(editMenu, canSilence ? MF_STRING : MF_GRAYED, CM_SILENCE,
              (m_waveform.IsStandaloneMode() && !hasSel) ? "Insert Silence...\tCtrl+Del" : "Silence\tCtrl+Del");
@@ -249,7 +251,8 @@ void SneakPeak::OnContextMenuCommand(int id)
     case CM_CUT:       DoCut(); break;
     case CM_COPY:      DoCopy(); break;
     case CM_PASTE:     DoPaste(); break;
-    case CM_DELETE:    DoDelete(); break;
+    case CM_DELETE:        DoDelete(false); break;
+    case CM_RIPPLE_DELETE: DoDelete(true); break;
     case CM_SILENCE:   DoSilence(); break;
     case CM_SELECT_ALL:
       if (m_waveform.HasItem()) {
