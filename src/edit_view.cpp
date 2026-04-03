@@ -1141,6 +1141,23 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       return 1;
     }
 
+    case WM_GESTURE: {
+      // Trackpad pinch-to-zoom (macOS magnification gesture via SWELL)
+      if (!m_waveform.HasItem() || !lParam) return 0;
+      auto* gi = (GESTUREINFO*)lParam;
+      if (gi->dwID != GID_ZOOM || gi->dwFlags == GF_BEGIN) return 0;
+      double raw = (double)wParam / 1024.0;           // 1.0 = neutral, >1 = zoom in
+      double factor = 1.0 + (raw - 1.0) * 0.15;       // dampen to 15% for smooth feel
+      POINT pt;
+      GetCursorPos(&pt);
+      ScreenToClient(m_hwnd, &pt);
+      double centerTime = m_waveform.XToTime(pt.x);
+      m_waveform.ZoomHorizontal(factor, centerTime);
+      m_spectral.Invalidate();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      return 0;
+    }
+
     case WM_KEYDOWN:
       OnKeyDown(wParam);
       return 0;
