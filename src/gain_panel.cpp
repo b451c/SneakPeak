@@ -311,13 +311,15 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect)
   // --- dB readout ---
   HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
 
-  char dbText[16];
+  char dbText[24];
   if (m_db <= MIN_DB + 0.5)
     snprintf(dbText, sizeof(dbText), "-inf");
+  else if (IsBatch())
+    snprintf(dbText, sizeof(dbText), "%+.1f dB rel", m_db);
   else
     snprintf(dbText, sizeof(dbText), "%+.1f dB", m_db);
 
-  SetTextColor(hdc, RGB(100, 200, 255));
+  SetTextColor(hdc, IsBatch() ? RGB(255, 200, 80) : RGB(100, 200, 255));
   RECT dbRect = { r.left + 32, r.top + 2, r.right - 14, r.bottom - 2 };
   DrawText(hdc, dbText, -1, &dbRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
