@@ -201,7 +201,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Hero -->
 <h1>Sneak<span>Peak</span> User Guide</h1>
-<p class="subtitle">Precision waveform editor for REAPER - v1.7.0</p>
+<p class="subtitle">Precision waveform editor for REAPER - v1.9.0</p>
 
 <p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts.</p>
 
@@ -337,12 +337,18 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <div class="shortcut-grid">
   <div class="key"><kbd>Scroll Up</kbd></div><div class="desc">Zoom in (centered on mouse position)</div>
   <div class="key"><kbd>Scroll Down</kbd></div><div class="desc">Zoom out</div>
-  <div class="key"><kbd>Ctrl</kbd> + <kbd>Scroll</kbd></div><div class="desc">Pan left/right without zooming</div>
+  <div class="key">Trackpad pinch</div><div class="desc">Zoom in/out (centered on cursor, dampened for smooth feel)</div>
+</div>
+
+<h4>Horizontal pan</h4>
+<div class="shortcut-grid">
+  <div class="key"><kbd>Cmd</kbd> + <kbd>Scroll</kbd></div><div class="desc">Pan left/right (mouse wheel)</div>
+  <div class="key">Trackpad horizontal swipe</div><div class="desc">Pan left/right (two-finger swipe)</div>
 </div>
 
 <h4>Vertical zoom (amplitude)</h4>
 <div class="shortcut-grid">
-  <div class="key"><kbd>Shift</kbd> + <kbd>Scroll</kbd></div><div class="desc">Zoom amplitude up/down</div>
+  <div class="key"><kbd>Option</kbd> + <kbd>Scroll</kbd></div><div class="desc">Zoom amplitude up/down</div>
   <div class="key">Scroll on dB scale</div><div class="desc">Always zooms amplitude (right edge)</div>
 </div>
 
@@ -352,7 +358,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="key"><kbd>End</kbd></div><div class="desc">Go to end of item</div>
   <div class="key"><kbd>Tab</kbd></div><div class="desc">Jump to next marker</div>
   <div class="key"><kbd>Shift</kbd>+<kbd>Tab</kbd></div><div class="desc">Jump to previous marker</div>
+  <div class="key"><kbd>Option</kbd>+<kbd>Right</kbd></div><div class="desc">Jump to next segment (SET/timeline/multi-item)</div>
+  <div class="key"><kbd>Option</kbd>+<kbd>Left</kbd></div><div class="desc">Jump to previous segment</div>
 </div>
+
+<p>Segment navigation selects the target segment, syncs the cursor to REAPER, and during playback automatically jumps to the new segment for seamless auditioning.</p>
 
 <p>The toolbar also has Zoom In, Zoom Out, Zoom to Fit, and Zoom to Selection buttons.</p>
 
@@ -362,13 +372,18 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Editing in REAPER mode is non-destructive. Operations go through the REAPER API and create undo points.</p>
 
 <div class="shortcut-grid">
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>X</kbd></div><div class="desc">Cut selection</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>C</kbd></div><div class="desc">Copy selection</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>V</kbd></div><div class="desc">Paste at cursor</div>
-  <div class="key"><kbd>Delete</kbd> / <kbd>E</kbd></div><div class="desc">Delete selection (splits item, removes middle)</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>X</kbd></div><div class="desc">Cut selection (copy + ripple delete)</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>C</kbd></div><div class="desc">Copy selection to clipboard</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>V</kbd></div><div class="desc">Paste at cursor (non-destructive insert)</div>
+  <div class="key"><kbd>Delete</kbd> / <kbd>E</kbd></div><div class="desc">Delete selection (gap preserved)</div>
+  <div class="key"><kbd>Shift</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>E</kbd></div><div class="desc">Ripple Delete (closes gap)</div>
   <div class="key"><kbd>Ctrl</kbd>+<kbd>N</kbd></div><div class="desc">Normalize to 0 dB peak</div>
   <div class="key"><kbd>Ctrl</kbd>+<kbd>Z</kbd></div><div class="desc">Undo (REAPER undo)</div>
 </div>
+
+<p><strong>Paste</strong> is non-destructive: it writes the clipboard to a temporary WAV file, splits the item at the cursor position, shifts subsequent items right, and inserts the new audio in the gap. The pasted region is automatically selected. Works in single-item, timeline, and SET modes.</p>
+
+<p><strong>Ripple Delete</strong> removes the selection and shifts all subsequent items left to close the gap. Standard Delete preserves gaps. Cut (<kbd>Cmd</kbd>+<kbd>X</kbd>) uses ripple delete by default, matching standard waveform editor behavior.</p>
 
 <p>Additional processing is available from the right-click context menu: LUFS normalization (-14 / -16), reverse, DC offset removal, and silence.</p>
 
@@ -389,7 +404,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="gain">Gain Control</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
 
-<p>Press <kbd>G</kbd> to open the floating gain panel. A rotary knob controls volume from -60 dB to +12 dB. Hold <kbd>Ctrl</kbd> while dragging for fine adjustment (0.1 dB per pixel instead of 0.5 dB). Double-click the knob to reset to 0 dB.</p>
+<p>Press <kbd>G</kbd> to open the floating gain panel. A rotary knob controls volume from -60 dB to +12 dB. Hold <kbd>Cmd</kbd> while dragging for fine adjustment (0.1 dB per pixel instead of 0.5 dB). Double-click the knob to reset to 0 dB.</p>
+
+<p>Use <kbd>Up</kbd>/<kbd>Down</kbd> arrow keys for quick +/-1 dB adjustments without the mouse. The waveform updates in real-time.</p>
+
+<p>In batch mode (SET, timeline, multi-item), the knob label turns gold and shows <strong>"+0.0 dB rel"</strong> to indicate that the value is a relative offset applied to all items, not an absolute level.</p>
 
 <p>Gain behavior depends on the mode:</p>
 
@@ -551,7 +570,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Delete in standalone mode removes the selected samples and splices the audio together with a short crossfade at the join point to avoid clicks.</p>
 
-<p>Playback: press <kbd>Space</kbd> to play from the cursor position. The playhead advances through the file. Press <kbd>Space</kbd> again to stop.</p>
+<p>Playback: press <kbd>Space</kbd> to play. If the cursor is inside a selection, it plays the selection. If the cursor is outside the selection (e.g., after clicking the ruler), it plays from the cursor position. This lets you preview audio before or after a selection without losing it. Press <kbd>Space</kbd> again to stop.</p>
 
 <h2 id="standalone-save">Save Workflow</h2>
 
@@ -678,9 +697,15 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="ruler">Ruler & Time Display</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
 
-<p>The ruler at the top shows time positions. By default it shows time relative to the item start (00:00:00). Toggle <strong>Ruler: Absolute Time</strong> from the context menu (right-click > View) to show the absolute REAPER timeline position instead.</p>
+<p>The ruler at the top shows time positions. Three modes are available via right-click > View:</p>
 
-<p>In SET mode, absolute time is enabled by default so you can correlate positions between SneakPeak and the REAPER timeline.</p>
+<ul>
+  <li><strong>Ruler: Relative Time</strong> - time from item start (00:00:00). Default for single items.</li>
+  <li><strong>Ruler: Absolute Time</strong> - REAPER timeline position. Default in SET mode.</li>
+  <li><strong>Ruler: Bars & Beats</strong> - measure and beat numbers synced with REAPER's tempo map. Handles tempo changes and time signature changes. Major ticks at measure boundaries, minor ticks at beats. At high zoom, individual beats are labeled (e.g., "45:2", "45:3").</li>
+</ul>
+
+<p>The selected ruler mode persists across sessions. In SET mode, absolute time is enabled by default so you can correlate positions between SneakPeak and the REAPER timeline.</p>
 
 <p>The bottom info panel shows cursor position, selection range, view range, sample rate, bit depth, channels, and file size.</p>
 
@@ -699,28 +724,34 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <table>
   <thead><tr><th>Shortcut</th><th>Action</th><th>Mode</th></tr></thead>
   <tbody>
-    <tr><td><kbd>Space</kbd></td><td>Play / Stop</td><td>All</td></tr>
+    <tr><td><kbd>Space</kbd></td><td>Play / Stop (from cursor or selection)</td><td>All</td></tr>
     <tr><td><kbd>T</kbd></td><td>Toggle Working Set mode</td><td>REAPER</td></tr>
     <tr><td><kbd>S</kbd></td><td>Split at cursor / selection</td><td>REAPER, SET</td></tr>
     <tr><td><kbd>G</kbd></td><td>Toggle gain panel</td><td>All</td></tr>
     <tr><td><kbd>M</kbd></td><td>Add marker at cursor</td><td>REAPER</td></tr>
     <tr><td><kbd>Shift</kbd>+<kbd>M</kbd></td><td>Add region from selection</td><td>REAPER</td></tr>
-    <tr><td><kbd>E</kbd></td><td>Delete selection</td><td>All</td></tr>
+    <tr><td><kbd>E</kbd></td><td>Delete selection (gap preserved)</td><td>All</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>E</kbd></td><td>Ripple Delete (closes gap)</td><td>REAPER, SET, Timeline</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td>Delete selection (gap preserved)</td><td>All</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>Delete</kbd></td><td>Ripple Delete (closes gap)</td><td>REAPER, SET, Timeline</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Delete</kbd></td><td>Silence selection</td><td>All</td></tr>
+    <tr><td><kbd>Up</kbd></td><td>Gain +1 dB</td><td>All</td></tr>
+    <tr><td><kbd>Down</kbd></td><td>Gain -1 dB</td><td>All</td></tr>
+    <tr><td><kbd>Option</kbd>+<kbd>Right</kbd></td><td>Next segment (select + scroll)</td><td>SET, Timeline, Multi</td></tr>
+    <tr><td><kbd>Option</kbd>+<kbd>Left</kbd></td><td>Previous segment</td><td>SET, Timeline, Multi</td></tr>
     <tr><td><kbd>Escape</kbd></td><td>Exit working set / clear selection / stop</td><td>All</td></tr>
     <tr><td><kbd>Home</kbd></td><td>Go to item start</td><td>All</td></tr>
     <tr><td><kbd>End</kbd></td><td>Go to item end</td><td>All</td></tr>
     <tr><td><kbd>Tab</kbd></td><td>Next marker</td><td>REAPER</td></tr>
     <tr><td><kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Previous marker</td><td>REAPER</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Select all</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Cut</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Cut (copy + ripple delete)</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Copy</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Paste</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Paste (non-destructive insert)</td><td>REAPER, SET, Timeline</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Normalize (peak)</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save</td><td>Standalone</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save As</td><td>Standalone</td></tr>
-    <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Delete selection</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>Delete</kbd></td><td>Silence selection</td><td>All</td></tr>
   </tbody>
 </table>
 
@@ -740,9 +771,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Right-click</td><td>Waveform</td><td>Context menu</td></tr>
     <tr><td>Right-click</td><td>Meter panel</td><td>Meter mode menu</td></tr>
     <tr><td>Scroll</td><td>Waveform</td><td>Horizontal zoom</td></tr>
-    <tr><td>Ctrl + Scroll</td><td>Waveform</td><td>Pan left/right</td></tr>
-    <tr><td>Shift + Scroll</td><td>Waveform</td><td>Vertical zoom</td></tr>
+    <tr><td>Cmd + Scroll</td><td>Waveform</td><td>Pan left/right</td></tr>
+    <tr><td>Option + Scroll</td><td>Waveform</td><td>Vertical zoom</td></tr>
     <tr><td>Scroll</td><td>dB scale</td><td>Vertical zoom</td></tr>
+    <tr><td>Trackpad horizontal swipe</td><td>Waveform</td><td>Pan left/right</td></tr>
+    <tr><td>Trackpad pinch</td><td>Waveform</td><td>Horizontal zoom (dampened)</td></tr>
     <tr><td>Drag fade handle</td><td>Top corners</td><td>Adjust fade length (H) and curve (V)</td></tr>
     <tr><td>Click</td><td>Minimap</td><td>Center view</td></tr>
     <tr><td>Drag</td><td>Minimap</td><td>Scroll view</td></tr>
@@ -759,9 +792,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Right-click anywhere on the waveform to access the full context menu. The menu is organized into sections:</p>
 
 <ul>
-  <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Silence, Select All, Split at Cursor (S)</li>
+  <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Ripple Delete, Silence, Select All, Split at Cursor (S)</li>
   <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix</li>
-  <li><strong>View</strong> - Zoom controls, Spectral View, Snap to Zero-Crossing, Minimap, Ruler time format, Working Set toggle, Group</li>
+  <li><strong>View</strong> - Zoom controls, Spectral View, Snap to Zero-Crossing, Minimap, Ruler mode (Relative/Absolute/Bars & Beats), Working Set toggle, Group</li>
   <li><strong>Multi-Item</strong> - Mix/Layered modes, Show Join Lines (when multiple items are loaded)</li>
   <li><strong>Markers</strong> - Add Marker, Add Region, Edit, Delete, Show/Hide</li>
   <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal</li>
