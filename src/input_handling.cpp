@@ -844,9 +844,10 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
 {
   if (!m_waveform.HasItem()) return;
 
-  bool ctrl = (LOWORD(wParam) & MK_CONTROL) != 0;
-  bool shift = (LOWORD(wParam) & MK_SHIFT) != 0;
-  bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+  // Use GetAsyncKeyState for all modifiers — SWELL doesn't populate MK_ flags in wParam
+  bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0; // Cmd on macOS
+  bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+  bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;     // Option on macOS
 
   double steps = (double)delta / 120.0;
 
@@ -859,9 +860,11 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
     return;
   }
 
-  if (alt || shift) {
+  if (alt) {
+    // Option+Scroll = vertical zoom
     m_waveform.ZoomVertical((float)pow(1.15, steps));
   } else if (ctrl) {
+    // Cmd+Scroll = horizontal pan (may not reach us when docked — trackpad pan via WM_MOUSEHWHEEL)
     m_waveform.ScrollH(-steps * m_waveform.GetViewDuration() * 0.1);
   } else {
     double centerTime = m_waveform.XToTime(x);
