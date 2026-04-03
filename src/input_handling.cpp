@@ -845,9 +845,8 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   if (!m_waveform.HasItem()) return;
 
   // Use GetAsyncKeyState for all modifiers — SWELL doesn't populate MK_ flags in wParam
-  bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0; // Cmd on macOS
-  bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-  bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;     // Option on macOS
+  bool cmd = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0; // Cmd on macOS
+  bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;    // Option on macOS
 
   double steps = (double)delta / 120.0;
 
@@ -863,7 +862,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   if (alt) {
     // Option+Scroll = vertical zoom
     m_waveform.ZoomVertical((float)pow(1.15, steps));
-  } else if (ctrl) {
+  } else if (cmd) {
     // Cmd+Scroll = horizontal pan (may not reach us when docked — trackpad pan via WM_MOUSEHWHEEL)
     m_waveform.ScrollH(-steps * m_waveform.GetViewDuration() * 0.1);
   } else {
@@ -1008,6 +1007,73 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case 'T':
       if (!ctrl) ToggleTrackView();
       break;
+
+    case VK_UP:
+    case VK_DOWN: {
+      if (!m_gainPanel.IsVisible()) break;
+      m_gainPanel.AdjustDb(key == VK_UP ? 1.0 : -1.0);
+      m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS; // suppress reload bounce
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    }
+
+    case VK_LEFT:
+    case VK_RIGHT: {
+      // Alt+Arrow = navigate between segments (SET/timeline/multi-item)
+      bool altHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+      if (!altHeld) break;
+      if (!m_waveform.IsTimelineOrMultiItem() && !m_waveform.IsTrackView()) break;
+      const auto& segs = m_waveform.GetSegments();
+      if (segs.size() < 2) break;
+
+      // Find current segment (by selection midpoint or cursor)
+      double pos = m_waveform.HasSelection()
+          ? (m_waveform.GetSelection().startTime + m_waveform.GetSelection().endTime) * 0.5
+          : m_waveform.GetCursorTime();
+      int curIdx = -1;
+      for (int i = 0; i < (int)segs.size(); i++) {
+        if (pos >= segs[i].relativeOffset &&
+            pos < segs[i].relativeOffset + segs[i].duration) {
+          curIdx = i;
+          break;
+        }
+      }
+
+      int nextIdx = (key == VK_RIGHT)
+          ? std::min(curIdx + 1, (int)segs.size() - 1)
+          : std::max(curIdx - 1, 0);
+      if (nextIdx == curIdx && curIdx >= 0) break;
+      if (curIdx < 0) nextIdx = 0; // no current segment, go to first
+
+      // Select the target segment in SneakPeak
+      const auto& seg = segs[nextIdx];
+      m_waveform.StartSelection(seg.relativeOffset);
+      m_waveform.UpdateSelection(seg.relativeOffset + seg.duration);
+      m_waveform.EndSelection();
+
+      // Select the corresponding REAPER item (SET/timeline only, not multi-item)
+      // Changing REAPER selection in multi-item mode would destroy the view
+      if (seg.item && !m_waveform.IsMultiItemActive() &&
+          g_SetMediaItemInfo_Value && g_CountSelectedMediaItems &&
+          g_GetSelectedMediaItem && g_UpdateArrange) {
+        for (int si = g_CountSelectedMediaItems(nullptr) - 1; si >= 0; si--) {
+          MediaItem* mi = g_GetSelectedMediaItem(nullptr, si);
+          if (mi) g_SetMediaItemInfo_Value(mi, "B_UISEL", 0.0);
+        }
+        g_SetMediaItemInfo_Value(seg.item, "B_UISEL", 1.0);
+        g_UpdateArrange();
+      }
+
+      // Scroll to show the segment
+      double segEnd = seg.relativeOffset + seg.duration;
+      if (seg.relativeOffset < m_waveform.GetViewStart() ||
+          segEnd > m_waveform.GetViewEnd()) {
+        double pad = m_waveform.GetViewDuration() * 0.1;
+        m_waveform.SetViewStart(std::max(0.0, seg.relativeOffset - pad));
+      }
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    }
   }
 }
 

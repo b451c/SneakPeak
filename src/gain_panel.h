@@ -30,6 +30,8 @@ public:
 
   // State
   double GetDb() const { return m_db; }
+  void SetDb(double db);   // clamp and write to item
+  void AdjustDb(double delta); // increment/decrement by delta dB
   bool IsDragging() const { return m_knobDragging || m_panelDragging; }
   bool IsPanelDragging() const { return m_panelDragging; }
 

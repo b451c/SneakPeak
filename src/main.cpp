@@ -129,6 +129,7 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
     bool handled = false;
     if (k == VK_HOME || k == VK_END || k == VK_SPACE || k == VK_ESCAPE || k == VK_TAB) handled = true;
     else if (k == VK_DELETE || k == VK_BACK) handled = true;
+    else if (k == VK_UP || k == VK_DOWN || k == VK_LEFT || k == VK_RIGHT) handled = true;
     else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A' || k == 'S')) handled = true;
     else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S' || k == 'T')) handled = true;
     if (handled) {

@@ -91,6 +91,22 @@ void GainPanel::WriteToItem()
   g_UpdateArrange();
 }
 
+void GainPanel::SetDb(double db)
+{
+  m_db = std::max(MIN_DB, std::min(MAX_DB, db));
+  WriteToItem();
+}
+
+void GainPanel::AdjustDb(double delta)
+{
+  m_db = std::max(MIN_DB, std::min(MAX_DB, m_db + delta));
+  // Keyboard adjustment is final (not preview) — bypass skipBatchWrite
+  bool saved = m_skipBatchWrite;
+  m_skipBatchWrite = false;
+  WriteToItem();
+  m_skipBatchWrite = saved;
+}
+
 void GainPanel::ResetTo0dB()
 {
   if (!m_batchItems.empty()) {

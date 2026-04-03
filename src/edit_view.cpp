@@ -813,9 +813,8 @@ void SneakPeak::UpdateGainPreview()
     bool hasSelPreview = m_waveform.HasSelection() && m_gainPanel.IsDragging();
     bool skipWrite = m_workingSet.active || m_waveform.IsTimelineOrMultiItem() || hasSelPreview;
     m_gainPanel.SetSkipBatchWrite(skipWrite);
-    if (m_gainPanel.IsBatch() && skipWrite && m_gainPanel.IsDragging()
-        && !m_waveform.HasSelection()) {
-      // SET/Timeline without selection: visual preview on whole waveform
+    if (m_gainPanel.IsBatch() && skipWrite && !m_waveform.HasSelection()) {
+      // SET/Timeline without selection: visual preview (drag or keyboard gain)
       double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
       m_waveform.SetBatchGainOffset(offsetLin);
     } else if (m_gainPanel.IsBatch() && !skipWrite) {
@@ -846,7 +845,9 @@ void SneakPeak::UpdateGainPreview()
   }
 
   // Multi-item: detect volume changes and reload (every ~1s to avoid heavy polling)
-  if (m_waveform.IsMultiItemActive() && !m_waveform.IsStandaloneMode()) {
+  // Skip during edit guard (keyboard gain adjustment) to prevent bounce
+  if (m_waveform.IsMultiItemActive() && !m_waveform.IsStandaloneMode() &&
+      m_timelineEditGuard <= 0) {
     if (m_audioChangeCheckCounter % 30 == 0) {
       if (m_waveform.GetMultiItemView().CheckVolumeChanged()) {
         LoadSelectedItem();  // reloads with new volumes
