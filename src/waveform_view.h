@@ -43,6 +43,7 @@ public:
 
   // Working set (items in a range on one track, gaps collapsed)
   void LoadItemsInRange(MediaTrack* track, double startPos, double endPos);
+  void LoadItemsList(const std::vector<MediaItem*>& items);
   bool IsTrackView() const { return m_trackViewActive; }
 
   // Timeline view (sibling items with gaps preserved, 1:1 with REAPER timeline)

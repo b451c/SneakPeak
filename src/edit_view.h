@@ -324,10 +324,11 @@ private:
   // Working set (locked multi-item edit range)
   struct WorkingSet {
     MediaTrack* track = nullptr;
-    double startPos = 0.0;   // timeline start of range
-    double endPos = 0.0;     // timeline end of range
-    bool active = false;     // currently displayed
-    bool dormant = false;    // user clicked away, set preserved for restore
+    std::vector<MediaItem*> items; // explicit item list (only user-selected items)
+    double startPos = 0.0;         // timeline start (for ripple edit bounds)
+    double endPos = 0.0;           // timeline end (for ripple edit bounds)
+    bool active = false;           // currently displayed
+    bool dormant = false;          // user clicked away, set preserved for restore
   };
   WorkingSet m_workingSet;
   void LoadWorkingSet();

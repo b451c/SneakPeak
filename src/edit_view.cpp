@@ -136,8 +136,9 @@ void SneakPeak::ToggleTrackView()
   int count = g_CountSelectedMediaItems(nullptr);
   if (count <= 0) return;
 
-  // Collect items and verify all on same track
+  // Collect selected items and verify all on same track
   MediaTrack* track = nullptr;
+  std::vector<MediaItem*> selectedItems;
   double minPos = 1e30, maxEnd = -1e30;
   for (int i = 0; i < count; i++) {
     MediaItem* mi = g_GetSelectedMediaItem(nullptr, i);
@@ -145,14 +146,16 @@ void SneakPeak::ToggleTrackView()
     MediaTrack* t = g_GetMediaItem_Track(mi);
     if (!track) track = t;
     else if (t != track) return; // multi-track: not supported
+    selectedItems.push_back(mi);
     double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
     double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
     if (pos < minPos) minPos = pos;
     if (pos + len > maxEnd) maxEnd = pos + len;
   }
-  if (!track || maxEnd <= minPos) return;
+  if (!track || selectedItems.empty() || maxEnd <= minPos) return;
 
   m_workingSet.track = track;
+  m_workingSet.items = std::move(selectedItems);
   m_workingSet.startPos = minPos;
   m_workingSet.endPos = maxEnd;
   LoadWorkingSet();
@@ -160,11 +163,11 @@ void SneakPeak::ToggleTrackView()
 
 void SneakPeak::LoadWorkingSet()
 {
-  if (!m_workingSet.track) return;
+  if (!m_workingSet.track || m_workingSet.items.empty()) return;
   if (m_previewActive) StandaloneCleanupPreview();
 
   m_waveform.ClearItem();
-  m_waveform.LoadItemsInRange(m_workingSet.track, m_workingSet.startPos, m_workingSet.endPos);
+  m_waveform.LoadItemsList(m_workingSet.items);
 
   if (!m_waveform.HasItem()) {
     ExitWorkingSet();
@@ -213,11 +216,28 @@ void SneakPeak::RefreshWorkingSet()
     return;
   }
 
+  // Revalidate stored item pointers — may be dangling after split/delete
+  auto& items = m_workingSet.items;
+  items.erase(std::remove_if(items.begin(), items.end(), [](MediaItem* mi) {
+    return !mi || !g_ValidatePtr2(nullptr, mi, "MediaItem*");
+  }), items.end());
+  if (items.empty()) { ExitWorkingSet(); return; }
+
+  // Update bounds from surviving items
+  m_workingSet.startPos = 1e30;
+  m_workingSet.endPos = -1e30;
+  for (auto* mi : items) {
+    double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+    if (pos < m_workingSet.startPos) m_workingSet.startPos = pos;
+    if (pos + len > m_workingSet.endPos) m_workingSet.endPos = pos + len;
+  }
+
   double viewStart = m_waveform.GetViewStart();
   double viewDur = m_waveform.GetViewDuration();
 
   m_waveform.ClearItem();
-  m_waveform.LoadItemsInRange(m_workingSet.track, m_workingSet.startPos, m_workingSet.endPos);
+  m_waveform.LoadItemsList(m_workingSet.items);
   m_waveform.Invalidate();
 
   if (!m_waveform.HasItem()) {
@@ -322,7 +342,11 @@ void SneakPeak::RefreshTimelineView()
 bool SneakPeak::IsWorkingSetItem(MediaItem* item) const
 {
   if (!m_workingSet.track || (!m_workingSet.active && !m_workingSet.dormant)) return false;
-  if (!item || !g_GetMediaItem_Track || !g_GetMediaItemInfo_Value) return false;
+  if (!item) return false;
+  for (auto* mi : m_workingSet.items)
+    if (mi == item) return true;
+  // Also check items created by split (same source, within bounds)
+  if (!g_GetMediaItem_Track || !g_GetMediaItemInfo_Value) return false;
   if (g_GetMediaItem_Track(item) != m_workingSet.track) return false;
   double pos = g_GetMediaItemInfo_Value(item, "D_POSITION");
   double len = g_GetMediaItemInfo_Value(item, "D_LENGTH");

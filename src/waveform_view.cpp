@@ -290,7 +290,6 @@ void WaveformView::LoadItemsInRange(MediaTrack* track, double startPos, double e
   int count = g_GetTrackNumMediaItems(track);
   if (count <= 0) return;
 
-  // Collect items on this track that overlap [startPos, endPos]
   std::vector<MediaItem*> items;
   for (int i = 0; i < count; i++) {
     MediaItem* mi = g_GetTrackMediaItem(track, i);
@@ -302,19 +301,30 @@ void WaveformView::LoadItemsInRange(MediaTrack* track, double startPos, double e
   }
   if (items.empty()) return;
 
-  std::sort(items.begin(), items.end(), [](MediaItem* a, MediaItem* b) {
-    return g_GetMediaItemInfo_Value(a, "D_POSITION") < g_GetMediaItemInfo_Value(b, "D_POSITION");
-  });
-
-  m_item = items[0];
-  m_multiItemActive = false;
-  m_trackViewActive = true;
-
-  LoadConcatenated(items);
-  m_peaksValid = false;
+  LoadItemsList(items);
 
   DBG("[SneakPeak] LoadItemsInRange: %d items in range [%.3f-%.3f], duration=%.3f\n",
       (int)items.size(), startPos, endPos, m_itemDuration);
+}
+
+void WaveformView::LoadItemsList(const std::vector<MediaItem*>& items)
+{
+  if (items.empty()) return;
+
+  std::vector<MediaItem*> sorted = items;
+  std::sort(sorted.begin(), sorted.end(), [](MediaItem* a, MediaItem* b) {
+    return g_GetMediaItemInfo_Value(a, "D_POSITION") < g_GetMediaItemInfo_Value(b, "D_POSITION");
+  });
+
+  m_item = sorted[0];
+  m_multiItemActive = false;
+  m_trackViewActive = true;
+
+  LoadConcatenated(sorted);
+  m_peaksValid = false;
+
+  DBG("[SneakPeak] LoadItemsList: %d items, duration=%.3f\n",
+      (int)sorted.size(), m_itemDuration);
 }
 
 void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
