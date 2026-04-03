@@ -813,8 +813,9 @@ void SneakPeak::UpdateGainPreview()
     bool hasSelPreview = m_waveform.HasSelection() && m_gainPanel.IsDragging();
     bool skipWrite = m_workingSet.active || m_waveform.IsTimelineOrMultiItem() || hasSelPreview;
     m_gainPanel.SetSkipBatchWrite(skipWrite);
-    if (m_gainPanel.IsBatch() && skipWrite && !m_waveform.HasSelection()) {
-      // SET/Timeline without selection: visual preview (drag or keyboard gain)
+    bool selDrag = m_waveform.HasSelection() && m_gainPanel.IsDragging();
+    if (m_gainPanel.IsBatch() && skipWrite && !selDrag) {
+      // Visual preview: whole range (no selection, or keyboard gain with selection)
       double offsetLin = pow(10.0, m_gainPanel.GetDb() / 20.0);
       m_waveform.SetBatchGainOffset(offsetLin);
     } else if (m_gainPanel.IsBatch() && !skipWrite) {

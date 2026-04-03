@@ -266,11 +266,11 @@ void SneakPeak::DoCopy()
 
 void SneakPeak::DoCut()
 {
-  // Non-destructive: copy to clipboard, then delete via split+remove
+  // Copy + ripple delete (standard waveform editor behavior: cut closes the gap)
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
 
   DoCopy();
-  DoDelete();
+  DoDelete(true); // ripple
 }
 
 void SneakPeak::DoPaste()
