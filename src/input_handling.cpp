@@ -1204,6 +1204,9 @@ void SneakPeak::OnKeyDown(WPARAM key)
       m_waveform.UpdateSelection(seg.relativeOffset + seg.duration);
       m_waveform.EndSelection();
 
+      // Suppress LoadSelectedItem from exiting timeline when we change REAPER selection
+      m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
+
       // Select the corresponding REAPER item (SET/timeline only, not multi-item)
       // Changing REAPER selection in multi-item mode would destroy the view
       if (seg.item && !m_waveform.IsMultiItemActive() &&
