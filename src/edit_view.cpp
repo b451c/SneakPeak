@@ -709,25 +709,33 @@ void SneakPeak::UpdatePlaybackFollow()
 
     // Track follow: when external playback, follow items on selected track
     // Skip when multi-item view is active — don't overwrite concatenated view
+    // Skip when user has explicitly selected an item — respect their choice
     if (playing && !m_startedPlayback && !m_waveform.IsMultiItem() &&
-        g_GetPlayPosition2 &&
+        g_GetPlayPosition2 && g_CountSelectedMediaItems && g_GetSelectedMediaItem &&
         g_GetSelectedTrack && g_GetTrackNumMediaItems && g_GetTrackMediaItem &&
         g_GetMediaItemInfo_Value) {
-      MediaTrack* selTrack = g_GetSelectedTrack(nullptr, 0);
-      if (selTrack) {
-        double playPos = g_GetPlayPosition2();
-        int numItems = g_GetTrackNumMediaItems(selTrack);
-        for (int i = 0; i < numItems; i++) {
-          MediaItem* trackItem = g_GetTrackMediaItem(selTrack, i);
-          if (!trackItem) continue;
-          double iPos = g_GetMediaItemInfo_Value(trackItem, "D_POSITION");
-          double iLen = g_GetMediaItemInfo_Value(trackItem, "D_LENGTH");
-          if (playPos >= iPos && playPos < iPos + iLen) {
-            if (trackItem != m_waveform.GetItem()) {
-              m_waveform.SetItem(trackItem);
-              InvalidateRect(m_hwnd, nullptr, FALSE);
+      // If user's selected item matches what we're showing, don't override
+      MediaItem* userSelected = (g_CountSelectedMediaItems(nullptr) > 0)
+          ? g_GetSelectedMediaItem(nullptr, 0) : nullptr;
+      if (userSelected && userSelected == m_waveform.GetItem()) {
+        // User explicitly selected this item — keep it
+      } else {
+        MediaTrack* selTrack = g_GetSelectedTrack(nullptr, 0);
+        if (selTrack) {
+          double playPos = g_GetPlayPosition2();
+          int numItems = g_GetTrackNumMediaItems(selTrack);
+          for (int i = 0; i < numItems; i++) {
+            MediaItem* trackItem = g_GetTrackMediaItem(selTrack, i);
+            if (!trackItem) continue;
+            double iPos = g_GetMediaItemInfo_Value(trackItem, "D_POSITION");
+            double iLen = g_GetMediaItemInfo_Value(trackItem, "D_LENGTH");
+            if (playPos >= iPos && playPos < iPos + iLen) {
+              if (trackItem != m_waveform.GetItem()) {
+                m_waveform.SetItem(trackItem);
+                InvalidateRect(m_hwnd, nullptr, FALSE);
+              }
+              break;
             }
-            break;
           }
         }
       }
