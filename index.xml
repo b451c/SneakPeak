@@ -36,6 +36,38 @@
 ]]></description>
       </metadata>
 
+      <version name="1.9.0" author="b451c" time="2026-04-04T00:00:00Z">
+        <changelog><![CDATA[Non-Destructive Paste, Bars/Beats Ruler, Trackpad Gestures, Ripple Delete
+
+New features:
+- Non-destructive paste: Cmd+V inserts clipboard as new item (split + ripple + insert)
+- Bars & Beats ruler: synced with REAPER tempo map, measure/beat ticks
+- Ripple Delete: Shift+Delete/Shift+E closes gap after deletion
+- Arrow key segment navigation: Option+Left/Right with playback jump
+- Arrow key gain: Up/Down for +/-1 dB adjustment
+- Trackpad horizontal scroll: two-finger swipe pans waveform
+- Pinch to zoom: trackpad magnification gesture (dampened)
+- Gain knob relative indicator: gold "rel" label in batch mode
+
+Bug fixes:
+- Scroll modifier detection (GetAsyncKeyState for SWELL compatibility)
+- SET mode only includes explicitly selected items (not range fill)
+- Track follow respects user's explicit item selection during playback
+- Fade-in/out preserved after gain+selection split operations
+- Gain double-apply eliminated (single-item to timeline transition)
+- Timeline/SET view rebuilt after gain and delete (no stale segments)
+- Space plays from cursor when outside selection
+- Cut uses ripple delete (standard waveform editor behavior)
+- Knob drag race condition fixed (skipBatchWrite set immediately)
+- Context menu fades align to selection edges
+- View duration clamped after ripple delete (no trailing silence)
+
+Performance:
+- Full-selection gain skips split (direct D_VOL, no item fragmentation)
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v1.9.0/reaper_sneakpeak-arm64.dylib</source>
+      </version>
+
       <version name="1.8.0" author="b451c" time="2026-03-27T00:00:00Z">
         <changelog><![CDATA[Timeline View, Dock Control, Gain Consistency, Bug Fixes
 
