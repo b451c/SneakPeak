@@ -4,6 +4,37 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] - 2026-04-04
+
+### Added
+- **Non-destructive paste** - Cmd+V now creates a new REAPER item at cursor position instead of modifying audio files on disk. Splits the item at cursor, ripples subsequent items right, inserts pasted audio in the gap. Works in single-item, timeline, and SET modes. Standalone mode retains destructive paste.
+- **Bars & Beats ruler** - New ruler mode synced with REAPER's tempo map. Shows measure numbers at major ticks, beat subdivisions at minor ticks. Handles tempo changes and time signature changes. Three ruler modes: Relative Time, Absolute Time, Bars & Beats (context menu > View).
+- **Ripple Delete** - Shift+Delete or Shift+E removes selection and shifts subsequent items left to close the gap. Standard Delete (no Shift) preserves gaps. Available in context menu: Edit > Ripple Delete.
+- **Arrow key segment navigation** - Option+Left/Right navigates between segments in timeline/SET/multi-item views. Selects the target segment, scrolls to show it, syncs cursor to REAPER. During playback, automatically jumps to the new segment.
+- **Arrow key gain adjustment** - Up/Down arrows adjust gain +/-1 dB on the current item or batch. Visual feedback in all view modes.
+- **Horizontal trackpad scroll** - Two-finger horizontal swipe on macOS trackpad pans the waveform (WM_MOUSEHWHEEL support).
+- **Pinch to zoom** - Trackpad pinch gesture zooms the waveform horizontally, centered on cursor position. Sensitivity dampened to 15% for smooth feel.
+- **Gain knob relative indicator** - Batch mode (SET/timeline/multi-item) shows gold-colored "+0.0 dB rel" label to distinguish from absolute single-item mode (blue).
+
+### Fixed
+- **Scroll modifier detection** - All modifiers now use GetAsyncKeyState instead of SWELL wParam flags (which are always zero on macOS). Cmd+Scroll pans, Option+Scroll zooms vertically.
+- **SET mode only includes selected items** - Previously, pressing T with items 1 and 3 selected (but not 2) included all three. Now stores explicit item pointers. Working set refreshes validate pointers after split/delete.
+- **Track follow respects explicit selection** - During playback, track follow no longer overrides a user-selected item. Only activates when no item is selected or selection doesn't match displayed item.
+- **Fade preservation after gain+selection** - Fade-in/out params saved before split, re-applied to outermost surviving items. Works in both single-item and timeline gain paths.
+- **Gain double-apply eliminated** - After split+reload in single-item gain path, db is zeroed to prevent ScaleAudioRange from re-applying gain already baked into freshly loaded audio.
+- **Timeline view rebuild after gain** - Both selection and no-selection gain paths rebuild timeline from track items, ensuring segments are up-to-date after splits.
+- **SET mode items refresh** - After gain or delete operations, working set items list is rebuilt from the track to include new split fragments.
+- **Ripple delete view clamp** - View duration always clamped to content after delete (both single-item and timeline paths). Fixes silence gap at end after ripple delete.
+- **Space plays from cursor** - When cursor is outside the selection, Space plays from cursor position. When inside, plays the selection. Allows previewing audio before/after a selection.
+- **Cut is now ripple** - Cmd+X (Cut) uses ripple delete by default, matching standard waveform editor behavior (removes selection and closes gap).
+- **Knob drag race condition** - skipBatchWrite set immediately on knob drag start, preventing first-frame D_VOL write to whole item when selection is active.
+- **Context menu fade alignment** - Fade-out from menu spans from selection start to item end. Fade-in spans from item start to selection end.
+- **Segment navigation scroll clamp** - View cannot scroll past audio content when navigating to last segment.
+- **Pasted item waveform** - UpdateItemInProject + Build Missing Peaks ensures waveform appears immediately in REAPER arrange.
+
+### Performance
+- **Full-selection gain optimization** - When selection covers the entire timeline, uses direct D_VOL path (no split). Avoids floating-point edge cases and unnecessary item fragmentation.
+
 ## [1.8.0] - 2026-03-27
 
 ### Added
