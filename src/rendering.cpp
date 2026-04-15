@@ -686,102 +686,133 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
 {
   if (!m_dynamics.HasResults()) return;
   const auto& results = m_dynamics.GetResults();
-  if (results.empty()) return;
+  int count = (int)results.size();
+  if (count == 0) return;
 
   RECT wr = m_waveform.GetRect();
   int waveL = wr.left;
   int waveR = wr.right - DB_SCALE_WIDTH;
+  int waveW = waveR - waveL;
   int yTop = wr.top + 2;
   int yBot = wr.bottom - 2;
   int yRange = yBot - yTop;
-  if (yRange < 1) return;
-
-  // Fade parameters (to modify dynamics curve by effective fade gain)
-  auto fp = m_waveform.GetActiveFadeParams();
-  double itemDur = m_waveform.GetItemDuration();
-
-  // Orange/yellow dynamics curve (matches saxmand's ImGui overlay color)
-  OwnedPen dynPen(PS_SOLID, 2, RGB(255, 160, 40));
-  DCPenScope penScope(hdc, dynPen);
+  if (yRange < 1 || waveW <= 0) return;
 
   double viewStart = m_waveform.GetViewStart();
   double viewDur = m_waveform.GetViewDuration();
+  double viewEnd = viewStart + viewDur;
   const auto& params = m_dynamics.GetParams();
-  bool first = true;
 
-  for (const auto& pt : results) {
-    if (pt.time < viewStart - 0.01 || pt.time > viewStart + viewDur + 0.01) continue;
+  // Fade parameters
+  auto fp = m_waveform.GetActiveFadeParams();
+  double itemDur = m_waveform.GetItemDuration();
 
-    int px = m_waveform.TimeToX(pt.time);
-    if (px < waveL || px > waveR) continue;
+  // Gain knob visual offset (applies during drag, 1.0 = no change)
+  double gainOffsetDb = 20.0 * log10(std::max(m_waveform.GetBatchGainOffset(), 1e-12));
 
-    // Apply fade gain to dynamics curve
-    double fadeGain = 1.0;
-    if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
-      fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
-    if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
-      fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
-
-    // Convert fade-adjusted dB to norm
-    double adjDb = pt.db + 20.0 * log10(std::max(fadeGain, 1e-12));
-    double norm = (adjDb - params.minDb) / (params.maxDb - params.minDb);
-    norm = std::max(0.0, std::min(1.0, norm));
-
-    int py = yBot - (int)(norm * (double)yRange);
-    py = std::max((int)wr.top, std::min((int)wr.bottom, py));
-
-    if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
-    else LineTo(hdc, px, py);
+  // Binary search: first result at or after viewStart
+  int startIdx;
+  {
+    int lo = 0, hi = count;
+    while (lo < hi) {
+      int mid = (lo + hi) / 2;
+      if (results[mid].time < viewStart) lo = mid + 1;
+      else hi = mid;
+    }
+    startIdx = std::max(0, lo - 1); // one before for line continuity
   }
 
-  // Compression preview curve (green) — shows post-compression levels
+  // Stride: skip results that map to same pixel (max 1 point per pixel)
+  double resultDt = (count > 1) ? (results[count - 1].time - results[0].time) / (double)(count - 1) : 0.001;
+  double secsPerPx = viewDur / (double)waveW;
+  int stride = std::max(1, (int)(secsPerPx / resultDt));
+
+  // Compression preview params
   double targetDb = m_dynamics.GetTargetDb();
   double pctAbove = params.compressAbove / 100.0;
   double pctBelow = params.compressBelow / 100.0;
-  if (pctAbove != 0.0 || pctBelow != 0.0) {
-    OwnedPen compPen(PS_SOLID, 2, RGB(80, 220, 120));
-    DCPenScope compScope(hdc, compPen);
-    bool compFirst = true;
+  bool showComp = (pctAbove != 0.0 || pctBelow != 0.0);
 
-    for (const auto& pt : results) {
-      if (pt.time < viewStart - 0.01 || pt.time > viewStart + viewDur + 0.01) continue;
+  // Helper: compute fade-adjusted dB for a point
+  // Inlined below to avoid function call overhead in tight loop
+
+  // --- Orange amplitude curve ---
+  {
+    OwnedPen dynPen(PS_SOLID, 2, RGB(255, 160, 40));
+    DCPenScope scope(hdc, dynPen);
+    bool first = true;
+    int lastPx = -2;
+
+    for (int i = startIdx; i < count; i += stride) {
+      const auto& pt = results[i];
+      if (pt.time > viewEnd + 0.01) break;
       int px = m_waveform.TimeToX(pt.time);
       if (px < waveL || px > waveR) continue;
+      if (px == lastPx) continue;
+      lastPx = px;
 
-      // Apply fade gain
       double fadeGain = 1.0;
       if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
         fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
       if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
         fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
 
-      double adjDb = pt.db + 20.0 * log10(std::max(fadeGain, 1e-12));
-      // Apply compression: push toward target by percentage
-      double pct = (adjDb < targetDb) ? pctBelow : pctAbove;
-      double compDb = adjDb + pct * (targetDb - adjDb);
-      double norm = (compDb - params.minDb) / (params.maxDb - params.minDb);
+      double adjDb = pt.db + gainOffsetDb + 20.0 * log10(std::max(fadeGain, 1e-12));
+      double norm = (adjDb - params.minDb) / (params.maxDb - params.minDb);
       norm = std::max(0.0, std::min(1.0, norm));
-
       int py = yBot - (int)(norm * (double)yRange);
-      py = std::max((int)wr.top, std::min((int)wr.bottom, py));
+      py = std::max(yTop, std::min(yBot, py));
 
-      if (compFirst) { MoveToEx(hdc, px, py, nullptr); compFirst = false; }
+      if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
       else LineTo(hdc, px, py);
     }
   }
 
-  // Target dB line (yellow horizontal)
+  // --- Green compression preview curve ---
+  if (showComp) {
+    OwnedPen compPen(PS_SOLID, 2, RGB(80, 220, 120));
+    DCPenScope scope(hdc, compPen);
+    bool first = true;
+    int lastPx = -2;
+
+    for (int i = startIdx; i < count; i += stride) {
+      const auto& pt = results[i];
+      if (pt.time > viewEnd + 0.01) break;
+      int px = m_waveform.TimeToX(pt.time);
+      if (px < waveL || px > waveR) continue;
+      if (px == lastPx) continue;
+      lastPx = px;
+
+      double fadeGain = 1.0;
+      if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
+        fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
+      if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
+        fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
+
+      double adjDb = pt.db + gainOffsetDb + 20.0 * log10(std::max(fadeGain, 1e-12));
+      double pct = (adjDb < targetDb) ? pctBelow : pctAbove;
+      double compDb = adjDb + pct * (targetDb - adjDb);
+      double norm = (compDb - params.minDb) / (params.maxDb - params.minDb);
+      norm = std::max(0.0, std::min(1.0, norm));
+      int py = yBot - (int)(norm * (double)yRange);
+      py = std::max(yTop, std::min(yBot, py));
+
+      if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
+      else LineTo(hdc, px, py);
+    }
+  }
+
+  // --- Target dB line (yellow horizontal) ---
   {
     double targetNorm = (targetDb - params.minDb) / (params.maxDb - params.minDb);
     targetNorm = std::max(0.0, std::min(1.0, targetNorm));
     int targetY = yBot - (int)(targetNorm * (double)yRange);
 
     OwnedPen targetPen(PS_SOLID, 1, RGB(255, 220, 50));
-    DCPenScope targetScope(hdc, targetPen);
+    DCPenScope scope(hdc, targetPen);
     MoveToEx(hdc, waveL, targetY, nullptr);
     LineTo(hdc, waveR, targetY);
 
-    // Label
     HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, RGB(255, 220, 50));
