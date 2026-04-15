@@ -244,8 +244,8 @@ void SneakPeak::DoCopy()
   if (selFrames <= 0) return;
 
   // Internal clipboard - fill samples first, set numFrames last
-  if (m_waveform.IsMultiItem() && !m_waveform.IsTimelineView()) {
-    // Multi-item: mix all layers in selected range
+  if (m_waveform.IsMultiItemActive()) {
+    // Multi-item view only: mix all layers in selected range
     m_waveform.GetMultiItemView().GetMixedAudio(startF, endF, nch, s_clipboard.samples);
   } else {
     // Single-item / timeline / SET: copy from m_audioData
