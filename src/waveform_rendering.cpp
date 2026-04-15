@@ -1295,6 +1295,7 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
 
   auto drawPointsForEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset) {
     int count = g_CountEnvelopePoints(env);
+    int lastPx = -100; // dedup: skip points on same pixel column
     for (int i = 0; i < count; i++) {
       double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
       int ptShape = 0;
@@ -1304,6 +1305,9 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
 
       int px = TimeToX(ptTime + segRelOffset);
       if (px < waveL - 4 || px > waveR + 4) continue;
+      // Skip unselected points that overlap the same pixel (dense envelopes)
+      if (!ptSelected && abs(px - lastPx) < 3) continue;
+      lastPx = px;
 
       double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
       int py = EnvYToGainY(gain);

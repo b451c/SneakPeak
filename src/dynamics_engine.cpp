@@ -134,3 +134,62 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression() 
   }
   return out;
 }
+
+// Iterative Ramer-Douglas-Peucker curve simplification.
+// Keeps only points needed to represent the shape within epsilonDb tolerance.
+// 60000 points -> typically 200-500 for speech/music compression curves.
+std::vector<DynamicsEngine::CompressPoint>
+DynamicsEngine::SimplifyCurve(const std::vector<CompressPoint>& pts, double epsilonDb)
+{
+  int n = (int)pts.size();
+  if (n <= 2) return pts;
+
+  std::vector<bool> keep(n, false);
+  keep[0] = true;
+  keep[n - 1] = true;
+
+  // Explicit stack: ranges to process (avoids recursion depth issues)
+  std::vector<std::pair<int, int>> stack;
+  stack.reserve(32);
+  stack.push_back({0, n - 1});
+
+  while (!stack.empty()) {
+    auto range = stack.back();
+    stack.pop_back();
+    int start = range.first;
+    int end = range.second;
+
+    if (end - start < 2) continue;
+
+    double t0 = pts[start].time, db0 = pts[start].dbAdjust;
+    double t1 = pts[end].time,   db1 = pts[end].dbAdjust;
+    double dt = t1 - t0;
+
+    // Find point with max dB deviation from linear interpolation
+    double maxDist = 0.0;
+    int maxIdx = start;
+
+    for (int i = start + 1; i < end; i++) {
+      double frac = (dt > 0.0) ? (pts[i].time - t0) / dt : 0.0;
+      double interp = db0 + (db1 - db0) * frac;
+      double dist = fabs(pts[i].dbAdjust - interp);
+      if (dist > maxDist) {
+        maxDist = dist;
+        maxIdx = i;
+      }
+    }
+
+    if (maxDist > epsilonDb) {
+      keep[maxIdx] = true;
+      stack.push_back({start, maxIdx});
+      stack.push_back({maxIdx, end});
+    }
+  }
+
+  std::vector<CompressPoint> result;
+  result.reserve(n / 10); // rough estimate
+  for (int i = 0; i < n; i++) {
+    if (keep[i]) result.push_back(pts[i]);
+  }
+  return result;
+}

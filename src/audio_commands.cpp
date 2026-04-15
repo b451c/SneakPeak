@@ -1349,7 +1349,11 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   }
   if (!m_dynamics.HasResults()) return;
 
-  auto comp = m_dynamics.ComputeCompression();
+  auto compRaw = m_dynamics.ComputeCompression();
+  if (compRaw.empty()) return;
+
+  // Simplify curve: RDP reduces ~60000 points to ~200-500 essential shape points
+  auto comp = DynamicsEngine::SimplifyCurve(compRaw, 0.3); // 0.3 dB tolerance
   if (comp.empty()) return;
 
   if (!g_GetTakeEnvelopeByName || !g_InsertEnvelopePointEx ||

@@ -48,6 +48,12 @@ public:
   };
   std::vector<CompressPoint> ComputeCompression() const;
 
+  // Ramer-Douglas-Peucker curve simplification.
+  // Reduces dense compression points to essential shape-defining subset.
+  // epsilonDb: max allowed dB error (0.3 = inaudible, 0.1 = precise).
+  static std::vector<CompressPoint> SimplifyCurve(const std::vector<CompressPoint>& pts,
+                                                  double epsilonDb);
+
 private:
   // Stage 1: collect peak per 1ms window from audio buffer
   void CollectPeaks(const double* audioData, int numFrames, int numChannels,
