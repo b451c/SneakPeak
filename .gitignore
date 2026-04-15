@@ -3,13 +3,22 @@ build/
 *.dylib
 sdk/
 WDL/
-.kiro/
+
+# Agent harness and internal docs (not for users)
+.harness/
+CLAUDE.md
+ROADMAP_v2.0.md
 AUDIT.md
 REFACTOR_LOG.md
-CLAUDE.md
-forum_post.txt
-.harness/
+init.sh
+next_session_prompt.txt
+
+# Forum/messaging drafts
 forum_post*.txt
 forum_reply*.txt
-# Internal tags not pushed
 pm_saxmand*.txt
+pm_*.txt
+telegram*.txt
+
+# IDE
+.kiro/
