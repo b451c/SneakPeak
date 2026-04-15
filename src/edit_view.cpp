@@ -526,9 +526,9 @@ void SneakPeak::LoadSelectedItem()
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
   int selCount = g_CountSelectedMediaItems(nullptr);
-  MediaItem* firstSel = (selCount > 0) ? g_GetSelectedMediaItem(nullptr, 0) : nullptr;
   DBG("[SneakPeak] LoadSelectedItem: count=%d firstSel=%p isTimeline=%d isTrackView=%d\n",
-      selCount, (void*)firstSel, m_waveform.IsTimelineView(), m_waveform.IsTrackView());
+      selCount, selCount > 0 ? (void*)g_GetSelectedMediaItem(nullptr, 0) : nullptr,
+      m_waveform.IsTimelineView(), m_waveform.IsTrackView());
 
   // Timeline/Multi-item view: suppress reload during edit operations
   if (m_timelineEditGuard > 0 && (m_waveform.IsTimelineOrMultiItem())) {
@@ -604,7 +604,7 @@ void SneakPeak::LoadSelectedItem()
   m_waveform.UpdateFadeCache(); // read D_VOL/fades immediately so first paint is correct
 
   // Run dynamics analysis on freshly loaded audio
-  if (m_dynamicsVisible && m_waveform.GetAudioSampleCount() > 0) {
+  if ((m_dynamicsVisible || m_dynamicsPanel.IsVisible()) && m_waveform.GetAudioSampleCount() > 0) {
     double itemVolDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
     m_dynamics.Analyze(m_waveform.GetAudioData().data(),
                        m_waveform.GetAudioSampleCount(),

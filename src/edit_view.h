@@ -12,6 +12,7 @@
 #include "spectral_view.h"
 #include "minimap_view.h"
 #include "dynamics_engine.h"
+#include "dynamics_panel.h"
 #include <vector>
 #include <string>
 
@@ -267,6 +268,7 @@ private:
   SpectralView m_spectral;
   MinimapView m_minimap;
   DynamicsEngine m_dynamics;
+  DynamicsPanel m_dynamicsPanel;
   bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;
   bool m_spectralPainted = false;  // triggers one repaint after FFT completes
@@ -385,6 +387,7 @@ private:
   int m_masterPeakCount = 0;
   void DrawMasterWaveform(HDC hdc);
   void DrawDynamicsCurve(HDC hdc);
+  void ApplyDynamicsToEnvelope();
 
   static AudioClipboard s_clipboard;
   static const int TIMER_REFRESH = 100;

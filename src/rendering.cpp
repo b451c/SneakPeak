@@ -32,6 +32,7 @@ void SneakPeak::OnPaint(HDC hdc)
     m_waveform.Paint(hdc);
     if (m_dynamicsVisible && m_dynamics.HasResults())
       DrawDynamicsCurve(hdc);
+    m_dynamicsPanel.Draw(hdc, m_waveformRect);
     // Envelope selection rectangle overlay (hatched semi-transparent fill + cyan border)
     if (m_envRectSelecting) {
       int rx1 = std::min(m_envRectStartX, m_envRectEndX);

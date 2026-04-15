@@ -206,6 +206,21 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
     return;
   }
 
+  // Dynamics panel interaction
+  if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_dynamicsPanel.OnMouseDown(x, y, m_waveformRect)) {
+      if (m_dynamicsPanel.IsDragging())
+        SetCapture(m_hwnd);
+      // Check if Apply was clicked
+      if (m_dynamicsPanel.ApplyRequested()) {
+        m_dynamicsPanel.ClearApplyRequested();
+        ApplyDynamicsToEnvelope();
+      }
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    return;
+  }
+
   // Spectral area — time selection + frequency band selection
   if (m_spectralVisible && y >= m_spectralRect.top && y < m_spectralRect.bottom) {
     if (m_waveform.HasItem()) {
@@ -580,6 +595,12 @@ void SneakPeak::OnMouseUp(int x, int y)
   if (m_splitterDragging) {
     m_splitterDragging = false;
     ReleaseCapture();
+    return;
+  }
+  if (m_dynamicsPanel.IsDragging()) {
+    m_dynamicsPanel.OnMouseUp();
+    ReleaseCapture();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
   if (m_envFreehand) {
@@ -1191,6 +1212,24 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 
   if (m_gainPanel.IsDragging()) {
     m_gainPanel.OnMouseMove(x, y, m_waveformRect);
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+
+  if (m_dynamicsPanel.IsDragging()) {
+    m_dynamicsPanel.OnMouseMove(x, y, m_waveformRect);
+    // Real-time reanalysis on slider drag
+    if (m_dynamicsPanel.ParamsChanged()) {
+      m_dynamicsPanel.ClearParamsChanged();
+      m_dynamics.SetParams(m_dynamicsPanel.GetParams());
+      if (m_waveform.GetAudioSampleCount() > 0) {
+        double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+        m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                           m_waveform.GetAudioSampleCount(),
+                           m_waveform.GetNumChannels(),
+                           m_waveform.GetSampleRate(),
+                           ivDb, m_dynamicsPanel.GetParams());
+      }
+    }
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 

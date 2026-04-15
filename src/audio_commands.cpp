@@ -1334,3 +1334,47 @@ void SneakPeak::DoNormalizeLUFS(double targetLufs)
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
+void SneakPeak::ApplyDynamicsToEnvelope()
+{
+  if (!m_waveform.HasItem() || m_waveform.IsStandaloneMode() || !m_waveform.GetTake()) return;
+
+  // Ensure analysis is current
+  if (!m_dynamics.HasResults() && m_waveform.GetAudioSampleCount() > 0) {
+    double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+    m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                       m_waveform.GetAudioSampleCount(),
+                       m_waveform.GetNumChannels(),
+                       m_waveform.GetSampleRate(),
+                       ivDb, m_dynamics.GetParams());
+  }
+  if (!m_dynamics.HasResults()) return;
+
+  auto comp = m_dynamics.ComputeCompression();
+  if (comp.empty()) return;
+
+  if (!g_GetTakeEnvelopeByName || !g_InsertEnvelopePointEx ||
+      !g_Envelope_SortPoints || !g_ScaleToEnvelopeMode || !g_GetEnvelopeScalingMode)
+    return;
+
+  TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+  if (!env) return; // user must enable envelope first
+
+  int scalingMode = g_GetEnvelopeScalingMode(env);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+
+  bool noSort = true;
+  for (const auto& cp : comp) {
+    double gainLinear = pow(10.0, cp.dbAdjust / 20.0);
+    double rawVal = g_ScaleToEnvelopeMode(scalingMode, gainLinear);
+    g_InsertEnvelopePointEx(env, -1, cp.time, rawVal, 0, 0.0, false, &noSort);
+  }
+  g_Envelope_SortPoints(env);
+
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Apply Dynamics", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+  if (g_UpdateArrange) g_UpdateArrange();
+  m_dynamicsVisible = true;
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
