@@ -936,22 +936,19 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 {
   // Envelope selection rectangle (Cmd+left-drag)
   if (m_envRectStartX != 0 || m_envRectStartY != 0) {
-    if (wParam & MK_LBUTTON) {
-      int dx = x - m_envRectStartX;
-      int dy = y - m_envRectStartY;
-      if (!m_envRectSelecting && (dx * dx + dy * dy > 25)) {
-        m_envRectSelecting = true;
-      }
-      if (m_envRectSelecting) {
-        m_envRectEndX = x;
-        m_envRectEndY = y;
-        InvalidateRect(m_hwnd, nullptr, FALSE);
-      }
-      return;
-    } else {
-      m_envRectStartX = m_envRectStartY = 0;
-      m_envRectSelecting = false;
+    int dx = x - m_envRectStartX;
+    int dy = y - m_envRectStartY;
+    if (!m_envRectSelecting && (dx * dx + dy * dy > 25)) {
+      m_envRectSelecting = true;
     }
+    if (m_envRectSelecting) {
+      m_envRectEndX = x;
+      m_envRectEndY = y;
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    m_lastMouseX = x;
+    m_lastMouseY = y;
+    return;
   }
 
   // Drag export: check threshold
@@ -1038,14 +1035,16 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     // Add point every 4 pixels for smooth but not excessive density
     if (abs(x - m_envFreehandLastX) >= 4) {
       TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
-      if (env && g_InsertEnvelopePointEx && g_GetEnvelopeScalingMode && g_ScaleToEnvelopeMode) {
+      if (env && g_InsertEnvelopePointEx && g_GetEnvelopeScalingMode &&
+          g_ScaleToEnvelopeMode && g_Envelope_SortPoints) {
         double time = m_waveform.XToTime(x);
         time = std::max(0.0, std::min(m_waveform.GetItemDuration(), time));
         double gain = m_waveform.EnvPixelToGain(y);
         int scalingMode = g_GetEnvelopeScalingMode(env);
         double rawVal = g_ScaleToEnvelopeMode(scalingMode, gain);
-        bool noSort = true;
+        bool noSort = false;
         g_InsertEnvelopePointEx(env, -1, time, rawVal, 0, 0.0, false, &noSort);
+        g_Envelope_SortPoints(env); // sort after each point to prevent visual glitches
         m_envFreehandLastX = x;
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
