@@ -1196,7 +1196,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       // Horizontal trackpad swipe / Shift+Scroll on macOS
       if (!m_waveform.HasItem()) return 1;
       int delta = (short)HIWORD(wParam);        // SWELL scales deltaX by 60.0
-      double steps = (double)delta / 60.0;
+      double steps = -(double)delta / 60.0;  // negate to match REAPER arrange direction
       m_waveform.ScrollH(steps * m_waveform.GetViewDuration() * 0.1);
       m_spectral.Invalidate();
       InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -1217,7 +1217,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       m_waveform.ZoomHorizontal(factor, centerTime);
       m_spectral.Invalidate();
       InvalidateRect(m_hwnd, nullptr, FALSE);
-      return 0;
+      return 1;  // consume gesture, prevent propagation to REAPER
     }
 
     case WM_KEYDOWN:

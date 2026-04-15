@@ -226,7 +226,7 @@ void GainPanel::OnMouseUp()
   m_panelDragging = false;
 }
 
-void GainPanel::Draw(HDC hdc, RECT waveformRect)
+void GainPanel::Draw(HDC hdc, RECT waveformRect, bool hasSelection)
 {
   if (!m_visible) return;
 
@@ -335,7 +335,10 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect)
   else
     snprintf(dbText, sizeof(dbText), "%+.1f dB", m_db);
 
-  SetTextColor(hdc, IsBatch() ? RGB(255, 200, 80) : RGB(100, 200, 255));
+  // Blue: single item or active selection (targeting specific range)
+  // Gold: batch mode without selection (relative adjustment across segments)
+  bool useGold = IsBatch() && !hasSelection;
+  SetTextColor(hdc, useGold ? RGB(255, 200, 80) : RGB(100, 200, 255));
   RECT dbRect = { r.left + 32, r.top + 2, r.right - 14, r.bottom - 2 };
   DrawText(hdc, dbText, -1, &dbRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 

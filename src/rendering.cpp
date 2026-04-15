@@ -31,7 +31,7 @@ void SneakPeak::OnPaint(HDC hdc)
     m_waveform.Paint(hdc);
   }
   if (m_markers.GetShowMarkers()) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
-  if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect);
+  if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect, m_waveform.HasSelection());
   if (m_waveform.HasItem()) DrawSoloButton(hdc);
   if (m_spectralVisible) {
     DrawSplitter(hdc);

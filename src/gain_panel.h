@@ -8,7 +8,7 @@ class MediaItem;
 
 class GainPanel {
 public:
-  void Draw(HDC hdc, RECT waveformRect);
+  void Draw(HDC hdc, RECT waveformRect, bool hasSelection = false);
   bool HitTest(int x, int y, RECT waveformRect) const;
   RECT GetRect(RECT waveformRect) const;
 
@@ -71,7 +71,7 @@ private:
   int m_offsetY = 0;
 
   static constexpr double MIN_DB = -60.0;
-  static constexpr double MAX_DB = 12.0;
+  static constexpr double MAX_DB = 24.0;
   static const int PANEL_W = 110;
   static const int PANEL_H = 32;
   static const int KNOB_RADIUS = 10;
