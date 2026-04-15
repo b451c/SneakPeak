@@ -252,12 +252,23 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   int centerY = yTop + height / 2;
   float halfH = (float)(height / 2) * m_verticalZoom;
 
-  // Apply item volume (D_VOL) and fades so waveform reflects changes
+  // Apply item volume (D_VOL), fades, and take volume envelope
   double itemVol = m_fadeCache.itemVol;
   auto fp = GetActiveFadeParams();
   double fadeInLen = fp.fadeInLen, fadeOutLen = fp.fadeOutLen;
   int fadeInShape = fp.fadeInShape, fadeOutShape = fp.fadeOutShape;
   double fadeInDir = fp.fadeInDir, fadeOutDir = fp.fadeOutDir;
+
+  // Take volume envelope (for waveform visual feedback)
+  TrackEnvelope* volEnv = nullptr;
+  int envScalingMode = 0;
+  if (m_envShowVolume && !m_standaloneMode && m_take &&
+      !m_multiItemActive && !m_trackViewActive && !m_timelineViewActive &&
+      g_GetTakeEnvelopeByName && g_Envelope_Evaluate &&
+      g_GetEnvelopeScalingMode && g_ScaleFromEnvelopeMode) {
+    volEnv = g_GetTakeEnvelopeByName(m_take, "Volume");
+    if (volEnv) envScalingMode = g_GetEnvelopeScalingMode(volEnv);
+  }
 
 
   // Pens: normal (green) and selected (dark green), plus RMS (darker variants)
@@ -323,7 +334,15 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
       }
     }
 
-    double vol = itemVol * fadeGain * sgain;
+    // Take volume envelope gain
+    double envGain = 1.0;
+    if (volEnv) {
+      double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
+      g_Envelope_Evaluate(volEnv, colTime, (double)m_sampleRate, 0, &rawVal, &d1, &d2, &d3);
+      envGain = g_ScaleFromEnvelopeMode(envScalingMode, rawVal);
+    }
+
+    double vol = itemVol * fadeGain * sgain * envGain;
     double rawMax = m_peakMax[idx] * vol;
     double rawMin = m_peakMin[idx] * vol;
     bool clipping = (rawMax > 1.0 || rawMin < -1.0);
@@ -401,7 +420,13 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
       if (m_standaloneGainStart < 0.0) sgain2 = m_standaloneGain;
       else if (colTime >= m_standaloneGainStart && colTime < m_standaloneGainEnd) sgain2 = m_standaloneGain;
     }
-    double vol = itemVol * fadeGain * sgain2;
+    double envGain2 = 1.0;
+    if (volEnv) {
+      double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
+      g_Envelope_Evaluate(volEnv, colTime, (double)m_sampleRate, 0, &rawVal, &d1, &d2, &d3);
+      envGain2 = g_ScaleFromEnvelopeMode(envScalingMode, rawVal);
+    }
+    double vol = itemVol * fadeGain * sgain2 * envGain2;
     double rmsVal = m_peakRMS[idx] * vol;
 
     int yRmsTop = centerY - (int)(rmsVal * (double)halfH);
