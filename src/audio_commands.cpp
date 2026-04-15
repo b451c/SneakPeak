@@ -247,15 +247,21 @@ void SneakPeak::DoCopy()
   s_clipboard.numChannels = nch;
   s_clipboard.sampleRate = m_waveform.GetSampleRate();
   s_clipboard.numFrames = selFrames;
-  s_clipboard.samples.resize((size_t)selFrames * nch);
 
-  const auto& data = m_waveform.GetAudioData();
-  size_t srcOffset = (size_t)startF * nch;
-  size_t copyLen = (size_t)selFrames * nch;
-  if (srcOffset + copyLen > data.size()) return;
-  std::copy(data.begin() + (long)srcOffset,
-            data.begin() + (long)(srcOffset + copyLen),
-            s_clipboard.samples.begin());
+  if (m_waveform.IsMultiItem() && !m_waveform.IsTimelineView()) {
+    // Multi-item: mix all layers in selected range
+    m_waveform.GetMultiItemView().GetMixedAudio(startF, endF, nch, s_clipboard.samples);
+  } else {
+    // Single-item / timeline / SET: copy from m_audioData
+    const auto& data = m_waveform.GetAudioData();
+    size_t srcOffset = (size_t)startF * nch;
+    size_t copyLen = (size_t)selFrames * nch;
+    if (srcOffset + copyLen > data.size()) return;
+    s_clipboard.samples.resize(copyLen);
+    std::copy(data.begin() + (long)srcOffset,
+              data.begin() + (long)(srcOffset + copyLen),
+              s_clipboard.samples.begin());
+  }
 
   // Also trigger REAPER's native copy (40060 = Copy selected area of items)
   if (g_Main_OnCommand) g_Main_OnCommand(40060, 0);
@@ -275,10 +281,6 @@ void SneakPeak::DoCut()
 void SneakPeak::DoPaste()
 {
   if (!m_waveform.HasItem() || s_clipboard.numFrames <= 0) return;
-  if (m_waveform.IsMultiItemActive()) {
-    MessageBox(m_hwnd, "Paste in multi-item view coming soon.", "SneakPeak", MB_OK);
-    return;
-  }
   // Standalone mode: destructive paste (no REAPER track)
   if (m_waveform.IsStandaloneMode()) {
     DoPasteDestructive();
