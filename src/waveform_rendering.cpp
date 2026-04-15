@@ -1116,6 +1116,61 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
   }
 }
 
+int WaveformView::EnvYToGainY(double gain) const
+{
+  int yTop = m_rect.top + 2;
+  int yBot = m_rect.bottom - 2;
+  int yRange = yBot - yTop;
+  int y = yBot - (int)(gain * (double)yRange);
+  return std::max((int)m_rect.top, std::min((int)m_rect.bottom, y));
+}
+
+double WaveformView::EnvPixelToGain(int y) const
+{
+  int yTop = m_rect.top + 2;
+  int yBot = m_rect.bottom - 2;
+  int yRange = yBot - yTop;
+  if (yRange < 1) return 1.0;
+  double gain = (double)(yBot - y) / (double)yRange;
+  return std::max(0.0, gain);
+}
+
+int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
+{
+  if (!m_item || !m_take || m_standaloneMode || !m_envShowVolume) return -1;
+  if (m_multiItemActive || m_trackViewActive || m_timelineViewActive) return -1;
+  if (!g_GetTakeEnvelopeByName || !g_CountEnvelopePoints ||
+      !g_GetEnvelopePoint || !g_GetEnvelopeScalingMode || !g_ScaleFromEnvelopeMode) return -1;
+
+  TrackEnvelope* env = g_GetTakeEnvelopeByName(m_take, "Volume");
+  if (!env) return -1;
+
+  int scalingMode = g_GetEnvelopeScalingMode(env);
+  int count = g_CountEnvelopePoints(env);
+  int bestIdx = -1;
+  int bestDist = hitRadius * hitRadius + 1;
+
+  for (int i = 0; i < count; i++) {
+    double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
+    int ptShape = 0;
+    bool ptSelected = false;
+    if (!g_GetEnvelopePoint(env, i, &ptTime, &ptValue, &ptShape, &ptTension, &ptSelected))
+      continue;
+
+    double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
+    int px = TimeToX(ptTime);
+    int py = EnvYToGainY(gain);
+    int dx = x - px;
+    int dy = y - py;
+    int dist = dx * dx + dy * dy;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
 void WaveformView::DrawVolumeEnvelope(HDC hdc)
 {
   // Only draw for single REAPER item with take (not standalone, not multi/timeline/SET)
@@ -1135,38 +1190,58 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
   int w = waveR - waveL;
   if (w < 2) return;
 
-  // Y mapping: top = gain 1.0, bottom = gain 0.0 (same as DrawFadeEnvelope)
-  int yTop = m_rect.top + 2;
-  int yBot = m_rect.bottom - 2;
-  int yRange = yBot - yTop;
+  int yRange = (m_rect.bottom - 2) - (m_rect.top + 2);
   if (yRange < 1) return;
 
-  OwnedPen envPen(PS_SOLID, 2, g_theme.volumeEnvelope);
-  DCPenScope penScope(hdc, envPen);
+  // Draw envelope curve
+  {
+    OwnedPen envPen(PS_SOLID, 2, g_theme.volumeEnvelope);
+    DCPenScope penScope(hdc, envPen);
 
-  double timeStep = m_viewDuration / (double)w;
-  double colTime = m_viewStartTime;
-  bool first = true;
+    double timeStep = m_viewDuration / (double)w;
+    double colTime = m_viewStartTime;
+    bool first = true;
 
-  for (int col = 0; col < w; col++, colTime += timeStep) {
-    double rawValue = 0.0, dVdS = 0.0, ddVdS = 0.0, dddVdS = 0.0;
-    g_Envelope_Evaluate(env, colTime, (double)m_sampleRate, 0,
-                        &rawValue, &dVdS, &ddVdS, &dddVdS);
-
-    // Convert raw envelope value to linear gain
-    double gain = g_ScaleFromEnvelopeMode(scalingMode, rawValue);
-
-    // Map gain to Y: 1.0 = yTop, 0.0 = yBot. Clamp to waveform bounds.
-    int y = yBot - (int)(gain * (double)yRange);
-    y = std::max((int)m_rect.top, std::min((int)m_rect.bottom, y));
-
-    int x = waveL + col;
-    if (first) {
-      MoveToEx(hdc, x, y, nullptr);
-      first = false;
-    } else {
-      LineTo(hdc, x, y);
+    for (int col = 0; col < w; col++, colTime += timeStep) {
+      double rawValue = 0.0, dVdS = 0.0, ddVdS = 0.0, dddVdS = 0.0;
+      g_Envelope_Evaluate(env, colTime, (double)m_sampleRate, 0,
+                          &rawValue, &dVdS, &ddVdS, &dddVdS);
+      double gain = g_ScaleFromEnvelopeMode(scalingMode, rawValue);
+      int y = EnvYToGainY(gain);
+      int x = waveL + col;
+      if (first) { MoveToEx(hdc, x, y, nullptr); first = false; }
+      else LineTo(hdc, x, y);
     }
+  }
+
+  // Draw envelope points as small filled circles
+  if (!g_CountEnvelopePoints || !g_GetEnvelopePoint) return;
+  int count = g_CountEnvelopePoints(env);
+  if (count <= 0) return;
+
+  OwnedBrush ptBrush(g_theme.volumeEnvelope);
+  OwnedPen ptOutline(PS_SOLID, 1, RGB(255, 255, 255));
+
+  for (int i = 0; i < count; i++) {
+    double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
+    int ptShape = 0;
+    bool ptSelected = false;
+    if (!g_GetEnvelopePoint(env, i, &ptTime, &ptValue, &ptShape, &ptTension, &ptSelected))
+      continue;
+
+    int px = TimeToX(ptTime);
+    if (px < waveL - 4 || px > waveR + 4) continue; // off-screen
+
+    double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
+    int py = EnvYToGainY(gain);
+
+    // Draw filled circle with white outline
+    constexpr int r = 4;
+    HPEN oldPen = (HPEN)SelectObject(hdc, (HPEN)ptOutline);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, (HBRUSH)ptBrush);
+    Ellipse(hdc, px - r, py - r, px + r, py + r);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
   }
 }
 

@@ -99,6 +99,12 @@ bool (*g_GetEnvelopePoint)(TrackEnvelope*, int, double*, double*, int*, double*,
 int (*g_GetEnvelopeScalingMode)(TrackEnvelope*) = nullptr;
 double (*g_ScaleFromEnvelopeMode)(int, double) = nullptr;
 int (*g_Envelope_Evaluate)(TrackEnvelope*, double, double, int, double*, double*, double*, double*) = nullptr;
+bool (*g_SetEnvelopePoint)(TrackEnvelope*, int, double*, double*, int*, double*, bool*, bool*) = nullptr;
+bool (*g_InsertEnvelopePointEx)(TrackEnvelope*, int, double, double, int, double, bool, bool*) = nullptr;
+bool (*g_DeleteEnvelopePointEx)(TrackEnvelope*, int, int) = nullptr;
+bool (*g_Envelope_SortPoints)(TrackEnvelope*) = nullptr;
+int (*g_GetEnvelopePointByTime)(TrackEnvelope*, double) = nullptr;
+double (*g_ScaleToEnvelopeMode)(int, double) = nullptr;
 
 // UI / dialogs
 bool (*g_GetUserInputs)(const char*, int, const char*, char*, int) = nullptr;

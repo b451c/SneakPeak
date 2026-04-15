@@ -283,6 +283,56 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
         }
       }
 
+      // Envelope point interaction (before fade handles and selection)
+      if (m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
+          g_GetTakeEnvelopeByName && g_ScaleToEnvelopeMode && g_InsertEnvelopePointEx &&
+          g_Envelope_SortPoints && g_Envelope_Evaluate && g_GetEnvelopeScalingMode &&
+          g_ScaleFromEnvelopeMode) {
+        TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+        if (env) {
+          int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 8);
+          if (hitIdx >= 0) {
+            // Drag existing point
+            m_envDragging = true;
+            m_envDragPointIdx = hitIdx;
+            SetCapture(m_hwnd);
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            return;
+          }
+          // Check if click is near the envelope line (within 6px vertically)
+          double clickTime = m_waveform.XToTime(x);
+          if (clickTime >= 0.0 && clickTime <= m_waveform.GetItemDuration()) {
+            double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
+            g_Envelope_Evaluate(env, clickTime, m_waveform.GetSampleRate(), 0,
+                                &rawVal, &d1, &d2, &d3);
+            int scalingMode = g_GetEnvelopeScalingMode(env);
+            double lineGain = g_ScaleFromEnvelopeMode(scalingMode, rawVal);
+            int lineY = m_waveform.EnvYToGainY(lineGain);
+            if (abs(y - lineY) <= 6) {
+              // Add new point at click position
+              double clickGain = m_waveform.EnvPixelToGain(y);
+              double newRawVal = g_ScaleToEnvelopeMode(scalingMode, clickGain);
+              if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+              bool noSort = false;
+              g_InsertEnvelopePointEx(env, -1, clickTime, newRawVal, 0, 0.0, false, &noSort);
+              g_Envelope_SortPoints(env);
+              if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Add envelope point", -1);
+              if (g_UpdateArrange) g_UpdateArrange();
+              // Start dragging the new point
+              int newIdx = g_GetEnvelopePointByTime ? g_GetEnvelopePointByTime(env, clickTime) : -1;
+              if (newIdx >= 0) {
+                m_envDragging = true;
+                m_envDragPointIdx = newIdx;
+                SetCapture(m_hwnd);
+                if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+              }
+              InvalidateRect(m_hwnd, nullptr, FALSE);
+              return;
+            }
+          }
+        }
+      }
+
       // Check REAPER fade handles (16px hit zone around handle)
       if (!m_waveform.IsStandaloneMode() && g_GetMediaItemInfo_Value) {
         auto& segs = m_waveform.GetSegments();
@@ -400,6 +450,17 @@ void SneakPeak::OnMouseUp(int x, int y)
   if (m_splitterDragging) {
     m_splitterDragging = false;
     ReleaseCapture();
+    return;
+  }
+  if (m_envDragging) {
+    m_envDragging = false;
+    m_envDragPointIdx = -1;
+    ReleaseCapture();
+    TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
+    if (env && g_Envelope_SortPoints) g_Envelope_SortPoints(env);
+    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Move envelope point", -1);
+    if (g_UpdateArrange) g_UpdateArrange();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
   if (m_fadeDragging != FADE_NONE) {
@@ -835,6 +896,25 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     m_toolbar.SetHover(-1);
   }
 
+  // Envelope point dragging
+  if (m_envDragging && m_envDragPointIdx >= 0 && m_waveform.HasItem()) {
+    TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
+    if (env && g_SetEnvelopePoint && g_GetEnvelopeScalingMode && g_ScaleToEnvelopeMode) {
+      double newTime = m_waveform.XToTime(x);
+      newTime = std::max(0.0, std::min(m_waveform.GetItemDuration(), newTime));
+      double newGain = m_waveform.EnvPixelToGain(y);
+      int scalingMode = g_GetEnvelopeScalingMode(env);
+      double newRawVal = g_ScaleToEnvelopeMode(scalingMode, newGain);
+      bool noSort = true;
+      g_SetEnvelopePoint(env, m_envDragPointIdx, &newTime, &newRawVal, nullptr, nullptr, nullptr, &noSort);
+      if (g_UpdateArrange) g_UpdateArrange();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    m_lastMouseX = x;
+    m_lastMouseY = y;
+    return;
+  }
+
   if (m_fadeDragging != FADE_NONE && m_waveform.HasItem()) {
     double time = m_waveform.XToTime(x);
     double dur = m_waveform.GetItemDuration();
@@ -1078,6 +1158,32 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case VK_DELETE:
     case VK_BACK: {
       bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+      // Delete envelope point at cursor (if envelope visible and point exists near cursor)
+      if (!ctrl && !shift && m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
+          g_GetTakeEnvelopeByName && g_GetEnvelopePointByTime && g_DeleteEnvelopePointEx &&
+          g_Envelope_SortPoints && g_GetEnvelopePoint) {
+        TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+        if (env) {
+          double cursorTime = m_waveform.GetCursorTime();
+          int ptIdx = g_GetEnvelopePointByTime(env, cursorTime);
+          if (ptIdx >= 0) {
+            double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
+            int ptShape = 0;
+            bool ptSel = false;
+            g_GetEnvelopePoint(env, ptIdx, &ptTime, &ptValue, &ptShape, &ptTension, &ptSel);
+            // Only delete if point is close to cursor (within 0.05s)
+            if (fabs(ptTime - cursorTime) < 0.05) {
+              if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+              g_DeleteEnvelopePointEx(env, -1, ptIdx);
+              g_Envelope_SortPoints(env);
+              if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
+              if (g_UpdateArrange) g_UpdateArrange();
+              InvalidateRect(m_hwnd, nullptr, FALSE);
+              break;
+            }
+          }
+        }
+      }
       if (ctrl) {
         DoSilence();
       } else {

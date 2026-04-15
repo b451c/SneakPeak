@@ -233,6 +233,10 @@ private:
   double m_fadeDragStartDir = 0.0;  // starting curvature for vertical drag
   bool m_standaloneFadeDrag = false; // true when dragging standalone fade handle
 
+  // Envelope point dragging
+  bool m_envDragging = false;
+  int m_envDragPointIdx = -1;  // index of point being dragged (-1 = none)
+
   MarkerManager m_markers;
 
   GainPanel m_gainPanel;

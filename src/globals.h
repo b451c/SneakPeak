@@ -126,6 +126,12 @@ extern bool (*g_GetEnvelopePoint)(TrackEnvelope* envelope, int ptidx, double* ti
 extern int (*g_GetEnvelopeScalingMode)(TrackEnvelope* env);
 extern double (*g_ScaleFromEnvelopeMode)(int scaling_mode, double val);
 extern int (*g_Envelope_Evaluate)(TrackEnvelope* envelope, double time, double samplerate, int samplesRequested, double* valueOut, double* dVdSOut, double* ddVdSOut, double* dddVdSOut);
+extern bool (*g_SetEnvelopePoint)(TrackEnvelope* envelope, int ptidx, double* timeInOptional, double* valueInOptional, int* shapeInOptional, double* tensionInOptional, bool* selectedInOptional, bool* noSortInOptional);
+extern bool (*g_InsertEnvelopePointEx)(TrackEnvelope* envelope, int autoitem_idx, double time, double value, int shape, double tension, bool selected, bool* noSortInOptional);
+extern bool (*g_DeleteEnvelopePointEx)(TrackEnvelope* envelope, int autoitem_idx, int ptidx);
+extern bool (*g_Envelope_SortPoints)(TrackEnvelope* envelope);
+extern int (*g_GetEnvelopePointByTime)(TrackEnvelope* envelope, double time);
+extern double (*g_ScaleToEnvelopeMode)(int scaling_mode, double val);
 
 // UI / dialogs
 extern bool (*g_GetUserInputs)(const char* title, int num_inputs, const char* captions_csv, char* retvals_csv, int retvals_csv_sz);

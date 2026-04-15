@@ -130,9 +130,12 @@ public:
   void SetSnapToZero(bool snap) { m_snapToZero = snap; }
   bool GetSnapToZero() const { return m_snapToZero; }
 
-  // Volume envelope overlay
+  // Volume envelope overlay + editing
   bool GetShowVolumeEnvelope() const { return m_envShowVolume; }
   void SetShowVolumeEnvelope(bool show) { m_envShowVolume = show; m_peaksValid = false; }
+  int HitTestEnvelopePoint(int x, int y, int hitRadius = 8) const;
+  int EnvYToGainY(double gain) const; // gain -> Y pixel
+  double EnvPixelToGain(int y) const; // Y pixel -> gain
 
   // Fade drag feedback
   void SetFadeDragInfo(int dragType, int shape);
