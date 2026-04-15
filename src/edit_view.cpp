@@ -942,6 +942,20 @@ void SneakPeak::UpdateItemState()
 
   // Working set: no periodic refresh - refreshes on explicit user actions
 
+  // Envelope auto-refresh: detect when volume envelope appears/changes
+  if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() && m_waveform.GetTake() &&
+      m_waveform.GetShowVolumeEnvelope() && g_GetTakeEnvelopeByName && g_CountEnvelopePoints) {
+    TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+    bool hasEnv = (env != nullptr);
+    int ptCount = hasEnv ? g_CountEnvelopePoints(env) : 0;
+    if (hasEnv != m_lastEnvExists || ptCount != m_lastEnvPointCount) {
+      m_lastEnvExists = hasEnv;
+      m_lastEnvPointCount = ptCount;
+      m_waveform.Invalidate();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+  }
+
   // Cursor + RMS levels - works for both single and multi-item
   if (m_waveform.HasItem()) {
     if (m_waveform.IsStandaloneMode() && m_previewActive && m_previewReg) {

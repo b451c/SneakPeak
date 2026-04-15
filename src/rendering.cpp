@@ -10,6 +10,7 @@
 
 #include "edit_view.h"
 #include "audio_engine.h"
+#include "audio_ops.h"
 #include "theme.h"
 #include "debug.h"
 #include "reaper_plugin.h"
@@ -668,12 +669,17 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   int yRange = yBot - yTop;
   if (yRange < 1) return;
 
+  // Fade parameters (to modify dynamics curve by effective fade gain)
+  auto fp = m_waveform.GetActiveFadeParams();
+  double itemDur = m_waveform.GetItemDuration();
+
   // Orange/yellow dynamics curve (matches saxmand's ImGui overlay color)
   OwnedPen dynPen(PS_SOLID, 2, RGB(255, 160, 40));
   DCPenScope penScope(hdc, dynPen);
 
   double viewStart = m_waveform.GetViewStart();
   double viewDur = m_waveform.GetViewDuration();
+  const auto& params = m_dynamics.GetParams();
   bool first = true;
 
   for (const auto& pt : results) {
@@ -682,8 +688,19 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     int px = m_waveform.TimeToX(pt.time);
     if (px < waveL || px > waveR) continue;
 
-    // norm is 0..1 mapped within minDb..maxDb. Draw: 1.0 = top, 0.0 = bottom.
-    int py = yBot - (int)(pt.norm * (double)yRange);
+    // Apply fade gain to dynamics curve
+    double fadeGain = 1.0;
+    if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
+      fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
+    if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
+      fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
+
+    // Convert fade-adjusted dB to norm
+    double adjDb = pt.db + 20.0 * log10(std::max(fadeGain, 1e-12));
+    double norm = (adjDb - params.minDb) / (params.maxDb - params.minDb);
+    norm = std::max(0.0, std::min(1.0, norm));
+
+    int py = yBot - (int)(norm * (double)yRange);
     py = std::max((int)wr.top, std::min((int)wr.bottom, py));
 
     if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
@@ -692,7 +709,6 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
 
   // Target dB line (yellow horizontal)
   {
-    const auto& params = m_dynamics.GetParams();
     double targetDb = m_dynamics.GetTargetDb();
     double targetNorm = (targetDb - params.minDb) / (params.maxDb - params.minDb);
     targetNorm = std::max(0.0, std::min(1.0, targetNorm));

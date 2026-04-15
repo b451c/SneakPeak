@@ -240,6 +240,10 @@ private:
   bool m_envDragging = false;
   int m_envDragPointIdx = -1;  // index of point being dragged (-1 = none)
 
+  // Envelope auto-refresh (detect envelope appear/change in REAPER)
+  bool m_lastEnvExists = false;
+  int m_lastEnvPointCount = 0;
+
   MarkerManager m_markers;
 
   GainPanel m_gainPanel;
