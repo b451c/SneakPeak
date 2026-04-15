@@ -137,6 +137,18 @@ public:
   int EnvYToGainY(double gain) const; // gain -> Y pixel
   double EnvPixelToGain(int y) const; // Y pixel -> gain
 
+  // Per-segment envelope lookup (foundation for timeline/SET envelope support)
+  // Maps view-relative time to the correct segment's take envelope.
+  // Returns nullptr env if in gap region or no envelope exists.
+  struct EnvSegmentInfo {
+    TrackEnvelope* env = nullptr; // envelope handle (nullptr = gap/no envelope)
+    double envTime = 0.0;         // time relative to take start (for Envelope_Evaluate)
+    int segmentIdx = -1;          // segment index (-1 = gap or single-item)
+    MediaItem_Take* take = nullptr;
+    int scalingMode = 0;          // cached GetEnvelopeScalingMode result
+  };
+  EnvSegmentInfo GetEnvelopeAtTime(double viewTime) const;
+
   // Fade drag feedback
   void SetFadeDragInfo(int dragType, int shape);
 

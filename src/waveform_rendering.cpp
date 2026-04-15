@@ -260,15 +260,9 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   double fadeInDir = fp.fadeInDir, fadeOutDir = fp.fadeOutDir;
 
   // Take volume envelope (for waveform visual feedback)
-  TrackEnvelope* volEnv = nullptr;
-  int envScalingMode = 0;
-  if (m_envShowVolume && !m_standaloneMode && m_take &&
-      !m_multiItemActive && !m_trackViewActive && !m_timelineViewActive &&
-      g_GetTakeEnvelopeByName && g_Envelope_Evaluate &&
-      g_GetEnvelopeScalingMode && g_ScaleFromEnvelopeMode) {
-    volEnv = g_GetTakeEnvelopeByName(m_take, "Volume");
-    if (volEnv) envScalingMode = g_GetEnvelopeScalingMode(volEnv);
-  }
+  // Uses GetEnvelopeAtTime helper for per-segment support in timeline/SET
+  bool useEnvGain = m_envShowVolume && !m_standaloneMode && m_take &&
+      !m_multiItemActive && g_Envelope_Evaluate && g_ScaleFromEnvelopeMode;
 
 
   // Pens: normal (green) and selected (dark green), plus RMS (darker variants)
@@ -334,12 +328,15 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
       }
     }
 
-    // Take volume envelope gain
+    // Take volume envelope gain (per-segment via helper)
     double envGain = 1.0;
-    if (volEnv) {
-      double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
-      g_Envelope_Evaluate(volEnv, colTime, (double)m_sampleRate, 0, &rawVal, &d1, &d2, &d3);
-      envGain = g_ScaleFromEnvelopeMode(envScalingMode, rawVal);
+    if (useEnvGain) {
+      auto ei = GetEnvelopeAtTime(colTime);
+      if (ei.env) {
+        double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
+        g_Envelope_Evaluate(ei.env, ei.envTime, (double)m_sampleRate, 0, &rawVal, &d1, &d2, &d3);
+        envGain = g_ScaleFromEnvelopeMode(ei.scalingMode, rawVal);
+      }
     }
 
     double vol = itemVol * fadeGain * sgain * envGain;
@@ -421,10 +418,13 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
       else if (colTime >= m_standaloneGainStart && colTime < m_standaloneGainEnd) sgain2 = m_standaloneGain;
     }
     double envGain2 = 1.0;
-    if (volEnv) {
-      double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
-      g_Envelope_Evaluate(volEnv, colTime, (double)m_sampleRate, 0, &rawVal, &d1, &d2, &d3);
-      envGain2 = g_ScaleFromEnvelopeMode(envScalingMode, rawVal);
+    if (useEnvGain) {
+      auto ei = GetEnvelopeAtTime(colTime);
+      if (ei.env) {
+        double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
+        g_Envelope_Evaluate(ei.env, ei.envTime, (double)m_sampleRate, 0, &rawVal, &d1, &d2, &d3);
+        envGain2 = g_ScaleFromEnvelopeMode(ei.scalingMode, rawVal);
+      }
     }
     double vol = itemVol * fadeGain * sgain2 * envGain2;
     double rmsVal = m_peakRMS[idx] * vol;
@@ -1141,6 +1141,39 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
   }
 }
 
+WaveformView::EnvSegmentInfo WaveformView::GetEnvelopeAtTime(double viewTime) const
+{
+  EnvSegmentInfo info;
+  if (!g_GetTakeEnvelopeByName || !g_GetEnvelopeScalingMode) return info;
+
+  // Multi-segment modes: find which segment contains this time
+  if ((m_timelineViewActive || m_trackViewActive) && m_segments.size() > 1) {
+    for (int i = 0; i < (int)m_segments.size(); i++) {
+      const auto& seg = m_segments[i];
+      if (viewTime >= seg.relativeOffset && viewTime < seg.relativeOffset + seg.duration) {
+        if (!seg.take) return info;
+        info.take = seg.take;
+        info.segmentIdx = i;
+        info.envTime = viewTime - seg.relativeOffset; // time relative to take start
+        info.env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+        if (info.env) info.scalingMode = g_GetEnvelopeScalingMode(info.env);
+        return info;
+      }
+    }
+    return info; // gap region
+  }
+
+  // Single-item mode
+  if (m_take) {
+    info.take = m_take;
+    info.segmentIdx = -1;
+    info.envTime = viewTime;
+    info.env = g_GetTakeEnvelopeByName(m_take, "Volume");
+    if (info.env) info.scalingMode = g_GetEnvelopeScalingMode(info.env);
+  }
+  return info;
+}
+
 int WaveformView::EnvYToGainY(double gain) const
 {
   int yTop = m_rect.top + 2;
@@ -1163,34 +1196,47 @@ double WaveformView::EnvPixelToGain(int y) const
 int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
 {
   if (!m_item || !m_take || m_standaloneMode || !m_envShowVolume) return -1;
-  if (m_multiItemActive || m_trackViewActive || m_timelineViewActive) return -1;
-  if (!g_GetTakeEnvelopeByName || !g_CountEnvelopePoints ||
-      !g_GetEnvelopePoint || !g_GetEnvelopeScalingMode || !g_ScaleFromEnvelopeMode) return -1;
+  if (m_multiItemActive) return -1; // multi-item: skip for now
+  if (!g_CountEnvelopePoints || !g_GetEnvelopePoint || !g_ScaleFromEnvelopeMode) return -1;
 
-  TrackEnvelope* env = g_GetTakeEnvelopeByName(m_take, "Volume");
-  if (!env) return -1;
-
-  int scalingMode = g_GetEnvelopeScalingMode(env);
-  int count = g_CountEnvelopePoints(env);
   int bestIdx = -1;
   int bestDist = hitRadius * hitRadius + 1;
 
-  for (int i = 0; i < count; i++) {
-    double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
-    int ptShape = 0;
-    bool ptSelected = false;
-    if (!g_GetEnvelopePoint(env, i, &ptTime, &ptValue, &ptShape, &ptTension, &ptSelected))
-      continue;
+  // Helper: test points from a single envelope
+  auto testEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset) {
+    int count = g_CountEnvelopePoints(env);
+    for (int i = 0; i < count; i++) {
+      double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
+      int ptShape = 0;
+      bool ptSelected = false;
+      if (!g_GetEnvelopePoint(env, i, &ptTime, &ptValue, &ptShape, &ptTension, &ptSelected))
+        continue;
+      double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
+      int px = TimeToX(ptTime + segRelOffset);
+      int py = EnvYToGainY(gain);
+      int dx = x - px;
+      int dy = y - py;
+      int dist = dx * dx + dy * dy;
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+  };
 
-    double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
-    int px = TimeToX(ptTime);
-    int py = EnvYToGainY(gain);
-    int dx = x - px;
-    int dy = y - py;
-    int dist = dx * dx + dy * dy;
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestIdx = i;
+  if ((m_timelineViewActive || m_trackViewActive) && m_segments.size() > 1 && g_GetTakeEnvelopeByName) {
+    // For now, only test the segment under the mouse (via GetEnvelopeAtTime)
+    double clickTime = XToTime(x);
+    auto ei = GetEnvelopeAtTime(clickTime);
+    if (ei.env) {
+      const auto& seg = m_segments[ei.segmentIdx];
+      testEnv(ei.env, ei.scalingMode, seg.relativeOffset);
+    }
+  } else if (m_take && g_GetTakeEnvelopeByName) {
+    TrackEnvelope* env = g_GetTakeEnvelopeByName(m_take, "Volume");
+    if (env) {
+      int sm = g_GetEnvelopeScalingMode ? g_GetEnvelopeScalingMode(env) : 0;
+      testEnv(env, sm, 0.0);
     }
   }
   return bestIdx;
@@ -1198,17 +1244,10 @@ int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
 
 void WaveformView::DrawVolumeEnvelope(HDC hdc)
 {
-  // Only draw for single REAPER item with take (not standalone, not multi/timeline/SET)
   if (!m_item || !m_take || m_standaloneMode) return;
   if (!m_envShowVolume) return;
-  if (m_multiItemActive || m_trackViewActive || m_timelineViewActive) return;
-  if (!g_GetTakeEnvelopeByName || !g_Envelope_Evaluate ||
-      !g_GetEnvelopeScalingMode || !g_ScaleFromEnvelopeMode) return;
-
-  TrackEnvelope* env = g_GetTakeEnvelopeByName(m_take, "Volume");
-  if (!env) return;
-
-  int scalingMode = g_GetEnvelopeScalingMode(env);
+  if (m_multiItemActive) return; // multi-item: multiple tracks, skip for now
+  if (!g_Envelope_Evaluate || !g_ScaleFromEnvelopeMode) return;
 
   int waveL = m_rect.left;
   int waveR = m_rect.right - DB_SCALE_WIDTH;
@@ -1218,7 +1257,7 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
   int yRange = (m_rect.bottom - 2) - (m_rect.top + 2);
   if (yRange < 1) return;
 
-  // Draw envelope curve
+  // Draw envelope curve using per-segment helper
   {
     OwnedPen envPen(PS_SOLID, 2, g_theme.volumeEnvelope);
     DCPenScope penScope(hdc, envPen);
@@ -1228,10 +1267,13 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
     bool first = true;
 
     for (int col = 0; col < w; col++, colTime += timeStep) {
-      double rawValue = 0.0, dVdS = 0.0, ddVdS = 0.0, dddVdS = 0.0;
-      g_Envelope_Evaluate(env, colTime, (double)m_sampleRate, 0,
-                          &rawValue, &dVdS, &ddVdS, &dddVdS);
-      double gain = g_ScaleFromEnvelopeMode(scalingMode, rawValue);
+      auto ei = GetEnvelopeAtTime(colTime);
+      if (!ei.env) { first = true; continue; } // gap - break line
+
+      double rawValue = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
+      g_Envelope_Evaluate(ei.env, ei.envTime, (double)m_sampleRate, 0,
+                          &rawValue, &d1, &d2, &d3);
+      double gain = g_ScaleFromEnvelopeMode(ei.scalingMode, rawValue);
       int y = EnvYToGainY(gain);
       int x = waveL + col;
       if (first) { MoveToEx(hdc, x, y, nullptr); first = false; }
@@ -1239,34 +1281,51 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
     }
   }
 
-  // Draw envelope points as small filled circles
+  // Draw envelope points as small filled circles (all segments)
   if (!g_CountEnvelopePoints || !g_GetEnvelopePoint) return;
-  int count = g_CountEnvelopePoints(env);
-  if (count <= 0) return;
 
   OwnedBrush ptBrush(g_theme.volumeEnvelope);
   OwnedPen ptOutline(PS_SOLID, 1, RGB(255, 255, 255));
 
-  for (int i = 0; i < count; i++) {
-    double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
-    int ptShape = 0;
-    bool ptSelected = false;
-    if (!g_GetEnvelopePoint(env, i, &ptTime, &ptValue, &ptShape, &ptTension, &ptSelected))
-      continue;
+  // Collect segments to iterate (single-item = one "virtual" segment)
+  auto drawPointsForEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset) {
+    int count = g_CountEnvelopePoints(env);
+    for (int i = 0; i < count; i++) {
+      double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
+      int ptShape = 0;
+      bool ptSelected = false;
+      if (!g_GetEnvelopePoint(env, i, &ptTime, &ptValue, &ptShape, &ptTension, &ptSelected))
+        continue;
 
-    int px = TimeToX(ptTime);
-    if (px < waveL - 4 || px > waveR + 4) continue; // off-screen
+      int px = TimeToX(ptTime + segRelOffset);
+      if (px < waveL - 4 || px > waveR + 4) continue;
 
-    double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
-    int py = EnvYToGainY(gain);
+      double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
+      int py = EnvYToGainY(gain);
 
-    // Draw filled circle with white outline
-    constexpr int r = 4;
-    HPEN oldPen = (HPEN)SelectObject(hdc, (HPEN)ptOutline);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, (HBRUSH)ptBrush);
-    Ellipse(hdc, px - r, py - r, px + r, py + r);
-    SelectObject(hdc, oldPen);
-    SelectObject(hdc, oldBrush);
+      constexpr int r = 4;
+      HPEN oldPen = (HPEN)SelectObject(hdc, (HPEN)ptOutline);
+      HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, (HBRUSH)ptBrush);
+      Ellipse(hdc, px - r, py - r, px + r, py + r);
+      SelectObject(hdc, oldPen);
+      SelectObject(hdc, oldBrush);
+    }
+  };
+
+  if ((m_timelineViewActive || m_trackViewActive) && m_segments.size() > 1) {
+    for (const auto& seg : m_segments) {
+      if (!seg.take || !g_GetTakeEnvelopeByName) continue;
+      TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+      if (!env) continue;
+      int sm = g_GetEnvelopeScalingMode ? g_GetEnvelopeScalingMode(env) : 0;
+      drawPointsForEnv(env, sm, seg.relativeOffset);
+    }
+  } else if (m_take) {
+    TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_take, "Volume") : nullptr;
+    if (env) {
+      int sm = g_GetEnvelopeScalingMode ? g_GetEnvelopeScalingMode(env) : 0;
+      drawPointsForEnv(env, sm, 0.0);
+    }
   }
 }
 
