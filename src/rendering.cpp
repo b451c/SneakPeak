@@ -734,9 +734,44 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     else LineTo(hdc, px, py);
   }
 
+  // Compression preview curve (green) — shows post-compression levels
+  double targetDb = m_dynamics.GetTargetDb();
+  double pctAbove = params.compressAbove / 100.0;
+  double pctBelow = params.compressBelow / 100.0;
+  if (pctAbove != 0.0 || pctBelow != 0.0) {
+    OwnedPen compPen(PS_SOLID, 2, RGB(80, 220, 120));
+    DCPenScope compScope(hdc, compPen);
+    bool compFirst = true;
+
+    for (const auto& pt : results) {
+      if (pt.time < viewStart - 0.01 || pt.time > viewStart + viewDur + 0.01) continue;
+      int px = m_waveform.TimeToX(pt.time);
+      if (px < waveL || px > waveR) continue;
+
+      // Apply fade gain
+      double fadeGain = 1.0;
+      if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
+        fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
+      if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
+        fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
+
+      double adjDb = pt.db + 20.0 * log10(std::max(fadeGain, 1e-12));
+      // Apply compression: push toward target by percentage
+      double pct = (adjDb < targetDb) ? pctBelow : pctAbove;
+      double compDb = adjDb + pct * (targetDb - adjDb);
+      double norm = (compDb - params.minDb) / (params.maxDb - params.minDb);
+      norm = std::max(0.0, std::min(1.0, norm));
+
+      int py = yBot - (int)(norm * (double)yRange);
+      py = std::max((int)wr.top, std::min((int)wr.bottom, py));
+
+      if (compFirst) { MoveToEx(hdc, px, py, nullptr); compFirst = false; }
+      else LineTo(hdc, px, py);
+    }
+  }
+
   // Target dB line (yellow horizontal)
   {
-    double targetDb = m_dynamics.GetTargetDb();
     double targetNorm = (targetDb - params.minDb) / (params.maxDb - params.minDb);
     targetNorm = std::max(0.0, std::min(1.0, targetNorm));
     int targetY = yBot - (int)(targetNorm * (double)yRange);

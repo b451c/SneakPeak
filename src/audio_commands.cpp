@@ -1357,7 +1357,10 @@ void SneakPeak::ApplyDynamicsToEnvelope()
     return;
 
   TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-  if (!env) return; // user must enable envelope first
+  if (!env) {
+    ShowToast("Enable Volume envelope on item first");
+    return;
+  }
 
   int scalingMode = g_GetEnvelopeScalingMode(env);
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
@@ -1375,6 +1378,9 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
   if (g_UpdateArrange) g_UpdateArrange();
   m_dynamicsVisible = true;
+  char toast[48];
+  snprintf(toast, sizeof(toast), "Applied %d envelope points", (int)comp.size());
+  ShowToast(toast);
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
