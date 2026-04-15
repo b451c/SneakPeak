@@ -1176,7 +1176,7 @@ WaveformView::EnvSegmentInfo WaveformView::GetEnvelopeAtTime(double viewTime) co
 
 // Envelope Y mapping: top = +6dB (gain 2.0), bottom = -inf (gain 0.0)
 // This puts 0dB (gain 1.0) at 50% height, matching REAPER's arrange view.
-static constexpr double ENV_MAX_GAIN = 2.0; // +6dB at top of display
+static constexpr double ENV_MAX_GAIN = 1.33; // ~+2.5dB at top, 0dB at 75% height
 
 int WaveformView::EnvYToGainY(double gain) const
 {
