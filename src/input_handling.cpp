@@ -339,16 +339,18 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             InvalidateRect(m_hwnd, nullptr, FALSE);
             return;
           }
-          // Check if click is near the envelope line (within 6px vertically)
+          // Check if click is near the envelope line (within 12px vertically)
           double clickTime = m_waveform.XToTime(x);
           if (clickTime >= 0.0 && clickTime <= m_waveform.GetItemDuration()) {
+            auto ei = m_waveform.GetEnvelopeAtTime(clickTime);
+            if (ei.env) {
             double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
-            g_Envelope_Evaluate(env, clickTime, m_waveform.GetSampleRate(), 0,
+            g_Envelope_Evaluate(ei.env, ei.envTime, m_waveform.GetSampleRate(), 0,
                                 &rawVal, &d1, &d2, &d3);
-            int scalingMode = g_GetEnvelopeScalingMode(env);
+            int scalingMode = ei.scalingMode;
             double lineGain = g_ScaleFromEnvelopeMode(scalingMode, rawVal);
             int lineY = m_waveform.EnvYToGainY(lineGain);
-            if (abs(y - lineY) <= 6) {
+            if (abs(y - lineY) <= 12) {
               double clickGain = m_waveform.EnvPixelToGain(y);
               double newRawVal = g_ScaleToEnvelopeMode(scalingMode, clickGain);
               bool cmdDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -380,6 +382,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
               InvalidateRect(m_hwnd, nullptr, FALSE);
               return;
             }
+            } // ei.env
           }
         }
       }
