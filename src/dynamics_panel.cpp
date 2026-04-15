@@ -28,10 +28,10 @@ static constexpr int VALUE_GAP = 4;
 static constexpr int L_TRACK_X = MARGIN + LABEL_W + LABEL_GAP;         // 50
 static constexpr int L_VALUE_X = L_TRACK_X + LEFT_TRACK_W + VALUE_GAP; // 128
 
-// Right column: starts after left column values
-static constexpr int R_LABEL_X = 164;
-static constexpr int R_TRACK_X = R_LABEL_X + LABEL_W + LABEL_GAP;     // 210
-static constexpr int R_VALUE_X = R_TRACK_X + RIGHT_TRACK_W + VALUE_GAP; // 276
+// Right column: starts after left column values + gap
+static constexpr int R_LABEL_X = 188;
+static constexpr int R_TRACK_X = R_LABEL_X + LABEL_W + LABEL_GAP;     // 234
+static constexpr int R_VALUE_X = R_TRACK_X + RIGHT_TRACK_W + VALUE_GAP; // 300
 
 // Apply button
 static constexpr int APPLY_W = 50;

@@ -64,7 +64,7 @@ private:
   int m_dragOffsetX = 0, m_dragOffsetY = 0;
   int m_offsetX = 0, m_offsetY = 0;
 
-  static const int PANEL_W = 324;
+  static const int PANEL_W = 354;
   static const int PANEL_H = 86;
   static const int TITLE_H = 22;
   static const int ROW_H = 18;
