@@ -1174,17 +1174,35 @@ WaveformView::EnvSegmentInfo WaveformView::GetEnvelopeAtTime(double viewTime) co
   return info;
 }
 
-// Envelope Y mapping: top = +6dB (gain 2.0), bottom = -inf (gain 0.0)
-// This puts 0dB (gain 1.0) at 50% height, matching REAPER's arrange view.
-static constexpr double ENV_MAX_GAIN = 1.33; // ~+2.5dB at top, 0dB at 75% height
+// Envelope Y mapping: logarithmic (dB-based).
+// 0dB (gain 1.0) at 75% height.  Above 0dB: linear to top.  Below 0dB: linear-in-dB to bottom.
+// This prevents deep dips from "spilling out" to the bottom edge — -40dB gets 12% height
+// instead of 0.75% with the old linear mapping.
+static constexpr double ENV_MAX_DB = 2.5;     // top of display (+2.5 dB)
+static constexpr double ENV_MIN_DB = -48.0;   // bottom of display (-48 dB)
+static constexpr double ENV_ZERO_FRAC = 0.75; // 0dB at 75% from bottom
 
 int WaveformView::EnvYToGainY(double gain) const
 {
   int yTop = m_rect.top + 2;
   int yBot = m_rect.bottom - 2;
   int yRange = yBot - yTop;
-  int y = yBot - (int)((gain / ENV_MAX_GAIN) * (double)yRange);
-  return std::max((int)m_rect.top, std::min((int)m_rect.bottom, y));
+
+  double db = 20.0 * log10(std::max(gain, 1e-6));
+  db = std::max(ENV_MIN_DB, std::min(ENV_MAX_DB, db));
+
+  double frac;
+  if (db >= 0.0) {
+    // Above 0dB: linear from 75% to 100% (top 25% reserved for boost)
+    frac = ENV_ZERO_FRAC + (db / ENV_MAX_DB) * (1.0 - ENV_ZERO_FRAC);
+  } else {
+    // Below 0dB: linear-in-dB from 0% to 75%
+    frac = ENV_ZERO_FRAC * (1.0 - db / ENV_MIN_DB);
+  }
+  frac = std::max(0.0, std::min(1.0, frac));
+
+  int y = yBot - (int)(frac * (double)yRange);
+  return std::max(yTop, std::min(yBot, y));
 }
 
 double WaveformView::EnvPixelToGain(int y) const
@@ -1193,8 +1211,18 @@ double WaveformView::EnvPixelToGain(int y) const
   int yBot = m_rect.bottom - 2;
   int yRange = yBot - yTop;
   if (yRange < 1) return 1.0;
-  double gain = ((double)(yBot - y) / (double)yRange) * ENV_MAX_GAIN;
-  return std::max(0.0, gain);
+
+  double frac = (double)(yBot - y) / (double)yRange;
+  frac = std::max(0.0, std::min(1.0, frac));
+
+  double db;
+  if (frac >= ENV_ZERO_FRAC) {
+    db = (frac - ENV_ZERO_FRAC) / (1.0 - ENV_ZERO_FRAC) * ENV_MAX_DB;
+  } else {
+    db = (1.0 - frac / ENV_ZERO_FRAC) * ENV_MIN_DB;
+  }
+
+  return pow(10.0, db / 20.0);
 }
 
 int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
