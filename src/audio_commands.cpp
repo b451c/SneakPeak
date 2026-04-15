@@ -243,11 +243,7 @@ void SneakPeak::DoCopy()
   int selFrames = endF - startF;
   if (selFrames <= 0) return;
 
-  // Internal clipboard
-  s_clipboard.numChannels = nch;
-  s_clipboard.sampleRate = m_waveform.GetSampleRate();
-  s_clipboard.numFrames = selFrames;
-
+  // Internal clipboard - fill samples first, set numFrames last
   if (m_waveform.IsMultiItem() && !m_waveform.IsTimelineView()) {
     // Multi-item: mix all layers in selected range
     m_waveform.GetMultiItemView().GetMixedAudio(startF, endF, nch, s_clipboard.samples);
@@ -262,6 +258,9 @@ void SneakPeak::DoCopy()
               data.begin() + (long)(srcOffset + copyLen),
               s_clipboard.samples.begin());
   }
+  s_clipboard.numChannels = nch;
+  s_clipboard.sampleRate = m_waveform.GetSampleRate();
+  s_clipboard.numFrames = selFrames;
 
   // Also trigger REAPER's native copy (40060 = Copy selected area of items)
   if (g_Main_OnCommand) g_Main_OnCommand(40060, 0);
