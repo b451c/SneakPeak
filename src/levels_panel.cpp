@@ -92,7 +92,9 @@ LevelsPanel::Ballistics LevelsPanel::GetBallistics() const
 
 void LevelsPanel::UpdateFromTrackPeak(double peakLinL, double peakLinR, bool playing, int nch)
 {
-  auto [attackRate, decayRate, peakDecay, peakHoldDecay] = GetBallistics();
+  auto b = GetBallistics();
+  double attackRate = b.attackRate, decayRate = b.decayRate;
+  double peakDecay = b.peakDecay, peakHoldDecay = b.peakHoldDecay;
 
   if (!playing) {
     if (m_wasPlaying || m_barL > -60.0 || m_barR > -60.0) {
@@ -136,7 +138,9 @@ void LevelsPanel::Update(const std::vector<double>& audio, int startFrame,
                          int endFrame, int sampleRate, int nch, double itemVol, bool playing,
                          const bool* channelActive)
 {
-  auto [attackRate, decayRate, peakDecay, peakHoldDecay] = GetBallistics();
+  auto b = GetBallistics();
+  double attackRate = b.attackRate, decayRate = b.decayRate;
+  double peakDecay = b.peakDecay, peakHoldDecay = b.peakHoldDecay;
 
   // When not playing, decay all meters to silence
   if (!playing) {

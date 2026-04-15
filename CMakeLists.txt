@@ -66,6 +66,7 @@ else()
     -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
     -Wshadow
     -Wconversion -Wno-sign-conversion
+    -fsigned-char
   )
 endif()
 
@@ -98,7 +99,7 @@ elseif(UNIX)
     OUTPUT_NAME "reaper_sneakpeak"
   )
   target_sources(reaper_sneakpeak PRIVATE
-    src/swell_modstub.cpp
+    ${WDL_DIR}/swell/swell-modstub-generic.cpp
   )
   target_link_libraries(reaper_sneakpeak PRIVATE
     dl

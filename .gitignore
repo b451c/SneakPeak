@@ -11,3 +11,5 @@ forum_post.txt
 .harness/
 forum_post*.txt
 forum_reply*.txt
+# Internal tags not pushed
+pm_saxmand*.txt

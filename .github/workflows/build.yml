@@ -12,10 +12,30 @@ jobs:
       matrix:
         include:
           - os: macos-14
-            platform: darwin-arm64
+            platform: macOS-arm64
             artifact: reaper_sneakpeak-arm64.dylib
             build_file: reaper_sneakpeak.dylib
             cmake_flags: "-DCMAKE_OSX_ARCHITECTURES=arm64"
+          - os: macos-14
+            platform: macOS-x86_64
+            artifact: reaper_sneakpeak-x86_64.dylib
+            build_file: reaper_sneakpeak.dylib
+            cmake_flags: "-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15"
+          - os: windows-latest
+            platform: Windows-x64
+            artifact: reaper_sneakpeak-x64.dll
+            build_file: Release/reaper_sneakpeak.dll
+            cmake_flags: "-A x64"
+          - os: ubuntu-22.04
+            platform: Linux-x86_64
+            artifact: reaper_sneakpeak-x86_64.so
+            build_file: reaper_sneakpeak.so
+            cmake_flags: ""
+          - os: ubuntu-22.04-arm
+            platform: Linux-aarch64
+            artifact: reaper_sneakpeak-aarch64.so
+            build_file: reaper_sneakpeak.so
+            cmake_flags: ""
 
     runs-on: ${{ matrix.os }}
     continue-on-error: false
@@ -30,6 +50,17 @@ jobs:
       - name: Clone WDL
         run: git clone --depth 1 https://github.com/justinfrankel/WDL.git WDL
 
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfreetype6-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxcursor-dev \
+            libxinerama-dev
+
       - name: Create build directory
         run: mkdir -p build
 
@@ -37,12 +68,19 @@ jobs:
         working-directory: build
         run: cmake .. -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }}
 
-      - name: Build
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
         working-directory: build
-        run: make -j$(sysctl -n hw.ncpu)
+        run: make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        working-directory: build
+        run: cmake --build . --config Release
 
       - name: Rename artifact
         working-directory: build
+        shell: bash
         run: cp "${{ matrix.build_file }}" "${{ matrix.artifact }}"
 
       - name: Upload artifact
@@ -79,17 +117,21 @@ jobs:
             | Platform | File | Status |
             |----------|------|--------|
             | macOS arm64 (Apple Silicon) | `reaper_sneakpeak-arm64.dylib` | Stable |
+            | macOS x86_64 (Intel) | `reaper_sneakpeak-x86_64.dylib` | New |
+            | Windows x64 | `reaper_sneakpeak-x64.dll` | New |
+            | Linux x86_64 | `reaper_sneakpeak-x86_64.so` | New |
+            | Linux aarch64 | `reaper_sneakpeak-aarch64.so` | New |
 
             ### Installation
 
-            Copy the binary to your REAPER UserPlugins folder and restart REAPER:
+            Copy the binary matching your platform to your REAPER UserPlugins folder and restart REAPER:
             - **macOS**: `~/Library/Application Support/REAPER/UserPlugins/`
+            - **Windows**: `%APPDATA%\REAPER\UserPlugins\`
+            - **Linux**: `~/.config/REAPER/UserPlugins/`
 
             Open via **Actions > SneakPeak: Toggle Window**.
-
-            > **Note:** Windows and Linux builds are planned for a future release. The codebase is cross-platform ready (WDL/SWELL).
 
             See the full [CHANGELOG](https://github.com/b451c/SneakPeak/blob/main/CHANGELOG.md) for version history.
 
             ---
-            *SneakPeak is free and open source. Support development: [Ko-fi](https://ko-fi.com/quickmd) · [Buy Me a Coffee](https://buymeacoffee.com/bsroczynskh) · [PayPal](https://paypal.me/b451c)*
+            *SneakPeak is free and open source. Support development: [Ko-fi](https://ko-fi.com/quickmd) | [Buy Me a Coffee](https://buymeacoffee.com/bsroczynskh) | [PayPal](https://paypal.me/b451c)*
