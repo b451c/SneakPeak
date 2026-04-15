@@ -23,7 +23,9 @@
 #include <pthread.h>
 #else
 #include <io.h>      // _access()
+#include <commdlg.h> // GetSaveFileName
 #define access(p, m) _access(p, m)
+#define strcasecmp _stricmp
 #ifndef F_OK
 #define F_OK 0
 #endif
@@ -395,6 +397,23 @@ void SneakPeak::SaveStandaloneFileAs()
   if (!initialFile.empty())
     snprintf(fn, sizeof(fn), "%s", initialFile.c_str());
 
+#ifdef _WIN32
+  {
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = m_hwnd;
+    ofn.lpstrFilter = "WAV files\0*.wav\0All files\0*.*\0";
+    ofn.lpstrFile = fn;
+    ofn.nMaxFile = sizeof(fn);
+    ofn.lpstrTitle = "Save WAV file";
+    if (!initialDir.empty())
+      ofn.lpstrInitialDir = initialDir.c_str();
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+    ofn.lpstrDefExt = "wav";
+    if (!GetSaveFileNameA(&ofn))
+      return; // user cancelled
+  }
+#else
   if (!BrowseForSaveFile("Save WAV file",
                           initialDir.empty() ? nullptr : initialDir.c_str(),
                           fn[0] ? fn : nullptr,
@@ -402,6 +421,7 @@ void SneakPeak::SaveStandaloneFileAs()
                           fn, sizeof(fn))) {
     return; // user cancelled
   }
+#endif
 
   std::string savePath(fn);
   // Ensure .wav extension

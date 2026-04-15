@@ -11,7 +11,9 @@
 #include <cmath>
 #include <algorithm>
 #include <sys/stat.h>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <shellapi.h>
+#else
 #include <pthread.h>
 #endif
 
