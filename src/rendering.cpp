@@ -32,6 +32,20 @@ void SneakPeak::OnPaint(HDC hdc)
     m_waveform.Paint(hdc);
     if (m_dynamicsVisible && m_dynamics.HasResults())
       DrawDynamicsCurve(hdc);
+    // Envelope selection rectangle overlay
+    if (m_envRectSelecting) {
+      int rx1 = std::min(m_envRectStartX, m_envRectEndX);
+      int ry1 = std::min(m_envRectStartY, m_envRectEndY);
+      int rx2 = std::max(m_envRectStartX, m_envRectEndX);
+      int ry2 = std::max(m_envRectStartY, m_envRectEndY);
+      HPEN rectPen = CreatePen(PS_SOLID, 1, g_theme.volumeEnvelope);
+      HPEN oldPen = (HPEN)SelectObject(hdc, rectPen);
+      HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+      Rectangle(hdc, rx1, ry1, rx2, ry2);
+      SelectObject(hdc, oldPen);
+      SelectObject(hdc, oldBrush);
+      DeleteObject(rectPen);
+    }
   }
   if (m_markers.GetShowMarkers()) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
   if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect, m_waveform.HasSelection());

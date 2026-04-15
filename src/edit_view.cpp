@@ -1253,9 +1253,59 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       OnKeyDown(wParam);
       return 0;
 
+    case WM_RBUTTONDOWN: {
+      int x = (short)LOWORD(lParam);
+      int y = (short)HIWORD(lParam);
+      // Start potential selection rectangle for envelope points
+      if (y >= m_waveformRect.top && y < m_waveformRect.bottom &&
+          m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode()) {
+        m_envRectStartX = x;
+        m_envRectStartY = y;
+        m_envRectEndX = x;
+        m_envRectEndY = y;
+        m_envRectSelecting = false; // becomes true on drag
+        SetCapture(m_hwnd);
+      }
+      return 0;
+    }
     case WM_RBUTTONUP: {
       int x = (short)LOWORD(lParam);
       int y = (short)HIWORD(lParam);
+      if (m_envRectSelecting) {
+        // Finalize selection rectangle: select points inside
+        m_envRectSelecting = false;
+        m_envRectStartX = m_envRectStartY = 0;
+        ReleaseCapture();
+        int rx1 = std::min(m_envRectStartX, m_envRectEndX);
+        int ry1 = std::min(m_envRectStartY, m_envRectEndY);
+        int rx2 = std::max(m_envRectStartX, m_envRectEndX);
+        int ry2 = std::max(m_envRectStartY, m_envRectEndY);
+        if (g_GetTakeEnvelopeByName && g_CountEnvelopePoints && g_GetEnvelopePoint &&
+            g_SetEnvelopePoint && g_ScaleFromEnvelopeMode && g_GetEnvelopeScalingMode) {
+          TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+          if (env) {
+            int sm = g_GetEnvelopeScalingMode(env);
+            int cnt = g_CountEnvelopePoints(env);
+            bool noSort = true;
+            bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            for (int i = 0; i < cnt; i++) {
+              double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
+              g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel);
+              double gain = g_ScaleFromEnvelopeMode(sm, pv);
+              int px = m_waveform.TimeToX(pt);
+              int py = m_waveform.EnvYToGainY(gain);
+              bool inside = (px >= rx1 && px <= rx2 && py >= ry1 && py <= ry2);
+              bool newSel = shift ? (psel || inside) : inside;
+              if (newSel != psel)
+                g_SetEnvelopePoint(env, i, nullptr, nullptr, nullptr, nullptr, &newSel, &noSort);
+            }
+          }
+        }
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+        return 0;
+      }
+      ReleaseCapture();
+      m_envRectStartX = m_envRectStartY = 0;
       OnRightClick(x, y);
       return 0;
     }

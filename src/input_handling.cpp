@@ -32,8 +32,26 @@ void SneakPeak::OnDoubleClick(int x, int y)
     return;
   }
 
-  // Double-click on waveform area: marker edit or select all
+  // Double-click on waveform area
   if (y >= m_waveformRect.top && y < m_waveformRect.bottom) {
+    // Double-click on envelope point = delete it
+    if (m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
+        g_GetTakeEnvelopeByName && g_DeleteEnvelopePointEx && g_Envelope_SortPoints) {
+      int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 8);
+      if (hitIdx >= 0) {
+        TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+        if (env) {
+          if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+          g_DeleteEnvelopePointEx(env, -1, hitIdx);
+          g_Envelope_SortPoints(env);
+          if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
+          m_envDragPointIdx = -1;
+          if (g_UpdateArrange) g_UpdateArrange();
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+          return;
+        }
+      }
+    }
     // Check if clicking on a marker first
     int markerIdx = m_markers.HitTestMarker(x, m_waveform);
     if (markerIdx >= 0) {
@@ -331,17 +349,34 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             double lineGain = g_ScaleFromEnvelopeMode(scalingMode, rawVal);
             int lineY = m_waveform.EnvYToGainY(lineGain);
             if (abs(y - lineY) <= 6) {
-              // Start freehand envelope drawing mode
-              // Add first point at click position, more added on mousemove
               double clickGain = m_waveform.EnvPixelToGain(y);
               double newRawVal = g_ScaleToEnvelopeMode(scalingMode, clickGain);
-              if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-              bool noSort = true;
-              g_InsertEnvelopePointEx(env, -1, clickTime, newRawVal, 0, 0.0, false, &noSort);
-              m_envFreehand = true;
-              m_envFreehandLastX = x;
-              m_envDragPointIdx = -1;
-              SetCapture(m_hwnd);
+              bool cmdDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+              if (cmdDown) {
+                // Cmd+click+drag on line = freehand envelope drawing
+                if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+                bool noSort = true;
+                g_InsertEnvelopePointEx(env, -1, clickTime, newRawVal, 0, 0.0, false, &noSort);
+                m_envFreehand = true;
+                m_envFreehandLastX = x;
+                m_envDragPointIdx = -1;
+                SetCapture(m_hwnd);
+              } else {
+                // Plain click on line = add single point, start dragging it
+                if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+                bool noSort = false;
+                g_InsertEnvelopePointEx(env, -1, clickTime, newRawVal, 0, 0.0, false, &noSort);
+                g_Envelope_SortPoints(env);
+                if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Add envelope point", -1);
+                if (g_UpdateArrange) g_UpdateArrange();
+                int newIdx = g_GetEnvelopePointByTime ? g_GetEnvelopePointByTime(env, clickTime) : -1;
+                if (newIdx >= 0) {
+                  m_envDragging = true;
+                  m_envDragPointIdx = newIdx;
+                  SetCapture(m_hwnd);
+                  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+                }
+              }
               InvalidateRect(m_hwnd, nullptr, FALSE);
               return;
             }
@@ -847,6 +882,28 @@ void SneakPeak::OnMouseUp(int x, int y)
 
 void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 {
+  // Envelope selection rectangle (right-click drag)
+  if (m_envRectStartX != 0 || m_envRectStartY != 0) {
+    // Check if right button is still held (WM_RBUTTONDOWN started tracking)
+    if (wParam & MK_RBUTTON) {
+      int dx = x - m_envRectStartX;
+      int dy = y - m_envRectStartY;
+      if (!m_envRectSelecting && (dx * dx + dy * dy > 25)) {
+        m_envRectSelecting = true; // crossed 5px threshold
+      }
+      if (m_envRectSelecting) {
+        m_envRectEndX = x;
+        m_envRectEndY = y;
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+      }
+      return;
+    } else {
+      // Right button released without going through WM_RBUTTONUP (edge case)
+      m_envRectStartX = m_envRectStartY = 0;
+      m_envRectSelecting = false;
+    }
+  }
+
   // Drag export: check threshold
   if (m_dragExportPending) {
     int dx = x - m_dragStartX;

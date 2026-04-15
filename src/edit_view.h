@@ -249,6 +249,11 @@ private:
   bool m_envFreehand = false;  // freehand drawing mode (add points on mousemove)
   int m_envFreehandLastX = 0;  // throttle: last X where point was added
 
+  // Envelope selection rectangle (right-click drag)
+  bool m_envRectSelecting = false;
+  int m_envRectStartX = 0, m_envRectStartY = 0;
+  int m_envRectEndX = 0, m_envRectEndY = 0;
+
   // Envelope auto-refresh (detect envelope appear/change in REAPER)
   bool m_lastEnvExists = false;
   int m_lastEnvPointCount = 0;
