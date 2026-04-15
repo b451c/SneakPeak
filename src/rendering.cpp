@@ -32,12 +32,18 @@ void SneakPeak::OnPaint(HDC hdc)
     m_waveform.Paint(hdc);
     if (m_dynamicsVisible && m_dynamics.HasResults())
       DrawDynamicsCurve(hdc);
-    // Envelope selection rectangle overlay
+    // Envelope selection rectangle overlay (tinted fill + cyan border)
     if (m_envRectSelecting) {
       int rx1 = std::min(m_envRectStartX, m_envRectEndX);
       int ry1 = std::min(m_envRectStartY, m_envRectEndY);
       int rx2 = std::max(m_envRectStartX, m_envRectEndX);
       int ry2 = std::max(m_envRectStartY, m_envRectEndY);
+      // Dark tint fill (like fade background)
+      RECT fillR = { rx1, ry1, rx2, ry2 };
+      HBRUSH fillBrush = CreateSolidBrush(RGB(0, 60, 80));
+      FillRect(hdc, &fillR, fillBrush);
+      DeleteObject(fillBrush);
+      // Cyan border
       HPEN rectPen = CreatePen(PS_SOLID, 1, g_theme.volumeEnvelope);
       HPEN oldPen = (HPEN)SelectObject(hdc, rectPen);
       HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
