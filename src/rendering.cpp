@@ -738,7 +738,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
 
   // --- Orange amplitude curve ---
   {
-    OwnedPen dynPen(PS_SOLID, 2, RGB(255, 160, 40));
+    OwnedPen dynPen(PS_SOLID, 1, RGB(200, 130, 50));
     DCPenScope scope(hdc, dynPen);
     bool first = true;
     int lastPx = -2;
@@ -770,7 +770,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
 
   // --- Green compression preview curve ---
   if (showComp) {
-    OwnedPen compPen(PS_SOLID, 2, RGB(180, 130, 255));
+    OwnedPen compPen(PS_SOLID, 1, RGB(140, 100, 200));
     DCPenScope scope(hdc, compPen);
     bool first = true;
     int lastPx = -2;
@@ -808,14 +808,14 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     targetNorm = std::max(0.0, std::min(1.0, targetNorm));
     int targetY = yBot - (int)(targetNorm * (double)yRange);
 
-    OwnedPen targetPen(PS_SOLID, 1, RGB(255, 220, 50));
+    OwnedPen targetPen(PS_SOLID, 1, RGB(180, 160, 50));
     DCPenScope scope(hdc, targetPen);
     MoveToEx(hdc, waveL, targetY, nullptr);
     LineTo(hdc, waveR, targetY);
 
     HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, RGB(255, 220, 50));
+    SetTextColor(hdc, RGB(180, 160, 50));
     char label[32];
     snprintf(label, sizeof(label), "Target %.0f dB", targetDb);
     RECT lr = { waveL + 4, targetY - 13, waveL + 120, targetY - 1 };
