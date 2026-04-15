@@ -1339,11 +1339,10 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
 
   auto drawPointsForEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset) {
     int count = g_CountEnvelopePoints(env);
-    // Dense envelopes (>50 points, e.g. from Apply Dynamics): small 2px dots
-    // Sparse envelopes (manual editing): normal 4px circles
-    bool dense = (count > 50);
-    int normalR = dense ? 2 : 4;
-    int skipDist = dense ? 2 : 3;
+    // Very dense (>100, e.g. Apply Dynamics): skip circles entirely, curve is enough
+    if (count > 100) return;
+    // Dense (>30): small 2px dots. Sparse: normal 4px circles.
+    int normalR = (count > 30) ? 2 : 4;
     int lastPx = -100;
     for (int i = 0; i < count; i++) {
       double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
@@ -1354,7 +1353,7 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
 
       int px = TimeToX(ptTime + segRelOffset);
       if (px < waveL - 4 || px > waveR + 4) continue;
-      if (!ptSelected && abs(px - lastPx) < skipDist) continue;
+      if (!ptSelected && abs(px - lastPx) < 3) continue;
       lastPx = px;
 
       double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
