@@ -80,8 +80,9 @@ void SneakPeak::InitiateDragExport()
     std::vector<double> exportBuf(data.begin() + offset,
                                    data.begin() + offset + (size_t)selFrames * nch);
 
-    // Bake pending standalone fades into export copy
+    // Bake fades into export copy
     if (isStandalone) {
+      // Standalone: use pending fade params
       auto sf = m_waveform.GetStandaloneFade();
       int totalFrames = m_waveform.GetAudioSampleCount();
       if (sf.fadeInLen >= 0.001) {
@@ -107,6 +108,87 @@ void SneakPeak::InitiateDragExport()
           int bufIdx = i - startF;
           for (int ch = 0; ch < nch; ch++)
             exportBuf[bufIdx * nch + ch] *= gain;
+        }
+      }
+    } else if (g_GetMediaItemInfo_Value) {
+      // REAPER mode: bake item fades from REAPER metadata
+      // D_VOL is already baked into m_audioData at load time.
+      // Fades are visual-only overlays - must bake here for export.
+      const auto& segs = m_waveform.GetSegments();
+      if (segs.empty() && m_waveform.GetItem()) {
+        // Single item - apply its fades to the full export range
+        MediaItem* item = m_waveform.GetItem();
+        double fadeInLen = g_GetMediaItemInfo_Value(item, "D_FADEINLEN");
+        double fadeInDir = g_GetMediaItemInfo_Value(item, "D_FADEINDIR");
+        double fadeOutLen = g_GetMediaItemInfo_Value(item, "D_FADEOUTLEN");
+        double fadeOutDir = g_GetMediaItemInfo_Value(item, "D_FADEOUTDIR");
+        int totalFrames = m_waveform.GetAudioSampleCount();
+
+        if (fadeInLen >= 0.001) {
+          int fadeFrames = std::min((int)(fadeInLen * sr), totalFrames);
+          if (startF < fadeFrames) {
+            int overlap = std::min(fadeFrames - startF, selFrames);
+            for (int i = 0; i < overlap; i++) {
+              double t = (double)(startF + i) / (double)fadeFrames;
+              double gain = ApplyFadeShape(t, 0, -fadeInDir);
+              for (int ch = 0; ch < nch; ch++)
+                exportBuf[i * nch + ch] *= gain;
+            }
+          }
+        }
+        if (fadeOutLen >= 0.001) {
+          int fadeFrames = std::min((int)(fadeOutLen * sr), totalFrames);
+          int fadeStart = totalFrames - fadeFrames;
+          int overlapStart = std::max(startF, fadeStart);
+          int overlapEnd = std::min(endF, totalFrames);
+          for (int i = overlapStart; i < overlapEnd; i++) {
+            double t = (double)(i - fadeStart) / (double)fadeFrames;
+            double gain = ApplyFadeShape(1.0 - t, 0, fadeOutDir);
+            int bufIdx = i - startF;
+            for (int ch = 0; ch < nch; ch++)
+              exportBuf[bufIdx * nch + ch] *= gain;
+          }
+        }
+      } else {
+        // Timeline/SET: apply per-segment fades
+        for (const auto& seg : segs) {
+          if (!seg.item) continue;
+          double fadeInLen = g_GetMediaItemInfo_Value(seg.item, "D_FADEINLEN");
+          double fadeInDir = g_GetMediaItemInfo_Value(seg.item, "D_FADEINDIR");
+          double fadeOutLen = g_GetMediaItemInfo_Value(seg.item, "D_FADEOUTLEN");
+          double fadeOutDir = g_GetMediaItemInfo_Value(seg.item, "D_FADEOUTDIR");
+
+          // Segment frame range in buffer
+          int segStart = seg.audioStartFrame;
+          int segEnd = segStart + seg.audioFrameCount;
+
+          // Fade-in for this segment
+          if (fadeInLen >= 0.001) {
+            int fadeFrames = std::min((int)(fadeInLen * sr), seg.audioFrameCount);
+            int applyStart = std::max(startF, segStart);
+            int applyEnd = std::min(endF, segStart + fadeFrames);
+            for (int i = applyStart; i < applyEnd; i++) {
+              double t = (double)(i - segStart) / (double)fadeFrames;
+              double gain = ApplyFadeShape(t, 0, -fadeInDir);
+              int bufIdx = i - startF;
+              for (int ch = 0; ch < nch; ch++)
+                exportBuf[bufIdx * nch + ch] *= gain;
+            }
+          }
+          // Fade-out for this segment
+          if (fadeOutLen >= 0.001) {
+            int fadeFrames = std::min((int)(fadeOutLen * sr), seg.audioFrameCount);
+            int fadeStart = segEnd - fadeFrames;
+            int applyStart = std::max(startF, fadeStart);
+            int applyEnd = std::min(endF, segEnd);
+            for (int i = applyStart; i < applyEnd; i++) {
+              double t = (double)(i - fadeStart) / (double)fadeFrames;
+              double gain = ApplyFadeShape(1.0 - t, 0, fadeOutDir);
+              int bufIdx = i - startF;
+              for (int ch = 0; ch < nch; ch++)
+                exportBuf[bufIdx * nch + ch] *= gain;
+            }
+          }
         }
       }
     }
