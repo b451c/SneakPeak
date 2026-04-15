@@ -1285,9 +1285,10 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
   if (!g_CountEnvelopePoints || !g_GetEnvelopePoint) return;
 
   OwnedBrush ptBrush(g_theme.volumeEnvelope);
+  OwnedBrush ptBrushSel(RGB(255, 255, 255));  // selected points: white fill
   OwnedPen ptOutline(PS_SOLID, 1, RGB(255, 255, 255));
+  OwnedPen ptOutlineSel(PS_SOLID, 1, g_theme.volumeEnvelope); // selected: cyan outline
 
-  // Collect segments to iterate (single-item = one "virtual" segment)
   auto drawPointsForEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset) {
     int count = g_CountEnvelopePoints(env);
     for (int i = 0; i < count; i++) {
@@ -1303,10 +1304,10 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
       double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
       int py = EnvYToGainY(gain);
 
-      constexpr int r = 4;
-      HPEN oldPen = (HPEN)SelectObject(hdc, (HPEN)ptOutline);
-      HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, (HBRUSH)ptBrush);
-      Ellipse(hdc, px - r, py - r, px + r, py + r);
+      int rr = ptSelected ? 5 : 4; // selected points slightly larger
+      HPEN oldPen = (HPEN)SelectObject(hdc, ptSelected ? (HPEN)ptOutlineSel : (HPEN)ptOutline);
+      HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, ptSelected ? (HBRUSH)ptBrushSel : (HBRUSH)ptBrush);
+      Ellipse(hdc, px - rr, py - rr, px + rr, py + rr);
       SelectObject(hdc, oldPen);
       SelectObject(hdc, oldBrush);
     }

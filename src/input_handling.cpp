@@ -292,11 +292,33 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
         if (env) {
           int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 8);
           if (hitIdx >= 0) {
-            // Drag existing point
+            bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            // Select/toggle point selection
+            if (g_GetEnvelopePoint && g_SetEnvelopePoint) {
+              double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
+              g_GetEnvelopePoint(env, hitIdx, &pt, &pv, &ps, &ptn, &psel);
+              if (shift) {
+                // Toggle this point's selection
+                bool newSel = !psel;
+                bool noSort = true;
+                g_SetEnvelopePoint(env, hitIdx, nullptr, nullptr, nullptr, nullptr, &newSel, &noSort);
+              } else if (!psel) {
+                // Deselect all, select this one
+                int cnt = g_CountEnvelopePoints(env);
+                bool noSort = true;
+                for (int j = 0; j < cnt; j++) {
+                  bool sel = (j == hitIdx);
+                  g_SetEnvelopePoint(env, j, nullptr, nullptr, nullptr, nullptr, &sel, &noSort);
+                }
+              }
+              // else: already selected, keep multi-selection for drag
+            }
+            // Start drag (moves all selected points)
             m_envDragging = true;
             m_envDragPointIdx = hitIdx;
             SetCapture(m_hwnd);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            InvalidateRect(m_hwnd, nullptr, FALSE);
             return;
           }
           // Check if click is near the envelope line (within 6px vertically)
@@ -926,17 +948,27 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     return;
   }
 
-  // Envelope point dragging
+  // Envelope point dragging (moves all selected points by delta)
   if (m_envDragging && m_envDragPointIdx >= 0 && m_waveform.HasItem()) {
     TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
-    if (env && g_SetEnvelopePoint && g_GetEnvelopeScalingMode && g_ScaleToEnvelopeMode) {
-      double newTime = m_waveform.XToTime(x);
-      newTime = std::max(0.0, std::min(m_waveform.GetItemDuration(), newTime));
-      double newGain = m_waveform.EnvPixelToGain(y);
+    if (env && g_SetEnvelopePoint && g_GetEnvelopePoint && g_CountEnvelopePoints &&
+        g_GetEnvelopeScalingMode && g_ScaleToEnvelopeMode && g_ScaleFromEnvelopeMode) {
+      // Compute delta from mouse movement
+      double timeDelta = m_waveform.XToTime(x) - m_waveform.XToTime(m_lastMouseX);
+      double gainDelta = m_waveform.EnvPixelToGain(y) - m_waveform.EnvPixelToGain(m_lastMouseY);
       int scalingMode = g_GetEnvelopeScalingMode(env);
-      double newRawVal = g_ScaleToEnvelopeMode(scalingMode, newGain);
       bool noSort = true;
-      g_SetEnvelopePoint(env, m_envDragPointIdx, &newTime, &newRawVal, nullptr, nullptr, nullptr, &noSort);
+      int cnt = g_CountEnvelopePoints(env);
+      for (int i = 0; i < cnt; i++) {
+        double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
+        if (!g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel)) continue;
+        if (!psel) continue;
+        double newTime = std::max(0.0, std::min(m_waveform.GetItemDuration(), pt + timeDelta));
+        double curGain = g_ScaleFromEnvelopeMode(scalingMode, pv);
+        double newGain = std::max(0.0, curGain + gainDelta);
+        double newRawVal = g_ScaleToEnvelopeMode(scalingMode, newGain);
+        g_SetEnvelopePoint(env, i, &newTime, &newRawVal, nullptr, nullptr, nullptr, &noSort);
+      }
       if (g_UpdateArrange) g_UpdateArrange();
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
@@ -1188,20 +1220,45 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case VK_DELETE:
     case VK_BACK: {
       bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-      // Delete last-clicked envelope point
-      if (!ctrl && !shift && m_envDragPointIdx >= 0 &&
-          m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
-          g_GetTakeEnvelopeByName && g_DeleteEnvelopePointEx && g_Envelope_SortPoints) {
+      // Delete selected envelope points (or last-clicked if none selected)
+      if (!ctrl && !shift && m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
+          g_GetTakeEnvelopeByName && g_DeleteEnvelopePointEx && g_Envelope_SortPoints &&
+          g_CountEnvelopePoints && g_GetEnvelopePoint) {
         TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-        if (env && g_CountEnvelopePoints && m_envDragPointIdx < g_CountEnvelopePoints(env)) {
-          if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-          g_DeleteEnvelopePointEx(env, -1, m_envDragPointIdx);
-          g_Envelope_SortPoints(env);
-          if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
-          m_envDragPointIdx = -1;
-          if (g_UpdateArrange) g_UpdateArrange();
-          InvalidateRect(m_hwnd, nullptr, FALSE);
-          break;
+        if (env) {
+          int cnt = g_CountEnvelopePoints(env);
+          // Check if any points are selected
+          bool anySelected = false;
+          for (int i = 0; i < cnt && !anySelected; i++) {
+            double t=0,v=0,tn=0; int s=0; bool sel=false;
+            g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
+            if (sel) anySelected = true;
+          }
+          if (anySelected) {
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            // Delete in reverse order to keep indices valid
+            for (int i = cnt - 1; i >= 0; i--) {
+              double t=0,v=0,tn=0; int s=0; bool sel=false;
+              g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
+              if (sel) g_DeleteEnvelopePointEx(env, -1, i);
+            }
+            g_Envelope_SortPoints(env);
+            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope points", -1);
+            m_envDragPointIdx = -1;
+            if (g_UpdateArrange) g_UpdateArrange();
+            InvalidateRect(m_hwnd, nullptr, FALSE);
+            break;
+          } else if (m_envDragPointIdx >= 0 && m_envDragPointIdx < cnt) {
+            // Fallback: delete last-clicked point
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            g_DeleteEnvelopePointEx(env, -1, m_envDragPointIdx);
+            g_Envelope_SortPoints(env);
+            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
+            m_envDragPointIdx = -1;
+            if (g_UpdateArrange) g_UpdateArrange();
+            InvalidateRect(m_hwnd, nullptr, FALSE);
+            break;
+          }
         }
       }
       if (ctrl) {
