@@ -331,6 +331,27 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
               }
               // else: already selected, keep multi-selection for drag
             }
+            // Compute time bounds from non-selected neighbors
+            m_envDragMinTime = 0.0;
+            m_envDragMaxTime = m_waveform.GetItemDuration();
+            if (g_CountEnvelopePoints && g_GetEnvelopePoint) {
+              int cnt = g_CountEnvelopePoints(env);
+              // Find leftmost selected time and rightmost selected time
+              double selMinTime = 1e30, selMaxTime = -1e30;
+              for (int j = 0; j < cnt; j++) {
+                double t=0,v=0,tn=0; int s=0; bool sel=false;
+                g_GetEnvelopePoint(env, j, &t, &v, &s, &tn, &sel);
+                if (sel) { if (t < selMinTime) selMinTime = t; if (t > selMaxTime) selMaxTime = t; }
+              }
+              // Find closest non-selected neighbors outside the selected range
+              for (int j = 0; j < cnt; j++) {
+                double t=0,v=0,tn=0; int s=0; bool sel=false;
+                g_GetEnvelopePoint(env, j, &t, &v, &s, &tn, &sel);
+                if (sel) continue;
+                if (t < selMinTime && t > m_envDragMinTime) m_envDragMinTime = t + 0.0001;
+                if (t > selMaxTime && t < m_envDragMaxTime) m_envDragMaxTime = t - 0.0001;
+              }
+            }
             // Start drag (moves all selected points)
             m_envDragging = true;
             m_envDragPointIdx = hitIdx;
@@ -1069,22 +1090,32 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     return;
   }
 
-  // Envelope point dragging (moves all selected points by delta)
+  // Envelope point dragging (moves all selected points by delta, clamped to neighbors)
   if (m_envDragging && m_envDragPointIdx >= 0 && m_waveform.HasItem()) {
     TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
     if (env && g_SetEnvelopePoint && g_GetEnvelopePoint && g_CountEnvelopePoints &&
         g_GetEnvelopeScalingMode && g_ScaleToEnvelopeMode && g_ScaleFromEnvelopeMode) {
-      // Compute delta from mouse movement
       double timeDelta = m_waveform.XToTime(x) - m_waveform.XToTime(m_lastMouseX);
       double gainDelta = m_waveform.EnvPixelToGain(y) - m_waveform.EnvPixelToGain(m_lastMouseY);
+      // Clamp timeDelta so no selected point crosses a non-selected neighbor
       int scalingMode = g_GetEnvelopeScalingMode(env);
-      bool noSort = true;
       int cnt = g_CountEnvelopePoints(env);
+      double selMin = 1e30, selMax = -1e30;
+      for (int i = 0; i < cnt; i++) {
+        double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
+        g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel);
+        if (psel) { if (pt < selMin) selMin = pt; if (pt > selMax) selMax = pt; }
+      }
+      double maxLeftDelta = m_envDragMinTime - selMin;   // negative (move left)
+      double maxRightDelta = m_envDragMaxTime - selMax;  // positive (move right)
+      timeDelta = std::max(maxLeftDelta, std::min(maxRightDelta, timeDelta));
+
+      bool noSort = true;
       for (int i = 0; i < cnt; i++) {
         double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
         if (!g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel)) continue;
         if (!psel) continue;
-        double newTime = std::max(0.0, std::min(m_waveform.GetItemDuration(), pt + timeDelta));
+        double newTime = pt + timeDelta;
         double curGain = g_ScaleFromEnvelopeMode(scalingMode, pv);
         double newGain = std::max(0.0, curGain + gainDelta);
         double newRawVal = g_ScaleToEnvelopeMode(scalingMode, newGain);

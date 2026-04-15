@@ -246,6 +246,8 @@ private:
   // Envelope point dragging + freehand drawing
   bool m_envDragging = false;
   int m_envDragPointIdx = -1;  // index of point being dragged (-1 = none)
+  double m_envDragMinTime = 0.0;  // left neighbor time (clamp bound)
+  double m_envDragMaxTime = 0.0;  // right neighbor time (clamp bound)
   bool m_envFreehand = false;  // freehand drawing mode (add points on mousemove)
   int m_envFreehandLastX = 0;  // throttle: last X where point was added
 
