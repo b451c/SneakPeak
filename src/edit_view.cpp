@@ -1109,12 +1109,6 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_ERASEBKGND:
       return 1;
 
-#ifdef _WIN32
-    case WM_MOUSEACTIVATE:
-      SetFocus(m_hwnd);
-      return MA_ACTIVATE;
-#endif
-
     case WM_SIZE: {
       RECT rc;
       GetClientRect(m_hwnd, &rc);

@@ -143,11 +143,14 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
     else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S' || k == 'T')) handled = true;
     if (handled) {
       SendMessage(ourHwnd, WM_KEYDOWN, msg->wParam, msg->lParam);
-      return 1;
+      return 1; // we ate this key
     }
   }
 
-  return 0;
+  // Our window has focus but we don't want this key - pass to REAPER main window
+  // (returning 0 means "not our window" which can cause REAPER to also process keys
+  // that should be ignored, like Delete acting on timeline items)
+  return -1;
 }
 
 static accelerator_register_t g_accelReg = { translateAccelSneakPeak, true, nullptr };
