@@ -1174,37 +1174,35 @@ WaveformView::EnvSegmentInfo WaveformView::GetEnvelopeAtTime(double viewTime) co
   return info;
 }
 
-// Envelope Y mapping: logarithmic (dB-based), range matched to REAPER arrange.
-// REAPER volume envelope range: +12dB (top) to -inf (bottom), 0dB at ~72%.
-// Below 0dB: linear-in-dB.  Above 0dB: linear-in-dB.
-static constexpr double ENV_MAX_DB = 12.0;    // top of display (matches REAPER +12dB max)
-static constexpr double ENV_MIN_DB = -60.0;   // bottom of display (practical silence floor)
-static constexpr double ENV_ZERO_FRAC = 0.72; // 0dB at 72% from bottom (matches REAPER fader)
+// Envelope Y mapping: uses REAPER's native fader scale via ScaleTo/FromEnvelopeMode.
+// This gives exact 1:1 visual match with REAPER's arrange view envelope display.
+// Range: 0 (bottom, -inf dB) to +12dB (top, gain ~4.0).
+static constexpr double ENV_MAX_GAIN = 4.0; // +12dB — REAPER default volume envelope max
 
-int WaveformView::EnvYToGainY(double gain) const
+int WaveformView::EnvYToGainY(double gain, int scalingMode) const
 {
   int yTop = m_rect.top + 2;
   int yBot = m_rect.bottom - 2;
   int yRange = yBot - yTop;
+  if (yRange < 1) return yBot;
 
-  double db = 20.0 * log10(std::max(gain, 1e-6));
-  db = std::max(ENV_MIN_DB, std::min(ENV_MAX_DB, db));
+  gain = std::max(0.0, std::min(ENV_MAX_GAIN, gain));
 
-  double frac;
-  if (db >= 0.0) {
-    // Above 0dB: linear from 75% to 100% (top 25% reserved for boost)
-    frac = ENV_ZERO_FRAC + (db / ENV_MAX_DB) * (1.0 - ENV_ZERO_FRAC);
-  } else {
-    // Below 0dB: linear-in-dB from 0% to 75%
-    frac = ENV_ZERO_FRAC * (1.0 - db / ENV_MIN_DB);
+  if (g_ScaleToEnvelopeMode) {
+    // Use REAPER's fader curve — same function REAPER uses for arrange display
+    double raw = g_ScaleToEnvelopeMode(scalingMode, gain);
+    double maxRaw = g_ScaleToEnvelopeMode(scalingMode, ENV_MAX_GAIN);
+    if (maxRaw <= 0.0) maxRaw = ENV_MAX_GAIN;
+    double frac = raw / maxRaw;
+    frac = std::max(0.0, std::min(1.0, frac));
+    return yBot - (int)(frac * (double)yRange);
   }
-  frac = std::max(0.0, std::min(1.0, frac));
 
-  int y = yBot - (int)(frac * (double)yRange);
-  return std::max(yTop, std::min(yBot, y));
+  // Fallback: linear gain
+  return yBot - (int)((gain / ENV_MAX_GAIN) * (double)yRange);
 }
 
-double WaveformView::EnvPixelToGain(int y) const
+double WaveformView::EnvPixelToGain(int y, int scalingMode) const
 {
   int yTop = m_rect.top + 2;
   int yBot = m_rect.bottom - 2;
@@ -1214,14 +1212,14 @@ double WaveformView::EnvPixelToGain(int y) const
   double frac = (double)(yBot - y) / (double)yRange;
   frac = std::max(0.0, std::min(1.0, frac));
 
-  double db;
-  if (frac >= ENV_ZERO_FRAC) {
-    db = (frac - ENV_ZERO_FRAC) / (1.0 - ENV_ZERO_FRAC) * ENV_MAX_DB;
-  } else {
-    db = (1.0 - frac / ENV_ZERO_FRAC) * ENV_MIN_DB;
+  if (g_ScaleToEnvelopeMode && g_ScaleFromEnvelopeMode) {
+    double maxRaw = g_ScaleToEnvelopeMode(scalingMode, ENV_MAX_GAIN);
+    if (maxRaw <= 0.0) maxRaw = ENV_MAX_GAIN;
+    double raw = frac * maxRaw;
+    return std::max(0.0, g_ScaleFromEnvelopeMode(scalingMode, raw));
   }
 
-  return pow(10.0, db / 20.0);
+  return frac * ENV_MAX_GAIN;
 }
 
 int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
@@ -1244,7 +1242,7 @@ int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
         continue;
       double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
       int px = TimeToX(ptTime + segRelOffset);
-      int py = EnvYToGainY(gain);
+      int py = EnvYToGainY(gain, scalingMode);
       int dx = x - px;
       int dy = y - py;
       int dist = dx * dx + dy * dy;
@@ -1305,7 +1303,7 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
       g_Envelope_Evaluate(ei.env, ei.envTime, (double)m_sampleRate, 0,
                           &rawValue, &d1, &d2, &d3);
       double gain = g_ScaleFromEnvelopeMode(ei.scalingMode, rawValue);
-      int y = EnvYToGainY(gain);
+      int y = EnvYToGainY(gain, ei.scalingMode);
       int x = waveL + col;
       if (first) { MoveToEx(hdc, x, y, nullptr); first = false; }
       else LineTo(hdc, x, y);
@@ -1341,7 +1339,7 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
       lastPx = px;
 
       double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
-      int py = EnvYToGainY(gain);
+      int py = EnvYToGainY(gain, scalingMode);
 
       int rr = ptSelected ? 5 : normalR;
       HPEN oldPen = (HPEN)SelectObject(hdc, ptSelected ? (HPEN)ptOutlineSel : (HPEN)ptOutline);

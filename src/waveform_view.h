@@ -134,8 +134,8 @@ public:
   bool GetShowVolumeEnvelope() const { return m_envShowVolume; }
   void SetShowVolumeEnvelope(bool show) { m_envShowVolume = show; m_peaksValid = false; }
   int HitTestEnvelopePoint(int x, int y, int hitRadius = 8) const;
-  int EnvYToGainY(double gain) const; // gain -> Y pixel
-  double EnvPixelToGain(int y) const; // Y pixel -> gain
+  int EnvYToGainY(double gain, int scalingMode) const; // gain -> Y pixel (REAPER fader scale)
+  double EnvPixelToGain(int y, int scalingMode) const; // Y pixel -> gain (REAPER fader scale)
 
   // Per-segment envelope lookup (foundation for timeline/SET envelope support)
   // Maps view-relative time to the correct segment's take envelope.
