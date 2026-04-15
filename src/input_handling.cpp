@@ -1735,6 +1735,17 @@ void SneakPeak::ReloadAfterGainChange(double savedViewStart, double savedViewDur
   }
   m_waveform.SetBatchGainOffset(1.0);
   m_waveform.UpdateFadeCache();
+
+  // Re-analyze dynamics with updated audio levels
+  if ((m_dynamicsVisible || m_dynamicsPanel.IsVisible()) && m_waveform.GetAudioSampleCount() > 0) {
+    double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+    m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                       m_waveform.GetAudioSampleCount(),
+                       m_waveform.GetNumChannels(),
+                       m_waveform.GetSampleRate(),
+                       ivDb, m_dynamics.GetParams());
+  }
+
   m_waveform.Invalidate();
   if (savedSel.active) m_waveform.SetSelection(savedSel);
 }
