@@ -396,6 +396,9 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
         }
       }
 
+      // Clicking on waveform (not on envelope point) deselects envelope point
+      m_envDragPointIdx = -1;
+
       if (wParam & MK_SHIFT) {
         m_waveform.UpdateSelection(time);
       } else {
@@ -454,7 +457,7 @@ void SneakPeak::OnMouseUp(int x, int y)
   }
   if (m_envDragging) {
     m_envDragging = false;
-    m_envDragPointIdx = -1;
+    // Keep m_envDragPointIdx — tracks "selected" point for Delete key
     ReleaseCapture();
     TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
     if (env && g_Envelope_SortPoints) g_Envelope_SortPoints(env);
@@ -1158,30 +1161,20 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case VK_DELETE:
     case VK_BACK: {
       bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-      // Delete envelope point at cursor (if envelope visible and point exists near cursor)
-      if (!ctrl && !shift && m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
-          g_GetTakeEnvelopeByName && g_GetEnvelopePointByTime && g_DeleteEnvelopePointEx &&
-          g_Envelope_SortPoints && g_GetEnvelopePoint) {
+      // Delete last-clicked envelope point
+      if (!ctrl && !shift && m_envDragPointIdx >= 0 &&
+          m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
+          g_GetTakeEnvelopeByName && g_DeleteEnvelopePointEx && g_Envelope_SortPoints) {
         TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-        if (env) {
-          double cursorTime = m_waveform.GetCursorTime();
-          int ptIdx = g_GetEnvelopePointByTime(env, cursorTime);
-          if (ptIdx >= 0) {
-            double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
-            int ptShape = 0;
-            bool ptSel = false;
-            g_GetEnvelopePoint(env, ptIdx, &ptTime, &ptValue, &ptShape, &ptTension, &ptSel);
-            // Only delete if point is close to cursor (within 0.05s)
-            if (fabs(ptTime - cursorTime) < 0.05) {
-              if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-              g_DeleteEnvelopePointEx(env, -1, ptIdx);
-              g_Envelope_SortPoints(env);
-              if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
-              if (g_UpdateArrange) g_UpdateArrange();
-              InvalidateRect(m_hwnd, nullptr, FALSE);
-              break;
-            }
-          }
+        if (env && g_CountEnvelopePoints && m_envDragPointIdx < g_CountEnvelopePoints(env)) {
+          if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+          g_DeleteEnvelopePointEx(env, -1, m_envDragPointIdx);
+          g_Envelope_SortPoints(env);
+          if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
+          m_envDragPointIdx = -1;
+          if (g_UpdateArrange) g_UpdateArrange();
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+          break;
         }
       }
       if (ctrl) {
