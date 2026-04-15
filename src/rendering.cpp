@@ -733,8 +733,8 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   double pctBelow = params.compressBelow / 100.0;
   bool showComp = (pctAbove != 0.0 || pctBelow != 0.0);
 
-  // Helper: compute fade-adjusted dB for a point
-  // Inlined below to avoid function call overhead in tight loop
+  // Silence threshold: don't draw curves below this (prevents ugly spikes to bottom)
+  static constexpr double SILENCE_FLOOR_DB = -45.0;
 
   // --- Orange amplitude curve ---
   {
@@ -758,6 +758,10 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
         fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
 
       double adjDb = pt.db + gainOffsetDb + 20.0 * log10(std::max(fadeGain, 1e-12));
+
+      // Break line during silence gaps (no useful visual info below floor)
+      if (adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
+
       double norm = (adjDb - params.minDb) / (params.maxDb - params.minDb);
       norm = std::max(0.0, std::min(1.0, norm));
       int py = yBot - (int)(norm * (double)yRange);
@@ -768,7 +772,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     }
   }
 
-  // --- Green compression preview curve ---
+  // --- Compression preview curve ---
   if (showComp) {
     OwnedPen compPen(PS_SOLID, 1, RGB(140, 100, 200));
     DCPenScope scope(hdc, compPen);
@@ -790,6 +794,10 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
         fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
 
       double adjDb = pt.db + gainOffsetDb + 20.0 * log10(std::max(fadeGain, 1e-12));
+
+      // Break line during silence
+      if (adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
+
       double pct = (adjDb < targetDb) ? pctBelow : pctAbove;
       double compDb = adjDb + pct * (targetDb - adjDb);
       double norm = (compDb - params.minDb) / (params.maxDb - params.minDb);
