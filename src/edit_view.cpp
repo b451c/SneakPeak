@@ -26,16 +26,23 @@ void SneakPeak::Create()
 {
   if (m_hwnd) return;
 
-  m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this);
-  if (!m_hwnd) return;
-
-  // Restore dock state: if previously docked, re-dock; otherwise show floating
+  // Check if previously docked
+  bool wantDocked = false;
   if (g_GetExtState && g_DockWindowAddEx) {
     const char* docked = g_GetExtState("SneakPeak", "was_docked");
-    if (docked && docked[0] == '1') {
-      g_DockWindowAddEx(m_hwnd, "SneakPeak", "SneakPeak_main", true);
-      m_isDocked = true;
-    }
+    wantDocked = (docked && docked[0] == '1');
+  }
+
+#ifdef _WIN32
+  m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this, wantDocked);
+#else
+  m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this);
+#endif
+  if (!m_hwnd) return;
+
+  if (wantDocked && g_DockWindowAddEx) {
+    g_DockWindowAddEx(m_hwnd, "SneakPeak", "SneakPeak_main", true);
+    m_isDocked = true;
   }
   if (!m_isDocked) {
     // Restore saved floating position/size

@@ -36,19 +36,6 @@
 ]]></description>
       </metadata>
 
-      <version name="2.0.0-alpha.3" author="b451c" time="2026-04-15T00:00:00Z">
-        <changelog><![CDATA[v2.0.0 Alpha 3 - Multiplatform test build
-
-First multiplatform build: macOS (ARM64 + Intel), Windows x64, Linux (x86_64 + aarch64).
-No new features - testing cross-platform compatibility.
-]]></changelog>
-        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.0.0-alpha.3/reaper_sneakpeak-arm64.dylib</source>
-        <source platform="darwin64" file="reaper_sneakpeak-x86_64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.0.0-alpha.3/reaper_sneakpeak-x86_64.dylib</source>
-        <source platform="win64" file="reaper_sneakpeak-x64.dll">https://github.com/b451c/SneakPeak/releases/download/v2.0.0-alpha.3/reaper_sneakpeak-x64.dll</source>
-        <source platform="linux64" file="reaper_sneakpeak-x86_64.so">https://github.com/b451c/SneakPeak/releases/download/v2.0.0-alpha.3/reaper_sneakpeak-x86_64.so</source>
-        <source platform="linux-aarch64" file="reaper_sneakpeak-aarch64.so">https://github.com/b451c/SneakPeak/releases/download/v2.0.0-alpha.3/reaper_sneakpeak-aarch64.so</source>
-      </version>
-
       <version name="1.9.0" author="b451c" time="2026-04-04T00:00:00Z">
         <changelog><![CDATA[Non-Destructive Paste, Bars/Beats Ruler, Trackpad Gestures, Ripple Delete
 

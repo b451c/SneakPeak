@@ -52,13 +52,17 @@
 
 // Portable dialog creation
 #ifdef _WIN32
-inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param) {
+inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param, bool docked = false) {
   #pragma pack(push, 4)
   struct { DLGTEMPLATE tmpl; WORD menu; WORD wndClass; WORD title; } dlg = {};
   #pragma pack(pop)
-  dlg.tmpl.style = WS_CHILD | DS_CONTROL;
-  dlg.tmpl.cx = 800;
-  dlg.tmpl.cy = 400;
+  if (docked) {
+    dlg.tmpl.style = WS_CHILD | DS_CONTROL;
+  } else {
+    dlg.tmpl.style = WS_POPUP | WS_CAPTION | WS_SIZEBOX | WS_SYSMENU | WS_VISIBLE;
+    dlg.tmpl.cx = 800;
+    dlg.tmpl.cy = 400;
+  }
   return CreateDialogIndirectParam(GetModuleHandle(nullptr), &dlg.tmpl, parent, dlgProc, param);
 }
 #else
