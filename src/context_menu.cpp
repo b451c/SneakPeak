@@ -475,7 +475,11 @@ void SneakPeak::OnContextMenuCommand(int id)
         KillTimer(m_hwnd, TIMER_REFRESH);
         if (g_DockWindowRemove) g_DockWindowRemove(m_hwnd);
         DestroyWindow(m_hwnd);
+#ifdef _WIN32
+        m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this, false);
+#else
         m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this);
+#endif
         if (g_GetExtState) {
           const char* wr = g_GetExtState("SneakPeak", "win_rect");
           if (wr && wr[0]) {
@@ -489,6 +493,13 @@ void SneakPeak::OnContextMenuCommand(int id)
         { RECT cr; GetClientRect(m_hwnd, &cr); RecalcLayout(cr.right, cr.bottom); }
         m_isDocked = false;
       } else {
+        // Dock: destroy floating, recreate as docked child
+#ifdef _WIN32
+        KillTimer(m_hwnd, TIMER_REFRESH);
+        DestroyWindow(m_hwnd);
+        m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this, true);
+        SetTimer(m_hwnd, TIMER_REFRESH, TIMER_INTERVAL_MS, nullptr);
+#endif
         if (g_DockWindowAddEx)
           g_DockWindowAddEx(m_hwnd, "SneakPeak", "SneakPeak_main", true);
         m_isDocked = true;
