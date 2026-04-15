@@ -107,6 +107,7 @@ enum ContextMenuID {
   CM_METER_SOURCE_MASTER,
   CM_SHOW_VOLUME_ENVELOPE,
   CM_SHOW_DYNAMICS,
+  CM_APPLY_DYNAMICS,
   CM_LAST // sentinel -- keep last
 };
 

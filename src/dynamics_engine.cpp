@@ -108,3 +108,29 @@ void DynamicsEngine::BuildEnvelope(double itemVolDb, const DynamicsParams& param
     m_results[i] = {m_rawPeaks[i].time, m_rawPeaks[i].peak, db, norm};
   }
 }
+
+double DynamicsEngine::GetTargetDb() const
+{
+  // -100 sentinel means "use average peak"
+  return (m_params.targetDb <= -99.0) ? m_avgPeakDb : m_params.targetDb;
+}
+
+// Stage 3: Compute per-point dB adjustment for compression
+// Translation of saxmand's changePoints block in Amplitude()
+std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression() const
+{
+  std::vector<CompressPoint> out;
+  if (m_results.empty()) return out;
+
+  double targetDb = GetTargetDb();
+  double pctAbove = m_params.compressAbove / 100.0;
+  double pctBelow = m_params.compressBelow / 100.0;
+
+  out.reserve(m_results.size());
+  for (const auto& pt : m_results) {
+    double pct = (pt.db < targetDb) ? pctBelow : pctAbove;
+    double dbAdj = pct * (targetDb - pt.db);
+    out.push_back({pt.time, dbAdj});
+  }
+  return out;
+}

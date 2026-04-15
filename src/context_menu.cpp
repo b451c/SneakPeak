@@ -142,6 +142,10 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_DC_REMOVE, "DC Offset Remove");
   MenuAppendSeparator(procMenu);
 
+  // Dynamics
+  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_APPLY_DYNAMICS, "Apply Dynamics...");
+  MenuAppendSeparator(procMenu);
+
   // Channel
   {
     // Mono downmix toggle
@@ -446,6 +450,72 @@ void SneakPeak::OnContextMenuCommand(int id)
       }
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
+    case CM_APPLY_DYNAMICS: {
+      if (!m_waveform.HasItem() || m_waveform.IsStandaloneMode() || !m_waveform.GetTake()) break;
+      // Ensure analysis is done
+      if (!m_dynamics.HasResults() && m_waveform.GetAudioSampleCount() > 0) {
+        double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+        m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                           m_waveform.GetAudioSampleCount(),
+                           m_waveform.GetNumChannels(),
+                           m_waveform.GetSampleRate(),
+                           ivDb, m_dynamics.GetParams());
+      }
+      if (!m_dynamics.HasResults()) break;
+      // Show dialog for params
+      DynamicsParams dp = m_dynamics.GetParams();
+      double targetDb = m_dynamics.GetTargetDb();
+      char vals[256];
+      snprintf(vals, sizeof(vals), "%.1f,%.0f,%.0f,%.0f,%.0f",
+               targetDb, dp.compressAbove, dp.compressBelow, dp.attackMs, dp.releaseMs);
+      if (g_GetUserInputs && g_GetUserInputs("Apply Dynamics", 5,
+          "Target dB,Compress Above %,Compress Below %,Attack ms,Release ms", vals, sizeof(vals))) {
+        double newTarget, newAbove, newBelow, newAttack, newRelease;
+        if (sscanf(vals, "%lf,%lf,%lf,%lf,%lf", &newTarget, &newAbove, &newBelow, &newAttack, &newRelease) == 5) {
+          dp.targetDb = newTarget;
+          dp.compressAbove = newAbove;
+          dp.compressBelow = newBelow;
+          dp.attackMs = std::max(0.0, newAttack);
+          dp.releaseMs = std::max(0.0, newRelease);
+          m_dynamics.SetParams(dp);
+          // Re-analyze with new attack/release
+          double ivDb2 = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+          m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                             m_waveform.GetAudioSampleCount(),
+                             m_waveform.GetNumChannels(),
+                             m_waveform.GetSampleRate(),
+                             ivDb2, dp);
+          // Compute compression and write envelope points
+          auto comp = m_dynamics.ComputeCompression();
+          if (!comp.empty() && g_GetTakeEnvelopeByName && g_InsertEnvelopePointEx &&
+              g_Envelope_SortPoints && g_ScaleToEnvelopeMode && g_GetEnvelopeScalingMode) {
+            TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+            if (!env) {
+              // Try to enable the envelope - need SWS or manual approach
+              // For now, user must enable it first
+              break;
+            }
+            int scalingMode = g_GetEnvelopeScalingMode(env);
+            if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            bool noSort = true;
+            for (const auto& cp : comp) {
+              // Convert dB adjustment to linear gain, then to envelope raw value
+              double gainLinear = pow(10.0, cp.dbAdjust / 20.0);
+              double rawVal = g_ScaleToEnvelopeMode(scalingMode, gainLinear);
+              g_InsertEnvelopePointEx(env, -1, cp.time, rawVal, 0, 0.0, false, &noSort);
+            }
+            g_Envelope_SortPoints(env);
+            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Apply Dynamics", -1);
+            if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+            if (g_UpdateArrange) g_UpdateArrange();
+          }
+          m_dynamicsVisible = true;
+        }
+      }
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    }
     case CM_METER_PEAK:
       m_levels.SetMode(MeterMode::PEAK);
       if (g_SetExtState) g_SetExtState("SneakPeak", "meter_mode", "peak", true);

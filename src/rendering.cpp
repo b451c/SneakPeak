@@ -689,6 +689,30 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
     else LineTo(hdc, px, py);
   }
+
+  // Target dB line (yellow horizontal)
+  {
+    const auto& params = m_dynamics.GetParams();
+    double targetDb = m_dynamics.GetTargetDb();
+    double targetNorm = (targetDb - params.minDb) / (params.maxDb - params.minDb);
+    targetNorm = std::max(0.0, std::min(1.0, targetNorm));
+    int targetY = yBot - (int)(targetNorm * (double)yRange);
+
+    OwnedPen targetPen(PS_SOLID, 1, RGB(255, 220, 50));
+    DCPenScope targetScope(hdc, targetPen);
+    MoveToEx(hdc, waveL, targetY, nullptr);
+    LineTo(hdc, waveR, targetY);
+
+    // Label
+    HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, RGB(255, 220, 50));
+    char label[32];
+    snprintf(label, sizeof(label), "Target %.0f dB", targetDb);
+    RECT lr = { waveL + 4, targetY - 13, waveL + 120, targetY - 1 };
+    DrawText(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(hdc, oldFont);
+  }
 }
 
 void SneakPeak::DrawMasterWaveform(HDC hdc)

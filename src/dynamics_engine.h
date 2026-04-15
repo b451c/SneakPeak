@@ -12,6 +12,9 @@ struct DynamicsParams {
   double lookaheadMs = 0.0;   // lookahead for peak detection
   double minDb = -60.0;       // visual floor (normalization)
   double maxDb = 6.0;         // visual ceiling (normalization)
+  double targetDb = -100.0;   // compression target (-100 = use average peak)
+  double compressAbove = 0.0; // percentage 0-200 to push peaks above target toward it
+  double compressBelow = 0.0; // percentage 0-200 to push peaks below target toward it
 };
 
 struct DynamicsPoint {
@@ -31,9 +34,19 @@ public:
 
   const std::vector<DynamicsPoint>& GetResults() const { return m_results; }
   double GetAveragePeakDb() const { return m_avgPeakDb; }
+  double GetTargetDb() const;
   bool HasResults() const { return !m_results.empty(); }
   void Clear() { m_results.clear(); }
   const DynamicsParams& GetParams() const { return m_params; }
+  void SetParams(const DynamicsParams& p) { m_params = p; }
+
+  // Stage 3: Compute dB adjustment per point based on compression params.
+  // Returns {time, dbAdjustment} pairs ready for envelope point writing.
+  struct CompressPoint {
+    double time;
+    double dbAdjust; // dB to add at this time (positive = boost, negative = cut)
+  };
+  std::vector<CompressPoint> ComputeCompression() const;
 
 private:
   // Stage 1: collect peak per 1ms window from audio buffer
