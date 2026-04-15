@@ -99,7 +99,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     // Empty state
     SetTextColor(hdc, g_theme.emptyText);
     RECT textR = { xPos, m_modeBarRect.top, m_modeBarRect.right - 80, m_modeBarRect.bottom };
-    DrawText(hdc, "SneakPeak - Drop audio file or select item", -1, &textR,
+    DrawText(hdc, "SneakPeak v2.0 - Drop audio file or select item", -1, &textR,
              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   } else if (isEmpty && m_masterMode) {
     // Master mode active — show indicator
@@ -122,6 +122,12 @@ void SneakPeak::DrawModeBar(HDC hdc)
     } else if (isStandalone && !isReaper) {
       accent = g_theme.modeBarStandaloneAccent;
       modeLabel = "STANDALONE";
+    } else if (m_waveform.IsTimelineView()) {
+      accent = RGB(180, 140, 255);  // purple for timeline
+      modeLabel = "TIMELINE";
+    } else if (m_waveform.IsMultiItemActive()) {
+      accent = RGB(255, 180, 80);   // orange for multi-item
+      modeLabel = "MULTI";
     } else {
       accent = g_theme.modeBarReaperAccent;
       modeLabel = "REAPER";
@@ -302,6 +308,14 @@ void SneakPeak::DrawModeBar(HDC hdc)
         }
       }
     }
+  }
+
+  // Version label — subtle, right of content, left of MASTER
+  {
+    SelectObject(hdc, g_fonts.normal11);
+    SetTextColor(hdc, RGB(90, 90, 90));
+    RECT verR = { m_modeBarRect.right - 160, m_modeBarRect.top, m_modeBarRect.right - 70, m_modeBarRect.bottom };
+    DrawText(hdc, "v2.0", -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
   // MASTER tab — right-aligned, always visible
