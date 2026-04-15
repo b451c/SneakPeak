@@ -32,17 +32,23 @@ void SneakPeak::OnPaint(HDC hdc)
     m_waveform.Paint(hdc);
     if (m_dynamicsVisible && m_dynamics.HasResults())
       DrawDynamicsCurve(hdc);
-    // Envelope selection rectangle overlay (tinted fill + cyan border)
+    // Envelope selection rectangle overlay (hatched semi-transparent fill + cyan border)
     if (m_envRectSelecting) {
       int rx1 = std::min(m_envRectStartX, m_envRectEndX);
       int ry1 = std::min(m_envRectStartY, m_envRectEndY);
       int rx2 = std::max(m_envRectStartX, m_envRectEndX);
       int ry2 = std::max(m_envRectStartY, m_envRectEndY);
-      // Dark tint fill (like fade background)
-      RECT fillR = { rx1, ry1, rx2, ry2 };
-      HBRUSH fillBrush = CreateSolidBrush(RGB(0, 60, 80));
-      FillRect(hdc, &fillR, fillBrush);
-      DeleteObject(fillBrush);
+      // Vertical lines fill per 3 pixels (fake transparency)
+      {
+        HPEN tintPen = CreatePen(PS_SOLID, 1, RGB(0, 80, 100));
+        HPEN oldP = (HPEN)SelectObject(hdc, tintPen);
+        for (int px = rx1; px <= rx2; px += 3) {
+          MoveToEx(hdc, px, ry1, nullptr);
+          LineTo(hdc, px, ry2);
+        }
+        SelectObject(hdc, oldP);
+        DeleteObject(tintPen);
+      }
       // Cyan border
       HPEN rectPen = CreatePen(PS_SOLID, 1, g_theme.volumeEnvelope);
       HPEN oldPen = (HPEN)SelectObject(hdc, rectPen);

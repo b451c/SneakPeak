@@ -1039,15 +1039,27 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     if (abs(x - m_envFreehandLastX) >= 4) {
       TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
       if (env && g_InsertEnvelopePointEx && g_GetEnvelopeScalingMode &&
-          g_ScaleToEnvelopeMode && g_Envelope_SortPoints) {
+          g_ScaleToEnvelopeMode && g_Envelope_SortPoints &&
+          g_CountEnvelopePoints && g_GetEnvelopePoint && g_DeleteEnvelopePointEx) {
         double time = m_waveform.XToTime(x);
         time = std::max(0.0, std::min(m_waveform.GetItemDuration(), time));
+        // Delete existing points between last drawn position and current
+        double prevTime = m_waveform.XToTime(m_envFreehandLastX);
+        double tMin = std::min(prevTime, time);
+        double tMax = std::max(prevTime, time);
+        int cnt = g_CountEnvelopePoints(env);
+        for (int i = cnt - 1; i >= 0; i--) {
+          double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
+          g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel);
+          if (pt > tMin && pt < tMax)
+            g_DeleteEnvelopePointEx(env, -1, i);
+        }
         double gain = m_waveform.EnvPixelToGain(y);
         int scalingMode = g_GetEnvelopeScalingMode(env);
         double rawVal = g_ScaleToEnvelopeMode(scalingMode, gain);
         bool noSort = false;
         g_InsertEnvelopePointEx(env, -1, time, rawVal, 0, 0.0, false, &noSort);
-        g_Envelope_SortPoints(env); // sort after each point to prevent visual glitches
+        g_Envelope_SortPoints(env);
         m_envFreehandLastX = x;
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
