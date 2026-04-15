@@ -120,7 +120,7 @@ RECT DynamicsPanel::GetApplyButtonRect(RECT pr) const
 
 RECT DynamicsPanel::GetCloseButtonRect(RECT pr) const
 {
-  return { pr.right - 14, pr.top + 1, pr.right - 1, pr.top + TITLE_H };
+  return { pr.right - 16, pr.top + 4, pr.right - 2, pr.top + 18 };
 }
 
 // --- Coordinate conversion ---
@@ -264,7 +264,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
   {
     HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
     SetTextColor(hdc, RGB(255, 160, 40));
-    RECT titleR = { pr.left + MARGIN, pr.top + 1, pr.right - 16, pr.top + TITLE_H };
+    RECT titleR = { pr.left + MARGIN + 2, pr.top + 4, pr.right - 16, pr.top + TITLE_H };
     DrawText(hdc, "DYNAMICS", -1, &titleR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }

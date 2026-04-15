@@ -64,9 +64,9 @@ private:
   int m_dragOffsetX = 0, m_dragOffsetY = 0;
   int m_offsetX = 0, m_offsetY = 0;
 
-  static const int PANEL_W = 320;
-  static const int PANEL_H = 76;
-  static const int TITLE_H = 14;
+  static const int PANEL_W = 324;
+  static const int PANEL_H = 86;
+  static const int TITLE_H = 22;
   static const int ROW_H = 18;
   static const int THUMB_R = 4;
   static const int TRACK_H = 2;

@@ -770,7 +770,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
 
   // --- Green compression preview curve ---
   if (showComp) {
-    OwnedPen compPen(PS_SOLID, 2, RGB(80, 220, 120));
+    OwnedPen compPen(PS_SOLID, 2, RGB(180, 130, 255));
     DCPenScope scope(hdc, compPen);
     bool first = true;
     int lastPx = -2;
