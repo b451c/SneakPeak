@@ -299,6 +299,7 @@ private:
 
   // Volume envelope overlay
   bool m_envShowVolume = true;
+  double m_envMaxGain = 2.0; // MAXVAL from envelope chunk (updated in DrawVolumeEnvelope)
 
   // Cached fade/volume parameters
   FadeCache m_fadeCache;

@@ -121,6 +121,7 @@
 #define REAPERAPI_WANT_Envelope_SortPoints
 #define REAPERAPI_WANT_GetEnvelopePointByTime
 #define REAPERAPI_WANT_ScaleToEnvelopeMode
+#define REAPERAPI_WANT_GetEnvelopeStateChunk
 
 #include "reaper_plugin.h"
 #include "reaper_plugin_functions.h"
@@ -391,6 +392,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_Envelope_SortPoints = Envelope_SortPoints;
   g_GetEnvelopePointByTime = GetEnvelopePointByTime;
   g_ScaleToEnvelopeMode = ScaleToEnvelopeMode;
+  g_GetEnvelopeStateChunk = GetEnvelopeStateChunk;
 
   // Theme colors
   Theme_SetGetThemeColor((void*)GetThemeColor);

@@ -1175,9 +1175,22 @@ WaveformView::EnvSegmentInfo WaveformView::GetEnvelopeAtTime(double viewTime) co
 }
 
 // Envelope Y mapping: uses REAPER's native fader scale via ScaleTo/FromEnvelopeMode.
-// This gives exact 1:1 visual match with REAPER's arrange view envelope display.
-// Range: 0 (bottom, -inf dB) to +12dB (top, gain ~4.0).
-static constexpr double ENV_MAX_GAIN = 4.0; // +12dB — REAPER default volume envelope max
+// Max gain read dynamically from envelope MAXVAL for 1:1 match with REAPER arrange.
+static constexpr double ENV_FALLBACK_MAX_GAIN = 2.0; // +6dB default
+
+// Read MAXVAL from envelope state chunk header
+static double QueryEnvelopeMaxGain(TrackEnvelope* env)
+{
+  if (!env || !g_GetEnvelopeStateChunk) return ENV_FALLBACK_MAX_GAIN;
+  char buf[512]; // header only, not full chunk
+  if (!g_GetEnvelopeStateChunk(env, buf, sizeof(buf), false)) return ENV_FALLBACK_MAX_GAIN;
+  const char* p = strstr(buf, "\nMAXVAL ");
+  if (!p) p = strstr(buf, " MAXVAL "); // alternate format
+  if (!p) return ENV_FALLBACK_MAX_GAIN;
+  double mv = 0.0;
+  if (sscanf(p + 8, "%lf", &mv) == 1 && mv > 0.0) return mv;
+  return ENV_FALLBACK_MAX_GAIN;
+}
 
 int WaveformView::EnvYToGainY(double gain, int scalingMode) const
 {
@@ -1186,20 +1199,19 @@ int WaveformView::EnvYToGainY(double gain, int scalingMode) const
   int yRange = yBot - yTop;
   if (yRange < 1) return yBot;
 
-  gain = std::max(0.0, std::min(ENV_MAX_GAIN, gain));
+  double maxGain = m_envMaxGain;
+  gain = std::max(0.0, std::min(maxGain, gain));
 
   if (g_ScaleToEnvelopeMode) {
-    // Use REAPER's fader curve — same function REAPER uses for arrange display
     double raw = g_ScaleToEnvelopeMode(scalingMode, gain);
-    double maxRaw = g_ScaleToEnvelopeMode(scalingMode, ENV_MAX_GAIN);
-    if (maxRaw <= 0.0) maxRaw = ENV_MAX_GAIN;
+    double maxRaw = g_ScaleToEnvelopeMode(scalingMode, maxGain);
+    if (maxRaw <= 0.0) maxRaw = maxGain;
     double frac = raw / maxRaw;
     frac = std::max(0.0, std::min(1.0, frac));
     return yBot - (int)(frac * (double)yRange);
   }
 
-  // Fallback: linear gain
-  return yBot - (int)((gain / ENV_MAX_GAIN) * (double)yRange);
+  return yBot - (int)((gain / maxGain) * (double)yRange);
 }
 
 double WaveformView::EnvPixelToGain(int y, int scalingMode) const
@@ -1212,14 +1224,15 @@ double WaveformView::EnvPixelToGain(int y, int scalingMode) const
   double frac = (double)(yBot - y) / (double)yRange;
   frac = std::max(0.0, std::min(1.0, frac));
 
+  double maxGain = m_envMaxGain;
   if (g_ScaleToEnvelopeMode && g_ScaleFromEnvelopeMode) {
-    double maxRaw = g_ScaleToEnvelopeMode(scalingMode, ENV_MAX_GAIN);
-    if (maxRaw <= 0.0) maxRaw = ENV_MAX_GAIN;
+    double maxRaw = g_ScaleToEnvelopeMode(scalingMode, maxGain);
+    if (maxRaw <= 0.0) maxRaw = maxGain;
     double raw = frac * maxRaw;
     return std::max(0.0, g_ScaleFromEnvelopeMode(scalingMode, raw));
   }
 
-  return frac * ENV_MAX_GAIN;
+  return frac * maxGain;
 }
 
 int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
@@ -1277,6 +1290,12 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
   if (!m_envShowVolume) return;
   if (m_multiItemActive) return; // multi-item: multiple tracks, skip for now
   if (!g_Envelope_Evaluate || !g_ScaleFromEnvelopeMode) return;
+
+  // Query envelope's actual display range (MAXVAL from chunk)
+  if (g_GetTakeEnvelopeByName) {
+    TrackEnvelope* envQ = g_GetTakeEnvelopeByName(m_take, "Volume");
+    if (envQ) m_envMaxGain = QueryEnvelopeMaxGain(envQ);
+  }
 
   int waveL = m_rect.left;
   int waveR = m_rect.right - DB_SCALE_WIDTH;
