@@ -1088,11 +1088,19 @@ INT_PTR CALLBACK SneakPeak::DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
   }
 
   self = reinterpret_cast<SneakPeak*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+#ifdef _WIN32
+  // Win32 dialog proc: return 0 for unprocessed, never call DefWindowProc
+  if (!self) return 0;
+  INT_PTR result = self->HandleMessage(msg, wParam, lParam);
+  if (result == -1) return 0;
+  return result;
+#else
+  // SWELL: dialog proc is a regular window proc, needs DefWindowProc
   if (!self) return DefWindowProc(hwnd, msg, wParam, lParam);
-
   INT_PTR result = self->HandleMessage(msg, wParam, lParam);
   if (result == -1) return DefWindowProc(hwnd, msg, wParam, lParam);
   return result;
+#endif
 }
 
 INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
