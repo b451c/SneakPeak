@@ -133,7 +133,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
       modeLabel = "MULTI";
     } else {
       accent = g_theme.modeBarReaperAccent;
-      modeLabel = "REAPER";
+      modeLabel = "ITEM";
     }
 
     // Draw indicator dot/diamond
@@ -179,10 +179,10 @@ void SneakPeak::DrawModeBar(HDC hdc)
 
     int tabAreaRight = m_modeBarRect.right - 8;
 
-    // REAPER pseudo-tab (if we have standalone files and we're in REAPER mode, or for switching back)
+    // ITEM pseudo-tab (if we have standalone files and we're in REAPER mode, or for switching back)
     if (isReaper && !m_standaloneFiles.empty()) {
-      // Active REAPER tab
-      char reaperLabel[256] = "REAPER item";
+      // Active ITEM tab
+      char reaperLabel[256] = "ITEM";
       if (m_waveform.HasItem()) {
         const char* fp = m_waveform.GetStandaloneFilePath().c_str();
         if (fp[0]) {
@@ -284,11 +284,11 @@ void SneakPeak::DrawModeBar(HDC hdc)
     }
 
     // If in standalone mode with no REAPER item showing, but we had a REAPER item before,
-    // show a "REAPER" pseudo-tab for switching back
+    // show an "ITEM" pseudo-tab for switching back
     if (!isReaper && !m_standaloneFiles.empty()) {
       // Check if there's a REAPER item available
       if (g_CountSelectedMediaItems && g_CountSelectedMediaItems(nullptr) > 0) {
-        const char* rl = "REAPER";
+        const char* rl = "ITEM";
         RECT tsR3 = { 0, 0, 300, 20 };
         DrawText(hdc, rl, -1, &tsR3, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
         int tw = std::min((int)(tsR3.right - tsR3.left) + 12, MODE_TAB_MAX_W);
