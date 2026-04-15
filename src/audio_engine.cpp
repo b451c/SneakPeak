@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdlib>
+#include <ctime>
 #include <algorithm>
 
 // --- WAV format structures ---

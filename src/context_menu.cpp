@@ -14,6 +14,9 @@
 
 #include <cmath>
 #include <cstring>
+#ifdef _WIN32
+#include <shellapi.h>
+#endif
 
 // Helper: portable AppendMenu (SWELL doesn't have it directly)
 static void MenuAppend(HMENU menu, unsigned int flags, UINT_PTR id, const char* str)

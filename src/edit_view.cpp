@@ -11,7 +11,9 @@
 #include <cmath>
 #include <algorithm>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <pthread.h>
+#endif
 
 AudioClipboard SneakPeak::s_clipboard;
 
@@ -921,9 +923,15 @@ void SneakPeak::UpdateItemState()
     if (m_waveform.IsStandaloneMode() && m_previewActive && m_previewReg) {
       // Track standalone preview cursor
       auto* reg = (preview_register_t*)m_previewReg;
+#ifdef _WIN32
+      EnterCriticalSection(&reg->cs);
+      double pos = reg->curpos;
+      LeaveCriticalSection(&reg->cs);
+#else
       pthread_mutex_lock(&reg->mutex);
       double pos = reg->curpos;
       pthread_mutex_unlock(&reg->mutex);
+#endif
       double dur = m_waveform.GetItemDuration();
       if (pos >= dur) {
         // Preview finished

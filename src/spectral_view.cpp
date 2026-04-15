@@ -66,7 +66,12 @@ SpectralView::~SpectralView()
   m_cancelRequested.store(true);
   if (m_computeThread.joinable())
     m_computeThread.join();
+#ifdef _WIN32
+  if (m_memBmp) DeleteObject(m_memBmp);
+  if (m_memDC) DeleteDC(m_memDC);
+#else
   if (m_memDC) SWELL_DeleteGfxContext(m_memDC);
+#endif
 }
 
 void SpectralView::SetRect(int x, int y, int w, int h)
@@ -557,7 +562,7 @@ void SpectralView::DrawLoadingOverlay(HDC hdc)
 
   // Progress bar
   float pct = m_progress.load();
-  int barW = std::min(200, (m_rect.right - m_rect.left) - 40);
+  int barW = std::min(200, (int)(m_rect.right - m_rect.left) - 40);
   int barH = 4;
   int barL = cx - barW / 2;
   int barT = cy + 10;
@@ -620,14 +625,49 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
   int contentW = width - DB_SCALE_WIDTH;
   if (m_pixW < 1 || m_pixH < 1) return;
 
-  // Fast SWELL bitmap rendering
+#ifdef _WIN32
+  // Win32: CreateDIBSection for direct framebuffer access
+  if (!m_memDC || m_memW != contentW || m_memH != height) {
+    if (m_memBmp) { DeleteObject(m_memBmp); m_memBmp = nullptr; }
+    if (m_memDC) { DeleteDC(m_memDC); m_memDC = nullptr; }
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = contentW;
+    bmi.bmiHeader.biHeight = -height; // top-down
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    m_memBmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (m_memBmp) {
+      m_memDC = CreateCompatibleDC(hdc);
+      SelectObject(m_memDC, m_memBmp);
+    }
+    m_memW = contentW;
+    m_memH = height;
+  }
+  if (m_memDC && m_memBmp) {
+    BITMAP bm;
+    GetObject(m_memBmp, sizeof(bm), &bm);
+    unsigned int* fbuf = (unsigned int*)bm.bmBits;
+    if (fbuf) {
+      int cols = std::min(contentW, m_pixW);
+      for (int col = 0; col < cols; col++) {
+        const unsigned char* colData = &m_pixels[col * m_pixH];
+        for (int row = 0; row < m_pixH; row++)
+          fbuf[row * contentW + col] = m_colorLUT_Native[colData[row]];
+      }
+      BitBlt(hdc, m_rect.left, m_rect.top, contentW, height, m_memDC, 0, 0, SRCCOPY);
+    }
+  }
+#else
+  // SWELL: direct framebuffer access via SWELL_CreateMemContext
   if (!m_memDC || m_memW != contentW || m_memH != height) {
     if (m_memDC) SWELL_DeleteGfxContext(m_memDC);
     m_memDC = SWELL_CreateMemContext(hdc, contentW, height);
     m_memW = contentW;
     m_memH = height;
   }
-
   if (m_memDC) {
     unsigned int* fbuf = (unsigned int*)SWELL_GetCtxFrameBuffer(m_memDC);
     if (fbuf) {
@@ -640,6 +680,7 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
       BitBlt(hdc, m_rect.left, m_rect.top, contentW, height, m_memDC, 0, 0, SRCCOPY);
     }
   }
+#endif
 
   // Freq scale (per channel)
   int nch = waveform.GetNumChannels();

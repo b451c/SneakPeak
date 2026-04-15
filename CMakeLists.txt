@@ -56,6 +56,7 @@ target_compile_definitions(reaper_sneakpeak PRIVATE
   $<$<NOT:$<PLATFORM_ID:Windows>>:SWELL_PROVIDED_BY_APP>
   $<$<CONFIG:Debug>:SNEAKPEAK_DEBUG>
   $<$<PLATFORM_ID:Windows>:NOMINMAX>
+  $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
   WDL_NO_DEFINE_MINMAX
 )
 

@@ -18,8 +18,16 @@
 #include <cstdio>
 #include <cmath>
 #include <algorithm>
+#ifndef _WIN32
 #include <unistd.h>  // access()
 #include <pthread.h>
+#else
+#include <io.h>      // _access()
+#define access(p, m) _access(p, m)
+#ifndef F_OK
+#define F_OK 0
+#endif
+#endif
 
 // --- Standalone file mode ---
 
@@ -439,7 +447,11 @@ void SneakPeak::StandaloneCleanupPreview()
     if (g_StartPreviewFade)
       g_StartPreviewFade(nullptr, reg, 0.050, 2); // 50ms fade-out
     if (g_StopPreview) g_StopPreview(reg);
+#ifdef _WIN32
+    DeleteCriticalSection(&reg->cs);
+#else
     pthread_mutex_destroy(&reg->mutex);
+#endif
     delete reg;
     m_previewReg = nullptr;
   }
@@ -512,7 +524,11 @@ void SneakPeak::StandalonePlayStop()
 
   auto* reg = new preview_register_t();
   memset(reg, 0, sizeof(*reg));
+#ifdef _WIN32
+  InitializeCriticalSection(&reg->cs);
+#else
   pthread_mutex_init(&reg->mutex, nullptr);
+#endif
   reg->src = src;
   reg->m_out_chan = 0;
   reg->loop = false;
@@ -537,7 +553,11 @@ void SneakPeak::StandalonePlayStop()
     DBG("[SneakPeak] Standalone preview started at %.3f (src=%p, nch=%d, sr=%.0f, len=%.3f)\n",
         startTime, (void*)src, src->GetNumChannels(), src->GetSampleRate(), src->GetLength());
   } else {
+#ifdef _WIN32
+    DeleteCriticalSection(&reg->cs);
+#else
     pthread_mutex_destroy(&reg->mutex);
+#endif
     delete reg;
     delete src;
     DBG("[SneakPeak] Standalone preview FAILED to start\n");

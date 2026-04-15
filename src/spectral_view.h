@@ -92,6 +92,9 @@ private:
 
   // Offscreen bitmap DC
   HDC m_memDC = nullptr;
+#ifdef _WIN32
+  HBITMAP m_memBmp = nullptr;
+#endif
   int m_memW = 0;
   int m_memH = 0;
 
