@@ -1440,7 +1440,36 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case 'e':
       if (!ctrl) {
         bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-        DoDelete(shift); // Shift+E = ripple delete
+        // Delete selected envelope points first (same logic as VK_DELETE)
+        if (!shift && m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
+            g_GetTakeEnvelopeByName && g_DeleteEnvelopePointEx && g_Envelope_SortPoints &&
+            g_CountEnvelopePoints && g_GetEnvelopePoint) {
+          TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+          if (env) {
+            int cnt = g_CountEnvelopePoints(env);
+            bool anySelected = false;
+            for (int i = 0; i < cnt && !anySelected; i++) {
+              double t=0,v=0,tn=0; int s=0; bool sel=false;
+              g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
+              if (sel) anySelected = true;
+            }
+            if (anySelected) {
+              if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+              for (int i = cnt - 1; i >= 0; i--) {
+                double t=0,v=0,tn=0; int s=0; bool sel=false;
+                g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
+                if (sel) g_DeleteEnvelopePointEx(env, -1, i);
+              }
+              g_Envelope_SortPoints(env);
+              if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope points", -1);
+              m_envDragPointIdx = -1;
+              if (g_UpdateArrange) g_UpdateArrange();
+              InvalidateRect(m_hwnd, nullptr, FALSE);
+              break;
+            }
+          }
+        }
+        DoDelete(shift);
       }
       break;
     case 'M':
