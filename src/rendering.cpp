@@ -99,7 +99,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     // Empty state
     SetTextColor(hdc, g_theme.emptyText);
     RECT textR = { xPos, m_modeBarRect.top, m_modeBarRect.right - 80, m_modeBarRect.bottom };
-    DrawText(hdc, "SneakPeak v2.0 - Drop audio file or select item", -1, &textR,
+    DrawText(hdc, "SneakPeak v" SNEAKPEAK_VERSION " - Drop audio file or select item", -1, &textR,
              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   } else if (isEmpty && m_masterMode) {
     // Master mode active — show indicator
@@ -315,7 +315,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     SelectObject(hdc, g_fonts.normal11);
     SetTextColor(hdc, RGB(90, 90, 90));
     RECT verR = { m_modeBarRect.right - 160, m_modeBarRect.top, m_modeBarRect.right - 70, m_modeBarRect.bottom };
-    DrawText(hdc, "v2.0", -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawText(hdc, "v" SNEAKPEAK_VERSION, -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
   // MASTER tab — right-aligned, always visible

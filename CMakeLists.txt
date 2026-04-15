@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 
 if(APPLE)
-  project(reaper_sneakpeak VERSION 1.4.0 LANGUAGES CXX OBJCXX)
+  project(reaper_sneakpeak VERSION 2.0.0 LANGUAGES CXX OBJCXX)
 else()
-  project(reaper_sneakpeak VERSION 1.4.0 LANGUAGES CXX)
+  project(reaper_sneakpeak VERSION 2.0.0 LANGUAGES CXX)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -58,6 +58,7 @@ target_compile_definitions(reaper_sneakpeak PRIVATE
   $<$<PLATFORM_ID:Windows>:NOMINMAX>
   $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
   WDL_NO_DEFINE_MINMAX
+  SNEAKPEAK_VERSION="${PROJECT_VERSION}"
 )
 
 if(MSVC)
