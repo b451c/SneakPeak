@@ -243,9 +243,11 @@ private:
   double m_fadeDragStartDir = 0.0;  // starting curvature for vertical drag
   bool m_standaloneFadeDrag = false; // true when dragging standalone fade handle
 
-  // Envelope point dragging
+  // Envelope point dragging + freehand drawing
   bool m_envDragging = false;
   int m_envDragPointIdx = -1;  // index of point being dragged (-1 = none)
+  bool m_envFreehand = false;  // freehand drawing mode (add points on mousemove)
+  int m_envFreehandLastX = 0;  // throttle: last X where point was added
 
   // Envelope auto-refresh (detect envelope appear/change in REAPER)
   bool m_lastEnvExists = false;
