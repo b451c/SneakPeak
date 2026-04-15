@@ -412,6 +412,23 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
         }
       }
 
+      // Cmd+drag on empty area = envelope point selection rectangle
+      {
+        bool cmdDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        if (cmdDown && m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode()) {
+          m_envRectSelecting = false;
+          m_envRectStartX = x;
+          m_envRectStartY = y;
+          m_envRectEndX = x;
+          m_envRectEndY = y;
+          m_dragging = false;
+          SetCapture(m_hwnd);
+          // We'll activate rectangle on 5px threshold in OnMouseMove
+          // Mark that we're in "pending rect" state using startX != 0
+          return;
+        }
+      }
+
       double time = m_waveform.XToTime(x);
 
       // Option+click: snap selection to segment boundaries (SET, timeline, multi-item)
@@ -466,6 +483,41 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
 
 void SneakPeak::OnMouseUp(int x, int y)
 {
+  // Finalize envelope selection rectangle (Cmd+drag)
+  if (m_envRectStartX != 0 || m_envRectStartY != 0) {
+    bool wasSelecting = m_envRectSelecting;
+    int rx1 = std::min(m_envRectStartX, m_envRectEndX);
+    int ry1 = std::min(m_envRectStartY, m_envRectEndY);
+    int rx2 = std::max(m_envRectStartX, m_envRectEndX);
+    int ry2 = std::max(m_envRectStartY, m_envRectEndY);
+    m_envRectSelecting = false;
+    m_envRectStartX = m_envRectStartY = 0;
+    ReleaseCapture();
+    if (wasSelecting && g_GetTakeEnvelopeByName && g_CountEnvelopePoints &&
+        g_GetEnvelopePoint && g_SetEnvelopePoint && g_ScaleFromEnvelopeMode &&
+        g_GetEnvelopeScalingMode && m_waveform.GetTake()) {
+      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+      if (env) {
+        int sm = g_GetEnvelopeScalingMode(env);
+        int cnt = g_CountEnvelopePoints(env);
+        bool noSort = true;
+        bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        for (int i = 0; i < cnt; i++) {
+          double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
+          g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel);
+          double gain = g_ScaleFromEnvelopeMode(sm, pv);
+          int px = m_waveform.TimeToX(pt);
+          int py = m_waveform.EnvYToGainY(gain);
+          bool inside = (px >= rx1 && px <= rx2 && py >= ry1 && py <= ry2);
+          bool newSel = shift ? (psel || inside) : inside;
+          if (newSel != psel)
+            g_SetEnvelopePoint(env, i, nullptr, nullptr, nullptr, nullptr, &newSel, &noSort);
+        }
+      }
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
   if (m_dragExportPending) {
     // Didn't drag outside — treat as click inside selection (place cursor)
     m_dragExportPending = false;
@@ -882,14 +934,13 @@ void SneakPeak::OnMouseUp(int x, int y)
 
 void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 {
-  // Envelope selection rectangle (right-click drag)
+  // Envelope selection rectangle (Cmd+left-drag)
   if (m_envRectStartX != 0 || m_envRectStartY != 0) {
-    // Check if right button is still held (WM_RBUTTONDOWN started tracking)
-    if (wParam & MK_RBUTTON) {
+    if (wParam & MK_LBUTTON) {
       int dx = x - m_envRectStartX;
       int dy = y - m_envRectStartY;
       if (!m_envRectSelecting && (dx * dx + dy * dy > 25)) {
-        m_envRectSelecting = true; // crossed 5px threshold
+        m_envRectSelecting = true;
       }
       if (m_envRectSelecting) {
         m_envRectEndX = x;
@@ -898,7 +949,6 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       }
       return;
     } else {
-      // Right button released without going through WM_RBUTTONUP (edge case)
       m_envRectStartX = m_envRectStartY = 0;
       m_envRectSelecting = false;
     }
