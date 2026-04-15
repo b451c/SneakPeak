@@ -1174,13 +1174,12 @@ WaveformView::EnvSegmentInfo WaveformView::GetEnvelopeAtTime(double viewTime) co
   return info;
 }
 
-// Envelope Y mapping: logarithmic (dB-based).
-// 0dB (gain 1.0) at 75% height.  Above 0dB: linear to top.  Below 0dB: linear-in-dB to bottom.
-// This prevents deep dips from "spilling out" to the bottom edge — -40dB gets 12% height
-// instead of 0.75% with the old linear mapping.
-static constexpr double ENV_MAX_DB = 2.5;     // top of display (+2.5 dB)
-static constexpr double ENV_MIN_DB = -48.0;   // bottom of display (-48 dB)
-static constexpr double ENV_ZERO_FRAC = 0.75; // 0dB at 75% from bottom
+// Envelope Y mapping: logarithmic (dB-based), range matched to REAPER arrange.
+// REAPER volume envelope range: +12dB (top) to -inf (bottom), 0dB at ~72%.
+// Below 0dB: linear-in-dB.  Above 0dB: linear-in-dB.
+static constexpr double ENV_MAX_DB = 12.0;    // top of display (matches REAPER +12dB max)
+static constexpr double ENV_MIN_DB = -60.0;   // bottom of display (practical silence floor)
+static constexpr double ENV_ZERO_FRAC = 0.72; // 0dB at 72% from bottom (matches REAPER fader)
 
 int WaveformView::EnvYToGainY(double gain) const
 {
