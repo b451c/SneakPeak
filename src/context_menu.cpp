@@ -58,6 +58,41 @@ static void MenuAppendSubmenu(HMENU menu, HMENU submenu, const char* str)
 
 void SneakPeak::OnRightClick(int x, int y)
 {
+  // Right-click on envelope point → shape selection menu
+  if (y >= m_waveformRect.top && y < m_waveformRect.bottom &&
+      m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
+      m_waveform.GetTake() && g_GetTakeEnvelopeByName && g_GetEnvelopePoint) {
+    int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 10);
+    if (hitIdx >= 0) {
+      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+      if (env) {
+        // Read current shape of this point
+        double ptTime = 0, ptVal = 0, ptTension = 0;
+        int ptShape = 0;
+        bool ptSel = false;
+        g_GetEnvelopePoint(env, hitIdx, &ptTime, &ptVal, &ptShape, &ptTension, &ptSel);
+
+        m_envDragPointIdx = hitIdx; // remember which point for command handler
+
+        HMENU shapeMenu = CreatePopupMenu();
+        MenuAppend(shapeMenu, MF_STRING | (ptShape == 0 ? MF_CHECKED : 0), CM_ENV_SHAPE_LINEAR, "Linear");
+        MenuAppend(shapeMenu, MF_STRING | (ptShape == 1 ? MF_CHECKED : 0), CM_ENV_SHAPE_SQUARE, "Square");
+        MenuAppend(shapeMenu, MF_STRING | (ptShape == 2 ? MF_CHECKED : 0), CM_ENV_SHAPE_SLOW,   "Slow start/end");
+        MenuAppend(shapeMenu, MF_STRING | (ptShape == 3 ? MF_CHECKED : 0), CM_ENV_SHAPE_FAST,   "Fast start");
+        MenuAppend(shapeMenu, MF_STRING | (ptShape == 4 ? MF_CHECKED : 0), CM_ENV_SHAPE_FAST_END,"Fast end");
+        MenuAppend(shapeMenu, MF_STRING | (ptShape == 5 ? MF_CHECKED : 0), CM_ENV_SHAPE_BEZIER, "Bezier");
+        MenuAppendSeparator(shapeMenu);
+        MenuAppend(shapeMenu, MF_STRING, CM_ENV_DELETE_POINT, "Delete point");
+
+        POINT pt = { x, y };
+        ClientToScreen(m_hwnd, &pt);
+        TrackPopupMenu(shapeMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
+        DestroyMenu(shapeMenu);
+        return;
+      }
+    }
+  }
+
   // Right-click on bottom panel (meters) → meter mode menu
   POINT ptTest = { x, y };
   if (PtInRect(&m_bottomPanelRect, ptTest)) {
@@ -568,6 +603,38 @@ void SneakPeak::OnContextMenuCommand(int id)
       system("/usr/bin/open 'https://www.paypal.com/paypalme/b451c'");
 #endif
       break;
+    case CM_ENV_SHAPE_LINEAR:
+    case CM_ENV_SHAPE_SQUARE:
+    case CM_ENV_SHAPE_SLOW:
+    case CM_ENV_SHAPE_FAST:
+    case CM_ENV_SHAPE_FAST_END:
+    case CM_ENV_SHAPE_BEZIER: {
+      if (m_envDragPointIdx < 0 || !m_waveform.GetTake() || !g_GetTakeEnvelopeByName || !g_SetEnvelopePoint) break;
+      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+      if (!env || !g_CountEnvelopePoints || m_envDragPointIdx >= g_CountEnvelopePoints(env)) break;
+      int newShape = id - CM_ENV_SHAPE_LINEAR; // 0=linear, 1=square, 2=slow, 3=fast, 4=fast end, 5=bezier
+      bool noSort = true;
+      if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+      g_SetEnvelopePoint(env, m_envDragPointIdx, nullptr, nullptr, &newShape, nullptr, nullptr, &noSort);
+      if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Change envelope shape", -1);
+      if (g_UpdateArrange) g_UpdateArrange();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    }
+    case CM_ENV_DELETE_POINT: {
+      if (m_envDragPointIdx < 0 || !m_waveform.GetTake() || !g_GetTakeEnvelopeByName ||
+          !g_DeleteEnvelopePointEx || !g_Envelope_SortPoints) break;
+      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+      if (!env || !g_CountEnvelopePoints || m_envDragPointIdx >= g_CountEnvelopePoints(env)) break;
+      if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+      g_DeleteEnvelopePointEx(env, -1, m_envDragPointIdx);
+      g_Envelope_SortPoints(env);
+      if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
+      m_envDragPointIdx = -1;
+      if (g_UpdateArrange) g_UpdateArrange();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    }
     case CM_DOCK_WINDOW:
       if (m_isDocked) {
         // Undock: destroy docked window, recreate as floating
