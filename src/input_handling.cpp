@@ -351,8 +351,8 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             double lineGain = g_ScaleFromEnvelopeMode(scalingMode, rawVal);
             int lineY = m_waveform.EnvYToGainY(lineGain);
             if (abs(y - lineY) <= 20) {
-              double clickGain = m_waveform.EnvPixelToGain(y);
-              double newRawVal = g_ScaleToEnvelopeMode(scalingMode, clickGain);
+              // Use evaluated envelope value (not pixel-derived) to avoid precision loss
+              double newRawVal = rawVal;
               bool cmdDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
               if (cmdDown) {
                 // Cmd+click+drag on line = freehand envelope drawing
