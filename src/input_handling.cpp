@@ -522,16 +522,14 @@ void SneakPeak::OnMouseUp(int x, int y)
         g_GetEnvelopeScalingMode && m_waveform.GetTake()) {
       TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
       if (env) {
-        int sm = g_GetEnvelopeScalingMode(env);
         int cnt = g_CountEnvelopePoints(env);
         bool noSort = true;
         bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         for (int i = 0; i < cnt; i++) {
           double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
           g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel);
-          double gain = g_ScaleFromEnvelopeMode(sm, pv);
           int px = m_waveform.TimeToX(pt);
-          int py = m_waveform.EnvYToGainY(gain);
+          int py = m_waveform.EnvYToGainY(pv); // raw value for Y
           bool inside = (px >= rx1 && px <= rx2 && py >= ry1 && py <= ry2);
           bool newSel = shift ? (psel || inside) : inside;
           if (newSel != psel)
@@ -1075,9 +1073,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
           if (pt > tMin && pt < tMax)
             g_DeleteEnvelopePointEx(env, -1, i);
         }
-        double gain = m_waveform.EnvPixelToGain(y);
-        int scalingMode = g_GetEnvelopeScalingMode(env);
-        double rawVal = g_ScaleToEnvelopeMode(scalingMode, gain);
+        double rawVal = m_waveform.EnvPixelToGain(y); // returns raw envelope value
         bool noSort = false;
         g_InsertEnvelopePointEx(env, -1, time, rawVal, 0, 0.0, false, &noSort);
         g_Envelope_SortPoints(env);
@@ -1096,9 +1092,8 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     if (env && g_SetEnvelopePoint && g_GetEnvelopePoint && g_CountEnvelopePoints &&
         g_GetEnvelopeScalingMode && g_ScaleToEnvelopeMode && g_ScaleFromEnvelopeMode) {
       double timeDelta = m_waveform.XToTime(x) - m_waveform.XToTime(m_lastMouseX);
-      double gainDelta = m_waveform.EnvPixelToGain(y) - m_waveform.EnvPixelToGain(m_lastMouseY);
+      double rawDelta = m_waveform.EnvPixelToGain(y) - m_waveform.EnvPixelToGain(m_lastMouseY);
       // Clamp timeDelta so no selected point crosses a non-selected neighbor
-      int scalingMode = g_GetEnvelopeScalingMode(env);
       int cnt = g_CountEnvelopePoints(env);
       double selMin = 1e30, selMax = -1e30;
       for (int i = 0; i < cnt; i++) {
@@ -1116,9 +1111,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         if (!g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel)) continue;
         if (!psel) continue;
         double newTime = pt + timeDelta;
-        double curGain = g_ScaleFromEnvelopeMode(scalingMode, pv);
-        double newGain = std::max(0.0, curGain + gainDelta);
-        double newRawVal = g_ScaleToEnvelopeMode(scalingMode, newGain);
+        double newRawVal = std::max(0.0, pv + rawDelta); // work directly in raw space
         g_SetEnvelopePoint(env, i, &newTime, &newRawVal, nullptr, nullptr, nullptr, &noSort);
       }
       if (g_UpdateArrange) g_UpdateArrange();
