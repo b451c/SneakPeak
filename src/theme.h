@@ -51,6 +51,9 @@ struct ThemeColors {
   // Clip indicators
   COLORREF clipIndicator;
 
+  // Volume envelope overlay
+  COLORREF volumeEnvelope;
+
   // Mode bar
   COLORREF modeBarBg;
   COLORREF modeBarText;

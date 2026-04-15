@@ -14,6 +14,7 @@ class MediaItem;
 class MediaItem_Take;
 class MediaTrack;
 class PCM_source;
+class TrackEnvelope;
 
 // Core API
 extern void (*g_DockWindowAddEx)(HWND hwnd, const char* name, const char* identstr, bool allowShow);
@@ -117,6 +118,14 @@ extern double (*g_TimeMap_GetMeasureInfo)(ReaProject* proj, int measure, double*
 
 // Pointer validation
 extern bool (*g_ValidatePtr2)(ReaProject* proj, void* pointer, const char* ctypename);
+
+// Envelope API
+extern TrackEnvelope* (*g_GetTakeEnvelopeByName)(MediaItem_Take* take, const char* envname);
+extern int (*g_CountEnvelopePoints)(TrackEnvelope* envelope);
+extern bool (*g_GetEnvelopePoint)(TrackEnvelope* envelope, int ptidx, double* timeOut, double* valueOut, int* shapeOut, double* tensionOut, bool* selectedOut);
+extern int (*g_GetEnvelopeScalingMode)(TrackEnvelope* env);
+extern double (*g_ScaleFromEnvelopeMode)(int scaling_mode, double val);
+extern int (*g_Envelope_Evaluate)(TrackEnvelope* envelope, double time, double samplerate, int samplesRequested, double* valueOut, double* dVdSOut, double* ddVdSOut, double* dddVdSOut);
 
 // UI / dialogs
 extern bool (*g_GetUserInputs)(const char* title, int num_inputs, const char* captions_csv, char* retvals_csv, int retvals_csv_sz);

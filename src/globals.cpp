@@ -92,6 +92,14 @@ double (*g_TimeMap_GetMeasureInfo)(ReaProject*, int, double*, double*, int*, int
 // Pointer validation
 bool (*g_ValidatePtr2)(ReaProject*, void*, const char*) = nullptr;
 
+// Envelope API
+TrackEnvelope* (*g_GetTakeEnvelopeByName)(MediaItem_Take*, const char*) = nullptr;
+int (*g_CountEnvelopePoints)(TrackEnvelope*) = nullptr;
+bool (*g_GetEnvelopePoint)(TrackEnvelope*, int, double*, double*, int*, double*, bool*) = nullptr;
+int (*g_GetEnvelopeScalingMode)(TrackEnvelope*) = nullptr;
+double (*g_ScaleFromEnvelopeMode)(int, double) = nullptr;
+int (*g_Envelope_Evaluate)(TrackEnvelope*, double, double, int, double*, double*, double*, double*) = nullptr;
+
 // UI / dialogs
 bool (*g_GetUserInputs)(const char*, int, const char*, char*, int) = nullptr;
 

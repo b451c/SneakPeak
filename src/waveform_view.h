@@ -130,6 +130,10 @@ public:
   void SetSnapToZero(bool snap) { m_snapToZero = snap; }
   bool GetSnapToZero() const { return m_snapToZero; }
 
+  // Volume envelope overlay
+  bool GetShowVolumeEnvelope() const { return m_envShowVolume; }
+  void SetShowVolumeEnvelope(bool show) { m_envShowVolume = show; m_peaksValid = false; }
+
   // Fade drag feedback
   void SetFadeDragInfo(int dragType, int shape);
 
@@ -216,6 +220,7 @@ private:
   void DrawDbScale(HDC hdc, int channel, int yTop, int height);
   void DrawFadeBackground(HDC hdc);
   void DrawFadeEnvelope(HDC hdc);
+  void DrawVolumeEnvelope(HDC hdc);
   void DrawStandaloneFadeHandles(HDC hdc);
   void DrawClipIndicators(HDC hdc);
   void DrawItemBoundaries(HDC hdc);
@@ -276,6 +281,9 @@ private:
 
   // Channel active (mute buttons)
   bool m_channelActive[2] = { true, true };
+
+  // Volume envelope overlay
+  bool m_envShowVolume = true;
 
   // Cached fade/volume parameters
   FadeCache m_fadeCache;

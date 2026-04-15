@@ -108,6 +108,14 @@
 // Pointer validation
 #define REAPERAPI_WANT_ValidatePtr2
 
+// Envelope API
+#define REAPERAPI_WANT_GetTakeEnvelopeByName
+#define REAPERAPI_WANT_CountEnvelopePoints
+#define REAPERAPI_WANT_GetEnvelopePoint
+#define REAPERAPI_WANT_GetEnvelopeScalingMode
+#define REAPERAPI_WANT_ScaleFromEnvelopeMode
+#define REAPERAPI_WANT_Envelope_Evaluate
+
 #include "reaper_plugin.h"
 #include "reaper_plugin_functions.h"
 #include "globals.h"
@@ -363,6 +371,14 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_ValidatePtr2 = ValidatePtr2;
   g_CalculateNormalization = (double(*)(PCM_source*, int, double, double, double))
       rec->GetFunc("CalculateNormalization");
+
+  // Envelope API
+  g_GetTakeEnvelopeByName = GetTakeEnvelopeByName;
+  g_CountEnvelopePoints = CountEnvelopePoints;
+  g_GetEnvelopePoint = GetEnvelopePoint;
+  g_GetEnvelopeScalingMode = GetEnvelopeScalingMode;
+  g_ScaleFromEnvelopeMode = ScaleFromEnvelopeMode;
+  g_Envelope_Evaluate = Envelope_Evaluate;
 
   // Theme colors
   Theme_SetGetThemeColor((void*)GetThemeColor);

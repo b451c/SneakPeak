@@ -104,7 +104,8 @@ enum ContextMenuID {
   CM_METER_RMS,
   CM_METER_VU,
   CM_METER_SOURCE_MASTER,
-  CM_LAST // sentinel — keep last
+  CM_SHOW_VOLUME_ENVELOPE,
+  CM_LAST // sentinel -- keep last
 };
 
 class SneakPeak {

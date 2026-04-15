@@ -228,6 +228,7 @@ void WaveformView::Paint(HDC hdc)
   if (hasSel) DrawSelection(hdc);
   DrawCursor(hdc);
   DrawClipIndicators(hdc);
+  DrawVolumeEnvelope(hdc);
   DrawFadeEnvelope(hdc);
   DrawStandaloneFadeHandles(hdc);
 
@@ -1112,6 +1113,60 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
     DrawText(hdc, label, -1, &labelRect, DT_LEFT | DT_SINGLELINE | DT_NOCLIP);
     SetBkMode(hdc, TRANSPARENT);
     SelectObject(hdc, oldFont);
+  }
+}
+
+void WaveformView::DrawVolumeEnvelope(HDC hdc)
+{
+  // Only draw for single REAPER item with take (not standalone, not multi/timeline/SET)
+  if (!m_item || !m_take || m_standaloneMode) return;
+  if (!m_envShowVolume) return;
+  if (m_multiItemActive || m_trackViewActive || m_timelineViewActive) return;
+  if (!g_GetTakeEnvelopeByName || !g_Envelope_Evaluate ||
+      !g_GetEnvelopeScalingMode || !g_ScaleFromEnvelopeMode) return;
+
+  TrackEnvelope* env = g_GetTakeEnvelopeByName(m_take, "Volume");
+  if (!env) return;
+
+  int scalingMode = g_GetEnvelopeScalingMode(env);
+
+  int waveL = m_rect.left;
+  int waveR = m_rect.right - DB_SCALE_WIDTH;
+  int w = waveR - waveL;
+  if (w < 2) return;
+
+  // Y mapping: top = gain 1.0, bottom = gain 0.0 (same as DrawFadeEnvelope)
+  int yTop = m_rect.top + 2;
+  int yBot = m_rect.bottom - 2;
+  int yRange = yBot - yTop;
+  if (yRange < 1) return;
+
+  OwnedPen envPen(PS_SOLID, 2, g_theme.volumeEnvelope);
+  DCPenScope penScope(hdc, envPen);
+
+  double timeStep = m_viewDuration / (double)w;
+  double colTime = m_viewStartTime;
+  bool first = true;
+
+  for (int col = 0; col < w; col++, colTime += timeStep) {
+    double rawValue = 0.0, dVdS = 0.0, ddVdS = 0.0, dddVdS = 0.0;
+    g_Envelope_Evaluate(env, colTime, (double)m_sampleRate, 0,
+                        &rawValue, &dVdS, &ddVdS, &dddVdS);
+
+    // Convert raw envelope value to linear gain
+    double gain = g_ScaleFromEnvelopeMode(scalingMode, rawValue);
+
+    // Map gain to Y: 1.0 = yTop, 0.0 = yBot. Clamp to waveform bounds.
+    int y = yBot - (int)(gain * (double)yRange);
+    y = std::max((int)m_rect.top, std::min((int)m_rect.bottom, y));
+
+    int x = waveL + col;
+    if (first) {
+      MoveToEx(hdc, x, y, nullptr);
+      first = false;
+    } else {
+      LineTo(hdc, x, y);
+    }
   }
 }
 

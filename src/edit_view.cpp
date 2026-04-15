@@ -78,6 +78,8 @@ void SneakPeak::Create()
     if (rulerMode) m_rulerMode = static_cast<RulerMode>(atoi(rulerMode));
     const char* joinLines = g_GetExtState("SneakPeak", "show_join_lines");
     if (joinLines && joinLines[0] == '0') m_waveform.SetShowJoinLines(false);
+    const char* volEnv = g_GetExtState("SneakPeak", "show_vol_env");
+    if (volEnv && volEnv[0] == '0') m_waveform.SetShowVolumeEnvelope(false);
     const char* meterMode = g_GetExtState("SneakPeak", "meter_mode");
     if (meterMode && strcmp(meterMode, "rms") == 0) m_levels.SetMode(MeterMode::RMS);
     else if (meterMode && strcmp(meterMode, "vu") == 0) m_levels.SetMode(MeterMode::VU);

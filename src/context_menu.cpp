@@ -188,6 +188,11 @@ void SneakPeak::OnRightClick(int x, int y)
     MenuAppend(viewMenu, MF_STRING, CM_RULER_BARS_BEATS,
                m_rulerMode == RulerMode::BarsBeats ? "Ruler: Bars & Beats  \xE2\x9C\x93" : "Ruler: Bars & Beats");
   }
+  if (hasReaperItem) {
+    MenuAppend(viewMenu, MF_STRING, CM_SHOW_VOLUME_ENVELOPE,
+               m_waveform.GetShowVolumeEnvelope()
+                   ? "Show Volume Envelope  \xE2\x9C\x93" : "Show Volume Envelope");
+  }
   if (!m_waveform.IsStandaloneMode() && hasItem) {
     MenuAppend(viewMenu, MF_STRING, CM_TRACK_VIEW,
                (m_workingSet.active || m_workingSet.dormant)
@@ -415,6 +420,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_waveform.SetShowJoinLines(!m_waveform.GetShowJoinLines());
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_join_lines",
                                         m_waveform.GetShowJoinLines() ? "1" : "0", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_SHOW_VOLUME_ENVELOPE:
+      m_waveform.SetShowVolumeEnvelope(!m_waveform.GetShowVolumeEnvelope());
+      if (g_SetExtState) g_SetExtState("SneakPeak", "show_vol_env",
+                                        m_waveform.GetShowVolumeEnvelope() ? "1" : "0", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_METER_PEAK:
