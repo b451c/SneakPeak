@@ -1174,17 +1174,16 @@ WaveformView::EnvSegmentInfo WaveformView::GetEnvelopeAtTime(double viewTime) co
   return info;
 }
 
-// Envelope Y mapping uses raw envelope values (fader-scaled).
-// m_envMaxRaw is dynamically computed: ScaleToEnvelopeMode(sm, 1.0) / 0.75
-// so that 0dB always sits at 75% height regardless of scaling mode.
+// Envelope Y mapping: top = +6dB (gain 2.0), bottom = -inf (gain 0.0)
+// This puts 0dB (gain 1.0) at 50% height, matching REAPER's arrange view.
+static constexpr double ENV_MAX_GAIN = 1.33; // ~+2.5dB at top, 0dB at 75% height
 
-int WaveformView::EnvYToGainY(double rawVal) const
+int WaveformView::EnvYToGainY(double gain) const
 {
   int yTop = m_rect.top + 2;
   int yBot = m_rect.bottom - 2;
   int yRange = yBot - yTop;
-  double maxRaw = (m_envMaxRaw > 0.01) ? m_envMaxRaw : 1.33;
-  int y = yBot - (int)((rawVal / maxRaw) * (double)yRange);
+  int y = yBot - (int)((gain / ENV_MAX_GAIN) * (double)yRange);
   return std::max((int)m_rect.top, std::min((int)m_rect.bottom, y));
 }
 
@@ -1194,9 +1193,8 @@ double WaveformView::EnvPixelToGain(int y) const
   int yBot = m_rect.bottom - 2;
   int yRange = yBot - yTop;
   if (yRange < 1) return 1.0;
-  double maxRaw = (m_envMaxRaw > 0.01) ? m_envMaxRaw : 1.33;
-  double rawVal = ((double)(yBot - y) / (double)yRange) * maxRaw;
-  return std::max(0.0, rawVal);
+  double gain = ((double)(yBot - y) / (double)yRange) * ENV_MAX_GAIN;
+  return std::max(0.0, gain);
 }
 
 int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
@@ -1217,8 +1215,9 @@ int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
       bool ptSelected = false;
       if (!g_GetEnvelopePoint(env, i, &ptTime, &ptValue, &ptShape, &ptTension, &ptSelected))
         continue;
+      double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
       int px = TimeToX(ptTime + segRelOffset);
-      int py = EnvYToGainY(ptValue); // raw value
+      int py = EnvYToGainY(gain);
       int dx = x - px;
       int dy = y - py;
       int dist = dx * dx + dy * dy;
@@ -1251,17 +1250,8 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
 {
   if (!m_item || !m_take || m_standaloneMode) return;
   if (!m_envShowVolume) return;
-  if (m_multiItemActive) return;
-  if (!g_Envelope_Evaluate) return;
-
-  // Compute dynamic Y scale: find 0dB raw value, set max so 0dB = 75% height
-  {
-    auto ei0 = GetEnvelopeAtTime(m_viewStartTime);
-    if (ei0.env && g_ScaleToEnvelopeMode) {
-      double raw0dB = g_ScaleToEnvelopeMode(ei0.scalingMode, 1.0);
-      if (raw0dB > 0.01) m_envMaxRaw = raw0dB / 0.75;
-    }
-  }
+  if (m_multiItemActive) return; // multi-item: multiple tracks, skip for now
+  if (!g_Envelope_Evaluate || !g_ScaleFromEnvelopeMode) return;
 
   int waveL = m_rect.left;
   int waveR = m_rect.right - DB_SCALE_WIDTH;
@@ -1271,7 +1261,7 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
   int yRange = (m_rect.bottom - 2) - (m_rect.top + 2);
   if (yRange < 1) return;
 
-  // Draw envelope curve using raw values (fader-scaled) for correct shape
+  // Draw envelope curve using per-segment helper
   {
     OwnedPen envPen(PS_SOLID, 2, g_theme.volumeEnvelope);
     DCPenScope penScope(hdc, envPen);
@@ -1282,12 +1272,13 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
 
     for (int col = 0; col < w; col++, colTime += timeStep) {
       auto ei = GetEnvelopeAtTime(colTime);
-      if (!ei.env) { first = true; continue; }
+      if (!ei.env) { first = true; continue; } // gap - break line
 
       double rawValue = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
       g_Envelope_Evaluate(ei.env, ei.envTime, (double)m_sampleRate, 0,
                           &rawValue, &d1, &d2, &d3);
-      int y = EnvYToGainY(rawValue); // raw value = fader-scaled, matches REAPER
+      double gain = g_ScaleFromEnvelopeMode(ei.scalingMode, rawValue);
+      int y = EnvYToGainY(gain);
       int x = waveL + col;
       if (first) { MoveToEx(hdc, x, y, nullptr); first = false; }
       else LineTo(hdc, x, y);
@@ -1314,7 +1305,8 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
       int px = TimeToX(ptTime + segRelOffset);
       if (px < waveL - 4 || px > waveR + 4) continue;
 
-      int py = EnvYToGainY(ptValue); // raw value
+      double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
+      int py = EnvYToGainY(gain);
 
       int rr = ptSelected ? 5 : 4; // selected points slightly larger
       HPEN oldPen = (HPEN)SelectObject(hdc, ptSelected ? (HPEN)ptOutlineSel : (HPEN)ptOutline);

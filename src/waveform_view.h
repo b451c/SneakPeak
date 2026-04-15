@@ -299,7 +299,6 @@ private:
 
   // Volume envelope overlay
   bool m_envShowVolume = true;
-  double m_envMaxRaw = 1.33;  // dynamic: raw_0dB / 0.75, updated per paint
 
   // Cached fade/volume parameters
   FadeCache m_fadeCache;
