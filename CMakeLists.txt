@@ -44,6 +44,7 @@ add_library(reaper_sneakpeak SHARED
   src/minimap_view.cpp
   src/multi_item_view.cpp
   src/dynamics_engine.cpp
+  src/dynamics_panel.cpp
 )
 
 target_include_directories(reaper_sneakpeak PRIVATE
