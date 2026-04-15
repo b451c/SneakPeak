@@ -1382,8 +1382,8 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
   if (g_UpdateArrange) g_UpdateArrange();
   m_dynamicsVisible = true;
-  char toast[48];
-  snprintf(toast, sizeof(toast), "Applied %d envelope points", (int)comp.size());
+  char toast[64];
+  snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), (int)compRaw.size());
   ShowToast(toast);
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
