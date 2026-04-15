@@ -11,6 +11,7 @@
 #include "levels_panel.h"
 #include "spectral_view.h"
 #include "minimap_view.h"
+#include "dynamics_engine.h"
 #include <vector>
 #include <string>
 
@@ -105,6 +106,7 @@ enum ContextMenuID {
   CM_METER_VU,
   CM_METER_SOURCE_MASTER,
   CM_SHOW_VOLUME_ENVELOPE,
+  CM_SHOW_DYNAMICS,
   CM_LAST // sentinel -- keep last
 };
 
@@ -243,6 +245,8 @@ private:
   LevelsPanel m_levels;
   SpectralView m_spectral;
   MinimapView m_minimap;
+  DynamicsEngine m_dynamics;
+  bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;
   bool m_spectralPainted = false;  // triggers one repaint after FFT completes
   bool m_minimapVisible = false;
@@ -359,6 +363,7 @@ private:
   int m_masterPeakHead = 0;
   int m_masterPeakCount = 0;
   void DrawMasterWaveform(HDC hdc);
+  void DrawDynamicsCurve(HDC hdc);
 
   static AudioClipboard s_clipboard;
   static const int TIMER_REFRESH = 100;

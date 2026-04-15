@@ -192,6 +192,9 @@ void SneakPeak::OnRightClick(int x, int y)
     MenuAppend(viewMenu, MF_STRING, CM_SHOW_VOLUME_ENVELOPE,
                m_waveform.GetShowVolumeEnvelope()
                    ? "Show Volume Envelope  \xE2\x9C\x93" : "Show Volume Envelope");
+    MenuAppend(viewMenu, MF_STRING, CM_SHOW_DYNAMICS,
+               m_dynamicsVisible
+                   ? "Show Dynamics Curve  \xE2\x9C\x93" : "Show Dynamics Curve");
   }
   if (!m_waveform.IsStandaloneMode() && hasItem) {
     MenuAppend(viewMenu, MF_STRING, CM_TRACK_VIEW,
@@ -426,6 +429,21 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_waveform.SetShowVolumeEnvelope(!m_waveform.GetShowVolumeEnvelope());
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_vol_env",
                                         m_waveform.GetShowVolumeEnvelope() ? "1" : "0", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_SHOW_DYNAMICS:
+      m_dynamicsVisible = !m_dynamicsVisible;
+      if (g_SetExtState) g_SetExtState("SneakPeak", "show_dynamics",
+                                        m_dynamicsVisible ? "1" : "0", true);
+      // Run analysis if enabling and audio is loaded
+      if (m_dynamicsVisible && m_waveform.GetAudioSampleCount() > 0 && !m_dynamics.HasResults()) {
+        double itemVolDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+        m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                           m_waveform.GetAudioSampleCount(),
+                           m_waveform.GetNumChannels(),
+                           m_waveform.GetSampleRate(),
+                           itemVolDb, m_dynamics.GetParams());
+      }
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_METER_PEAK:

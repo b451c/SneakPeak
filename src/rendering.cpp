@@ -29,6 +29,8 @@ void SneakPeak::OnPaint(HDC hdc)
     DrawMasterWaveform(hdc);
   } else {
     m_waveform.Paint(hdc);
+    if (m_dynamicsVisible && m_dynamics.HasResults())
+      DrawDynamicsCurve(hdc);
   }
   if (m_markers.GetShowMarkers()) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
   if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect, m_waveform.HasSelection());
@@ -649,6 +651,43 @@ void SneakPeak::UpdateSoloState()
   for (auto* tr : tracks) {
     int* pSolo = (int*)g_GetSetMediaTrackInfo(tr, "I_SOLO", nullptr);
     if (pSolo && *pSolo != 0) { m_trackSoloed = true; break; }
+  }
+}
+
+void SneakPeak::DrawDynamicsCurve(HDC hdc)
+{
+  if (!m_dynamics.HasResults()) return;
+  const auto& results = m_dynamics.GetResults();
+  if (results.empty()) return;
+
+  RECT wr = m_waveform.GetRect();
+  int waveL = wr.left;
+  int waveR = wr.right - DB_SCALE_WIDTH;
+  int yTop = wr.top + 2;
+  int yBot = wr.bottom - 2;
+  int yRange = yBot - yTop;
+  if (yRange < 1) return;
+
+  // Orange/yellow dynamics curve (matches saxmand's ImGui overlay color)
+  OwnedPen dynPen(PS_SOLID, 2, RGB(255, 160, 40));
+  DCPenScope penScope(hdc, dynPen);
+
+  double viewStart = m_waveform.GetViewStart();
+  double viewDur = m_waveform.GetViewDuration();
+  bool first = true;
+
+  for (const auto& pt : results) {
+    if (pt.time < viewStart - 0.01 || pt.time > viewStart + viewDur + 0.01) continue;
+
+    int px = m_waveform.TimeToX(pt.time);
+    if (px < waveL || px > waveR) continue;
+
+    // norm is 0..1 mapped within minDb..maxDb. Draw: 1.0 = top, 0.0 = bottom.
+    int py = yBot - (int)(pt.norm * (double)yRange);
+    py = std::max((int)wr.top, std::min((int)wr.bottom, py));
+
+    if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
+    else LineTo(hdc, px, py);
   }
 }
 

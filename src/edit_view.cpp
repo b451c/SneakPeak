@@ -80,6 +80,8 @@ void SneakPeak::Create()
     if (joinLines && joinLines[0] == '0') m_waveform.SetShowJoinLines(false);
     const char* volEnv = g_GetExtState("SneakPeak", "show_vol_env");
     if (volEnv && volEnv[0] == '0') m_waveform.SetShowVolumeEnvelope(false);
+    const char* dynVis = g_GetExtState("SneakPeak", "show_dynamics");
+    if (dynVis && dynVis[0] == '1') m_dynamicsVisible = true;
     const char* meterMode = g_GetExtState("SneakPeak", "meter_mode");
     if (meterMode && strcmp(meterMode, "rms") == 0) m_levels.SetMode(MeterMode::RMS);
     else if (meterMode && strcmp(meterMode, "vu") == 0) m_levels.SetMode(MeterMode::VU);
@@ -600,6 +602,17 @@ void SneakPeak::LoadSelectedItem()
   if (m_waveform.IsMultiItem()) m_waveform.ClearItem();
   m_waveform.SetItem(item);
   m_waveform.UpdateFadeCache(); // read D_VOL/fades immediately so first paint is correct
+
+  // Run dynamics analysis on freshly loaded audio
+  if (m_dynamicsVisible && m_waveform.GetAudioSampleCount() > 0) {
+    double itemVolDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+    m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                       m_waveform.GetAudioSampleCount(),
+                       m_waveform.GetNumChannels(),
+                       m_waveform.GetSampleRate(),
+                       itemVolDb, m_dynamics.GetParams());
+  }
+
   m_spectralVisible = false;  // spectral is per-item, reset on switch
   m_spectral.ClearSpectrum();
   m_spectral.Invalidate();
