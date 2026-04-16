@@ -117,21 +117,21 @@ RECT DynamicsPanel::GetSliderTrackRect(RECT pr, int idx) const
 RECT DynamicsPanel::GetApplyButtonRect(RECT pr) const
 {
   int x = pr.right - MARGIN - APPLY_W - 2;
-  int y = pr.top + TITLE_H + 3 * ROW_H + 4;
+  int y = pr.top + TITLE_H + 3 * ROW_H + 10;
   return { x, y, x + APPLY_W, y + APPLY_H };
 }
 
 RECT DynamicsPanel::GetRmsToggleRect(RECT pr) const
 {
   int x = pr.left + R_LABEL_X;
-  int y = pr.top + TITLE_H + 3 * ROW_H + 4;
+  int y = pr.top + TITLE_H + 3 * ROW_H + 10;
   return { x, y, x + 42, y + APPLY_H };
 }
 
 RECT DynamicsPanel::GetDynToggleRect(RECT pr) const
 {
   int x = pr.left + MARGIN;
-  int y = pr.top + TITLE_H + 3 * ROW_H + 4;
+  int y = pr.top + TITLE_H + 3 * ROW_H + 10;
   return { x, y, x + TOGGLE_W, y + APPLY_H };
 }
 
