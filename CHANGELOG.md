@@ -4,6 +4,25 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0-alpha.11] - 2026-04-16
+
+### Added
+- **Dense envelope point interaction** - After Apply Dynamics creates >100 envelope points, Cmd+drag on the waveform draws a reveal rectangle. Points within the rectangle become visible (4px circles) and fully interactive - drag, delete, double-click delete, Shift+click multi-select. The reveal range is time-based (survives zoom/scroll) and clears on click outside it. Subtle hatched background marks the revealed zone.
+- **Gain reduction shading** - Semi-transparent fill between the orange (original amplitude) and purple (compressed) curves, showing where and how much compression is reducing gain. Uses warm red tint with 50% opacity (alternating columns). Toggle with [GR] button in dynamics panel.
+- **A/B envelope bypass** - New [A/B] toggle in dynamics panel for audition comparison. When active (yellow), disables the volume envelope in REAPER (via GetSetEnvelopeInfo_String ACTIVE flag) so you hear the audio without compression. Waveform also renders without envelope gain. Bypass auto-restored when panel is closed.
+- **[GR] toggle** - Show/hide gain reduction shading between dynamics curves. Warm red color (RGB 180,60,40) when active.
+
+### Fixed
+- **[Env] toggle no longer changes waveform shape** - Previously, toggling envelope visibility also removed envGain from the waveform rendering, making it look like the original audio. Now [Env] only hides the cyan envelope curve - the waveform always reflects the actual envelope effect (what you hear). Use A/B for before/after comparison.
+- **Apply button disabled during Live mode** - Apply is grayed out when Live is active since envelope points are already written in real-time. Prevents confusion about redundant action.
+- **Peak/RMS toggle triggers immediate re-analysis** - Switching detection mode now instantly recalculates dynamics curves, GR meter, and (if Live) envelope points. Previously only triggered during slider drag.
+
+### Changed
+- **Dynamics panel bottom row** - Now shows: [Dyn] [Env] [Live] [GR] [A/B] ... [Peak/RMS] ... [Apply]
+- **New REAPER API imports** - SetEnvelopeStateChunk, GetSetEnvelopeInfo_String (15 total envelope functions)
+
+---
+
 ## [2.0.0-alpha.10] - 2026-04-16
 
 ### Added
