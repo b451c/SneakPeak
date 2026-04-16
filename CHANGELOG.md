@@ -43,6 +43,8 @@ SneakPeak v2.0 is a major release: **multiplatform support** (Windows, Linux), a
 - **Auto-refresh** - Envelope changes made in REAPER arrange view are detected and displayed automatically.
 
 ### Quality of Life
+- **Scroll-for-gain on knob** - Mouse wheel on the gain knob adjusts gain +/-0.5 dB per notch. Cmd+scroll for fine mode (+/-0.1 dB). Scrolling outside the knob still zooms/pans as before.
+- **Support button in mode bar** - Clickable heart icon next to the version number opens a dropdown with Ko-fi, Buy Me a Coffee, PayPal, and GitHub links.
 - **Multi-item dropdown** - Click the "MULTI" label for a dropdown menu with Mix/Layered modes and "Timeline View" option.
 - **Gain knob range** - Extended to +/-24 dB (matches REAPER API range).
 - **Gain knob colors** - Blue for single/selected item, gold for batch mode.
