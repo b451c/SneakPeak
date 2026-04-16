@@ -82,7 +82,7 @@ private:
   int m_offsetX = 0, m_offsetY = 0;
 
   static const int PANEL_W = 380;
-  static const int PANEL_H = 106;
+  static const int PANEL_H = 112;
   static const int TITLE_H = 22;
   static const int ROW_H = 18;
   static const int THUMB_R = 4;
