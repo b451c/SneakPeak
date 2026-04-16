@@ -148,13 +148,25 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
 {
   if (!g_sneakPeak || !g_sneakPeak->IsVisible() || !g_sneakPeak->GetHwnd()) return 0;
 
-  // Focus check: our tracked flag (from WM_SETFOCUS/WM_KILLFOCUS) is primary.
-  // Fallback to GetFocus() for cases where WM_SETFOCUS didn't fire.
-  if (!g_sneakPeak->HasFocus()) {
+  HWND ourHwnd = g_sneakPeak->GetHwnd();
+
+  // Focus detection: try multiple methods (docked WS_CHILD windows on Windows
+  // don't reliably report focus via GetFocus/WM_SETFOCUS)
+  bool ours = g_sneakPeak->HasFocus();
+  if (!ours) {
     HWND focus = GetFocus();
-    HWND ourHwnd = g_sneakPeak->GetHwnd();
-    if (focus != ourHwnd && !IsChild(ourHwnd, focus)) return 0;
+    ours = (focus == ourHwnd) || (IsChild(ourHwnd, focus) != 0);
   }
+  if (!ours && g_sneakPeak->IsDocked()) {
+    // Docked fallback: check if mouse cursor is inside our window.
+    // User must click in our window to make a selection, so mouse is over us.
+    POINT pt;
+    GetCursorPos(&pt);
+    RECT wr;
+    GetWindowRect(ourHwnd, &wr);
+    ours = PtInRect(&wr, pt) != 0;
+  }
+  if (!ours) return 0;
 
   if (msg->message == WM_KEYDOWN) {
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -432,7 +444,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
 
   rec->Register("hookcommand", (void*)hookCommandProc);
   rec->Register("toggleaction", (void*)toggleActionCallback);
-  rec->Register("accelerator", &g_accelReg);
+  rec->Register("<accelerator", &g_accelReg);
   rec->Register("atexit", (void*)onAtExit);
 
   g_plugin_register("timer", (void*)(void(*)())startupTimerFunc);

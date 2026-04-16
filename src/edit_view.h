@@ -149,6 +149,7 @@ public:
   // Called directly from accelerator callback (SWS pattern - no SendMessage bounce)
   void OnKeyDown(WPARAM key);
   bool HasFocus() const { return m_hasFocus; }
+  bool IsDocked() const { return m_isDocked; }
 
 private:
   INT_PTR HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam);
