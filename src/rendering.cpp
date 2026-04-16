@@ -761,28 +761,23 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     return pt.db + gainOffsetDb + 20.0 * log10(std::max(fadeGain, 1e-12));
   };
 
-  // Helper: find the point with max dB in a stride window (matches waveform's
-  // max-peak-per-column behavior). Without this, stride sampling picks arbitrary
-  // points and creates misleading spikes at zoomed-out views.
-  auto getMaxDbInStride = [&](int baseIdx) -> std::pair<double, double> {
+  // Helper: find the index of the point with max dB in a stride window (matches
+  // waveform's max-peak-per-column behavior). Returns index into results[].
+  auto getMaxIdxInStride = [&](int baseIdx) -> int {
     double maxDb = -200.0;
-    double maxTime = results[baseIdx].time;
+    int maxIdx = baseIdx;
     int end = std::min(count, baseIdx + stride);
     for (int j = baseIdx; j < end; j++) {
       double db = getAdjDb(results[j]);
-      if (db > maxDb) { maxDb = db; maxTime = results[j].time; }
+      if (db > maxDb) { maxDb = db; maxIdx = j; }
     }
-    return {maxDb, maxTime};
+    return maxIdx;
   };
 
-  // Compression preview params (standard compressor math)
+  // Compression preview params
   double thresh = m_dynamics.GetThreshold();
-  double ratio = std::max(1.0, params.ratio);
-  double knee = std::max(0.0, params.kneeDb);
-  double slope = 1.0 / ratio - 1.0;
-  double halfKnee = knee / 2.0;
   double makeupDb = params.autoMakeup ? -m_dynamics.GetAvgGainReduction() : params.makeupDb;
-  bool showComp = (ratio > 1.01);
+  bool showComp = (params.ratio > 1.01);
 
   // Silence threshold: don't draw curves below this (prevents ugly spikes to bottom)
   static constexpr double SILENCE_FLOOR_DB = -45.0;
@@ -795,9 +790,10 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     int lastPx = -2;
 
     for (int i = startIdx; i < count; i += stride) {
-      auto [adjDb, adjTime] = getMaxDbInStride(i);
-      if (adjTime > viewEnd + 0.01) break;
-      int px = m_waveform.TimeToX(adjTime);
+      int idx = getMaxIdxInStride(i);
+      double adjDb = getAdjDb(results[idx]);
+      if (results[idx].time > viewEnd + 0.01) break;
+      int px = m_waveform.TimeToX(results[idx].time);
       if (px < waveL || px > waveR) continue;
       if (px == lastPx) continue;
       lastPx = px;
@@ -811,7 +807,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     }
   }
 
-  // --- Compression preview curve ---
+  // --- Compression preview curve (uses precomputed gain-smoothed GR) ---
   if (showComp) {
     OwnedPen compPen(PS_SOLID, 1, RGB(140, 100, 200));
     DCPenScope scope(hdc, compPen);
@@ -819,25 +815,19 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     int lastPx = -2;
 
     for (int i = startIdx; i < count; i += stride) {
-      auto [adjDb, adjTime] = getMaxDbInStride(i);
-      if (adjTime > viewEnd + 0.01) break;
-      int px = m_waveform.TimeToX(adjTime);
+      int idx = getMaxIdxInStride(i);
+      const auto& pt = results[idx];
+      double adjDb = getAdjDb(pt);
+      if (pt.time > viewEnd + 0.01) break;
+      int px = m_waveform.TimeToX(pt.time);
       if (px < waveL || px > waveR) continue;
       if (px == lastPx) continue;
       lastPx = px;
 
       if (adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
 
-      // Standard compressor gain computation with soft knee
-      double overshoot = adjDb - thresh;
-      double gr = 0.0;
-      if (knee > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
-        double x = overshoot + halfKnee;
-        gr = slope * x * x / (2.0 * knee);
-      } else if (overshoot > 0.0) {
-        gr = slope * overshoot;
-      }
-      double compDb = adjDb + gr + makeupDb;
+      // Use precomputed gain-smoothed GR from ComputeCompression
+      double compDb = adjDb + pt.smoothedGR + makeupDb;
       int py = dbToY(compDb);
 
       if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }

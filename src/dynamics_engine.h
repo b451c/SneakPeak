@@ -31,8 +31,9 @@ struct DynamicsParams {
 struct DynamicsPoint {
   double time;       // seconds from item start
   double peakLinear; // raw peak amplitude (0..1+)
-  double db;         // smoothed amplitude in dB (includes item vol)
+  double db;         // smoothed amplitude in dB (includes item vol) - for orange curve
   double norm;       // normalized 0..1 within minDb..maxDb range
+  double smoothedGR; // gain-smoothed GR in dB (negative, 0=no compression) - set by ComputeCompression
 };
 
 class DynamicsEngine {
@@ -48,13 +49,15 @@ public:
   const DynamicsParams& GetParams() const { return m_params; }
   void SetParams(const DynamicsParams& p) { m_params = p; }
 
-  // Compute gain reduction per point (standard compressor math + soft knee).
+  // Compute gain reduction per point (gain-smoothing compressor model).
+  // Attack/release smooth the GR signal, not the input level.
+  // Also populates smoothedGR on each DynamicsPoint for rendering.
   // Returns {time, dbAdjustment} pairs. Includes makeup gain.
   struct CompressPoint {
     double time;
     double dbAdjust; // total dB change (GR + makeup)
   };
-  std::vector<CompressPoint> ComputeCompression() const;
+  std::vector<CompressPoint> ComputeCompression();
 
   // Average gain reduction from last ComputeCompression (for GR meter, auto-makeup)
   double GetAvgGainReduction() const { return m_avgGR; }
@@ -76,6 +79,7 @@ private:
   std::vector<RawPeak> m_rawPeaks;
   std::vector<DynamicsPoint> m_results;
   double m_avgPeakDb = -60.0;
-  mutable double m_avgGR = 0.0; // cached from last ComputeCompression
+  double m_avgGR = 0.0;
+  double m_itemVolDb = 0.0; // cached for ComputeCompression (gain smoothing needs raw dB)
   DynamicsParams m_params;
 };

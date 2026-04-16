@@ -13,6 +13,7 @@ void DynamicsEngine::Analyze(const double* audioData, int numFrames, int numChan
   m_results.clear();
   m_rawPeaks.clear();
   m_avgGR = 0.0;
+  m_itemVolDb = itemVolDb;
 
   if (!audioData || numFrames <= 0 || sampleRate <= 0) return;
 
@@ -117,7 +118,7 @@ void DynamicsEngine::BuildEnvelope(double itemVolDb, const DynamicsParams& param
     double norm = (db - params.minDb) / (params.maxDb - params.minDb);
     norm = std::max(0.0, std::min(1.0, norm));
 
-    m_results[i] = {m_rawPeaks[i].time, m_rawPeaks[i].peak, db, norm};
+    m_results[i] = {m_rawPeaks[i].time, m_rawPeaks[i].peak, db, norm, 0.0};
   }
 }
 
@@ -126,8 +127,10 @@ double DynamicsEngine::GetThreshold() const
   return (m_params.threshold <= -99.0) ? m_avgPeakDb : m_params.threshold;
 }
 
-// Stage 3: Standard compressor gain computation with soft knee
-std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression() const
+// Stage 3: Gain-smoothing compressor model (industry standard).
+// Instant GR computed from raw peaks, then attack/release smooth the GR signal.
+// This matches FabFilter Pro-C, Waves, UAD, ReaComp behavior.
+std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
 {
   std::vector<CompressPoint> out;
   if (m_results.empty()) return out;
@@ -138,30 +141,49 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression() 
   double slope = 1.0 / ratio - 1.0; // negative for compression
   double halfKnee = knee / 2.0;
 
+  // Attack/release coefficients for GR smoothing
+  double dt = (m_results.size() > 1)
+    ? (m_results[1].time - m_results[0].time) : STEP_SIZE;
+  double attCoeff = (m_params.attackMs > 0.0)
+    ? exp(-dt / (m_params.attackMs / 1000.0)) : 0.0;
+  double relCoeff = (m_params.releaseMs > 0.0)
+    ? exp(-dt / (m_params.releaseMs / 1000.0)) : 0.0;
+
   out.reserve(m_results.size());
   double grSum = 0.0;
-  int grCount = 0; // count only points with actual compression
+  int grCount = 0;
+  double smoothGR = 0.0; // smoothed gain reduction state (dB, <=0)
 
-  for (const auto& pt : m_results) {
-    double overshoot = pt.db - thresh;
-    double gr = 0.0; // gain reduction in dB (negative = quieter)
+  for (size_t i = 0; i < m_results.size(); i++) {
+    auto& pt = m_results[i];
+
+    // Instant gain computation from RAW peak (not smoothed envelope)
+    double rawDb = 20.0 * log10(std::max(pt.peakLinear, EPSILON)) + m_itemVolDb;
+    double overshoot = rawDb - thresh;
+    double instantGR = 0.0;
 
     if (knee > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
-      // Soft knee: quadratic interpolation around threshold
       double x = overshoot + halfKnee;
-      gr = slope * x * x / (2.0 * knee);
+      instantGR = slope * x * x / (2.0 * knee);
     } else if (overshoot > 0.0) {
-      // Above threshold: standard compression
-      gr = slope * overshoot;
+      instantGR = slope * overshoot;
     }
-    // Below threshold (and outside knee): no compression, gr = 0
 
-    if (gr < -0.01) { grSum += gr; grCount++; }
-    out.push_back({pt.time, gr}); // makeup added below
+    // Smooth the GAIN REDUCTION (not the input level).
+    // instantGR <= 0 (negative = more compression).
+    // Attack = GR getting more negative (more compression needed).
+    // Release = GR returning toward 0 (less compression needed).
+    if (instantGR < smoothGR) {
+      smoothGR = attCoeff * smoothGR + (1.0 - attCoeff) * instantGR;
+    } else {
+      smoothGR = relCoeff * smoothGR + (1.0 - relCoeff) * instantGR;
+    }
+
+    pt.smoothedGR = smoothGR;
+    if (smoothGR < -0.01) { grSum += smoothGR; grCount++; }
+    out.push_back({pt.time, smoothGR});
   }
 
-  // Average gain reduction from compressed points only (not diluted by silence).
-  // This makes auto-makeup match the actual loudness reduction.
   m_avgGR = (grCount > 0) ? grSum / (double)grCount : 0.0;
 
   // Apply makeup gain
