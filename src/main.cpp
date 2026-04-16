@@ -142,14 +142,15 @@ static int g_cmdTrackView = 0;
 static MediaItem* g_lastSelectedItem = nullptr;
 static int g_lastSelectedCount = 0;
 
-// Keyboard accelerator for docked window — intercepts Ctrl+Z/X/C/V etc.
+// Keyboard accelerator — SWS pattern: call OnKeyDown directly, never SendMessage.
+// Return 1 = consumed, -666 = our window has focus but pass to REAPER main, 0 = not ours.
 static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
 {
   if (!g_sneakPeak || !g_sneakPeak->IsVisible() || !g_sneakPeak->GetHwnd()) return 0;
 
   HWND focus = GetFocus();
   HWND ourHwnd = g_sneakPeak->GetHwnd();
-  if (focus != ourHwnd && GetParent(focus) != ourHwnd) return 0;
+  if (focus != ourHwnd && IsChild(ourHwnd, focus) == 0) return 0;
 
   if (msg->message == WM_KEYDOWN) {
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -161,15 +162,14 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
     else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A' || k == 'S')) handled = true;
     else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S' || k == 'T')) handled = true;
     if (handled) {
-      SendMessage(ourHwnd, WM_KEYDOWN, msg->wParam, msg->lParam);
+      g_sneakPeak->OnKeyDown(msg->wParam);
       return 1; // we ate this key
     }
   }
 
-  // Our window has focus but we don't want this key - pass to REAPER main window
-  // (returning 0 means "not our window" which can cause REAPER to also process keys
-  // that should be ignored, like Delete acting on timeline items)
-  return -1;
+  // Our window has focus but we don't want this key.
+  // -666 = SWS magic: force passthrough to REAPER main window so global shortcuts work.
+  return -666;
 }
 
 static accelerator_register_t g_accelReg = { translateAccelSneakPeak, true, nullptr };

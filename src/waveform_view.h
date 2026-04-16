@@ -313,7 +313,7 @@ private:
   bool m_channelActive[2] = { true, true };
 
   // Volume envelope overlay
-  bool m_envShowVolume = true;
+  bool m_envShowVolume = false;
   double m_envMaxGain = 2.0; // MAXVAL from envelope chunk (updated in DrawVolumeEnvelope)
   bool m_envBypassed = false;      // A/B: skip envGain in rendering
   double m_envRevealStart = 0.0; // reveal range for dense envelopes (time coords)

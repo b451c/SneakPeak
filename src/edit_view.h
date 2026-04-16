@@ -146,6 +146,9 @@ public:
 
   static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+  // Called directly from accelerator callback (SWS pattern - no SendMessage bounce)
+  void OnKeyDown(WPARAM key);
+
 private:
   INT_PTR HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam);
   void OnSize(int w, int h);
@@ -156,7 +159,6 @@ private:
   void OnMouseMove(int x, int y, WPARAM wParam);
   void OnMouseWheel(int x, int y, int delta, WPARAM wParam);
   void OnDoubleClick(int x, int y);
-  void OnKeyDown(WPARAM key);
   bool HandlePendingClose();
   void ValidateItemPointers();
   void UpdateAutoScroll();

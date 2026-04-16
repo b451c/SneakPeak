@@ -79,7 +79,7 @@ void SneakPeak::Create()
     const char* joinLines = g_GetExtState("SneakPeak", "show_join_lines");
     if (joinLines && joinLines[0] == '0') m_waveform.SetShowJoinLines(false);
     const char* volEnv = g_GetExtState("SneakPeak", "show_vol_env");
-    if (volEnv && volEnv[0] == '0') m_waveform.SetShowVolumeEnvelope(false);
+    if (volEnv && volEnv[0] == '1') m_waveform.SetShowVolumeEnvelope(true);
     const char* dynVis = g_GetExtState("SneakPeak", "show_dynamics");
     if (dynVis && dynVis[0] == '1') m_dynamicsVisible = true;
     const char* meterMode = g_GetExtState("SneakPeak", "meter_mode");
