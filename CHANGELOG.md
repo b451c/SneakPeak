@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Apply Dynamics non-destructive** - Each Apply now clears existing envelope points in the time range (via DeleteEnvelopePointRange) before writing new ones, with guard points at boundaries to prevent discontinuity. Repeated Apply is idempotent - same settings always produce the same result. Previously, points accumulated on each Apply, stacking compression.
 - **Auto makeup gain accuracy** - Average gain reduction now computed from compressed points only (where GR < -0.01 dB), no longer diluted by silence/uncompressed passages. Makes auto-makeup properly compensate for actual loudness reduction.
 - **Dynamics curve zoom consistency** - At zoomed-out views, dynamics curves now show max-peak-per-stride (matching how the waveform takes max peak per column). Previously used arbitrary stride sampling which created misleading phantom spikes that disappeared when zoomed in.
+- **Dynamics hidden when no item** - Dynamics curves no longer render over the empty "Select a media item" state. Previously, stale curves from a previous item remained visible after deselection.
 
 ### Changed
 - **DynamicsParams struct rewritten** - Now uses standard compressor parameters (threshold dB, ratio, knee dB, attack ms, release ms, makeup dB, RMS mode) instead of percentage-based compression.
