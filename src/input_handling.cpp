@@ -256,6 +256,34 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       if (m_dynamicsPanel.ApplyRequested()) {
         m_dynamicsPanel.ClearApplyRequested();
         ApplyDynamicsToEnvelope();
+        // Save dynamics params to item P_EXT on Apply
+        SaveDynamicsToItem();
+      }
+      // Preset dropdown menu
+      if (m_dynamicsPanel.PresetMenuRequested()) {
+        m_dynamicsPanel.ClearPresetMenuRequested();
+        HMENU presetMenu = CreatePopupMenu();
+        auto addPresetItem = [](HMENU m, unsigned int id, const char* str) {
+#ifdef _WIN32
+          AppendMenuA(m, MF_STRING, id, str);
+#else
+          MENUITEMINFO mi = { sizeof(mi) };
+          mi.fMask = MIIM_ID | MIIM_STATE | MIIM_TYPE;
+          mi.fType = MFT_STRING;
+          mi.fState = 0;
+          mi.wID = id;
+          mi.dwTypeData = (char*)str;
+          InsertMenuItem(m, GetMenuItemCount(m), TRUE, &mi);
+#endif
+        };
+        for (int i = 0; i < PRESET_COUNT; i++)
+          addPresetItem(presetMenu, CM_PRESET_BASE + i, g_dynamicsPresets[i].name);
+        RECT pr = m_dynamicsPanel.GetRect(m_waveformRect);
+        RECT pbr = m_dynamicsPanel.GetPresetButtonRect(pr);
+        POINT pt = { pbr.left, pbr.bottom + 2 };
+        ClientToScreen(m_hwnd, &pt);
+        TrackPopupMenu(presetMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
+        DestroyMenu(presetMenu);
       }
       // Restore envelope on panel close if bypass was active
       bool isBypassed = m_dynamicsPanel.GetBypassed();

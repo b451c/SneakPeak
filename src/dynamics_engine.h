@@ -41,6 +41,32 @@ struct DynamicsPoint {
   double smoothedGR; // gain-smoothed GR in dB (negative, 0=no compression) - set by ComputeCompression
 };
 
+// Built-in presets (researched from professional sources)
+struct DynamicsPreset {
+  const char* name;
+  DynamicsParams params;
+};
+
+// Preset index constants
+enum {
+  PRESET_DEFAULT = 0,
+  PRESET_GENTLE,
+  PRESET_VOICE,
+  PRESET_BROADCAST,
+  PRESET_DEBREATH,
+  PRESET_MUSIC_BUS,
+  PRESET_COUNT
+};
+
+extern const DynamicsPreset g_dynamicsPresets[PRESET_COUNT];
+
+// P_EXT serialization key
+static constexpr const char* PEXT_DYNAMICS_KEY = "P_EXT:SneakPeak_Dynamics";
+
+// Serialize/deserialize DynamicsParams to/from compact string
+void DynamicsParamsToString(const DynamicsParams& p, char* buf, int bufSize);
+bool DynamicsParamsFromString(const char* str, DynamicsParams& out);
+
 class DynamicsEngine {
 public:
   void Analyze(const double* audioData, int numFrames, int numChannels,

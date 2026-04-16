@@ -69,6 +69,7 @@ PCM_source* (*g_PCM_Source_CreateFromFile)(const char*) = nullptr;
 bool (*g_SetMediaItemTake_Source)(MediaItem_Take*, PCM_source*) = nullptr;
 void (*g_GetMediaSourceFileName)(PCM_source*, char*, int) = nullptr;
 bool (*g_SetMediaItemInfo_Value)(MediaItem*, const char*, double) = nullptr;
+bool (*g_GetSetMediaItemInfo_String)(MediaItem*, const char*, char*, bool) = nullptr;
 
 // Undo
 void (*g_Undo_BeginBlock2)(ReaProject*) = nullptr;

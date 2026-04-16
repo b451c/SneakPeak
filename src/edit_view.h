@@ -117,6 +117,8 @@ enum ContextMenuID {
   CM_ENV_SHAPE_BEZIER,
   CM_ENV_DELETE_POINT,
   CM_SWITCH_TIMELINE,
+  CM_PRESET_BASE,  // + PRESET_COUNT entries
+  CM_PRESET_LAST = CM_PRESET_BASE + 10,
   CM_LAST // sentinel -- keep last
 };
 
@@ -393,6 +395,8 @@ private:
   void DrawMasterWaveform(HDC hdc);
   void DrawDynamicsCurve(HDC hdc);
   void ApplyDynamicsToEnvelope();
+  void SaveDynamicsToItem();
+  bool LoadDynamicsFromItem();
 
   static AudioClipboard s_clipboard;
   static const int TIMER_REFRESH = 100;

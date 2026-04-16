@@ -1447,3 +1447,24 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
+void SneakPeak::SaveDynamicsToItem()
+{
+  if (!g_GetSetMediaItemInfo_String || !m_waveform.GetItem()) return;
+  char buf[256];
+  DynamicsParamsToString(m_dynamicsPanel.GetParams(), buf, sizeof(buf));
+  g_GetSetMediaItemInfo_String(m_waveform.GetItem(), PEXT_DYNAMICS_KEY, buf, true);
+}
+
+bool SneakPeak::LoadDynamicsFromItem()
+{
+  if (!g_GetSetMediaItemInfo_String || !m_waveform.GetItem()) return false;
+  char buf[256] = {};
+  if (!g_GetSetMediaItemInfo_String(m_waveform.GetItem(), PEXT_DYNAMICS_KEY, buf, false))
+    return false;
+  if (!buf[0]) return false;
+  DynamicsParams loaded;
+  if (!DynamicsParamsFromString(buf, loaded)) return false;
+  m_dynamicsPanel.Show(loaded, m_dynamics.GetAveragePeakDb());
+  return true;
+}
+

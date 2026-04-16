@@ -532,8 +532,9 @@ void SneakPeak::OnContextMenuCommand(int id)
                            m_waveform.GetSampleRate(),
                            ivDb, m_dynamics.GetParams());
       }
-      // Show inline dynamics panel (replaces modal dialog)
-      m_dynamicsPanel.Show(m_dynamics.GetParams(), m_dynamics.GetAveragePeakDb());
+      // Show inline dynamics panel - try loading saved params from item P_EXT first
+      if (!LoadDynamicsFromItem())
+        m_dynamicsPanel.Show(m_dynamics.GetParams(), m_dynamics.GetAveragePeakDb());
       m_dynamicsVisible = true;
       if (g_SetExtState) g_SetExtState("SneakPeak", "dynamics_visible", "1", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -623,6 +624,26 @@ void SneakPeak::OnContextMenuCommand(int id)
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     }
+    default:
+      // Preset selection (CM_PRESET_BASE + index)
+      if (id >= CM_PRESET_BASE && id < CM_PRESET_BASE + PRESET_COUNT) {
+        m_dynamicsPanel.ApplyPreset(id - CM_PRESET_BASE);
+        m_dynamics.SetParams(m_dynamicsPanel.GetParams());
+        if (m_waveform.GetAudioSampleCount() > 0) {
+          double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+          m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                             m_waveform.GetAudioSampleCount(),
+                             m_waveform.GetNumChannels(),
+                             m_waveform.GetSampleRate(),
+                             ivDb, m_dynamicsPanel.GetParams());
+          m_dynamics.ComputeCompression();
+          m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
+          if (m_dynamicsPanel.IsLive())
+            ApplyDynamicsToEnvelope();
+        }
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+      }
+      break;
     case CM_DOCK_WINDOW:
       if (m_isDocked) {
         // Undock: destroy docked window, recreate as floating

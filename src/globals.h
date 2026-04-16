@@ -88,6 +88,7 @@ extern PCM_source* (*g_PCM_Source_CreateFromFile)(const char* filename);
 extern bool (*g_SetMediaItemTake_Source)(MediaItem_Take* take, PCM_source* source);
 extern void (*g_GetMediaSourceFileName)(PCM_source* source, char* filenamebuf, int filenamebuf_sz);
 extern bool (*g_SetMediaItemInfo_Value)(MediaItem* item, const char* parmname, double newvalue);
+extern bool (*g_GetSetMediaItemInfo_String)(MediaItem* item, const char* parmname, char* stringNeedBig, bool setNewValue);
 
 // Undo
 extern void (*g_Undo_BeginBlock2)(ReaProject* proj);

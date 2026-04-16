@@ -23,6 +23,10 @@ public:
   void ClearParamsChanged() { m_paramsChanged = false; }
   bool ApplyRequested() const { return m_applyRequested; }
   void ClearApplyRequested() { m_applyRequested = false; }
+  bool PresetMenuRequested() const { return m_presetMenuRequested; }
+  void ClearPresetMenuRequested() { m_presetMenuRequested = false; }
+  void ApplyPreset(int presetIdx);
+  RECT GetPresetButtonRect(RECT panelRect) const;
   bool IsDragging() const { return m_dragSlider >= 0 || m_panelDragging; }
 
   // For GR meter display
@@ -91,6 +95,8 @@ private:
   double m_dragStartVal = 0.0; // slider value at drag start (for fine mode delta)
   bool m_paramsChanged = false;
   bool m_applyRequested = false;
+  bool m_presetMenuRequested = false;
+  int m_presetIdx = -1;  // -1 = custom, 0..PRESET_COUNT-1 = built-in
   bool m_showDyn = true;  // show dynamics curves (orange + purple + threshold)
   bool m_showEnv = true;  // show volume envelope (cyan)
   bool m_showGR = true;   // show gain reduction shading between curves

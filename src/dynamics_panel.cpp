@@ -186,9 +186,25 @@ RECT DynamicsPanel::GetABToggleRect(RECT pr) const
   return { x, y, x + TOGGLE_W - 4, y + APPLY_H }; // compact "A/B"
 }
 
+RECT DynamicsPanel::GetPresetButtonRect(RECT pr) const
+{
+  return { pr.left + 92, pr.top + 4, pr.left + 198, pr.top + 18 };
+}
+
 RECT DynamicsPanel::GetCloseButtonRect(RECT pr) const
 {
   return { pr.right - 16, pr.top + 4, pr.right - 2, pr.top + 18 };
+}
+
+void DynamicsPanel::ApplyPreset(int idx)
+{
+  if (idx < 0 || idx >= PRESET_COUNT) return;
+  m_params = g_dynamicsPresets[idx].params;
+  // Sentinel threshold: use average peak for initial value
+  if (m_params.threshold <= -99.0)
+    m_params.threshold = m_avgPeakDb;
+  m_presetIdx = idx;
+  m_paramsChanged = true;
 }
 
 // --- Coordinate conversion ---
@@ -247,6 +263,13 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   RECT closeR = GetCloseButtonRect(pr);
   if (x >= closeR.left && x < closeR.right && y >= closeR.top && y < closeR.bottom) {
     Hide();
+    return true;
+  }
+
+  // Preset button
+  RECT presetR = GetPresetButtonRect(pr);
+  if (x >= presetR.left && x < presetR.right && y >= presetR.top && y < presetR.bottom) {
+    m_presetMenuRequested = true;
     return true;
   }
 
@@ -346,6 +369,7 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     }
     SetSliderValue(m_dragSlider, val);
     m_paramsChanged = true;
+    m_presetIdx = -1; // manual adjustment = custom
   }
   else if (m_panelDragging) {
     int defaultCX = (wr.left + wr.right) / 2;
@@ -397,9 +421,30 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     RECT titleR = { pr.left + MARGIN + 2, pr.top + 4, pr.left + 90, pr.top + TITLE_H };
     DrawText(hdc, "DYNAMICS", -1, &titleR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
-    // GR meter bar (horizontal, right of title)
+    // Preset button (right of title)
+    {
+      RECT presetR = GetPresetButtonRect(pr);
+      OwnedPen presetPen(PS_SOLID, 1, RGB(100, 100, 100));
+      DCPenScope presetScope(hdc, presetPen);
+      MoveToEx(hdc, presetR.left, presetR.top, nullptr);
+      LineTo(hdc, presetR.right - 1, presetR.top);
+      LineTo(hdc, presetR.right - 1, presetR.bottom - 1);
+      LineTo(hdc, presetR.left, presetR.bottom - 1);
+      LineTo(hdc, presetR.left, presetR.top);
+      SetTextColor(hdc, RGB(180, 180, 180));
+      SelectObject(hdc, g_fonts.normal11);
+      char presetLabel[32];
+      if (m_presetIdx >= 0 && m_presetIdx < PRESET_COUNT)
+        snprintf(presetLabel, sizeof(presetLabel), "%s \xE2\x96\xBE", g_dynamicsPresets[m_presetIdx].name);
+      else
+        snprintf(presetLabel, sizeof(presetLabel), "Preset \xE2\x96\xBE");
+      DrawText(hdc, presetLabel, -1, &presetR,
+               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
+
+    // GR meter bar (horizontal, right of preset button)
     if (m_avgGR < -0.1) {
-      int meterX = pr.left + 92;
+      int meterX = pr.left + 204;
       int meterY = pr.top + 8;
       int meterMaxW = pr.right - 60 - meterX;
       double grNorm = std::min(1.0, fabs(m_avgGR) / 20.0); // 0..1 for 0..-20dB

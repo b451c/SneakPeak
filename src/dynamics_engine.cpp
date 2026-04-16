@@ -2,9 +2,61 @@
 // Standard compressor: threshold + ratio + soft knee + attack/release + makeup
 #include "dynamics_engine.h"
 #include <algorithm>
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
 
 static constexpr double STEP_SIZE = 0.001; // 1ms analysis windows
 static constexpr double EPSILON = 1e-12;
+
+// --- Built-in presets (researched from iZotope, Waves, EBU R128, BBC guidelines) ---
+
+const DynamicsPreset g_dynamicsPresets[PRESET_COUNT] = {
+  { "Default", { 0.0, 1.0, 0.0, 0.0, false, 10.0, 100.0, 0.0, false, 5.0, -100.0, -20.0, 50.0, -60.0, 6.0 } },
+  { "Gentle Leveling", { -18.0, 2.0, 12.0, 0.0, true, 20.0, 150.0, 3.0, true, 5.0, -100.0, -40.0, 50.0, -60.0, 6.0 } },
+  { "Voice / Podcast", { -24.0, 4.0, 6.0, 0.0, true, 5.0, 80.0, 5.0, true, 5.0, -45.0, -18.0, 80.0, -60.0, 6.0 } },
+  { "Broadcast", { -20.0, 6.0, 3.0, 0.0, true, 1.0, 50.0, 5.0, true, 5.0, -40.0, -24.0, 60.0, -60.0, 6.0 } },
+  { "De-breath", { -18.0, 2.0, 8.0, 0.0, true, 10.0, 100.0, 5.0, false, 5.0, -35.0, -12.0, 30.0, -60.0, 6.0 } },
+  { "Music Bus", { -16.0, 2.0, 9.0, 0.0, true, 30.0, 200.0, 0.0, true, 5.0, -100.0, -40.0, 50.0, -60.0, 6.0 } },
+};
+
+// --- P_EXT serialization ---
+
+void DynamicsParamsToString(const DynamicsParams& p, char* buf, int bufSize)
+{
+  snprintf(buf, bufSize,
+    "t=%.1f r=%.1f k=%.1f m=%.1f am=%d a=%.1f re=%.1f la=%.1f rms=%d "
+    "gt=%.1f gr=%.1f gh=%.1f",
+    p.threshold, p.ratio, p.kneeDb, p.makeupDb, p.autoMakeup ? 1 : 0,
+    p.attackMs, p.releaseMs, p.lookaheadMs, p.rmsMode ? 1 : 0,
+    p.gateThreshDb, p.gateRangeDb, p.gateHoldMs);
+}
+
+bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
+{
+  if (!str || !str[0]) return false;
+  out = DynamicsParams{}; // start with defaults
+  auto readKey = [&](const char* key, double& val) {
+    char search[16];
+    snprintf(search, sizeof(search), "%s=", key);
+    const char* p = strstr(str, search);
+    if (p) val = atof(p + strlen(search));
+  };
+  double am = 1.0, rms = 0.0;
+  readKey("t", out.threshold);
+  readKey("r", out.ratio);
+  readKey("k", out.kneeDb);
+  readKey("m", out.makeupDb);
+  readKey("am", am); out.autoMakeup = (am > 0.5);
+  readKey("a", out.attackMs);
+  readKey("re", out.releaseMs);
+  readKey("la", out.lookaheadMs);
+  readKey("rms", rms); out.rmsMode = (rms > 0.5);
+  readKey("gt", out.gateThreshDb);
+  readKey("gr", out.gateRangeDb);
+  readKey("gh", out.gateHoldMs);
+  return true;
+}
 
 void DynamicsEngine::Analyze(const double* audioData, int numFrames, int numChannels,
                              int sampleRate, double itemVolDb, const DynamicsParams& params)
