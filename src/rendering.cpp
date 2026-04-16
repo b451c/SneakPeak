@@ -36,7 +36,7 @@ void SneakPeak::OnPaint(HDC hdc)
         m_waveform.SetShowVolumeEnvelope(wantEnv);
     }
     m_waveform.Paint(hdc);
-    bool showDyn = m_dynamicsVisible && m_dynamics.HasResults() &&
+    bool showDyn = m_waveform.HasItem() && m_dynamicsVisible && m_dynamics.HasResults() &&
         (!m_dynamicsPanel.IsVisible() || m_dynamicsPanel.GetShowDyn());
     if (showDyn)
       DrawDynamicsCurve(hdc);
