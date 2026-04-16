@@ -61,11 +61,15 @@ void SneakPeak::OnRightClick(int x, int y)
   // Right-click on envelope point → shape selection menu
   if (y >= m_waveformRect.top && y < m_waveformRect.bottom &&
       m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
-      m_waveform.GetTake() && g_GetTakeEnvelopeByName && g_GetEnvelopePoint) {
+      g_GetTakeEnvelopeByName && g_GetEnvelopePoint) {
     int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 10);
     if (hitIdx >= 0) {
-      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+      // Use GetEnvelopeAtTime for correct segment in timeline/SET
+      double rcTime = m_waveform.XToTime(x);
+      auto rcEi = m_waveform.GetEnvelopeAtTime(rcTime);
+      TrackEnvelope* env = rcEi.env;
       if (env) {
+        m_envDragEnv = env; // store for shape/delete command handlers
         // Read current shape of this point
         double ptTime = 0, ptVal = 0, ptTension = 0;
         int ptShape = 0;
@@ -268,6 +272,7 @@ void SneakPeak::OnRightClick(int x, int y)
     MenuAppend(multiMenu, MF_STRING, CM_SHOW_JOIN_LINES,
                m_waveform.GetShowJoinLines() ? "Show Join Lines  \xE2\x9C\x93" : "Show Join Lines");
     MenuAppendSubmenu(viewMenu, multiMenu, "Multi-Item View");
+    MenuAppend(viewMenu, MF_STRING, CM_SWITCH_TIMELINE, "Switch to Timeline View");
   }
 
   HMENU supportMenu = CreatePopupMenu();
@@ -485,8 +490,39 @@ void SneakPeak::OnContextMenuCommand(int id)
       }
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
+    case CM_SWITCH_TIMELINE: {
+      if (!m_waveform.IsMultiItemActive()) break;
+      std::vector<MediaItem*> items;
+      for (const auto& seg : m_waveform.GetSegments())
+        if (seg.item) items.push_back(seg.item);
+      if (items.empty()) break;
+      m_waveform.ClearItem();
+      m_waveform.LoadTimelineView(items);
+      { std::vector<MediaItem*> segItems;
+        for (const auto& seg : m_waveform.GetSegments()) if (seg.item) segItems.push_back(seg.item);
+        if (!segItems.empty()) m_gainPanel.ShowBatch(segItems);
+      }
+      m_waveform.Invalidate();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    }
     case CM_APPLY_DYNAMICS: {
-      if (!m_waveform.HasItem() || m_waveform.IsStandaloneMode() || !m_waveform.GetTake()) break;
+      if (!m_waveform.HasItem() || m_waveform.IsStandaloneMode()) break;
+      // Multi-item: switch to timeline view first (dynamics needs per-item envelopes)
+      if (m_waveform.IsMultiItemActive()) {
+        std::vector<MediaItem*> items;
+        for (const auto& seg : m_waveform.GetSegments())
+          if (seg.item) items.push_back(seg.item);
+        if (items.empty()) break;
+        m_waveform.ClearItem();
+        m_waveform.LoadTimelineView(items);
+        { std::vector<MediaItem*> segItems;
+          for (const auto& seg : m_waveform.GetSegments()) if (seg.item) segItems.push_back(seg.item);
+          if (!segItems.empty()) m_gainPanel.ShowBatch(segItems);
+        }
+        m_waveform.Invalidate();
+      }
+      if (!m_waveform.GetTake()) break;
       // Ensure analysis is done
       if (!m_dynamics.HasResults() && m_waveform.GetAudioSampleCount() > 0) {
         double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
@@ -561,9 +597,9 @@ void SneakPeak::OnContextMenuCommand(int id)
     case CM_ENV_SHAPE_FAST:
     case CM_ENV_SHAPE_FAST_END:
     case CM_ENV_SHAPE_BEZIER: {
-      if (m_envDragPointIdx < 0 || !m_waveform.GetTake() || !g_GetTakeEnvelopeByName || !g_SetEnvelopePoint) break;
-      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-      if (!env || !g_CountEnvelopePoints || m_envDragPointIdx >= g_CountEnvelopePoints(env)) break;
+      if (m_envDragPointIdx < 0 || !m_envDragEnv || !g_SetEnvelopePoint) break;
+      TrackEnvelope* env = m_envDragEnv;
+      if (!g_CountEnvelopePoints || m_envDragPointIdx >= g_CountEnvelopePoints(env)) break;
       int newShape = id - CM_ENV_SHAPE_LINEAR; // 0=linear, 1=square, 2=slow, 3=fast, 4=fast end, 5=bezier
       bool noSort = true;
       if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
@@ -574,10 +610,10 @@ void SneakPeak::OnContextMenuCommand(int id)
       break;
     }
     case CM_ENV_DELETE_POINT: {
-      if (m_envDragPointIdx < 0 || !m_waveform.GetTake() || !g_GetTakeEnvelopeByName ||
+      if (m_envDragPointIdx < 0 || !m_envDragEnv ||
           !g_DeleteEnvelopePointEx || !g_Envelope_SortPoints) break;
-      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-      if (!env || !g_CountEnvelopePoints || m_envDragPointIdx >= g_CountEnvelopePoints(env)) break;
+      TrackEnvelope* env = m_envDragEnv;
+      if (!g_CountEnvelopePoints || m_envDragPointIdx >= g_CountEnvelopePoints(env)) break;
       if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
       g_DeleteEnvelopePointEx(env, -1, m_envDragPointIdx);
       g_Envelope_SortPoints(env);

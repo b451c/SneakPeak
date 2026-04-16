@@ -1360,45 +1360,79 @@ void SneakPeak::ApplyDynamicsToEnvelope()
       !g_Envelope_SortPoints || !g_ScaleToEnvelopeMode || !g_GetEnvelopeScalingMode)
     return;
 
-  TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-  if (!env) {
-    ShowToast("Enable Volume envelope on item first");
-    return;
-  }
-
-  int scalingMode = g_GetEnvelopeScalingMode(env);
   bool liveSession = m_dynamicsPanel.IsLive() && m_dynamicsPanel.LiveUndoOpen();
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (!liveSession && g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
-  double timeStart = comp.front().time;
-  double timeEnd = comp.back().time;
+  // Helper: apply compression points to a single envelope
+  auto applyToEnv = [&](TrackEnvelope* env, const std::vector<DynamicsEngine::CompressPoint>& pts) {
+    if (pts.empty()) return;
+    int scalingMode = g_GetEnvelopeScalingMode(env);
+    double tStart = pts.front().time;
+    double tEnd = pts.back().time;
 
-  // Clear existing points in the affected range to prevent accumulation.
-  // Insert guard points at boundaries first to preserve envelope outside the range.
-  if (g_Envelope_Evaluate && g_DeleteEnvelopePointRange) {
-    // Evaluate existing envelope at boundaries for guard points
-    double valStart = 0.0, valEnd = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
-    g_Envelope_Evaluate(env, timeStart, 44100.0, 0, &valStart, &d1, &d2, &d3);
-    g_Envelope_Evaluate(env, timeEnd, 44100.0, 0, &valEnd, &d1, &d2, &d3);
+    // Clear existing points and insert guard points
+    if (g_Envelope_Evaluate && g_DeleteEnvelopePointRange) {
+      double valStart = 0.0, valEnd = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
+      g_Envelope_Evaluate(env, tStart, 44100.0, 0, &valStart, &d1, &d2, &d3);
+      g_Envelope_Evaluate(env, tEnd, 44100.0, 0, &valEnd, &d1, &d2, &d3);
+      g_DeleteEnvelopePointRange(env, tStart - 0.0001, tEnd + 0.0001);
+      bool noSortGuard = true;
+      if (tStart > 0.001)
+        g_InsertEnvelopePointEx(env, -1, tStart - 0.0001, valStart, 0, 0.0, false, &noSortGuard);
+      g_InsertEnvelopePointEx(env, -1, tEnd + 0.0001, valEnd, 0, 0.0, false, &noSortGuard);
+    }
 
-    // Delete all existing points in range (slightly wider to include edge points)
-    g_DeleteEnvelopePointRange(env, timeStart - 0.0001, timeEnd + 0.0001);
+    bool noSort = true;
+    for (const auto& cp : pts) {
+      double gainLinear = pow(10.0, cp.dbAdjust / 20.0);
+      double rawVal = g_ScaleToEnvelopeMode(scalingMode, gainLinear);
+      g_InsertEnvelopePointEx(env, -1, cp.time, rawVal, 0, 0.0, false, &noSort);
+    }
+    g_Envelope_SortPoints(env);
+  };
 
-    // Insert guard points just outside the range to prevent discontinuity
-    bool noSortGuard = true;
-    if (timeStart > 0.001)
-      g_InsertEnvelopePointEx(env, -1, timeStart - 0.0001, valStart, 0, 0.0, false, &noSortGuard);
-    g_InsertEnvelopePointEx(env, -1, timeEnd + 0.0001, valEnd, 0, 0.0, false, &noSortGuard);
+  auto& segs = m_waveform.GetSegments();
+  bool isMultiSeg = (m_waveform.IsTimelineView() || m_waveform.IsTrackView()) && segs.size() > 1;
+  bool anyEnv = false;
+
+  if (isMultiSeg) {
+    // Group compression points by segment, convert to segment-relative time
+    for (size_t si = 0; si < segs.size(); si++) {
+      const auto& seg = segs[si];
+      if (!seg.take) continue;
+      TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+      if (!env) continue;
+      anyEnv = true;
+
+      double segStart = seg.relativeOffset;
+      double segEnd = segStart + seg.duration;
+      std::vector<DynamicsEngine::CompressPoint> segPts;
+      for (const auto& cp : comp) {
+        if (cp.time >= segStart && cp.time < segEnd) {
+          DynamicsEngine::CompressPoint sp;
+          sp.time = cp.time - segStart; // convert to segment-relative
+          sp.dbAdjust = cp.dbAdjust;
+          segPts.push_back(sp);
+        }
+      }
+      applyToEnv(env, segPts);
+    }
+  } else {
+    TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+    if (env) {
+      anyEnv = true;
+      applyToEnv(env, comp); // single-item: times already correct
+    }
   }
 
-  bool noSort = true;
-  for (const auto& cp : comp) {
-    double gainLinear = pow(10.0, cp.dbAdjust / 20.0);
-    double rawVal = g_ScaleToEnvelopeMode(scalingMode, gainLinear);
-    g_InsertEnvelopePointEx(env, -1, cp.time, rawVal, 0, 0.0, false, &noSort);
+  if (!anyEnv) {
+    if (!liveSession && g_Undo_EndBlock2)
+      g_Undo_EndBlock2(nullptr, "SneakPeak: Apply Dynamics", -1);
+    if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+    ShowToast("Enable Volume envelope on item first");
+    return;
   }
-  g_Envelope_SortPoints(env);
 
   if (!liveSession && g_Undo_EndBlock2)
     g_Undo_EndBlock2(nullptr, "SneakPeak: Apply Dynamics", -1);

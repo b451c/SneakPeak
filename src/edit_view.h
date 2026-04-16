@@ -116,6 +116,7 @@ enum ContextMenuID {
   CM_ENV_SHAPE_FAST_END,
   CM_ENV_SHAPE_BEZIER,
   CM_ENV_DELETE_POINT,
+  CM_SWITCH_TIMELINE,
   CM_LAST // sentinel -- keep last
 };
 
@@ -214,6 +215,7 @@ private:
   void UndoRestore();
 
   RECT m_modeBarRect = {};
+  RECT m_modeLabelRect = {};  // clickable area of the mode label (MULTI/TIMELINE/ITEM/SET)
   RECT m_toolbarRect = {};
   RECT m_rulerRect = {};
   RECT m_waveformRect = {};
@@ -247,8 +249,11 @@ private:
   // Envelope point dragging + freehand drawing
   bool m_envDragging = false;
   int m_envDragPointIdx = -1;  // index of point being dragged (-1 = none)
-  double m_envDragMinTime = 0.0;  // left neighbor time (clamp bound)
-  double m_envDragMaxTime = 0.0;  // right neighbor time (clamp bound)
+  double m_envDragMinTime = 0.0;  // left neighbor time (clamp bound, segment-relative)
+  double m_envDragMaxTime = 0.0;  // right neighbor time (clamp bound, segment-relative)
+  TrackEnvelope* m_envDragEnv = nullptr;     // envelope being edited (correct segment in timeline/SET)
+  double m_envDragSegOffset = 0.0;           // segment's relativeOffset for viewTime<->envTime
+  double m_envDragSegDuration = 0.0;         // duration of segment being edited
   bool m_envFreehand = false;  // freehand drawing mode (add points on mousemove)
   int m_envFreehandLastX = 0;  // throttle: last X where point was added
 

@@ -37,6 +37,7 @@ void SneakPeak::OnPaint(HDC hdc)
     }
     m_waveform.Paint(hdc);
     bool showDyn = m_waveform.HasItem() && m_dynamicsVisible && m_dynamics.HasResults() &&
+        !m_waveform.IsMultiItemActive() &&
         (!m_dynamicsPanel.IsVisible() || m_dynamicsPanel.GetShowDyn());
     if (showDyn)
       DrawDynamicsCurve(hdc);
@@ -198,7 +199,9 @@ void SneakPeak::DrawModeBar(HDC hdc)
     DrawText(hdc, modeLabel, -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     RECT labelMeasure = { 0, 0, 200, 20 };
     DrawText(hdc, modeLabel, -1, &labelMeasure, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
-    xPos += (labelMeasure.right - labelMeasure.left) + 8;
+    int labelW = labelMeasure.right - labelMeasure.left;
+    m_modeLabelRect = { xPos - 12, m_modeBarRect.top, xPos + labelW + 4, m_modeBarRect.bottom };
+    xPos += labelW + 8;
 
     // Separator
     HPEN sepPen = CreatePen(PS_SOLID, 1, g_theme.border);

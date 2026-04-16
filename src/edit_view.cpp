@@ -525,6 +525,10 @@ void SneakPeak::LoadSelectedItem()
 {
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
+  // Clear stale envelope drag state (item may have changed)
+  m_envDragEnv = nullptr;
+  m_envDragPointIdx = -1;
+
   int selCount = g_CountSelectedMediaItems(nullptr);
   DBG("[SneakPeak] LoadSelectedItem: count=%d firstSel=%p isTimeline=%d isTrackView=%d\n",
       selCount, selCount > 0 ? (void*)g_GetSelectedMediaItem(nullptr, 0) : nullptr,
@@ -943,11 +947,23 @@ void SneakPeak::UpdateItemState()
   // Working set: no periodic refresh - refreshes on explicit user actions
 
   // Envelope auto-refresh: detect when volume envelope appears/changes
-  if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() && m_waveform.GetTake() &&
+  // Aggregates across all segments for correct timeline/SET behavior
+  if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode() &&
       m_waveform.GetShowVolumeEnvelope() && g_GetTakeEnvelopeByName && g_CountEnvelopePoints) {
-    TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-    bool hasEnv = (env != nullptr);
-    int ptCount = hasEnv ? g_CountEnvelopePoints(env) : 0;
+    bool hasEnv = false;
+    int ptCount = 0;
+    auto& segs = m_waveform.GetSegments();
+    bool isMultiSeg = (m_waveform.IsTimelineView() || m_waveform.IsTrackView()) && segs.size() > 1;
+    if (isMultiSeg) {
+      for (const auto& seg : segs) {
+        if (!seg.take) continue;
+        TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+        if (env) { hasEnv = true; ptCount += g_CountEnvelopePoints(env); }
+      }
+    } else if (m_waveform.GetTake()) {
+      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+      if (env) { hasEnv = true; ptCount = g_CountEnvelopePoints(env); }
+    }
     if (hasEnv != m_lastEnvExists || ptCount != m_lastEnvPointCount) {
       m_lastEnvExists = hasEnv;
       m_lastEnvPointCount = ptCount;

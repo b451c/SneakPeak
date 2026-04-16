@@ -39,7 +39,9 @@ void SneakPeak::OnDoubleClick(int x, int y)
         g_GetTakeEnvelopeByName && g_DeleteEnvelopePointEx && g_Envelope_SortPoints) {
       int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 8);
       if (hitIdx >= 0) {
-        TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+        double dblClickTime = m_waveform.XToTime(x);
+        auto dblEi = m_waveform.GetEnvelopeAtTime(dblClickTime);
+        TrackEnvelope* env = dblEi.env;
         if (env) {
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           g_DeleteEnvelopePointEx(env, -1, hitIdx);
@@ -100,6 +102,43 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
   // Mode bar click
   if (y >= m_modeBarRect.top && y < m_modeBarRect.bottom) {
+    // Click on mode label in MULTI mode: show view mode popup menu
+    if (m_waveform.IsMultiItemActive() &&
+        x >= m_modeLabelRect.left && x < m_modeLabelRect.right &&
+        y >= m_modeLabelRect.top && y < m_modeLabelRect.bottom) {
+      HMENU modeMenu = CreatePopupMenu();
+      MultiItemMode curMode = m_waveform.GetMultiItemMode();
+      auto addItem = [](HMENU m, unsigned int flags, unsigned int id, const char* str) {
+#ifdef _WIN32
+        AppendMenuA(m, flags, id, str);
+#else
+        MENUITEMINFO mi = { sizeof(mi) };
+        mi.fMask = MIIM_ID | MIIM_STATE | MIIM_TYPE;
+        mi.fType = MFT_STRING;
+        mi.fState = (flags & MF_CHECKED) ? MFS_CHECKED : 0;
+        mi.wID = id;
+        mi.dwTypeData = (char*)str;
+        InsertMenuItem(m, GetMenuItemCount(m), TRUE, &mi);
+#endif
+      };
+      addItem(modeMenu, curMode == MultiItemMode::MIX ? MF_CHECKED : 0,
+              CM_MULTI_MODE_MIX, "Mix (Sum)");
+      addItem(modeMenu, curMode == MultiItemMode::LAYERED ? MF_CHECKED : 0,
+              CM_MULTI_MODE_LAYERED, "Layered (per Item)");
+      addItem(modeMenu, curMode == MultiItemMode::LAYERED_TRACKS ? MF_CHECKED : 0,
+              CM_MULTI_MODE_LAYERED_TRACKS, "Layered (per Track)");
+#ifdef _WIN32
+      AppendMenuA(modeMenu, MF_SEPARATOR, 0, nullptr);
+#else
+      SWELL_Menu_AddMenuItem(modeMenu, "", 0, MF_SEPARATOR);
+#endif
+      addItem(modeMenu, 0, CM_SWITCH_TIMELINE, "Timeline View");
+      POINT pt = { x, m_modeBarRect.bottom };
+      ClientToScreen(m_hwnd, &pt);
+      TrackPopupMenu(modeMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
+      DestroyMenu(modeMenu);
+      return;
+    }
     for (const auto& tab : m_modeBarTabs) {
       if (x >= tab.rect.left && x < tab.rect.right &&
           y >= tab.rect.top && y < tab.rect.bottom) {
@@ -222,17 +261,25 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       bool isBypassed = m_dynamicsPanel.GetBypassed();
       if (wasBypassed && !m_dynamicsPanel.IsVisible())
         isBypassed = false; // panel closed, restore envelope
-      // A/B bypass: toggle envelope ACTIVE state in REAPER
+      // A/B bypass: toggle envelope ACTIVE state on all segments' envelopes
       if (isBypassed != wasBypassed) {
         m_waveform.SetEnvBypassed(isBypassed);
-        if (g_GetTakeEnvelopeByName && g_GetSetEnvelopeInfo_String && m_waveform.GetTake()) {
-          TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-          if (env) {
-            char val[4];
-            snprintf(val, sizeof(val), "%d", isBypassed ? 0 : 1);
-            g_GetSetEnvelopeInfo_String(env, "ACTIVE", val, true);
-            if (g_UpdateArrange) g_UpdateArrange();
+        if (g_GetTakeEnvelopeByName && g_GetSetEnvelopeInfo_String) {
+          char val[4];
+          snprintf(val, sizeof(val), "%d", isBypassed ? 0 : 1);
+          auto& segs = m_waveform.GetSegments();
+          bool isMultiSeg = (m_waveform.IsTimelineView() || m_waveform.IsTrackView()) && segs.size() > 1;
+          if (isMultiSeg) {
+            for (const auto& seg : segs) {
+              if (!seg.take) continue;
+              TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+              if (env) g_GetSetEnvelopeInfo_String(env, "ACTIVE", val, true);
+            }
+          } else if (m_waveform.GetTake()) {
+            TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+            if (env) g_GetSetEnvelopeInfo_String(env, "ACTIVE", val, true);
           }
+          if (g_UpdateArrange) g_UpdateArrange();
         }
       }
       // Re-analyze on toggle clicks (Peak/RMS) that set ParamsChanged
@@ -371,14 +418,24 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
       }
 
       // Envelope point interaction (before fade handles and selection)
+      // Uses GetEnvelopeAtTime to find the correct per-segment envelope in timeline/SET
       if (m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
           g_GetTakeEnvelopeByName && g_ScaleToEnvelopeMode && g_InsertEnvelopePointEx &&
           g_Envelope_SortPoints && g_Envelope_Evaluate && g_GetEnvelopeScalingMode &&
           g_ScaleFromEnvelopeMode) {
-        TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+        double clickTime = m_waveform.XToTime(x);
+        auto ei = m_waveform.GetEnvelopeAtTime(clickTime);
+        TrackEnvelope* env = ei.env;
         if (env) {
           int envCount = g_CountEnvelopePoints ? g_CountEnvelopePoints(env) : 0;
           bool isDenseEnv = (envCount > 100);
+          double segOffset = 0.0;
+          double segDuration = m_waveform.GetItemDuration();
+          if (ei.segmentIdx >= 0) {
+            const auto& seg = m_waveform.GetSegments()[ei.segmentIdx];
+            segOffset = seg.relativeOffset;
+            segDuration = seg.duration;
+          }
 
           int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 8);
           if (hitIdx >= 0) {
@@ -403,9 +460,9 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
               }
               // else: already selected, keep multi-selection for drag
             }
-            // Compute time bounds from non-selected neighbors
+            // Compute time bounds from non-selected neighbors (segment-relative)
             m_envDragMinTime = 0.0;
-            m_envDragMaxTime = m_waveform.GetItemDuration();
+            m_envDragMaxTime = segDuration;
             if (g_CountEnvelopePoints && g_GetEnvelopePoint) {
               int cnt = g_CountEnvelopePoints(env);
               // Find leftmost selected time and rightmost selected time
@@ -427,6 +484,9 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             // Start drag (moves all selected points)
             m_envDragging = true;
             m_envDragPointIdx = hitIdx;
+            m_envDragEnv = env;
+            m_envDragSegOffset = segOffset;
+            m_envDragSegDuration = segDuration;
             SetCapture(m_hwnd);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
             InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -435,10 +495,8 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           // Check if click is near the envelope line (within 20px vertically)
           // Skip for dense envelopes - Cmd+drag falls through to reveal rect instead
           if (!isDenseEnv) {
-          double clickTime = m_waveform.XToTime(x);
           if (clickTime >= 0.0 && clickTime <= m_waveform.GetItemDuration()) {
-            auto ei = m_waveform.GetEnvelopeAtTime(clickTime);
-            if (ei.env) {
+            // ei already computed above via GetEnvelopeAtTime
             double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
             g_Envelope_Evaluate(ei.env, ei.envTime, m_waveform.GetSampleRate(), 0,
                                 &rawVal, &d1, &d2, &d3);
@@ -453,23 +511,29 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
                 // Cmd+click+drag on line = freehand envelope drawing
                 if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
                 bool noSort = true;
-                g_InsertEnvelopePointEx(env, -1, clickTime, newRawVal, 0, 0.0, false, &noSort);
+                g_InsertEnvelopePointEx(env, -1, ei.envTime, newRawVal, 0, 0.0, false, &noSort);
                 m_envFreehand = true;
                 m_envFreehandLastX = x;
                 m_envDragPointIdx = -1;
+                m_envDragEnv = env;
+                m_envDragSegOffset = segOffset;
+                m_envDragSegDuration = segDuration;
                 SetCapture(m_hwnd);
               } else {
                 // Plain click on line = add single point, start dragging it
                 if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
                 bool noSort = false;
-                g_InsertEnvelopePointEx(env, -1, clickTime, newRawVal, 0, 0.0, false, &noSort);
+                g_InsertEnvelopePointEx(env, -1, ei.envTime, newRawVal, 0, 0.0, false, &noSort);
                 g_Envelope_SortPoints(env);
                 if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Add envelope point", -1);
                 if (g_UpdateArrange) g_UpdateArrange();
-                int newIdx = g_GetEnvelopePointByTime ? g_GetEnvelopePointByTime(env, clickTime) : -1;
+                int newIdx = g_GetEnvelopePointByTime ? g_GetEnvelopePointByTime(env, ei.envTime) : -1;
                 if (newIdx >= 0) {
                   m_envDragging = true;
                   m_envDragPointIdx = newIdx;
+                  m_envDragEnv = env;
+                  m_envDragSegOffset = segOffset;
+                  m_envDragSegDuration = segDuration;
                   SetCapture(m_hwnd);
                   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
                 }
@@ -477,7 +541,6 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
               InvalidateRect(m_hwnd, nullptr, FALSE);
               return;
             }
-            } // ei.env
           }
           } // !isDenseEnv
         }
@@ -594,31 +657,49 @@ void SneakPeak::OnMouseUp(int x, int y)
     ReleaseCapture();
     if (wasSelecting && g_GetTakeEnvelopeByName && g_CountEnvelopePoints &&
         g_GetEnvelopePoint && g_SetEnvelopePoint && g_ScaleFromEnvelopeMode &&
-        g_GetEnvelopeScalingMode && m_waveform.GetTake()) {
-      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-      if (env) {
-        int sm = g_GetEnvelopeScalingMode(env);
+        g_GetEnvelopeScalingMode) {
+      bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+      int totalCount = 0;
+      // Select points from each segment's envelope (correct for timeline/SET)
+      auto selectFromEnv = [&](TrackEnvelope* env, int sm, double segOff) {
         int cnt = g_CountEnvelopePoints(env);
+        totalCount += cnt;
         bool noSort = true;
-        bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         for (int i = 0; i < cnt; i++) {
           double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
           g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel);
           double gain = g_ScaleFromEnvelopeMode(sm, pv);
-          int px = m_waveform.TimeToX(pt);
+          int px = m_waveform.TimeToX(pt + segOff);
           int py = m_waveform.EnvYToGainY(gain, sm);
           bool inside = (px >= rx1 && px <= rx2 && py >= ry1 && py <= ry2);
           bool newSel = shift ? (psel || inside) : inside;
           if (newSel != psel)
             g_SetEnvelopePoint(env, i, nullptr, nullptr, nullptr, nullptr, &newSel, &noSort);
         }
-        // Dense envelope: persist as reveal range so points become visible
-        if (cnt > 100) {
-          double tStart = std::max(0.0, m_waveform.XToTime(rx1));
-          double tEnd = std::min(m_waveform.GetItemDuration(), m_waveform.XToTime(rx2));
-          if (tEnd > tStart)
-            m_waveform.SetEnvRevealRange(tStart, tEnd);
+      };
+      auto& segs = m_waveform.GetSegments();
+      bool isMultiSeg = (m_waveform.IsTimelineView() || m_waveform.IsTrackView()) && segs.size() > 1;
+      if (isMultiSeg) {
+        for (const auto& seg : segs) {
+          if (!seg.take) continue;
+          TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+          if (!env) continue;
+          int sm = g_GetEnvelopeScalingMode(env);
+          selectFromEnv(env, sm, seg.relativeOffset);
         }
+      } else if (m_waveform.GetTake()) {
+        TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+        if (env) {
+          int sm = g_GetEnvelopeScalingMode(env);
+          selectFromEnv(env, sm, 0.0);
+        }
+      }
+      // Dense envelope: persist as reveal range so points become visible
+      if (totalCount > 100) {
+        double tStart = std::max(0.0, m_waveform.XToTime(rx1));
+        double tEnd = std::min(m_waveform.GetItemDuration(), m_waveform.XToTime(rx2));
+        if (tEnd > tStart)
+          m_waveform.SetEnvRevealRange(tStart, tEnd);
       }
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -678,8 +759,7 @@ void SneakPeak::OnMouseUp(int x, int y)
   if (m_envFreehand) {
     m_envFreehand = false;
     ReleaseCapture();
-    TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
-    if (env && g_Envelope_SortPoints) g_Envelope_SortPoints(env);
+    if (m_envDragEnv && g_Envelope_SortPoints) g_Envelope_SortPoints(m_envDragEnv);
     if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Freehand envelope drawing", -1);
     if (g_UpdateArrange) g_UpdateArrange();
     m_envDragPointIdx = -1;
@@ -690,8 +770,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     m_envDragging = false;
     // Keep m_envDragPointIdx — tracks "selected" point for Delete key
     ReleaseCapture();
-    TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
-    if (env && g_Envelope_SortPoints) g_Envelope_SortPoints(env);
+    if (m_envDragEnv && g_Envelope_SortPoints) g_Envelope_SortPoints(m_envDragEnv);
     if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Move envelope point", -1);
     if (g_UpdateArrange) g_UpdateArrange();
     InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -1147,18 +1226,21 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     m_toolbar.SetHover(-1);
   }
 
-  // Freehand envelope drawing
+  // Freehand envelope drawing (uses m_envDragEnv for correct segment in timeline/SET)
   if (m_envFreehand && m_waveform.HasItem()) {
     // Add point every 4 pixels for smooth but not excessive density
     if (abs(x - m_envFreehandLastX) >= 4) {
-      TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
+      TrackEnvelope* env = m_envDragEnv;
       if (env && g_InsertEnvelopePointEx && g_GetEnvelopeScalingMode &&
           g_ScaleToEnvelopeMode && g_Envelope_SortPoints &&
           g_CountEnvelopePoints && g_GetEnvelopePoint && g_DeleteEnvelopePointEx) {
-        double time = m_waveform.XToTime(x);
-        time = std::max(0.0, std::min(m_waveform.GetItemDuration(), time));
+        // Convert view-relative time to segment-relative envelope time
+        double viewTime = m_waveform.XToTime(x);
+        double time = viewTime - m_envDragSegOffset;
+        time = std::max(0.0, std::min(m_envDragSegDuration, time));
         // Delete existing points between last drawn position and current
-        double prevTime = m_waveform.XToTime(m_envFreehandLastX);
+        double prevViewTime = m_waveform.XToTime(m_envFreehandLastX);
+        double prevTime = prevViewTime - m_envDragSegOffset;
         double tMin = std::min(prevTime, time);
         double tMax = std::max(prevTime, time);
         int cnt = g_CountEnvelopePoints(env);
@@ -1185,7 +1267,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 
   // Envelope point dragging (moves all selected points by delta, clamped to neighbors)
   if (m_envDragging && m_envDragPointIdx >= 0 && m_waveform.HasItem()) {
-    TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume") : nullptr;
+    TrackEnvelope* env = m_envDragEnv;
     if (env && g_SetEnvelopePoint && g_GetEnvelopePoint && g_CountEnvelopePoints &&
         g_GetEnvelopeScalingMode && g_ScaleToEnvelopeMode && g_ScaleFromEnvelopeMode) {
       double timeDelta = m_waveform.XToTime(x) - m_waveform.XToTime(m_lastMouseX);
@@ -1496,40 +1578,71 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case VK_BACK: {
       bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
       // Delete selected envelope points (or last-clicked if none selected)
+      // Iterates all segments' envelopes for correct timeline/SET behavior
       if (!ctrl && !shift && m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
           g_GetTakeEnvelopeByName && g_DeleteEnvelopePointEx && g_Envelope_SortPoints &&
           g_CountEnvelopePoints && g_GetEnvelopePoint) {
-        TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-        if (env) {
+        auto deleteSelectedFromEnv = [](TrackEnvelope* env) -> bool {
           int cnt = g_CountEnvelopePoints(env);
-          // Check if any points are selected
-          bool anySelected = false;
-          for (int i = 0; i < cnt && !anySelected; i++) {
+          bool anyDel = false;
+          for (int i = cnt - 1; i >= 0; i--) {
             double t=0,v=0,tn=0; int s=0; bool sel=false;
             g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
-            if (sel) anySelected = true;
+            if (sel) { g_DeleteEnvelopePointEx(env, -1, i); anyDel = true; }
           }
-          if (anySelected) {
-            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-            // Delete in reverse order to keep indices valid
-            for (int i = cnt - 1; i >= 0; i--) {
-              double t=0,v=0,tn=0; int s=0; bool sel=false;
-              g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
-              if (sel) g_DeleteEnvelopePointEx(env, -1, i);
+          if (anyDel) g_Envelope_SortPoints(env);
+          return anyDel;
+        };
+        auto hasSelectedInEnv = [](TrackEnvelope* env) -> bool {
+          int cnt = g_CountEnvelopePoints(env);
+          for (int i = 0; i < cnt; i++) {
+            double t=0,v=0,tn=0; int s=0; bool sel=false;
+            g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
+            if (sel) return true;
+          }
+          return false;
+        };
+        bool anySelected = false;
+        auto& segs = m_waveform.GetSegments();
+        bool isMultiSeg = (m_waveform.IsTimelineView() || m_waveform.IsTrackView()) && segs.size() > 1;
+        if (isMultiSeg) {
+          for (const auto& seg : segs) {
+            if (!seg.take) continue;
+            TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+            if (env && hasSelectedInEnv(env)) { anySelected = true; break; }
+          }
+        } else if (m_waveform.GetTake()) {
+          TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+          if (env && hasSelectedInEnv(env)) anySelected = true;
+        }
+        if (anySelected) {
+          if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+          if (isMultiSeg) {
+            for (const auto& seg : segs) {
+              if (!seg.take) continue;
+              TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+              if (env) deleteSelectedFromEnv(env);
             }
-            g_Envelope_SortPoints(env);
-            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope points", -1);
-            m_envDragPointIdx = -1;
-            if (g_UpdateArrange) g_UpdateArrange();
-            InvalidateRect(m_hwnd, nullptr, FALSE);
-            break;
-          } else if (m_envDragPointIdx >= 0 && m_envDragPointIdx < cnt) {
-            // Fallback: delete last-clicked point
+          } else if (m_waveform.GetTake()) {
+            TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+            if (env) deleteSelectedFromEnv(env);
+          }
+          if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope points", -1);
+          m_envDragPointIdx = -1;
+          m_envDragEnv = nullptr;
+          if (g_UpdateArrange) g_UpdateArrange();
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+          break;
+        } else if (m_envDragPointIdx >= 0 && m_envDragEnv) {
+          // Fallback: delete last-clicked point from its specific envelope
+          int cnt = g_CountEnvelopePoints(m_envDragEnv);
+          if (m_envDragPointIdx < cnt) {
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-            g_DeleteEnvelopePointEx(env, -1, m_envDragPointIdx);
-            g_Envelope_SortPoints(env);
+            g_DeleteEnvelopePointEx(m_envDragEnv, -1, m_envDragPointIdx);
+            g_Envelope_SortPoints(m_envDragEnv);
             if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
             m_envDragPointIdx = -1;
+            m_envDragEnv = nullptr;
             if (g_UpdateArrange) g_UpdateArrange();
             InvalidateRect(m_hwnd, nullptr, FALSE);
             break;
@@ -1594,33 +1707,59 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case 'e':
       if (!ctrl) {
         bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-        // Delete selected envelope points first (same logic as VK_DELETE)
+        // Delete selected envelope points first (iterates all segments for timeline/SET)
         if (!shift && m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
             g_GetTakeEnvelopeByName && g_DeleteEnvelopePointEx && g_Envelope_SortPoints &&
             g_CountEnvelopePoints && g_GetEnvelopePoint) {
-          TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-          if (env) {
+          auto hasSelEnv = [](TrackEnvelope* env) -> bool {
             int cnt = g_CountEnvelopePoints(env);
-            bool anySelected = false;
-            for (int i = 0; i < cnt && !anySelected; i++) {
+            for (int i = 0; i < cnt; i++) {
               double t=0,v=0,tn=0; int s=0; bool sel=false;
               g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
-              if (sel) anySelected = true;
+              if (sel) return true;
             }
-            if (anySelected) {
-              if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-              for (int i = cnt - 1; i >= 0; i--) {
-                double t=0,v=0,tn=0; int s=0; bool sel=false;
-                g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
-                if (sel) g_DeleteEnvelopePointEx(env, -1, i);
+            return false;
+          };
+          auto delSelEnv = [](TrackEnvelope* env) {
+            int cnt = g_CountEnvelopePoints(env);
+            for (int i = cnt - 1; i >= 0; i--) {
+              double t=0,v=0,tn=0; int s=0; bool sel=false;
+              g_GetEnvelopePoint(env, i, &t, &v, &s, &tn, &sel);
+              if (sel) g_DeleteEnvelopePointEx(env, -1, i);
+            }
+            g_Envelope_SortPoints(env);
+          };
+          bool anySelected = false;
+          auto& segs = m_waveform.GetSegments();
+          bool isMultiSeg = (m_waveform.IsTimelineView() || m_waveform.IsTrackView()) && segs.size() > 1;
+          if (isMultiSeg) {
+            for (const auto& seg : segs) {
+              if (!seg.take) continue;
+              TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+              if (env && hasSelEnv(env)) { anySelected = true; break; }
+            }
+          } else if (m_waveform.GetTake()) {
+            TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+            if (env && hasSelEnv(env)) anySelected = true;
+          }
+          if (anySelected) {
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            if (isMultiSeg) {
+              for (const auto& seg : segs) {
+                if (!seg.take) continue;
+                TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+                if (env) delSelEnv(env);
               }
-              g_Envelope_SortPoints(env);
-              if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope points", -1);
-              m_envDragPointIdx = -1;
-              if (g_UpdateArrange) g_UpdateArrange();
-              InvalidateRect(m_hwnd, nullptr, FALSE);
-              break;
+            } else if (m_waveform.GetTake()) {
+              TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+              if (env) delSelEnv(env);
             }
+            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope points", -1);
+            m_envDragPointIdx = -1;
+            m_envDragEnv = nullptr;
+            if (g_UpdateArrange) g_UpdateArrange();
+            InvalidateRect(m_hwnd, nullptr, FALSE);
+            break;
           }
         }
         DoDelete(shift);
