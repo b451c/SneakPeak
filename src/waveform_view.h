@@ -240,8 +240,12 @@ private:
   void DrawClipIndicators(HDC hdc);
   void DrawItemBoundaries(HDC hdc);
   double SnapToZeroCrossing(double time) const;
+
+public:
   int GetChannelTop(int channel) const;
   int GetChannelHeight() const;
+
+private:
   // Multi-item view
   MultiItemView m_multiItem;
   bool m_multiItemActive = false;

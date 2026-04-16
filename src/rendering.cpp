@@ -693,10 +693,26 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   int waveL = wr.left;
   int waveR = wr.right - DB_SCALE_WIDTH;
   int waveW = waveR - waveL;
-  int yTop = wr.top + 2;
-  int yBot = wr.bottom - 2;
-  int yRange = yBot - yTop;
-  if (yRange < 1 || waveW <= 0) return;
+  if (waveW <= 0) return;
+
+  // Use waveform's amplitude-based Y mapping (channel 0) so dynamics curves
+  // align exactly with the dB scale and grid lines on the waveform.
+  // Waveform maps: y = centerY - linear_amplitude * halfH
+  // where centerY is the channel center (silence) and halfH accounts for zoom.
+  int chTop = m_waveform.GetChannelTop(0);
+  int chH = m_waveform.GetChannelHeight();
+  int centerY = chTop + chH / 2;
+  float halfH = (float)(chH / 2) * m_waveform.GetVerticalZoom();
+  int yClampTop = chTop;
+  int yClampBot = chTop + chH - 1;
+  if (chH < 10) return;
+
+  // Helper: convert dB to Y pixel using same formula as DrawWaveformChannel/DrawDbScale
+  auto dbToY = [&](double db) -> int {
+    double linear = pow(10.0, db / 20.0);
+    int y = centerY - (int)(linear * (double)halfH);
+    return std::max(yClampTop, std::min(yClampBot, y));
+  };
 
   double viewStart = m_waveform.GetViewStart();
   double viewDur = m_waveform.GetViewDuration();
@@ -765,10 +781,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
       // Break line during silence gaps (no useful visual info below floor)
       if (adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
 
-      double norm = (adjDb - params.minDb) / (params.maxDb - params.minDb);
-      norm = std::max(0.0, std::min(1.0, norm));
-      int py = yBot - (int)(norm * (double)yRange);
-      py = std::max(yTop, std::min(yBot, py));
+      int py = dbToY(adjDb);
 
       if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
       else LineTo(hdc, px, py);
@@ -811,10 +824,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
         gr = slope * overshoot;
       }
       double compDb = adjDb + gr + makeupDb;
-      double norm = (compDb - params.minDb) / (params.maxDb - params.minDb);
-      norm = std::max(0.0, std::min(1.0, norm));
-      int py = yBot - (int)(norm * (double)yRange);
-      py = std::max(yTop, std::min(yBot, py));
+      int py = dbToY(compDb);
 
       if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
       else LineTo(hdc, px, py);
@@ -823,9 +833,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
 
   // --- Threshold line (yellow horizontal) ---
   {
-    double targetNorm = (thresh - params.minDb) / (params.maxDb - params.minDb);
-    targetNorm = std::max(0.0, std::min(1.0, targetNorm));
-    int targetY = yBot - (int)(targetNorm * (double)yRange);
+    int targetY = dbToY(thresh);
 
     OwnedPen targetPen(PS_SOLID, 1, RGB(180, 160, 50));
     DCPenScope scope(hdc, targetPen);
