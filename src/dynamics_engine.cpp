@@ -149,16 +149,32 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   double relCoeff = (m_params.releaseMs > 0.0)
     ? exp(-dt / (m_params.releaseMs / 1000.0)) : 0.0;
 
+  // Lookahead: scan N frames ahead for max peak before computing instant GR.
+  // This lets the compressor "see" transients before they arrive.
+  int lookaheadFrames = (m_params.lookaheadMs > 0.0 && dt > 0.0)
+    ? (int)(m_params.lookaheadMs / 1000.0 / dt + 0.5) : 0;
+
   out.reserve(m_results.size());
   double grSum = 0.0;
   int grCount = 0;
   double smoothGR = 0.0; // smoothed gain reduction state (dB, <=0)
+  int n = (int)m_results.size();
 
-  for (size_t i = 0; i < m_results.size(); i++) {
+  for (int i = 0; i < n; i++) {
     auto& pt = m_results[i];
 
-    // Instant gain computation from RAW peak (not smoothed envelope)
-    double rawDb = 20.0 * log10(std::max(pt.peakLinear, EPSILON)) + m_itemVolDb;
+    // With lookahead: use max peak from current position to lookahead window
+    double peakVal = pt.peakLinear;
+    if (lookaheadFrames > 0) {
+      int end = std::min(n, i + 1 + lookaheadFrames);
+      for (int j = i + 1; j < end; j++) {
+        if (m_results[j].peakLinear > peakVal)
+          peakVal = m_results[j].peakLinear;
+      }
+    }
+
+    // Instant gain computation from peak (with lookahead)
+    double rawDb = 20.0 * log10(std::max(peakVal, EPSILON)) + m_itemVolDb;
     double overshoot = rawDb - thresh;
     double instantGR = 0.0;
 

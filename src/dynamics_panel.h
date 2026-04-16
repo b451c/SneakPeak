@@ -40,7 +40,7 @@ public:
   void SetLiveUndoOpen(bool v) { m_liveUndoOpen = v; }
 
 private:
-  static constexpr int NUM_SLIDERS = 6;
+  static constexpr int NUM_SLIDERS = 7;
 
   struct SliderDef {
     const char* label;
@@ -53,8 +53,8 @@ private:
   double GetSliderValue(int idx) const;
   void SetSliderValue(int idx, double val);
 
-  static int SliderCol(int idx) { return (idx < 3) ? 0 : 1; }
-  static int SliderRow(int idx) { return (idx < 3) ? idx : idx - 3; }
+  static int SliderCol(int idx) { return (idx < 3 || idx == 6) ? 0 : 1; }
+  static int SliderRow(int idx) { return (idx < 3) ? idx : (idx == 6) ? 3 : idx - 3; }
 
   RECT GetSliderTrackRect(RECT panelRect, int idx) const;
   RECT GetApplyButtonRect(RECT panelRect) const;
@@ -90,7 +90,7 @@ private:
   int m_offsetX = 0, m_offsetY = 0;
 
   static const int PANEL_W = 380;
-  static const int PANEL_H = 112;
+  static const int PANEL_H = 130;
   static const int TITLE_H = 22;
   static const int ROW_H = 18;
   static const int THUMB_R = 4;

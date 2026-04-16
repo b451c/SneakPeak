@@ -14,6 +14,7 @@ const DynamicsPanel::SliderDef DynamicsPanel::SLIDER_DEFS[NUM_SLIDERS] = {
   { "Attack",    0.0,  500.0, "ms",  0 },  // 3: right col row 0
   { "Release",   0.0, 1000.0, "ms",  0 },  // 4: right col row 1
   { "Makeup",    0.0,   24.0, "dB",  1 },  // 5: right col row 2
+  { "L.ahead",   0.0,   20.0, "ms",  1 },  // 6: left col row 3
 };
 
 // --- Layout constants ---
@@ -47,6 +48,7 @@ double DynamicsPanel::GetSliderValue(int idx) const
     case 3: return m_params.attackMs;
     case 4: return m_params.releaseMs;
     case 5: return m_params.autoMakeup ? 0.0 : m_params.makeupDb;
+    case 6: return m_params.lookaheadMs;
     default: return 0.0;
   }
 }
@@ -62,6 +64,7 @@ void DynamicsPanel::SetSliderValue(int idx, double val)
     case 3: m_params.attackMs = val; break;
     case 4: m_params.releaseMs = val; break;
     case 5: m_params.makeupDb = val; m_params.autoMakeup = false; break;
+    case 6: m_params.lookaheadMs = val; break;
   }
 }
 
@@ -121,21 +124,21 @@ RECT DynamicsPanel::GetSliderTrackRect(RECT pr, int idx) const
 RECT DynamicsPanel::GetApplyButtonRect(RECT pr) const
 {
   int x = pr.right - MARGIN - APPLY_W - 2;
-  int y = pr.top + TITLE_H + 3 * ROW_H + 10;
+  int y = pr.top + TITLE_H + 4 * ROW_H + 10;
   return { x, y, x + APPLY_W, y + APPLY_H };
 }
 
 RECT DynamicsPanel::GetRmsToggleRect(RECT pr) const
 {
   int x = pr.left + R_LABEL_X;
-  int y = pr.top + TITLE_H + 3 * ROW_H + 10;
+  int y = pr.top + TITLE_H + 4 * ROW_H + 10;
   return { x, y, x + 42, y + APPLY_H };
 }
 
 RECT DynamicsPanel::GetDynToggleRect(RECT pr) const
 {
   int x = pr.left + MARGIN;
-  int y = pr.top + TITLE_H + 3 * ROW_H + 10;
+  int y = pr.top + TITLE_H + 4 * ROW_H + 10;
   return { x, y, x + TOGGLE_W, y + APPLY_H };
 }
 
