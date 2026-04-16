@@ -27,14 +27,39 @@
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Full audio loading for accurate waveform display\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Dockable window, persistent settings\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Zero dependencies - pure C++ extension\sa180\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Dynamics processing: compressor + gate with real-time preview\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Volume envelope editing with freehand drawing\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Requirements\par}
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab REAPER 7.0+\par}
-{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab macOS arm64 (Apple Silicon)\sa180\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab macOS (arm64/x86_64), Windows (x64), Linux (x86_64/aarch64)\sa180\par}
 {\pard \qc \f0 \sa180 \li0 \fi0 \emdash\emdash\emdash\emdash\emdash\par}
 {\pard \ql \f0 \sa180 \li0 \fi0 MIT License | https://github.com/b451c/SneakPeak\par}
 }
 ]]></description>
       </metadata>
+
+      <version name="2.0.0" author="b451c" time="2026-04-16T00:00:00Z">
+        <changelog><![CDATA[Multiplatform + Dynamics Engine + Envelope Editing
+
+Major release - Windows and Linux now supported!
+
+New features:
+- Multiplatform: macOS arm64/x86_64, Windows x64, Linux x86_64/aarch64
+- Dynamics engine: professional compressor + noise gate, writes volume envelope
+- 10-slider dynamics panel with real-time preview, Live mode, 6 presets
+- Volume envelope editing: add/move/delete points, freehand drawing, multi-select
+- Lookahead, Peak/RMS detection, auto makeup gain
+- GR meter, gain reduction shading, A/B bypass
+- Per-item dynamics persistence via P_EXT
+- Gain knob +/-24 dB, multi-item copy/paste
+- MULTI dropdown menu, drag export bakes fades
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.0.0/reaper_sneakpeak-arm64.dylib</source>
+        <source platform="darwin64" file="reaper_sneakpeak-x86_64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.0.0/reaper_sneakpeak-x86_64.dylib</source>
+        <source platform="win64" file="reaper_sneakpeak-x64.dll">https://github.com/b451c/SneakPeak/releases/download/v2.0.0/reaper_sneakpeak-x64.dll</source>
+        <source platform="linux64" file="reaper_sneakpeak-x86_64.so">https://github.com/b451c/SneakPeak/releases/download/v2.0.0/reaper_sneakpeak-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_sneakpeak-aarch64.so">https://github.com/b451c/SneakPeak/releases/download/v2.0.0/reaper_sneakpeak-aarch64.so</source>
+      </version>
 
       <version name="1.9.0" author="b451c" time="2026-04-04T00:00:00Z">
         <changelog><![CDATA[Non-Destructive Paste, Bars/Beats Ruler, Trackpad Gestures, Ripple Delete

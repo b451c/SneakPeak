@@ -433,7 +433,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="gain">Gain Control</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
 
-<p>Press <kbd>G</kbd> to open the floating gain panel. A rotary knob controls volume from -60 dB to +12 dB. Hold <kbd>Cmd</kbd> while dragging for fine adjustment (0.1 dB per pixel instead of 0.5 dB). Double-click the knob to reset to 0 dB.</p>
+<p>Press <kbd>G</kbd> to open the floating gain panel. A rotary knob controls volume from -60 dB to +24 dB. Hold <kbd>Cmd</kbd> while dragging for fine adjustment (0.1 dB per pixel instead of 0.5 dB). Double-click the knob to reset to 0 dB.</p>
 
 <p>Use <kbd>Up</kbd>/<kbd>Down</kbd> arrow keys for quick +/-1 dB adjustments without the mouse. The waveform updates in real-time.</p>
 
@@ -643,6 +643,130 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <hr>
 
+<!-- Envelope Editing -->
+<h2 id="envelope-overview">Volume Envelope Editing</h2>
+<div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-set">SET</span></div>
+
+<p>SneakPeak displays the take volume envelope as a cyan curve overlaid on the waveform. The envelope is fully editable - add, move, delete, and draw points directly on the waveform without switching to REAPER's envelope lanes. The waveform shape always reflects the effect of the envelope in real-time.</p>
+
+<p>Enable the overlay via right-click > <strong>View > Show Volume Envelope</strong>. The envelope must first be enabled on the take in REAPER (right-click item > Take > Show take volume envelope).</p>
+
+<div class="tip">
+  <strong>Accurate display</strong>
+  SneakPeak uses REAPER's native fader-scale mapping for the envelope Y axis, so what you see matches REAPER's arrange view exactly.
+</div>
+
+<h2 id="envelope-points">Point Editing</h2>
+
+<div class="shortcut-grid">
+  <div class="key"><kbd>Click</kbd> on line</div><div class="desc">Add new point at that position (uses evaluated value for precision)</div>
+  <div class="key"><kbd>Click</kbd> on point</div><div class="desc">Select point, start drag</div>
+  <div class="key"><kbd>Drag</kbd> point</div><div class="desc">Move point (or all selected points)</div>
+  <div class="key"><kbd>Double-click</kbd> point</div><div class="desc">Delete point</div>
+  <div class="key"><kbd>Delete</kbd> / <kbd>E</kbd></div><div class="desc">Delete all selected points</div>
+  <div class="key"><kbd>Right-click</kbd> point</div><div class="desc">Curve shape menu (6 shapes) + delete option</div>
+</div>
+
+<p>Available curve shapes: Linear, Square, Slow start/end, Fast start, Fast end, Bezier. The shape controls interpolation between the clicked point and the next point.</p>
+
+<h2 id="envelope-freehand">Freehand Drawing</h2>
+
+<p>Hold <kbd>Cmd</kbd> and drag on the envelope line to draw points freehand. Points are created every 4 pixels along your mouse path, and any existing points in the drawn range are automatically removed to prevent glitches. This is ideal for quickly sculpting envelope shapes.</p>
+
+<h2 id="envelope-multiselect">Multi-Select & Dense Points</h2>
+
+<p><kbd>Shift</kbd>+click on a point to toggle its selection (add to or remove from multi-selection). Drag any selected point to move all selected points together. <kbd>Delete</kbd> or <kbd>E</kbd> removes all selected points at once.</p>
+
+<p><strong>Selection rectangle:</strong> <kbd>Cmd</kbd>+drag on an empty area (not on the envelope line) to draw a selection rectangle. All points inside are selected. <kbd>Shift</kbd>+rectangle adds to the existing selection.</p>
+
+<p><strong>Dense point interaction:</strong> After Apply Dynamics creates many envelope points (>100), individual points are hidden for performance. Use <kbd>Cmd</kbd>+drag to draw a reveal rectangle - points within become visible and fully interactive. The reveal range is time-based and survives zoom/scroll. Click outside the revealed zone to clear it.</p>
+
+<hr>
+
+<!-- Dynamics -->
+<h2 id="dynamics-overview">Dynamics Processing</h2>
+<div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-set">SET</span></div>
+
+<p>SneakPeak includes a built-in dynamics processor that analyzes your audio and writes volume envelope points to achieve compression and gating. Instead of real-time DSP, it works offline - analyzing the audio buffer and generating precise envelope automation. This means zero CPU cost during playback.</p>
+
+<p>The dynamics engine visualizes two curves on the waveform:</p>
+<ul>
+  <li><strong>Orange curve</strong> - original amplitude envelope (attack/release follower of the audio peaks)</li>
+  <li><strong>Purple curve</strong> - post-compression level (what the audio will sound like after applying)</li>
+  <li><strong>Yellow line</strong> - threshold level</li>
+  <li><strong>Red line</strong> - gate threshold (when gate is active)</li>
+  <li><strong>Red shading</strong> - gain reduction fill between original and compressed curves (toggle with [GR])</li>
+</ul>
+
+<p>Open the dynamics panel from right-click > <strong>Process > Apply Dynamics...</strong> or use the context menu.</p>
+
+<h2 id="dynamics-panel">Dynamics Panel</h2>
+
+<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 10 real-time sliders:</p>
+
+<table>
+  <thead><tr><th>Slider</th><th>Range</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>Thresh</td><td>-60 to 0 dB</td><td>Compression threshold - signals above this are compressed</td></tr>
+    <tr><td>Ratio</td><td>1:1 to 20:1</td><td>Compression ratio - how much to reduce signals above threshold</td></tr>
+    <tr><td>Knee</td><td>0 to 30 dB</td><td>Soft knee width - gradual transition into compression</td></tr>
+    <tr><td>L.ahead</td><td>0 to 20 ms</td><td>Lookahead - catch transients before they arrive</td></tr>
+    <tr><td>G.Thr</td><td>-60 to 0 dB</td><td>Gate threshold - signals below this are attenuated</td></tr>
+    <tr><td>Attack</td><td>0.1 to 200 ms</td><td>How fast compression fades in</td></tr>
+    <tr><td>Release</td><td>5 to 2000 ms</td><td>How fast compression fades out</td></tr>
+    <tr><td>Makeup</td><td>0 to 24 dB</td><td>Gain compensation (auto-calculated from average GR)</td></tr>
+    <tr><td>G.Range</td><td>-40 to 0 dB</td><td>Gate range - maximum attenuation when gate is closed</td></tr>
+    <tr><td>G.Hold</td><td>0 to 200 ms</td><td>Gate hold time - prevents syllable-level chattering</td></tr>
+  </tbody>
+</table>
+
+<p>Hold <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> while dragging a slider for fine mode (1/5th sensitivity). The <strong>Apply</strong> button writes the computed compression curve as REAPER volume envelope points. Each Apply is non-destructive and idempotent - existing points are cleared before writing new ones.</p>
+
+<p>Toggle <strong>Peak/RMS</strong> in the panel to switch detection mode. RMS provides smoother, less aggressive curves suited for music. Peak is more responsive, better for speech.</p>
+
+<h2 id="dynamics-live">Live Mode</h2>
+
+<p>Click the <strong>[Live]</strong> toggle (green when active) to enable real-time envelope writing. In Live mode, every slider change immediately writes envelope points to REAPER - the waveform updates in real-time as you drag. No need to click Apply.</p>
+
+<p>A single undo block wraps each drag gesture, so <kbd>Cmd</kbd>+<kbd>Z</kbd> reverts the entire adjustment. When Live is active, the Apply button is grayed out (it would be redundant).</p>
+
+<div class="tip">
+  <strong>Workflow:</strong>
+  Use Live mode for quick iterative adjustments - drag sliders and hear the result immediately. Use Apply mode when you want to preview the curves visually before committing.
+</div>
+
+<h2 id="dynamics-gate">Gate</h2>
+
+<p>The noise gate operates on the <em>post-compression</em> level - after the compressor and makeup gain have been applied. This is specifically designed for breath reduction in speech/podcast audio: compression boosts quiet passages (including breaths), and the gate catches those boosted breaths and pulls them back down.</p>
+
+<p>Three gate parameters: <strong>G.Thr</strong> (threshold - signals below this are gated), <strong>G.Range</strong> (maximum attenuation, default -20 dB for natural sound), <strong>G.Hold</strong> (hold time, prevents rapid on/off chattering on syllable boundaries). Set G.Thr to -100 dB to disable the gate.</p>
+
+<p>The gate threshold is shown as a dim red horizontal line on the waveform. GR shading and the purple compression curve include gate reduction.</p>
+
+<h2 id="dynamics-presets">Presets</h2>
+
+<p>Click the preset name in the panel title bar to open a dropdown with 6 built-in presets:</p>
+
+<table>
+  <thead><tr><th>Preset</th><th>Use Case</th></tr></thead>
+  <tbody>
+    <tr><td>Default</td><td>Flat - no processing (all sliders at neutral)</td></tr>
+    <tr><td>Gentle Leveling</td><td>Light 2:1 compression with wide knee and RMS detection</td></tr>
+    <tr><td>Voice/Podcast</td><td>4:1 compression with gate at -45 dB for speech cleanup</td></tr>
+    <tr><td>Broadcast</td><td>6:1 aggressive compression with fast attack and strong gate</td></tr>
+    <tr><td>De-breath</td><td>Light compression + aggressive gate targeting breath removal</td></tr>
+    <tr><td>Music Bus</td><td>2:1 slow attack for mix bus glue</td></tr>
+  </tbody>
+</table>
+
+<p>When you manually adjust any slider, the preset name changes to "Preset" (custom). Settings are automatically saved per-item via REAPER's P_EXT system - reopen the dynamics panel on the same item and your settings are restored.</p>
+
+<h2 id="dynamics-ab">A/B Bypass</h2>
+
+<p>Click the <strong>[A/B]</strong> toggle (yellow when active) to bypass the volume envelope in REAPER. This disables the envelope so you hear the original unprocessed audio - an instant before/after comparison. The waveform also renders without the envelope effect while bypassed. Bypass is automatically restored when you close the dynamics panel.</p>
+
+<hr>
+
 <!-- Features -->
 <h2 id="spectral">Spectral View</h2>
 <div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-standalone">STANDALONE</span></div>
@@ -781,6 +905,12 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Normalize (peak)</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save</td><td>Standalone</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save As</td><td>Standalone</td></tr>
+    <tr><td>Click on envelope line</td><td>Add envelope point</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td><kbd>Cmd</kbd> + Drag on line</td><td>Freehand envelope drawing</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td><kbd>Cmd</kbd> + Drag on empty</td><td>Envelope selection rectangle</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td><kbd>Shift</kbd> + Click point</td><td>Toggle envelope point selection</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td>Double-click point</td><td>Delete envelope point</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td>Right-click point</td><td>Curve shape menu</td><td>ITEM, SET, Timeline</td></tr>
   </tbody>
 </table>
 
@@ -813,6 +943,15 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Drag</td><td>Splitter</td><td>Resize waveform/spectral split</td></tr>
     <tr><td>Click</td><td>Solo button</td><td>Toggle track solo</td></tr>
     <tr><td>Click</td><td>Channel button</td><td>Mute/unmute channel</td></tr>
+    <tr><td>Click</td><td>Envelope line</td><td>Add point at click position</td></tr>
+    <tr><td>Click + Drag</td><td>Envelope point</td><td>Move point (or all selected)</td></tr>
+    <tr><td>Shift + Click</td><td>Envelope point</td><td>Toggle point selection</td></tr>
+    <tr><td>Double-click</td><td>Envelope point</td><td>Delete point</td></tr>
+    <tr><td>Right-click</td><td>Envelope point</td><td>Curve shape menu (6 shapes)</td></tr>
+    <tr><td>Cmd + Drag</td><td>Envelope line</td><td>Freehand draw points</td></tr>
+    <tr><td>Cmd + Drag</td><td>Empty waveform area</td><td>Envelope selection rectangle / dense reveal</td></tr>
+    <tr><td>Drag slider</td><td>Dynamics panel</td><td>Adjust parameter (Cmd for fine mode)</td></tr>
+    <tr><td>Click</td><td>MULTI label</td><td>Mode dropdown (Mix/Layered/Timeline View)</td></tr>
   </tbody>
 </table>
 
@@ -822,9 +961,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <ul>
   <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Ripple Delete, Silence, Select All, Split at Cursor (S)</li>
-  <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix</li>
-  <li><strong>View</strong> - Zoom controls, Spectral View, Snap to Zero-Crossing, Minimap, Ruler mode (Relative/Absolute/Bars & Beats), Working Set toggle, Group</li>
-  <li><strong>Multi-Item</strong> - Mix/Layered modes, Show Join Lines (when multiple items are loaded)</li>
+  <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix, Apply Dynamics...</li>
+  <li><strong>View</strong> - Zoom controls, Spectral View, Show Volume Envelope, Show Dynamics Curve, Snap to Zero-Crossing, Minimap, Ruler mode (Relative/Absolute/Bars & Beats), Working Set toggle, Group, Switch to Timeline View</li>
+  <li><strong>Multi-Item</strong> - Mix/Layered modes, Show Join Lines, Switch to Timeline View (when multiple items are loaded)</li>
   <li><strong>Markers</strong> - Add Marker, Add Region, Edit, Delete, Show/Hide</li>
   <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal</li>
   <li><strong>Dock SneakPeak in Docker / Undock SneakPeak</strong> - toggle between floating and docked window</li>

@@ -2,13 +2,13 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/b451c/SneakPeak)](https://github.com/b451c/SneakPeak/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-macOS%20(stable)-brightgreen.svg)](#requirements)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-brightgreen.svg)](#requirements)
 
-**Precision waveform item editor for REAPER** - a native C++ extension that gives you a detailed, dockable waveform view for any media item. Click an item in REAPER's arrange view, and SneakPeak instantly shows you a full-featured waveform editor with spectral analysis, multi-item layering, and real-time metering.
+**Precision waveform item editor for REAPER** - a native C++ extension that gives you a detailed, dockable waveform view for any media item. Click an item in REAPER's arrange view, and SneakPeak instantly shows you a full-featured waveform editor with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, and real-time metering. Available for macOS (arm64/x86_64), Windows (x64), and Linux (x86_64/aarch64).
 
 ![SneakPeak](docs/images/sneakpeak-hero.png)
 
-> *Select any audio item in REAPER and get an instant, detailed waveform with selection, editing, spectral analysis, multi-item layering, and real-time metering - all in a dockable window.*
+> *Select any audio item in REAPER and get an instant, detailed waveform with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, and real-time metering - all in a dockable window.*
 
 ## Screenshots
 
@@ -56,6 +56,27 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Silence / Insert silence** - Zero out selection or insert silence at cursor.
 - **Snap to zero-crossing** - Intelligent selection boundaries at zero-crossing points.
 - **Undo** - Full REAPER undo integration. Independent 20-level undo stack in standalone mode.
+
+### Dynamics Processing
+- **Built-in compressor** - Industry-standard gain-smoothing architecture (ratio, threshold, soft knee, attack, release, auto makeup gain). Matches FabFilter Pro-C / Waves / ReaComp.
+- **Noise gate** - Post-compression gate for breath reduction in speech/podcast. Threshold, range, hold parameters.
+- **Lookahead** - 0-20ms transient detection without latency cost.
+- **10-slider dynamics panel** - Inline control surface with real-time preview. Any slider change instantly updates the compression curves on the waveform.
+- **Live mode** - Real-time envelope writing as you drag sliders. Waveform updates instantly, no Apply needed.
+- **6 built-in presets** - Default, Gentle Leveling, Voice/Podcast, Broadcast, De-breath, Music Bus.
+- **Per-item persistence** - Settings auto-saved via P_EXT, auto-loaded when reopening.
+- **GR meter + shading** - Gain reduction visualization in panel and on waveform.
+- **A/B bypass** - Instant before/after comparison (audio + visual).
+- **Peak/RMS detection** - Toggle between peak and RMS analysis modes.
+
+### Volume Envelope Editing
+- **Envelope overlay** - Cyan curve showing take volume envelope, 1:1 with REAPER arrange view.
+- **Point editing** - Click to add, drag to move, double-click or Delete to remove. Right-click for curve shape (6 shapes).
+- **Multi-select** - Shift+click to toggle, batch drag/delete.
+- **Freehand drawing** - Cmd+drag on envelope line to draw points continuously.
+- **Selection rectangle** - Cmd+drag on empty area for rectangle selection.
+- **Dense point interaction** - Reveal rectangle for managing >100 points after Apply Dynamics.
+- **Works in all modes** - ITEM, Timeline, and SET modes via per-segment envelope lookup.
 
 ### Spectral Analysis
 - **Real-time spectrogram** - Async FFT computation (2048-point) with magma color scheme.
@@ -148,6 +169,9 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 | Save (standalone) | `Ctrl/Cmd+S` |
 | Save As (standalone) | `Ctrl/Cmd+Shift+S` |
 | Split at cursor | `S` |
+| Ripple Delete | `Shift+Delete` or `Shift+E` |
+| Gain +/-1 dB | `Up` / `Down` |
+| Next/Previous segment | `Alt/Option+Right/Left` |
 | Zoom | `Scroll wheel` |
 | Vertical zoom | `Shift+Scroll` or `Alt+Scroll` |
 | Pan | `Ctrl/Cmd+Scroll` |
@@ -172,14 +196,20 @@ ReaPack will automatically notify you of future updates.
 ### Manual install
 
 1. Download the binary for your platform from the [Releases](https://github.com/b451c/SneakPeak/releases/latest) page.
-2. Copy it to your REAPER resource path:
+2. Copy it to your REAPER UserPlugins folder:
 
-| Platform | Path |
-|----------|------|
-| **macOS** | `~/Library/Application Support/REAPER/UserPlugins/` |
+| Platform | File | Path |
+|----------|------|------|
+| **macOS arm64** | `reaper_sneakpeak-arm64.dylib` | `~/Library/Application Support/REAPER/UserPlugins/` |
+| **macOS x86_64** | `reaper_sneakpeak-x86_64.dylib` | `~/Library/Application Support/REAPER/UserPlugins/` |
+| **Windows x64** | `reaper_sneakpeak-x64.dll` | `%APPDATA%\REAPER\UserPlugins\` |
+| **Linux x86_64** | `reaper_sneakpeak-x86_64.so` | `~/.config/REAPER/UserPlugins/` |
+| **Linux aarch64** | `reaper_sneakpeak-aarch64.so` | `~/.config/REAPER/UserPlugins/` |
 
 3. Restart REAPER.
 4. Open via **Actions > SneakPeak: Toggle Window**, or assign a keyboard shortcut.
+
+> **macOS note:** Only install one dylib - having both arm64 and x86_64 in UserPlugins will cause REAPER to load both and crash.
 
 ### Build from source
 
@@ -239,15 +269,19 @@ make -j$(sysctl -n hw.ncpu)
 
 ## Requirements
 
-- **REAPER** 7.0+ (tested on 7.62)
-- **macOS** arm64 (Apple Silicon) - **stable, fully functional**
+- **REAPER** 7.0+ (tested on 7.62+)
 
-### Planned platforms
+### Supported Platforms
 
-- **Windows** x64 - planned for a future release
-- **Linux** x86_64 - planned for a future release
+| Platform | Architecture | Status |
+|----------|-------------|--------|
+| **macOS** | arm64 (Apple Silicon) | Stable (primary development) |
+| **macOS** | x86_64 (Intel) | Stable |
+| **Windows** | x64 | New in v2.0 |
+| **Linux** | x86_64 | New in v2.0 |
+| **Linux** | aarch64 | New in v2.0 |
 
-The codebase is built on WDL/SWELL for cross-platform portability. Windows and Linux support is architecturally ready and will be available in a future version. If you're interested in helping with cross-platform testing, please reach out via [GitHub Issues](https://github.com/b451c/SneakPeak/issues).
+All platforms built via GitHub Actions CI on every tagged release. The codebase is pure C++ with WDL/SWELL - zero external dependencies.
 
 ---
 
@@ -257,14 +291,17 @@ The codebase is built on WDL/SWELL for cross-platform portability. Windows and L
 src/
   main.cpp                Entry point, REAPER API imports, action registration
   edit_view.h/cpp         Core: window lifecycle, timer, layout, message dispatch
-  rendering.cpp           Paint routines, mode bar, ruler, master waveform, meters panel
-  input_handling.cpp      Mouse, keyboard, toolbar input dispatch
+  rendering.cpp           Paint routines, mode bar, ruler, dynamics curves, master waveform
+  input_handling.cpp      Mouse, keyboard, toolbar, envelope editing dispatch
   audio_commands.cpp      Clipboard, undo, destructive editing, normalize, fade, reverse
   standalone_file.cpp     Standalone tab lifecycle, save/load/save-as, preview playback
   context_menu.cpp        Right-click menu construction and command dispatch
   drag_export.cpp         Drag & drop WAV export to timeline/desktop
-  waveform_view.h/cpp     Waveform data management, zoom, selection, coordinates
-  waveform_rendering.cpp  Peak computation, waveform drawing, dB scale, fades, cursor
+  waveform_view.h/cpp     Waveform data, zoom, selection, envelope helpers, coordinates
+  waveform_rendering.cpp  Peak computation, waveform + envelope drawing, dB scale, fades
+  dynamics_engine.h/cpp   Compressor + gate computation (peak/RMS, attack/release, lookahead)
+  dynamics_panel.h/cpp    Inline dynamics control panel (10 sliders, presets, Live mode)
+  item_split_ops.h/cpp    SplitAndApplyGain helper for consistent gain across all modes
   toolbar.h/cpp           Button bar with zoom, transport, and editing actions
   audio_engine.h/cpp      WAV file I/O (16/24/32-bit float), REAPER source refresh
   audio_ops.h/cpp         Sample processing (normalize, fade, reverse, gain, DC remove)
