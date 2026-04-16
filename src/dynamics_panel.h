@@ -60,6 +60,9 @@ private:
   double m_avgGR = 0.0;
 
   int m_dragSlider = -1;
+  int m_dragGrabOffset = 0;   // pixel offset: thumbX - clickX (prevents jump on grab)
+  int m_dragStartX = 0;       // mouse X at drag start (for fine mode delta)
+  double m_dragStartVal = 0.0; // slider value at drag start (for fine mode delta)
   bool m_paramsChanged = false;
   bool m_applyRequested = false;
 

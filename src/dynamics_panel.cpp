@@ -206,10 +206,14 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   int slider = HitTestSlider(x, y, pr);
   if (slider >= 0) {
     m_dragSlider = slider;
+    m_dragStartX = x;
+    m_dragStartVal = GetSliderValue(slider);
+    // Grab offset: distance from click to current thumb center.
+    // This prevents the value from jumping when you grab near (not on) the thumb.
     RECT tr = GetSliderTrackRect(pr, slider);
-    double val = PixelToValue(x, tr, slider);
-    SetSliderValue(slider, val);
-    m_paramsChanged = true;
+    int thumbX = ValueToPixel(m_dragStartVal, tr, slider);
+    m_dragGrabOffset = thumbX - x;
+    // Don't set value on click - start dragging from current position
     return true;
   }
 
@@ -225,7 +229,20 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
   if (m_dragSlider >= 0) {
     RECT pr = GetRect(wr);
     RECT tr = GetSliderTrackRect(pr, m_dragSlider);
-    double val = PixelToValue(x, tr, m_dragSlider);
+
+    double val;
+    if (IsFineMode()) {
+      // Fine mode (Cmd/Ctrl): delta-based, 1/5th sensitivity from drag start value
+      int dx = x - m_dragStartX;
+      double pxRange = (double)(tr.right - tr.left);
+      const auto& def = SLIDER_DEFS[m_dragSlider];
+      double valRange = def.maxVal - def.minVal;
+      double delta = ((double)dx / pxRange) * valRange * 0.2;
+      val = m_dragStartVal + delta;
+    } else {
+      // Normal mode: absolute position with grab offset (no jump on click)
+      val = PixelToValue(x + m_dragGrabOffset, tr, m_dragSlider);
+    }
     SetSliderValue(m_dragSlider, val);
     m_paramsChanged = true;
   }
