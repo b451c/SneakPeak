@@ -1,5 +1,5 @@
-// dynamics_engine.h — Peak analysis and envelope smoothing for SneakPeak
-// Translated from saxmand's Lua amplitude analysis code.
+// dynamics_engine.h — Professional dynamics processor for SneakPeak
+// Standard compressor: threshold, ratio, knee, attack/release, makeup gain.
 // Pure computation — no REAPER API calls, no GDI.
 #pragma once
 
@@ -7,14 +7,25 @@
 #include <cmath>
 
 struct DynamicsParams {
-  double attackMs = 5.0;      // envelope attack time
-  double releaseMs = 100.0;   // envelope release time
-  double lookaheadMs = 0.0;   // lookahead for peak detection
-  double minDb = -60.0;       // visual floor (normalization)
-  double maxDb = 6.0;         // visual ceiling (normalization)
-  double targetDb = -100.0;   // compression target (-100 = use average peak)
-  double compressAbove = 0.0; // percentage 0-200 to push peaks above target toward it
-  double compressBelow = 0.0; // percentage 0-200 to push peaks below target toward it
+  // Compressor controls (standard)
+  double threshold = -100.0;  // dB (-100 sentinel = use average peak)
+  double ratio = 4.0;         // compression ratio (1.0 = off, 20.0 = limiter)
+  double kneeDb = 6.0;        // soft knee width in dB (0 = hard knee)
+  double makeupDb = 0.0;      // output makeup gain in dB
+  bool autoMakeup = true;     // auto-compute makeup from average GR
+
+  // Envelope follower
+  double attackMs = 5.0;
+  double releaseMs = 100.0;
+  double lookaheadMs = 0.0;
+
+  // Detection mode
+  bool rmsMode = false;       // false = peak, true = RMS
+  double rmsWindowMs = 5.0;   // RMS averaging window
+
+  // Visual range (normalization for curve display)
+  double minDb = -60.0;
+  double maxDb = 6.0;
 };
 
 struct DynamicsPoint {
@@ -26,49 +37,45 @@ struct DynamicsPoint {
 
 class DynamicsEngine {
 public:
-  // Analyze audio buffer: collect peaks then build smoothed envelope.
-  // audioData: interleaved samples [frame * numChannels + ch]
-  // itemVolDb: item volume in dB (added to smoothed dB values)
   void Analyze(const double* audioData, int numFrames, int numChannels,
                int sampleRate, double itemVolDb, const DynamicsParams& params);
 
   const std::vector<DynamicsPoint>& GetResults() const { return m_results; }
   double GetAveragePeakDb() const { return m_avgPeakDb; }
-  double GetTargetDb() const;
+  double GetThreshold() const;
   bool HasResults() const { return !m_results.empty(); }
   void Clear() { m_results.clear(); }
   const DynamicsParams& GetParams() const { return m_params; }
   void SetParams(const DynamicsParams& p) { m_params = p; }
 
-  // Stage 3: Compute dB adjustment per point based on compression params.
-  // Returns {time, dbAdjustment} pairs ready for envelope point writing.
+  // Compute gain reduction per point (standard compressor math + soft knee).
+  // Returns {time, dbAdjustment} pairs. Includes makeup gain.
   struct CompressPoint {
     double time;
-    double dbAdjust; // dB to add at this time (positive = boost, negative = cut)
+    double dbAdjust; // total dB change (GR + makeup)
   };
   std::vector<CompressPoint> ComputeCompression() const;
 
-  // Ramer-Douglas-Peucker curve simplification.
-  // Reduces dense compression points to essential shape-defining subset.
-  // epsilonDb: max allowed dB error (0.3 = inaudible, 0.1 = precise).
+  // Average gain reduction from last ComputeCompression (for GR meter, auto-makeup)
+  double GetAvgGainReduction() const { return m_avgGR; }
+
+  // Ramer-Douglas-Peucker curve simplification
   static std::vector<CompressPoint> SimplifyCurve(const std::vector<CompressPoint>& pts,
                                                   double epsilonDb);
 
 private:
-  // Stage 1: collect peak per 1ms window from audio buffer
   void CollectPeaks(const double* audioData, int numFrames, int numChannels,
-                    int sampleRate);
-
-  // Stage 2: asymmetric attack/release follower with lookahead
+                    int sampleRate, bool rmsMode, double rmsWindowMs);
   void BuildEnvelope(double itemVolDb, const DynamicsParams& params);
 
   struct RawPeak {
     double time;
-    double peak; // max(abs(L), abs(R)) in window
+    double peak;
   };
 
   std::vector<RawPeak> m_rawPeaks;
   std::vector<DynamicsPoint> m_results;
   double m_avgPeakDb = -60.0;
+  mutable double m_avgGR = 0.0; // cached from last ComputeCompression
   DynamicsParams m_params;
 };

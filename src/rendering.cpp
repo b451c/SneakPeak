@@ -727,11 +727,14 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   double secsPerPx = viewDur / (double)waveW;
   int stride = std::max(1, (int)(secsPerPx / resultDt));
 
-  // Compression preview params
-  double targetDb = m_dynamics.GetTargetDb();
-  double pctAbove = params.compressAbove / 100.0;
-  double pctBelow = params.compressBelow / 100.0;
-  bool showComp = (pctAbove != 0.0 || pctBelow != 0.0);
+  // Compression preview params (standard compressor math)
+  double thresh = m_dynamics.GetThreshold();
+  double ratio = std::max(1.0, params.ratio);
+  double knee = std::max(0.0, params.kneeDb);
+  double slope = 1.0 / ratio - 1.0;
+  double halfKnee = knee / 2.0;
+  double makeupDb = params.autoMakeup ? -m_dynamics.GetAvgGainReduction() : params.makeupDb;
+  bool showComp = (ratio > 1.01);
 
   // Silence threshold: don't draw curves below this (prevents ugly spikes to bottom)
   static constexpr double SILENCE_FLOOR_DB = -45.0;
@@ -798,8 +801,16 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
       // Break line during silence
       if (adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
 
-      double pct = (adjDb < targetDb) ? pctBelow : pctAbove;
-      double compDb = adjDb + pct * (targetDb - adjDb);
+      // Standard compressor gain computation with soft knee
+      double overshoot = adjDb - thresh;
+      double gr = 0.0;
+      if (knee > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
+        double x = overshoot + halfKnee;
+        gr = slope * x * x / (2.0 * knee);
+      } else if (overshoot > 0.0) {
+        gr = slope * overshoot;
+      }
+      double compDb = adjDb + gr + makeupDb;
       double norm = (compDb - params.minDb) / (params.maxDb - params.minDb);
       norm = std::max(0.0, std::min(1.0, norm));
       int py = yBot - (int)(norm * (double)yRange);
@@ -810,9 +821,9 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     }
   }
 
-  // --- Target dB line (yellow horizontal) ---
+  // --- Threshold line (yellow horizontal) ---
   {
-    double targetNorm = (targetDb - params.minDb) / (params.maxDb - params.minDb);
+    double targetNorm = (thresh - params.minDb) / (params.maxDb - params.minDb);
     targetNorm = std::max(0.0, std::min(1.0, targetNorm));
     int targetY = yBot - (int)(targetNorm * (double)yRange);
 
@@ -825,7 +836,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, RGB(180, 160, 50));
     char label[32];
-    snprintf(label, sizeof(label), "Target %.0f dB", targetDb);
+    snprintf(label, sizeof(label), "Thresh %.0f dB", thresh);
     RECT lr = { waveL + 4, targetY - 13, waveL + 120, targetY - 1 };
     DrawText(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);

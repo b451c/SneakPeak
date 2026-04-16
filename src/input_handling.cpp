@@ -1228,6 +1228,9 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
                            m_waveform.GetNumChannels(),
                            m_waveform.GetSampleRate(),
                            ivDb, m_dynamicsPanel.GetParams());
+        // Update GR meter (compute compression to get avg GR)
+        m_dynamics.ComputeCompression();
+        m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
       }
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);

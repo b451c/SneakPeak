@@ -1,4 +1,4 @@
-// dynamics_panel.h — Inline dynamics control panel with real-time sliders
+// dynamics_panel.h — Professional dynamics control panel with real-time sliders
 #pragma once
 
 #include "platform.h"
@@ -25,26 +25,29 @@ public:
   void ClearApplyRequested() { m_applyRequested = false; }
   bool IsDragging() const { return m_dragSlider >= 0 || m_panelDragging; }
 
+  // For GR meter display
+  void SetAvgGainReduction(double gr) { m_avgGR = gr; }
+
 private:
-  static constexpr int NUM_SLIDERS = 5;
+  static constexpr int NUM_SLIDERS = 6;
 
   struct SliderDef {
     const char* label;
     double minVal, maxVal;
     const char* unit;
-    int precision; // decimal places
+    int precision;
   };
   static const SliderDef SLIDER_DEFS[NUM_SLIDERS];
 
   double GetSliderValue(int idx) const;
   void SetSliderValue(int idx, double val);
 
-  // Layout: slider index -> column (0=left, 1=right) and row (0-2)
   static int SliderCol(int idx) { return (idx < 3) ? 0 : 1; }
   static int SliderRow(int idx) { return (idx < 3) ? idx : idx - 3; }
 
   RECT GetSliderTrackRect(RECT panelRect, int idx) const;
   RECT GetApplyButtonRect(RECT panelRect) const;
+  RECT GetRmsToggleRect(RECT panelRect) const;
   RECT GetCloseButtonRect(RECT panelRect) const;
   int HitTestSlider(int x, int y, RECT panelRect) const;
   double PixelToValue(int px, RECT trackRect, int idx) const;
@@ -54,6 +57,7 @@ private:
   bool m_visible = false;
   DynamicsParams m_params;
   double m_avgPeakDb = -18.0;
+  double m_avgGR = 0.0;
 
   int m_dragSlider = -1;
   bool m_paramsChanged = false;
@@ -64,8 +68,8 @@ private:
   int m_dragOffsetX = 0, m_dragOffsetY = 0;
   int m_offsetX = 0, m_offsetY = 0;
 
-  static const int PANEL_W = 354;
-  static const int PANEL_H = 86;
+  static const int PANEL_W = 380;
+  static const int PANEL_H = 106;
   static const int TITLE_H = 22;
   static const int ROW_H = 18;
   static const int THUMB_R = 4;
