@@ -137,6 +137,17 @@ public:
   int EnvYToGainY(double gain, int scalingMode) const; // gain -> Y pixel (REAPER fader scale)
   double EnvPixelToGain(int y, int scalingMode) const; // Y pixel -> gain (REAPER fader scale)
 
+  // Envelope bypass (A/B comparison - skip envGain in rendering)
+  bool GetEnvBypassed() const { return m_envBypassed; }
+  void SetEnvBypassed(bool v) { m_envBypassed = v; m_peaksValid = false; }
+
+  // Dense envelope reveal range (for >100 points after Apply Dynamics)
+  bool HasEnvRevealRange() const { return m_envRevealEnd > m_envRevealStart; }
+  void SetEnvRevealRange(double start, double end) { m_envRevealStart = start; m_envRevealEnd = end; }
+  void ClearEnvRevealRange() { m_envRevealStart = m_envRevealEnd = 0.0; }
+  double GetEnvRevealStart() const { return m_envRevealStart; }
+  double GetEnvRevealEnd() const { return m_envRevealEnd; }
+
   // Per-segment envelope lookup (foundation for timeline/SET envelope support)
   // Maps view-relative time to the correct segment's take envelope.
   // Returns nullptr env if in gap region or no envelope exists.
@@ -304,6 +315,9 @@ private:
   // Volume envelope overlay
   bool m_envShowVolume = true;
   double m_envMaxGain = 2.0; // MAXVAL from envelope chunk (updated in DrawVolumeEnvelope)
+  bool m_envBypassed = false;      // A/B: skip envGain in rendering
+  double m_envRevealStart = 0.0; // reveal range for dense envelopes (time coords)
+  double m_envRevealEnd = 0.0;   // both 0 = inactive
 
   // Cached fade/volume parameters
   FadeCache m_fadeCache;

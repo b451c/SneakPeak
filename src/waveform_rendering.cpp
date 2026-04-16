@@ -261,7 +261,10 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
 
   // Take volume envelope (for waveform visual feedback)
   // Uses GetEnvelopeAtTime helper for per-segment support in timeline/SET
-  bool useEnvGain = m_envShowVolume && !m_standaloneMode && m_take &&
+  // Always apply envelope gain to waveform (reflects what you hear).
+  // m_envShowVolume only controls the cyan curve visibility, not waveform amplitude.
+  // A/B bypass (m_envBypassed) is the correct way to see "before envelope".
+  bool useEnvGain = !m_envBypassed && !m_standaloneMode && m_take &&
       !m_multiItemActive && g_Envelope_Evaluate && g_ScaleFromEnvelopeMode;
 
 
@@ -1247,12 +1250,21 @@ int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
   // Helper: test points from a single envelope
   auto testEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset) {
     int count = g_CountEnvelopePoints(env);
+    bool dense = (count > 100);
+    // Dense without reveal range: no visible points to hit
+    if (dense && !HasEnvRevealRange()) return;
     for (int i = 0; i < count; i++) {
       double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
       int ptShape = 0;
       bool ptSelected = false;
       if (!g_GetEnvelopePoint(env, i, &ptTime, &ptValue, &ptShape, &ptTension, &ptSelected))
         continue;
+      // Dense mode: only test points inside reveal range
+      if (dense) {
+        double absTime = ptTime + segRelOffset;
+        if (absTime < m_envRevealStart || absTime > m_envRevealEnd)
+          continue;
+      }
       double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
       int px = TimeToX(ptTime + segRelOffset);
       int py = EnvYToGainY(gain, scalingMode);
@@ -1337,12 +1349,39 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
   OwnedPen ptOutline(PS_SOLID, 1, RGB(255, 255, 255));
   OwnedPen ptOutlineSel(PS_SOLID, 1, g_theme.volumeEnvelope); // selected: cyan outline
 
+  // Draw reveal range indicator for dense envelopes (before points, so points draw on top)
+  if (HasEnvRevealRange()) {
+    int rvX1 = std::max(waveL, TimeToX(m_envRevealStart));
+    int rvX2 = std::min(waveR, TimeToX(m_envRevealEnd));
+    if (rvX2 > rvX1) {
+      int yTop = m_rect.top + 2;
+      int yBot = m_rect.bottom - 2;
+      // Subtle hatched background (sparse vertical lines)
+      {
+        OwnedPen tintPen(PS_SOLID, 1, RGB(0, 45, 60));
+        DCPenScope tScope(hdc, tintPen);
+        for (int px = rvX1; px <= rvX2; px += 6) {
+          MoveToEx(hdc, px, yTop, nullptr);
+          LineTo(hdc, px, yBot);
+        }
+      }
+      // Boundary lines (brighter)
+      OwnedPen bndPen(PS_SOLID, 1, RGB(0, 130, 160));
+      DCPenScope bScope(hdc, bndPen);
+      MoveToEx(hdc, rvX1, yTop, nullptr);
+      LineTo(hdc, rvX1, yBot);
+      MoveToEx(hdc, rvX2, yTop, nullptr);
+      LineTo(hdc, rvX2, yBot);
+    }
+  }
+
   auto drawPointsForEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset) {
     int count = g_CountEnvelopePoints(env);
-    // Very dense (>100, e.g. Apply Dynamics): skip circles entirely, curve is enough
-    if (count > 100) return;
-    // Dense (>30): small 2px dots. Sparse: normal 4px circles.
-    int normalR = (count > 30) ? 2 : 4;
+    bool dense = (count > 100);
+    // Very dense: skip circles unless reveal range is active
+    if (dense && !HasEnvRevealRange()) return;
+    // Dense revealed: normal 4px. Medium density: 2px. Sparse: 4px.
+    int normalR = dense ? 4 : (count > 30) ? 2 : 4;
     int lastPx = -100;
     for (int i = 0; i < count; i++) {
       double ptTime = 0.0, ptValue = 0.0, ptTension = 0.0;
@@ -1350,6 +1389,13 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
       bool ptSelected = false;
       if (!g_GetEnvelopePoint(env, i, &ptTime, &ptValue, &ptShape, &ptTension, &ptSelected))
         continue;
+
+      // Dense mode: only draw points inside reveal range
+      if (dense) {
+        double absTime = ptTime + segRelOffset;
+        if (absTime < m_envRevealStart || absTime > m_envRevealEnd)
+          continue;
+      }
 
       int px = TimeToX(ptTime + segRelOffset);
       if (px < waveL - 4 || px > waveR + 4) continue;

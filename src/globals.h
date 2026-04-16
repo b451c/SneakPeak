@@ -134,6 +134,8 @@ extern bool (*g_Envelope_SortPoints)(TrackEnvelope* envelope);
 extern int (*g_GetEnvelopePointByTime)(TrackEnvelope* envelope, double time);
 extern double (*g_ScaleToEnvelopeMode)(int scaling_mode, double val);
 extern bool (*g_GetEnvelopeStateChunk)(TrackEnvelope* env, char* strNeedBig, int strNeedBig_sz, bool isundo);
+extern bool (*g_SetEnvelopeStateChunk)(TrackEnvelope* env, const char* str, bool isundo);
+extern bool (*g_GetSetEnvelopeInfo_String)(TrackEnvelope* env, const char* parmname, char* stringNeedBig, bool setNewValue);
 
 // UI / dialogs
 extern bool (*g_GetUserInputs)(const char* title, int num_inputs, const char* captions_csv, char* retvals_csv, int retvals_csv_sz);

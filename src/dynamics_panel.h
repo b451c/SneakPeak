@@ -31,8 +31,11 @@ public:
   // Overlay visibility toggles (read by SneakPeak in OnPaint)
   bool GetShowDyn() const { return m_showDyn; }
   bool GetShowEnv() const { return m_showEnv; }
+  bool GetShowGR() const { return m_showGR; }
+  bool GetBypassed() const { return m_bypassed; }
   void SetShowDyn(bool v) { m_showDyn = v; }
   void SetShowEnv(bool v) { m_showEnv = v; }
+  void SetShowGR(bool v) { m_showGR = v; }
 
   // Live preview mode: write envelope points on every slider change
   bool IsLive() const { return m_liveMode; }
@@ -62,6 +65,8 @@ private:
   RECT GetDynToggleRect(RECT panelRect) const;
   RECT GetEnvToggleRect(RECT panelRect) const;
   RECT GetLiveToggleRect(RECT panelRect) const;
+  RECT GetGRToggleRect(RECT panelRect) const;
+  RECT GetABToggleRect(RECT panelRect) const;
   RECT GetCloseButtonRect(RECT panelRect) const;
   int HitTestSlider(int x, int y, RECT panelRect) const;
   double PixelToValue(int px, RECT trackRect, int idx) const;
@@ -81,6 +86,8 @@ private:
   bool m_applyRequested = false;
   bool m_showDyn = true;  // show dynamics curves (orange + purple + threshold)
   bool m_showEnv = true;  // show volume envelope (cyan)
+  bool m_showGR = true;   // show gain reduction shading between curves
+  bool m_bypassed = false;  // A/B: envelope bypass for comparison
   bool m_liveMode = false;  // live preview: write envelope on slider change
   bool m_liveUndoOpen = false; // undo block is open for live session
 

@@ -209,6 +209,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   // Dynamics panel interaction
   if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
     bool wasLiveUndo = m_dynamicsPanel.LiveUndoOpen();
+    bool wasBypassed = m_dynamicsPanel.GetBypassed();
     if (m_dynamicsPanel.OnMouseDown(x, y, m_waveformRect)) {
       if (m_dynamicsPanel.IsDragging())
         SetCapture(m_hwnd);
@@ -216,6 +217,40 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       if (m_dynamicsPanel.ApplyRequested()) {
         m_dynamicsPanel.ClearApplyRequested();
         ApplyDynamicsToEnvelope();
+      }
+      // Restore envelope on panel close if bypass was active
+      bool isBypassed = m_dynamicsPanel.GetBypassed();
+      if (wasBypassed && !m_dynamicsPanel.IsVisible())
+        isBypassed = false; // panel closed, restore envelope
+      // A/B bypass: toggle envelope ACTIVE state in REAPER
+      if (isBypassed != wasBypassed) {
+        m_waveform.SetEnvBypassed(isBypassed);
+        if (g_GetTakeEnvelopeByName && g_GetSetEnvelopeInfo_String && m_waveform.GetTake()) {
+          TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+          if (env) {
+            char val[4];
+            snprintf(val, sizeof(val), "%d", isBypassed ? 0 : 1);
+            g_GetSetEnvelopeInfo_String(env, "ACTIVE", val, true);
+            if (g_UpdateArrange) g_UpdateArrange();
+          }
+        }
+      }
+      // Re-analyze on toggle clicks (Peak/RMS) that set ParamsChanged
+      if (m_dynamicsPanel.ParamsChanged()) {
+        m_dynamicsPanel.ClearParamsChanged();
+        m_dynamics.SetParams(m_dynamicsPanel.GetParams());
+        if (m_waveform.GetAudioSampleCount() > 0) {
+          double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+          m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                             m_waveform.GetAudioSampleCount(),
+                             m_waveform.GetNumChannels(),
+                             m_waveform.GetSampleRate(),
+                             ivDb, m_dynamicsPanel.GetParams());
+          m_dynamics.ComputeCompression();
+          m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
+          if (m_dynamicsPanel.IsLive())
+            ApplyDynamicsToEnvelope();
+        }
       }
       // Close live undo block if panel was hidden (close button) or Live toggled off
       if (wasLiveUndo && !m_dynamicsPanel.LiveUndoOpen() &&
@@ -323,6 +358,18 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
         }
       }
 
+      // Clear envelope reveal range if clicking outside it (without Cmd)
+      if (m_waveform.HasEnvRevealRange() && m_waveform.GetShowVolumeEnvelope()) {
+        bool cmdDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        if (!cmdDown) {
+          double clickTime = m_waveform.XToTime(x);
+          if (clickTime < m_waveform.GetEnvRevealStart() || clickTime > m_waveform.GetEnvRevealEnd()) {
+            m_waveform.ClearEnvRevealRange();
+            InvalidateRect(m_hwnd, nullptr, FALSE);
+          }
+        }
+      }
+
       // Envelope point interaction (before fade handles and selection)
       if (m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
           g_GetTakeEnvelopeByName && g_ScaleToEnvelopeMode && g_InsertEnvelopePointEx &&
@@ -330,6 +377,9 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           g_ScaleFromEnvelopeMode) {
         TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
         if (env) {
+          int envCount = g_CountEnvelopePoints ? g_CountEnvelopePoints(env) : 0;
+          bool isDenseEnv = (envCount > 100);
+
           int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 8);
           if (hitIdx >= 0) {
             bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -383,6 +433,8 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             return;
           }
           // Check if click is near the envelope line (within 20px vertically)
+          // Skip for dense envelopes - Cmd+drag falls through to reveal rect instead
+          if (!isDenseEnv) {
           double clickTime = m_waveform.XToTime(x);
           if (clickTime >= 0.0 && clickTime <= m_waveform.GetItemDuration()) {
             auto ei = m_waveform.GetEnvelopeAtTime(clickTime);
@@ -427,6 +479,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             }
             } // ei.env
           }
+          } // !isDenseEnv
         }
       }
 
@@ -558,6 +611,13 @@ void SneakPeak::OnMouseUp(int x, int y)
           bool newSel = shift ? (psel || inside) : inside;
           if (newSel != psel)
             g_SetEnvelopePoint(env, i, nullptr, nullptr, nullptr, nullptr, &newSel, &noSort);
+        }
+        // Dense envelope: persist as reveal range so points become visible
+        if (cnt > 100) {
+          double tStart = std::max(0.0, m_waveform.XToTime(rx1));
+          double tEnd = std::min(m_waveform.GetItemDuration(), m_waveform.XToTime(rx2));
+          if (tEnd > tStart)
+            m_waveform.SetEnvRevealRange(tStart, tEnd);
         }
       }
     }

@@ -782,6 +782,38 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   // Silence threshold: don't draw curves below this (prevents ugly spikes to bottom)
   static constexpr double SILENCE_FLOOR_DB = -45.0;
 
+  // --- Gain reduction shading (filled area between original and compressed curves) ---
+  bool showGR = showComp && (!m_dynamicsPanel.IsVisible() || m_dynamicsPanel.GetShowGR());
+  if (showGR) {
+    OwnedPen grPen(PS_SOLID, 1, RGB(100, 38, 28));
+    DCPenScope scope(hdc, grPen);
+    int lastPx = -2;
+
+    for (int i = startIdx; i < count; i += stride) {
+      int idx = getMaxIdxInStride(i);
+      const auto& pt = results[idx];
+      double adjDb = getAdjDb(pt);
+      if (pt.time > viewEnd + 0.01) break;
+      int px = m_waveform.TimeToX(pt.time);
+      if (px < waveL || px > waveR) continue;
+      if (px == lastPx) continue;
+      lastPx = px;
+
+      if (adjDb < SILENCE_FLOOR_DB) continue;
+
+      int origY = dbToY(adjDb);
+      double compDb = adjDb + pt.smoothedGR + makeupDb;
+      int compY = dbToY(compDb);
+
+      // Only shade where compression reduces level (compY below origY = lower amplitude)
+      // Skip every other column for semi-transparent look (GDI has no alpha blending)
+      if (compY > origY + 1 && (px & 1) == 0) {
+        MoveToEx(hdc, px, origY, nullptr);
+        LineTo(hdc, px, compY);
+      }
+    }
+  }
+
   // --- Orange amplitude curve ---
   {
     OwnedPen dynPen(PS_SOLID, 1, RGB(200, 130, 50));

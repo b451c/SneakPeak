@@ -84,6 +84,8 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   // Reset toggles to show everything on panel open
   m_showDyn = true;
   m_showEnv = true;
+  m_showGR = true;
+  m_bypassed = false;
   m_liveMode = false;
   m_liveUndoOpen = false;
 }
@@ -93,6 +95,7 @@ void DynamicsPanel::Hide()
   m_visible = false;
   m_dragSlider = -1;
   m_panelDragging = false;
+  m_bypassed = false;
   m_liveMode = false;
   // Note: live undo block closure handled by SneakPeak (needs g_Undo_EndBlock2)
 }
@@ -156,6 +159,22 @@ RECT DynamicsPanel::GetLiveToggleRect(RECT pr) const
   int x = envR.right + TOGGLE_GAP;
   int y = envR.top;
   return { x, y, x + TOGGLE_W + 4, y + APPLY_H }; // slightly wider for "Live"
+}
+
+RECT DynamicsPanel::GetGRToggleRect(RECT pr) const
+{
+  RECT liveR = GetLiveToggleRect(pr);
+  int x = liveR.right + TOGGLE_GAP;
+  int y = liveR.top;
+  return { x, y, x + TOGGLE_W - 4, y + APPLY_H }; // compact "GR"
+}
+
+RECT DynamicsPanel::GetABToggleRect(RECT pr) const
+{
+  RECT grR = GetGRToggleRect(pr);
+  int x = grR.right + TOGGLE_GAP;
+  int y = grR.top;
+  return { x, y, x + TOGGLE_W - 4, y + APPLY_H }; // compact "A/B"
 }
 
 RECT DynamicsPanel::GetCloseButtonRect(RECT pr) const
@@ -222,11 +241,13 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
     return true;
   }
 
-  // Apply button
-  RECT applyR = GetApplyButtonRect(pr);
-  if (x >= applyR.left && x < applyR.right && y >= applyR.top && y < applyR.bottom) {
-    m_applyRequested = true;
-    return true;
+  // Apply button (disabled during Live mode - points already written in real-time)
+  if (!m_liveMode) {
+    RECT applyR = GetApplyButtonRect(pr);
+    if (x >= applyR.left && x < applyR.right && y >= applyR.top && y < applyR.bottom) {
+      m_applyRequested = true;
+      return true;
+    }
   }
 
   // Peak/RMS toggle
@@ -256,6 +277,20 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   if (x >= liveR.left && x < liveR.right && y >= liveR.top && y < liveR.bottom) {
     m_liveMode = !m_liveMode;
     if (m_liveMode) m_applyRequested = true; // initial apply when turning on
+    return true;
+  }
+
+  // GR shading toggle
+  RECT grR = GetGRToggleRect(pr);
+  if (x >= grR.left && x < grR.right && y >= grR.top && y < grR.bottom) {
+    m_showGR = !m_showGR;
+    return true;
+  }
+
+  // A/B bypass toggle
+  RECT abR = GetABToggleRect(pr);
+  if (x >= abR.left && x < abR.right && y >= abR.top && y < abR.bottom) {
+    m_bypassed = !m_bypassed;
     return true;
   }
 
@@ -517,10 +552,41 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     SetTextColor(hdc, m_liveMode ? RGB(100, 220, 100) : RGB(80, 80, 80));
     DrawText(hdc, "Live", -1, &liveR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
-    // Apply button
+    // GR shading toggle
+    RECT grR = GetGRToggleRect(pr);
+    {
+      COLORREF col = m_showGR ? RGB(180, 60, 40) : RGB(60, 60, 60);
+      OwnedPen btnPen(PS_SOLID, 1, col);
+      DCPenScope scope(hdc, btnPen);
+      MoveToEx(hdc, grR.left, grR.top, nullptr);
+      LineTo(hdc, grR.right - 1, grR.top);
+      LineTo(hdc, grR.right - 1, grR.bottom - 1);
+      LineTo(hdc, grR.left, grR.bottom - 1);
+      LineTo(hdc, grR.left, grR.top);
+    }
+    SetTextColor(hdc, m_showGR ? RGB(180, 60, 40) : RGB(80, 80, 80));
+    DrawText(hdc, "GR", -1, &grR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    // A/B bypass toggle
+    RECT abR = GetABToggleRect(pr);
+    {
+      COLORREF col = m_bypassed ? RGB(220, 180, 50) : RGB(60, 60, 60);
+      OwnedPen btnPen(PS_SOLID, 1, col);
+      DCPenScope scope(hdc, btnPen);
+      MoveToEx(hdc, abR.left, abR.top, nullptr);
+      LineTo(hdc, abR.right - 1, abR.top);
+      LineTo(hdc, abR.right - 1, abR.bottom - 1);
+      LineTo(hdc, abR.left, abR.bottom - 1);
+      LineTo(hdc, abR.left, abR.top);
+    }
+    SetTextColor(hdc, m_bypassed ? RGB(220, 180, 50) : RGB(80, 80, 80));
+    DrawText(hdc, "A/B", -1, &abR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    // Apply button (grayed out during Live - points already written in real-time)
     RECT ar = GetApplyButtonRect(pr);
     {
-      OwnedPen btnPen(PS_SOLID, 1, RGB(255, 160, 40));
+      COLORREF applyCol = m_liveMode ? RGB(70, 70, 70) : RGB(255, 160, 40);
+      OwnedPen btnPen(PS_SOLID, 1, applyCol);
       DCPenScope scope(hdc, btnPen);
       MoveToEx(hdc, ar.left, ar.top, nullptr);
       LineTo(hdc, ar.right - 1, ar.top);
@@ -528,7 +594,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       LineTo(hdc, ar.left, ar.bottom - 1);
       LineTo(hdc, ar.left, ar.top);
     }
-    SetTextColor(hdc, RGB(255, 160, 40));
+    SetTextColor(hdc, m_liveMode ? RGB(70, 70, 70) : RGB(255, 160, 40));
     DrawText(hdc, "Apply", -1, &ar, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }

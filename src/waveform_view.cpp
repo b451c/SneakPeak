@@ -486,6 +486,7 @@ void WaveformView::ClearItem()
   m_multiItem.Clear();
   m_batchGainOffset = 1.0;
   m_peaksValid = false;
+  ClearEnvRevealRange();
   m_selection = {};
   m_numChannels = 0;
   m_itemDuration = 0.0;

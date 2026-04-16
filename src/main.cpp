@@ -123,6 +123,8 @@
 #define REAPERAPI_WANT_GetEnvelopePointByTime
 #define REAPERAPI_WANT_ScaleToEnvelopeMode
 #define REAPERAPI_WANT_GetEnvelopeStateChunk
+#define REAPERAPI_WANT_SetEnvelopeStateChunk
+#define REAPERAPI_WANT_GetSetEnvelopeInfo_String
 
 #include "reaper_plugin.h"
 #include "reaper_plugin_functions.h"
@@ -395,6 +397,8 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_GetEnvelopePointByTime = GetEnvelopePointByTime;
   g_ScaleToEnvelopeMode = ScaleToEnvelopeMode;
   g_GetEnvelopeStateChunk = GetEnvelopeStateChunk;
+  g_SetEnvelopeStateChunk = SetEnvelopeStateChunk;
+  g_GetSetEnvelopeInfo_String = GetSetEnvelopeInfo_String;
 
   // Theme colors
   Theme_SetGetThemeColor((void*)GetThemeColor);
