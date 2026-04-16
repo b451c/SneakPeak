@@ -102,6 +102,33 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
   // Mode bar click
   if (y >= m_modeBarRect.top && y < m_modeBarRect.bottom) {
+    // Click on Support link: show support menu
+    if (x >= m_supportRect.left && x < m_supportRect.right &&
+        y >= m_supportRect.top && y < m_supportRect.bottom) {
+      HMENU supportMenu = CreatePopupMenu();
+      auto addSupportItem = [](HMENU m, unsigned int id, const char* str) {
+#ifdef _WIN32
+        AppendMenuA(m, MF_STRING, id, str);
+#else
+        MENUITEMINFO mi = { sizeof(mi) };
+        mi.fMask = MIIM_ID | MIIM_STATE | MIIM_TYPE;
+        mi.fType = MFT_STRING;
+        mi.fState = 0;
+        mi.wID = id;
+        mi.dwTypeData = (char*)str;
+        InsertMenuItem(m, GetMenuItemCount(m), TRUE, &mi);
+#endif
+      };
+      addSupportItem(supportMenu, CM_SUPPORT_KOFI, "\xe2\x98\x95 Ko-fi");
+      addSupportItem(supportMenu, CM_SUPPORT_BMAC, "\xf0\x9f\x8d\xba Buy Me a Coffee");
+      addSupportItem(supportMenu, CM_SUPPORT_PAYPAL, "\xf0\x9f\x92\xb3 PayPal");
+      addSupportItem(supportMenu, CM_SUPPORT_GITHUB, "\xe2\xad\x90 GitHub");
+      POINT pt = { m_supportRect.left, m_modeBarRect.bottom };
+      ClientToScreen(m_hwnd, &pt);
+      TrackPopupMenu(supportMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
+      DestroyMenu(supportMenu);
+      return;
+    }
     // Click on mode label in MULTI mode: show view mode popup menu
     if (m_waveform.IsMultiItemActive() &&
         x >= m_modeLabelRect.left && x < m_modeLabelRect.right &&

@@ -592,6 +592,13 @@ void SneakPeak::OnContextMenuCommand(int id)
       system("/usr/bin/open 'https://www.paypal.com/paypalme/b451c'");
 #endif
       break;
+    case CM_SUPPORT_GITHUB:
+#ifdef _WIN32
+      ShellExecute(nullptr, "open", "https://github.com/b451c/SneakPeak", nullptr, nullptr, SW_SHOWNORMAL);
+#else
+      system("/usr/bin/open 'https://github.com/b451c/SneakPeak'");
+#endif
+      break;
     case CM_ENV_SHAPE_LINEAR:
     case CM_ENV_SHAPE_SQUARE:
     case CM_ENV_SHAPE_SLOW:

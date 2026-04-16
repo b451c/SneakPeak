@@ -351,12 +351,17 @@ void SneakPeak::DrawModeBar(HDC hdc)
     }
   }
 
-  // Version label — subtle, right of content, left of MASTER
+  // Version + Support link — subtle, right of content, left of MASTER
   {
     SelectObject(hdc, g_fonts.normal11);
     SetTextColor(hdc, RGB(90, 90, 90));
-    RECT verR = { m_modeBarRect.right - 160, m_modeBarRect.top, m_modeBarRect.right - 70, m_modeBarRect.bottom };
+    int verRight = m_modeBarRect.right - 70;
+    RECT verR = { verRight - 130, m_modeBarRect.top, verRight - 50, m_modeBarRect.bottom };
     DrawText(hdc, "v" SNEAKPEAK_VERSION, -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    // Support button (heart + text)
+    SetTextColor(hdc, RGB(160, 80, 80));
+    m_supportRect = { verRight - 46, m_modeBarRect.top, verRight, m_modeBarRect.bottom };
+    DrawText(hdc, "\xe2\x99\xa5 Support", -1, &m_supportRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
   // MASTER tab — right-aligned, always visible

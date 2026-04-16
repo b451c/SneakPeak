@@ -89,6 +89,7 @@ enum ContextMenuID {
   CM_SUPPORT_KOFI,
   CM_SUPPORT_BMAC,
   CM_SUPPORT_PAYPAL,
+  CM_SUPPORT_GITHUB,
   CM_NORMALIZE_LUFS,
   CM_NORMALIZE_LUFS_16,
   CM_MULTI_MODE_MIX,
@@ -218,6 +219,7 @@ private:
 
   RECT m_modeBarRect = {};
   RECT m_modeLabelRect = {};  // clickable area of the mode label (MULTI/TIMELINE/ITEM/SET)
+  RECT m_supportRect = {};    // clickable support link in mode bar
   RECT m_toolbarRect = {};
   RECT m_rulerRect = {};
   RECT m_waveformRect = {};
