@@ -700,6 +700,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Open the dynamics panel from right-click > <strong>Process > Apply Dynamics...</strong> or use the context menu.</p>
 
+<img src="images/dynamics-gr-shading.png" alt="SneakPeak dynamics with GR shading" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+
 <h2 id="dynamics-panel">Dynamics Panel</h2>
 
 <p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 10 real-time sliders:</p>
@@ -720,6 +722,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   </tbody>
 </table>
 
+<img src="images/dynamics-panel.png" alt="SneakPeak dynamics panel" style="width:420px;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+
 <p>Hold <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> while dragging a slider for fine mode (1/5th sensitivity). The <strong>Apply</strong> button writes the computed compression curve as REAPER volume envelope points. Each Apply is non-destructive and idempotent - existing points are cleared before writing new ones.</p>
 
 <p>Toggle <strong>Peak/RMS</strong> in the panel to switch detection mode. RMS provides smoother, less aggressive curves suited for music. Peak is more responsive, better for speech.</p>
@@ -729,6 +733,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Click the <strong>[Live]</strong> toggle (green when active) to enable real-time envelope writing. In Live mode, every slider change immediately writes envelope points to REAPER - the waveform updates in real-time as you drag. No need to click Apply.</p>
 
 <p>A single undo block wraps each drag gesture, so <kbd>Cmd</kbd>+<kbd>Z</kbd> reverts the entire adjustment. When Live is active, the Apply button is grayed out (it would be redundant).</p>
+
+<img src="images/dynamics-live-mode.png" alt="SneakPeak Live mode with envelope points" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <div class="tip">
   <strong>Workflow:</strong>

@@ -24,6 +24,14 @@
 |:---:|
 | ![Fades](docs/images/fades.gif) |
 
+| Dynamics with GR shading | Live mode with envelope |
+|:---:|:---:|
+| ![Dynamics](docs/images/dynamics-gr-shading.png) | ![Live](docs/images/dynamics-live-mode.png) |
+
+| Dynamics panel |
+|:---:|
+| ![Panel](docs/images/dynamics-panel.png) |
+
 ---
 
 ## Why SneakPeak?
