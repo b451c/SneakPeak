@@ -148,9 +148,13 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
 {
   if (!g_sneakPeak || !g_sneakPeak->IsVisible() || !g_sneakPeak->GetHwnd()) return 0;
 
-  HWND focus = GetFocus();
-  HWND ourHwnd = g_sneakPeak->GetHwnd();
-  if (focus != ourHwnd && IsChild(ourHwnd, focus) == 0) return 0;
+  // Focus check: our tracked flag (from WM_SETFOCUS/WM_KILLFOCUS) is primary.
+  // Fallback to GetFocus() for cases where WM_SETFOCUS didn't fire.
+  if (!g_sneakPeak->HasFocus()) {
+    HWND focus = GetFocus();
+    HWND ourHwnd = g_sneakPeak->GetHwnd();
+    if (focus != ourHwnd && !IsChild(ourHwnd, focus)) return 0;
+  }
 
   if (msg->message == WM_KEYDOWN) {
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;

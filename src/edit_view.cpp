@@ -1265,6 +1265,13 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       return 1;  // consume gesture, prevent propagation to REAPER
     }
 
+    case WM_SETFOCUS:
+      m_hasFocus = true;
+      return 0;
+    case WM_KILLFOCUS:
+      m_hasFocus = false;
+      return 0;
+
     case WM_KEYDOWN:
       OnKeyDown(wParam);
       return 0;

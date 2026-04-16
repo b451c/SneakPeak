@@ -148,6 +148,7 @@ public:
 
   // Called directly from accelerator callback (SWS pattern - no SendMessage bounce)
   void OnKeyDown(WPARAM key);
+  bool HasFocus() const { return m_hasFocus; }
 
 private:
   INT_PTR HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam);
@@ -238,6 +239,7 @@ private:
 
   bool m_pendingClose = false;
   bool m_isDocked = false;
+  bool m_hasFocus = false;
   int m_timelineEditGuard = 0; // ticks to suppress timeline exit after edit operation
   WaveformSelection m_pendingSelRestore = {}; // selection to restore after guarded reload
   bool m_dragging = false;
