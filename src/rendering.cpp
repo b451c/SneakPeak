@@ -29,8 +29,16 @@ void SneakPeak::OnPaint(HDC hdc)
   if (m_masterMode) {
     DrawMasterWaveform(hdc);
   } else {
+    // Panel overlay toggles: sync envelope visibility from panel toggle
+    if (m_dynamicsPanel.IsVisible()) {
+      bool wantEnv = m_dynamicsPanel.GetShowEnv();
+      if (m_waveform.GetShowVolumeEnvelope() != wantEnv)
+        m_waveform.SetShowVolumeEnvelope(wantEnv);
+    }
     m_waveform.Paint(hdc);
-    if (m_dynamicsVisible && m_dynamics.HasResults())
+    bool showDyn = m_dynamicsVisible && m_dynamics.HasResults() &&
+        (!m_dynamicsPanel.IsVisible() || m_dynamicsPanel.GetShowDyn());
+    if (showDyn)
       DrawDynamicsCurve(hdc);
     m_dynamicsPanel.Draw(hdc, m_waveformRect);
     // Envelope selection rectangle overlay (hatched semi-transparent fill + cyan border)

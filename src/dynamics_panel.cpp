@@ -33,6 +33,8 @@ static constexpr int R_VALUE_X = R_TRACK_X + RIGHT_TRACK_W + VALUE_GAP;
 
 static constexpr int APPLY_W = 50;
 static constexpr int APPLY_H = 14;
+static constexpr int TOGGLE_W = 28;
+static constexpr int TOGGLE_GAP = 3;
 
 // --- Value access ---
 
@@ -76,6 +78,9 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   m_applyRequested = false;
   m_dragSlider = -1;
   m_avgGR = 0.0;
+  // Reset toggles to show everything on panel open
+  m_showDyn = true;
+  m_showEnv = true;
 }
 
 void DynamicsPanel::Hide()
@@ -121,6 +126,22 @@ RECT DynamicsPanel::GetRmsToggleRect(RECT pr) const
   int x = pr.left + R_LABEL_X;
   int y = pr.top + TITLE_H + 3 * ROW_H + 2;
   return { x, y, x + 62, y + APPLY_H };
+}
+
+RECT DynamicsPanel::GetDynToggleRect(RECT pr) const
+{
+  RECT rms = GetRmsToggleRect(pr);
+  int x = rms.right + TOGGLE_GAP;
+  int y = rms.top;
+  return { x, y, x + TOGGLE_W, y + APPLY_H };
+}
+
+RECT DynamicsPanel::GetEnvToggleRect(RECT pr) const
+{
+  RECT dyn = GetDynToggleRect(pr);
+  int x = dyn.right + TOGGLE_GAP;
+  int y = dyn.top;
+  return { x, y, x + TOGGLE_W, y + APPLY_H };
 }
 
 RECT DynamicsPanel::GetCloseButtonRect(RECT pr) const
@@ -199,6 +220,20 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   if (x >= rmsR.left && x < rmsR.right && y >= rmsR.top && y < rmsR.bottom) {
     m_params.rmsMode = !m_params.rmsMode;
     m_paramsChanged = true;
+    return true;
+  }
+
+  // Dyn visibility toggle
+  RECT dynR = GetDynToggleRect(pr);
+  if (x >= dynR.left && x < dynR.right && y >= dynR.top && y < dynR.bottom) {
+    m_showDyn = !m_showDyn;
+    return true;
+  }
+
+  // Env visibility toggle
+  RECT envR = GetEnvToggleRect(pr);
+  if (x >= envR.left && x < envR.right && y >= envR.top && y < envR.bottom) {
+    m_showEnv = !m_showEnv;
     return true;
   }
 
@@ -414,6 +449,36 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     SetTextColor(hdc, m_params.rmsMode ? RGB(255, 160, 40) : RGB(160, 160, 160));
     DrawText(hdc, m_params.rmsMode ? "RMS" : "Peak", -1, &rmsR,
              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    // Dyn toggle
+    RECT dynR = GetDynToggleRect(pr);
+    {
+      COLORREF col = m_showDyn ? RGB(200, 130, 50) : RGB(60, 60, 60);
+      OwnedPen btnPen(PS_SOLID, 1, col);
+      DCPenScope scope(hdc, btnPen);
+      MoveToEx(hdc, dynR.left, dynR.top, nullptr);
+      LineTo(hdc, dynR.right - 1, dynR.top);
+      LineTo(hdc, dynR.right - 1, dynR.bottom - 1);
+      LineTo(hdc, dynR.left, dynR.bottom - 1);
+      LineTo(hdc, dynR.left, dynR.top);
+    }
+    SetTextColor(hdc, m_showDyn ? RGB(200, 130, 50) : RGB(80, 80, 80));
+    DrawText(hdc, "Dyn", -1, &dynR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    // Env toggle
+    RECT envR = GetEnvToggleRect(pr);
+    {
+      COLORREF col = m_showEnv ? RGB(0, 180, 220) : RGB(60, 60, 60);
+      OwnedPen btnPen(PS_SOLID, 1, col);
+      DCPenScope scope(hdc, btnPen);
+      MoveToEx(hdc, envR.left, envR.top, nullptr);
+      LineTo(hdc, envR.right - 1, envR.top);
+      LineTo(hdc, envR.right - 1, envR.bottom - 1);
+      LineTo(hdc, envR.left, envR.bottom - 1);
+      LineTo(hdc, envR.left, envR.top);
+    }
+    SetTextColor(hdc, m_showEnv ? RGB(0, 180, 220) : RGB(80, 80, 80));
+    DrawText(hdc, "Env", -1, &envR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Apply button
     RECT ar = GetApplyButtonRect(pr);

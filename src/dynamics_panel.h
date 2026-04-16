@@ -28,6 +28,12 @@ public:
   // For GR meter display
   void SetAvgGainReduction(double gr) { m_avgGR = gr; }
 
+  // Overlay visibility toggles (read by SneakPeak in OnPaint)
+  bool GetShowDyn() const { return m_showDyn; }
+  bool GetShowEnv() const { return m_showEnv; }
+  void SetShowDyn(bool v) { m_showDyn = v; }
+  void SetShowEnv(bool v) { m_showEnv = v; }
+
 private:
   static constexpr int NUM_SLIDERS = 6;
 
@@ -48,6 +54,8 @@ private:
   RECT GetSliderTrackRect(RECT panelRect, int idx) const;
   RECT GetApplyButtonRect(RECT panelRect) const;
   RECT GetRmsToggleRect(RECT panelRect) const;
+  RECT GetDynToggleRect(RECT panelRect) const;
+  RECT GetEnvToggleRect(RECT panelRect) const;
   RECT GetCloseButtonRect(RECT panelRect) const;
   int HitTestSlider(int x, int y, RECT panelRect) const;
   double PixelToValue(int px, RECT trackRect, int idx) const;
@@ -65,6 +73,8 @@ private:
   double m_dragStartVal = 0.0; // slider value at drag start (for fine mode delta)
   bool m_paramsChanged = false;
   bool m_applyRequested = false;
+  bool m_showDyn = true;  // show dynamics curves (orange + purple + threshold)
+  bool m_showEnv = true;  // show volume envelope (cyan)
 
   // Panel dragging
   bool m_panelDragging = false;
