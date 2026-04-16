@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [2.0.0-alpha.10] - 2026-04-16
 
 ### Added
+- **Gain-smoothing compressor model** - Industry-standard architecture: gain computer sees raw peaks instantly, attack/release smooth the gain reduction signal (not the input level). Matches FabFilter Pro-C, Waves, UAD, REAPER ReaComp. More predictable compression amounts, more musical feel. Previously used level-detection smoothing where attack/release smoothed the input level before gain computation.
+- **Lookahead slider** - New L.ahead parameter (0-20ms) in the dynamics panel. Scans ahead in the audio buffer for upcoming transients so the compressor starts reducing gain before the peak arrives. Allows slow attack (musical feel) while still catching transients. Zero latency cost in offline processing.
 - **Live mode** - New [Live] toggle in dynamics panel (green when active). When enabled, envelope points are written to REAPER in real-time as you drag sliders - the waveform updates instantly, no Apply needed. Single undo block per drag gesture (Cmd+Z reverts entire adjustment). When disabled, original Apply workflow.
 - **Dyn/Env visibility toggles** - Two toggle buttons in the dynamics panel bottom row: [Dyn] (orange) shows/hides dynamics curves (amplitude, compression, threshold), [Env] (cyan) shows/hides volume envelope overlay. Quick clean waveform preview without closing the panel.
 - **Slider fine mode** - Hold Cmd/Ctrl while dragging dynamics panel sliders for 1/5th sensitivity. Delta-based from drag start value for precise adjustments on short slider tracks.
@@ -21,7 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Changed
 - **DynamicsParams struct rewritten** - Now uses standard compressor parameters (threshold dB, ratio, knee dB, attack ms, release ms, makeup dB, RMS mode) instead of percentage-based compression.
 - **Apply Dynamics opens panel** - Context menu "Apply Dynamics..." now opens the inline panel instead of a modal dialog.
-- **Dynamics panel layout** - Dyn/Env/Live toggles in bottom-left (below Knee). Peak/RMS and Apply right-aligned with more breathing room. Panel height increased for better spacing.
+- **Dynamics panel layout** - 7 sliders in 4 rows (left: Thresh/Ratio/Knee/L.ahead, right: Attack/Release/Makeup). Dyn/Env/Live toggles in bottom-left. Peak/RMS and Apply right-aligned. Panel height 130px.
+- **Compressor model** - Switched from level-detection smoothing to gain smoothing. Attack/release now control how fast compression fades in/out (not how fast the detector responds).
 
 ### Performance
 - **DrawDynamicsCurve optimized** - Binary search for visible range + max-peak-per-stride + same-pixel deduplication reduces drawn points from 60000 to ~600 per frame.
