@@ -738,10 +738,34 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     startIdx = std::max(0, lo - 1); // one before for line continuity
   }
 
-  // Stride: skip results that map to same pixel (max 1 point per pixel)
+  // Stride: how many analysis points map to one pixel column
   double resultDt = (count > 1) ? (results[count - 1].time - results[0].time) / (double)(count - 1) : 0.001;
   double secsPerPx = viewDur / (double)waveW;
   int stride = std::max(1, (int)(secsPerPx / resultDt));
+
+  // Helper: compute fade-adjusted dB for a dynamics point
+  auto getAdjDb = [&](const DynamicsPoint& pt) -> double {
+    double fadeGain = 1.0;
+    if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
+      fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
+    if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
+      fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
+    return pt.db + gainOffsetDb + 20.0 * log10(std::max(fadeGain, 1e-12));
+  };
+
+  // Helper: find the point with max dB in a stride window (matches waveform's
+  // max-peak-per-column behavior). Without this, stride sampling picks arbitrary
+  // points and creates misleading spikes at zoomed-out views.
+  auto getMaxDbInStride = [&](int baseIdx) -> std::pair<double, double> {
+    double maxDb = -200.0;
+    double maxTime = results[baseIdx].time;
+    int end = std::min(count, baseIdx + stride);
+    for (int j = baseIdx; j < end; j++) {
+      double db = getAdjDb(results[j]);
+      if (db > maxDb) { maxDb = db; maxTime = results[j].time; }
+    }
+    return {maxDb, maxTime};
+  };
 
   // Compression preview params (standard compressor math)
   double thresh = m_dynamics.GetThreshold();
@@ -763,22 +787,13 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     int lastPx = -2;
 
     for (int i = startIdx; i < count; i += stride) {
-      const auto& pt = results[i];
-      if (pt.time > viewEnd + 0.01) break;
-      int px = m_waveform.TimeToX(pt.time);
+      auto [adjDb, adjTime] = getMaxDbInStride(i);
+      if (adjTime > viewEnd + 0.01) break;
+      int px = m_waveform.TimeToX(adjTime);
       if (px < waveL || px > waveR) continue;
       if (px == lastPx) continue;
       lastPx = px;
 
-      double fadeGain = 1.0;
-      if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
-        fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
-      if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
-        fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
-
-      double adjDb = pt.db + gainOffsetDb + 20.0 * log10(std::max(fadeGain, 1e-12));
-
-      // Break line during silence gaps (no useful visual info below floor)
       if (adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
 
       int py = dbToY(adjDb);
@@ -796,22 +811,13 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     int lastPx = -2;
 
     for (int i = startIdx; i < count; i += stride) {
-      const auto& pt = results[i];
-      if (pt.time > viewEnd + 0.01) break;
-      int px = m_waveform.TimeToX(pt.time);
+      auto [adjDb, adjTime] = getMaxDbInStride(i);
+      if (adjTime > viewEnd + 0.01) break;
+      int px = m_waveform.TimeToX(adjTime);
       if (px < waveL || px > waveR) continue;
       if (px == lastPx) continue;
       lastPx = px;
 
-      double fadeGain = 1.0;
-      if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
-        fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
-      if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
-        fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
-
-      double adjDb = pt.db + gainOffsetDb + 20.0 * log10(std::max(fadeGain, 1e-12));
-
-      // Break line during silence
       if (adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
 
       // Standard compressor gain computation with soft knee
