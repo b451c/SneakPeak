@@ -1514,6 +1514,14 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
 
   double steps = (double)delta / 120.0;
 
+  // Scroll on gain knob = adjust gain (+/-0.5 dB per notch, Cmd = +/-0.1 dB fine)
+  if (m_gainPanel.IsVisible() && m_gainPanel.HitTest(x, y, m_waveformRect)) {
+    double dbStep = cmd ? 0.1 : 0.5;
+    m_gainPanel.AdjustDb(steps * dbStep);
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
   // Scroll on dB scale column = vertical zoom
   int dbScaleLeft = m_waveformRect.right - DB_SCALE_WIDTH;
   if (x >= dbScaleLeft && x <= m_waveformRect.right &&

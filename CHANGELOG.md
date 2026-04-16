@@ -4,83 +4,57 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.0.0-alpha.12] - 2026-04-16
+## [2.0.0] - 2026-04-16
 
-### Added
-- **Gate in dynamics engine** - Noise gate integrated into the compressor for breath reduction in speech/podcast audio. Gate operates on post-compression+makeup level, catching quiet sounds (breaths) that were boosted by compression. Three new sliders in dynamics panel: G.Thr (gate threshold, -60 to 0 dB, default -100 = off), G.Range (max reduction, -40 to 0 dB, default -20 for natural sound), G.Hold (hold time, 0-200ms, default 50ms prevents syllable-level chattering). Gate threshold shown as dim red horizontal line on waveform. GR shading and purple curve include gate reduction. Based on research of ZamGate, x42/darc, Airwindows SoftGate, Faust compressors library.
-- **Dynamics preset system** - Six built-in presets researched from professional sources (iZotope, Waves, EBU R128, BBC guidelines): Default (flat, no processing), Gentle Leveling (2:1, wide knee, RMS), Voice/Podcast (4:1, gate at -45dB), Broadcast (6:1, fast attack, aggressive gate), De-breath (light compression + aggressive gate for breath removal), Music Bus (2:1, slow attack for glue). Preset button in dynamics panel title bar shows current selection. Manual slider adjustment switches to "Preset" (custom). Settings auto-saved to REAPER item P_EXT on Apply, auto-loaded when reopening panel on same item.
-- **Envelope editing in timeline/SET modes** - All envelope editing operations now correctly use per-segment envelope lookup (GetEnvelopeAtTime) instead of first segment only. Fixed 12 code paths: point add/drag/delete, freehand drawing, rectangle selection, keyboard shortcuts (Delete/E), context menu shape/delete, A/B bypass (toggles all segments), Apply Dynamics (groups points per segment with segment-relative times), and auto-refresh (aggregates all segments).
-- **Multi-item to Timeline transition** - Click on "MULTI" label in mode bar shows dropdown menu with Mix/Layered modes and "Timeline View" option. Also available via context menu View > "Switch to Timeline View". Opening Dynamics Panel in multi-item mode auto-switches to timeline view.
-- **Dynamics curves hidden in multi-item view** - Dynamics curves no longer render in multi-item view where they would be meaningless (composite audio, no single envelope to write to).
+### Highlights
+SneakPeak v2.0 is a major release: **multiplatform support** (Windows, Linux), a full **dynamics engine** (compressor + gate + presets), **volume envelope editing**, and **Live mode** for real-time envelope writing.
 
-### Changed
-- **Dynamics panel layout** - 10 sliders in 5 rows (was 7 in 4 rows). New row 3: L.ahead + G.Thr. New row 4: G.Range + G.Hold. Panel height 148px (was 130px). Preset button in title bar with dropdown. GR meter shifted right.
-- **Compressor + Gate in single pass** - ComputeCompression now runs two passes: first computes compressor GR + auto-makeup, then applies gate on post-compression level. Gate has independent smoothing (2ms attack / 100ms release, hardcoded) and hold timer.
-- **New REAPER API import** - GetSetMediaItemInfo_String for P_EXT per-item dynamics persistence.
+### Multiplatform
+- **5 platform builds** - macOS arm64 (Apple Silicon), macOS x86_64 (Intel), Windows x64, Linux x86_64, Linux aarch64. All built via GitHub Actions CI.
+- **ReaPack support** for all platforms - install via ReaPack for automatic updates.
 
----
+### Dynamics Engine
+- **Professional compressor** - Industry-standard gain-smoothing model (ratio, threshold, soft knee, attack, release, auto makeup gain). Matches FabFilter Pro-C / Waves / ReaComp architecture.
+- **Noise gate** - Post-compression gate for breath reduction in speech/podcast. Three parameters: threshold, range, hold time. Gate threshold shown as dim red line on waveform.
+- **Lookahead** - 0-20ms transient detection. Scans ahead in the audio buffer so the compressor starts reducing gain before the peak arrives.
+- **Peak/RMS detection** - Toggle between peak and RMS analysis. RMS provides smoother compression curves for music content.
+- **Auto makeup gain** - Automatic loudness compensation from compressed points only (not diluted by silence).
 
-## [2.0.0-alpha.11] - 2026-04-16
+### Dynamics Panel
+- **Inline control panel** - 10 real-time sliders: Threshold, Ratio, Knee, Lookahead, Gate Threshold, Attack, Release, Makeup, Gate Range, Gate Hold. Any change instantly updates the compression preview on the waveform.
+- **Live mode** - [Live] toggle writes envelope points to REAPER in real-time as you drag sliders. Waveform updates instantly. Single undo block per gesture (Cmd+Z reverts entire adjustment).
+- **6 built-in presets** - Default, Gentle Leveling, Voice/Podcast, Broadcast, De-breath, Music Bus. Researched from iZotope, Waves, EBU R128, BBC guidelines.
+- **Per-item persistence** - Dynamics settings auto-saved to REAPER item P_EXT on Apply, auto-loaded when reopening the panel on the same item.
+- **GR meter** - Gain reduction meter in the panel title bar showing real-time compression depth.
+- **Compression preview curve** - Purple overlay showing post-compression levels alongside the original amplitude curve (orange).
+- **GR shading** - Semi-transparent fill between original and compressed curves showing where and how much compression is applied. Toggle with [GR] button.
+- **A/B bypass** - [A/B] toggle disables the volume envelope in REAPER for instant before/after comparison (audio + visual). Auto-restored when panel closes.
+- **Visibility toggles** - [Dyn] shows/hides dynamics curves, [Env] shows/hides envelope overlay. Waveform always reflects the actual envelope effect.
+- **Slider fine mode** - Hold Cmd/Ctrl for 1/5th sensitivity. Grab offset prevents value jumping.
 
-### Added
-- **Dense envelope point interaction** - After Apply Dynamics creates >100 envelope points, Cmd+drag on the waveform draws a reveal rectangle. Points within the rectangle become visible (4px circles) and fully interactive - drag, delete, double-click delete, Shift+click multi-select. The reveal range is time-based (survives zoom/scroll) and clears on click outside it. Subtle hatched background marks the revealed zone.
-- **Gain reduction shading** - Semi-transparent fill between the orange (original amplitude) and purple (compressed) curves, showing where and how much compression is reducing gain. Uses warm red tint with 50% opacity (alternating columns). Toggle with [GR] button in dynamics panel.
-- **A/B envelope bypass** - New [A/B] toggle in dynamics panel for audition comparison. When active (yellow), disables the volume envelope in REAPER (via GetSetEnvelopeInfo_String ACTIVE flag) so you hear the audio without compression. Waveform also renders without envelope gain. Bypass auto-restored when panel is closed.
-- **[GR] toggle** - Show/hide gain reduction shading between dynamics curves. Warm red color (RGB 180,60,40) when active.
+### Volume Envelope Editing
+- **Envelope overlay** - Cyan curve showing the take volume envelope, rendered per-segment in timeline/SET modes. 1:1 match with REAPER's arrange view (uses native fader-scale Y mapping).
+- **Point editing** - Click on the envelope line to add a point. Drag to move. Double-click or Delete/E to remove. Right-click for curve shape menu (6 shapes: Linear, Square, Slow start/end, Fast start, Fast end, Bezier).
+- **Multi-select** - Shift+click to toggle point selection. Drag any selected point to move all selected. Delete removes all selected.
+- **Freehand drawing** - Cmd+drag on the envelope line to draw points freehand (creates points every 4px, removes overlapping).
+- **Selection rectangle** - Cmd+drag on empty area draws a selection rectangle with hatched fill.
+- **Dense point interaction** - After Apply Dynamics creates >100 points, Cmd+drag draws a reveal rectangle. Points within become visible and interactive. Time-based (survives zoom/scroll).
+- **Works in all modes** - Envelope editing works in ITEM, Timeline, and SET modes via per-segment envelope lookup.
+- **Auto-refresh** - Envelope changes made in REAPER arrange view are detected and displayed automatically.
 
-### Fixed
-- **[Env] toggle no longer changes waveform shape** - Previously, toggling envelope visibility also removed envGain from the waveform rendering, making it look like the original audio. Now [Env] only hides the cyan envelope curve - the waveform always reflects the actual envelope effect (what you hear). Use A/B for before/after comparison.
-- **Apply button disabled during Live mode** - Apply is grayed out when Live is active since envelope points are already written in real-time. Prevents confusion about redundant action.
-- **Peak/RMS toggle triggers immediate re-analysis** - Switching detection mode now instantly recalculates dynamics curves, GR meter, and (if Live) envelope points. Previously only triggered during slider drag.
-
-### Changed
-- **Dynamics panel bottom row** - Now shows: [Dyn] [Env] [Live] [GR] [A/B] ... [Peak/RMS] ... [Apply]
-- **New REAPER API imports** - SetEnvelopeStateChunk, GetSetEnvelopeInfo_String (15 total envelope functions)
-
----
-
-## [2.0.0-alpha.10] - 2026-04-16
-
-### Added
-- **Gain-smoothing compressor model** - Industry-standard architecture: gain computer sees raw peaks instantly, attack/release smooth the gain reduction signal (not the input level). Matches FabFilter Pro-C, Waves, UAD, REAPER ReaComp. More predictable compression amounts, more musical feel. Previously used level-detection smoothing where attack/release smoothed the input level before gain computation.
-- **Lookahead slider** - New L.ahead parameter (0-20ms) in the dynamics panel. Scans ahead in the audio buffer for upcoming transients so the compressor starts reducing gain before the peak arrives. Allows slow attack (musical feel) while still catching transients. Zero latency cost in offline processing.
-- **Live mode** - New [Live] toggle in dynamics panel (green when active). When enabled, envelope points are written to REAPER in real-time as you drag sliders - the waveform updates instantly, no Apply needed. Single undo block per drag gesture (Cmd+Z reverts entire adjustment). When disabled, original Apply workflow.
-- **Dyn/Env visibility toggles** - Two toggle buttons in the dynamics panel bottom row: [Dyn] (orange) shows/hides dynamics curves (amplitude, compression, threshold), [Env] (cyan) shows/hides volume envelope overlay. Quick clean waveform preview without closing the panel.
-- **Slider fine mode** - Hold Cmd/Ctrl while dragging dynamics panel sliders for 1/5th sensitivity. Delta-based from drag start value for precise adjustments on short slider tracks.
-- **Slider grab offset** - Clicking near a slider thumb no longer jumps the value. Drag starts from current position with relative offset tracking.
-
-### Fixed
-- **Threshold line aligns with dB scale** - Yellow threshold line at -18dB now lands exactly on the -18dB grid line. All dynamics curves (orange amplitude, purple compression, yellow threshold) use the same amplitude-based Y mapping as the waveform: `y = centerY - pow(10, dB/20) * halfH`. Previously used linear-in-dB normalization which gave completely different Y positions.
-- **Apply Dynamics non-destructive** - Each Apply now clears existing envelope points in the time range (via DeleteEnvelopePointRange) before writing new ones, with guard points at boundaries to prevent discontinuity. Repeated Apply is idempotent - same settings always produce the same result. Previously, points accumulated on each Apply, stacking compression.
-- **Auto makeup gain accuracy** - Average gain reduction now computed from compressed points only (where GR < -0.01 dB), no longer diluted by silence/uncompressed passages. Makes auto-makeup properly compensate for actual loudness reduction.
-- **Dynamics curve zoom consistency** - At zoomed-out views, dynamics curves now show max-peak-per-stride (matching how the waveform takes max peak per column). Previously used arbitrary stride sampling which created misleading phantom spikes that disappeared when zoomed in.
-- **Dynamics hidden when no item** - Dynamics curves no longer render over the empty "Select a media item" state. Previously, stale curves from a previous item remained visible after deselection.
-
-### Changed
-- **DynamicsParams struct rewritten** - Now uses standard compressor parameters (threshold dB, ratio, knee dB, attack ms, release ms, makeup dB, RMS mode) instead of percentage-based compression.
-- **Apply Dynamics opens panel** - Context menu "Apply Dynamics..." now opens the inline panel instead of a modal dialog.
-- **Dynamics panel layout** - 7 sliders in 4 rows (left: Thresh/Ratio/Knee/L.ahead, right: Attack/Release/Makeup). Dyn/Env/Live toggles in bottom-left. Peak/RMS and Apply right-aligned. Panel height 130px.
-- **Compressor model** - Switched from level-detection smoothing to gain smoothing. Attack/release now control how fast compression fades in/out (not how fast the detector responds).
+### Quality of Life
+- **Multi-item dropdown** - Click the "MULTI" label for a dropdown menu with Mix/Layered modes and "Timeline View" option.
+- **Gain knob range** - Extended to +/-24 dB (matches REAPER API range).
+- **Gain knob colors** - Blue for single/selected item, gold for batch mode.
+- **Multi-item copy/paste** - Copy in multi-item view mixes layers into clipboard.
+- **Drag export bakes fades** - Exported audio includes REAPER item fades.
+- **Pinch gesture consumed** - No longer passes through to REAPER arrangement.
+- **Horizontal scroll direction** - Matches REAPER arrange view.
 
 ### Performance
-- **DrawDynamicsCurve optimized** - Binary search for visible range + max-peak-per-stride + same-pixel deduplication reduces drawn points from 60000 to ~600 per frame.
-- **RDP curve simplification** - Ramer-Douglas-Peucker algorithm reduces envelope points from 60000 to 200-500 when applying dynamics to REAPER envelope. Prevents performance issues with large point counts.
-- **Adaptive envelope point rendering** - Points hidden when >100 visible, 2px when 30-100, 4px when <30. Prevents visual clutter at high zoom-out.
-- **Silence floor** - Dynamics curves clamped at -45dB floor, preventing visual noise from near-silence regions.
-- **Muted overlay colors** - Dynamics curve colors toned down for better visual hierarchy with waveform content.
-
----
-
-## [2.0.0-alpha.9] - 2026-04-16
-
-### Added
-- **Dynamics control panel** - Inline floating panel replaces the modal GetUserInputs dialog. Six real-time sliders: Threshold, Ratio, Knee, Attack, Release, Makeup. Dragging any slider instantly updates the compression preview curve on the waveform. Apply button writes envelope points with toast feedback.
-- **Standard compressor math** - Professional compression engine with ratio + threshold + soft knee curve, replacing the old percentage-based Above/Below system. Matches standard compressor behavior.
-- **Auto makeup gain** - Automatic gain compensation based on average gain reduction, keeping perceived loudness consistent after compression.
-- **RMS detection mode** - Toggle between Peak and RMS detection in the dynamics panel. RMS provides smoother, less aggressive compression curves.
-- **GR meter bar** - Gain reduction meter in the dynamics panel title bar, showing real-time compression depth.
-- **Compression preview curve** - Purple curve overlay showing post-compression levels alongside the original dynamics curve (orange). Visual before/after comparison.
-- **Envelope fader-scale Y mapping** - Envelope display now uses REAPER's native ScaleToEnvelopeMode/ScaleFromEnvelopeMode for Y axis mapping, achieving 1:1 visual match with REAPER's arrange view. Reads MAXVAL from envelope state chunk for correct display range.
+- **Dynamics curve rendering** - Binary search + max-peak-per-stride + deduplication reduces drawn points from 60000 to ~600 per frame.
+- **RDP curve simplification** - Ramer-Douglas-Peucker reduces envelope points from 60000 to 200-500 for Apply.
+- **Adaptive point rendering** - Points hidden when >100 visible, small when 30-100, normal when <30.
 
 ---
 

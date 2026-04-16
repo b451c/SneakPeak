@@ -127,7 +127,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <nav class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div class="sidebar-logo">SneakPeak</div>
-    <div class="sidebar-version">v1.9.0 User Guide</div>
+    <div class="sidebar-version">v2.0.0 User Guide</div>
   </div>
 
   <div class="nav-group">
@@ -177,6 +177,24 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   </div>
 
   <div class="nav-group">
+    <div class="nav-group-title">Envelope Editing</div>
+    <a href="#envelope-overview" class="nav-link">Overview</a>
+    <a href="#envelope-points" class="nav-link">Point Editing</a>
+    <a href="#envelope-freehand" class="nav-link">Freehand Drawing</a>
+    <a href="#envelope-multiselect" class="nav-link">Multi-Select</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Dynamics</div>
+    <a href="#dynamics-overview" class="nav-link">Overview</a>
+    <a href="#dynamics-panel" class="nav-link">Dynamics Panel</a>
+    <a href="#dynamics-live" class="nav-link">Live Mode</a>
+    <a href="#dynamics-gate" class="nav-link">Gate</a>
+    <a href="#dynamics-presets" class="nav-link">Presets</a>
+    <a href="#dynamics-ab" class="nav-link">A/B Bypass</a>
+  </div>
+
+  <div class="nav-group">
     <div class="nav-group-title">Features</div>
     <a href="#spectral" class="nav-link">Spectral View</a>
     <a href="#multi-item" class="nav-link">Multi-Item View</a>
@@ -201,14 +219,14 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Hero -->
 <h1>Sneak<span>Peak</span> User Guide</h1>
-<p class="subtitle">Precision waveform editor for REAPER - v1.9.0</p>
+<p class="subtitle">Precision waveform editor for REAPER - v2.0.0</p>
 
-<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts.</p>
+<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. New in v2.0: volume envelope editing, dynamics processing (compressor + gate), and multiplatform support (macOS, Windows, Linux).</p>
 
 <div class="hero-modes">
   <div class="hero-mode">
     <div class="hero-mode-icon">&#9654;</div>
-    <div class="hero-mode-name">REAPER Mode</div>
+    <div class="hero-mode-name">ITEM Mode</div>
     <div class="hero-mode-desc">Click an item, see its waveform. Non-destructive editing with full REAPER undo.</div>
   </div>
   <div class="hero-mode">
@@ -238,14 +256,25 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h3>Manual install</h3>
 <ol>
-  <li>Download <code>reaper_sneakpeak-arm64.dylib</code> from <a href="https://github.com/b451c/SneakPeak/releases/latest">GitHub Releases</a></li>
-  <li>Copy to <code>~/Library/Application Support/REAPER/UserPlugins/</code></li>
+  <li>Download the binary for your platform from <a href="https://github.com/b451c/SneakPeak/releases/latest">GitHub Releases</a></li>
+  <li>Copy to your REAPER UserPlugins folder (see table below)</li>
   <li>Restart REAPER</li>
 </ol>
 
+<table>
+  <thead><tr><th>Platform</th><th>File</th><th>UserPlugins Path</th></tr></thead>
+  <tbody>
+    <tr><td>macOS (Apple Silicon)</td><td><code>reaper_sneakpeak-arm64.dylib</code></td><td><code>~/Library/Application Support/REAPER/UserPlugins/</code></td></tr>
+    <tr><td>macOS (Intel)</td><td><code>reaper_sneakpeak-x86_64.dylib</code></td><td><code>~/Library/Application Support/REAPER/UserPlugins/</code></td></tr>
+    <tr><td>Windows x64</td><td><code>reaper_sneakpeak-x64.dll</code></td><td><code>%APPDATA%\REAPER\UserPlugins\</code></td></tr>
+    <tr><td>Linux x86_64</td><td><code>reaper_sneakpeak-x86_64.so</code></td><td><code>~/.config/REAPER/UserPlugins/</code></td></tr>
+    <tr><td>Linux aarch64</td><td><code>reaper_sneakpeak-aarch64.so</code></td><td><code>~/.config/REAPER/UserPlugins/</code></td></tr>
+  </tbody>
+</table>
+
 <div class="warning">
-  <strong>macOS Apple Silicon only (for now)</strong>
-  Windows and Linux builds are planned. The codebase is cross-platform ready (WDL/SWELL).
+  <strong>macOS: only one dylib!</strong>
+  If you have both <code>reaper_sneakpeak-arm64.dylib</code> and <code>reaper_sneakpeak-x86_64.dylib</code> in UserPlugins, REAPER will load both and crash. Keep only the one matching your architecture.
 </div>
 
 <!-- First Launch -->
@@ -274,8 +303,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>SneakPeak has three distinct modes, shown in the mode bar at the top of the window. Each mode serves a different workflow.</p>
 
-<h3>REAPER Mode</h3>
-<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+<h3>ITEM Mode (formerly REAPER)</h3>
+<div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 <p>The default mode. Click an item on the timeline and SneakPeak shows its waveform. All editing goes through the REAPER API - nothing is destructive. Split, gain changes, fade adjustments, and normalization all create REAPER undo points that you can reverse with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
 <p>When you cut a section from an item, SneakPeak automatically enters <strong>Timeline View</strong> - showing all surviving fragments with gaps preserved, so you can continue editing without losing context. See the <a href="#timeline-overview">Timeline View</a> section for details.</p>
 
@@ -290,10 +319,10 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <hr>
 
 <!-- REAPER Mode Details -->
-<h2 id="reaper-basics">REAPER Mode - Basics</h2>
-<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+<h2 id="reaper-basics">ITEM Mode - Basics</h2>
+<div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 
-<p>In REAPER mode, SneakPeak follows your item selection. Click a different item on the timeline and the waveform updates. The mode bar shows "REAPER" with a blue diamond indicator.</p>
+<p>In ITEM mode, SneakPeak follows your item selection. Click a different item on the timeline and the waveform updates. The mode bar shows "ITEM" with a blue diamond indicator.</p>
 
 <p>Everything you do in this mode uses the REAPER API. The audio files on disk are never modified directly. Gain changes use the item's D_VOL parameter. Fades use D_FADEINLEN and D_FADEOUTLEN. Split uses SplitMediaItem. All reversible with REAPER's undo system.</p>
 
