@@ -23,6 +23,11 @@ struct DynamicsParams {
   bool rmsMode = false;       // false = peak, true = RMS
   double rmsWindowMs = 5.0;   // RMS averaging window
 
+  // Gate (applied after compression + makeup to catch boosted breaths)
+  double gateThreshDb = -100.0;  // dB (-100 = gate off, below any signal)
+  double gateRangeDb = -20.0;    // max reduction in dB (not full mute)
+  double gateHoldMs = 50.0;      // hold time before gate closes (ms)
+
   // Visual range (normalization for curve display)
   double minDb = -60.0;
   double maxDb = 6.0;

@@ -888,6 +888,25 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     DrawText(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }
+
+  // --- Gate threshold line (dim red horizontal, only when gate is active) ---
+  if (params.gateThreshDb > -99.0) {
+    int gateY = dbToY(params.gateThreshDb);
+
+    OwnedPen gatePen(PS_SOLID, 1, RGB(140, 70, 70));
+    DCPenScope scope(hdc, gatePen);
+    MoveToEx(hdc, waveL, gateY, nullptr);
+    LineTo(hdc, waveR, gateY);
+
+    HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, RGB(140, 70, 70));
+    char label[32];
+    snprintf(label, sizeof(label), "Gate %.0f dB", params.gateThreshDb);
+    RECT lr = { waveL + 4, gateY + 2, waveL + 120, gateY + 14 };
+    DrawText(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(hdc, oldFont);
+  }
 }
 
 void SneakPeak::DrawMasterWaveform(HDC hdc)

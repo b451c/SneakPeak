@@ -15,6 +15,9 @@ const DynamicsPanel::SliderDef DynamicsPanel::SLIDER_DEFS[NUM_SLIDERS] = {
   { "Release",   0.0, 1000.0, "ms",  0 },  // 4: right col row 1
   { "Makeup",    0.0,   24.0, "dB",  1 },  // 5: right col row 2
   { "L.ahead",   0.0,   20.0, "ms",  1 },  // 6: left col row 3
+  { "G.Thr",   -60.0,    0.0, "dB",  1 },  // 7: right col row 3 (gate threshold)
+  { "G.Range", -40.0,    0.0, "dB",  0 },  // 8: left col row 4 (gate max reduction)
+  { "G.Hold",    0.0,  200.0, "ms",  0 },  // 9: right col row 4 (gate hold time)
 };
 
 // --- Layout constants ---
@@ -49,6 +52,9 @@ double DynamicsPanel::GetSliderValue(int idx) const
     case 4: return m_params.releaseMs;
     case 5: return m_params.autoMakeup ? 0.0 : m_params.makeupDb;
     case 6: return m_params.lookaheadMs;
+    case 7: return m_params.gateThreshDb;
+    case 8: return m_params.gateRangeDb;
+    case 9: return m_params.gateHoldMs;
     default: return 0.0;
   }
 }
@@ -65,6 +71,9 @@ void DynamicsPanel::SetSliderValue(int idx, double val)
     case 4: m_params.releaseMs = val; break;
     case 5: m_params.makeupDb = val; m_params.autoMakeup = false; break;
     case 6: m_params.lookaheadMs = val; break;
+    case 7: m_params.gateThreshDb = val; break;
+    case 8: m_params.gateRangeDb = val; break;
+    case 9: m_params.gateHoldMs = val; break;
   }
 }
 
@@ -127,21 +136,21 @@ RECT DynamicsPanel::GetSliderTrackRect(RECT pr, int idx) const
 RECT DynamicsPanel::GetApplyButtonRect(RECT pr) const
 {
   int x = pr.right - MARGIN - APPLY_W - 2;
-  int y = pr.top + TITLE_H + 4 * ROW_H + 10;
+  int y = pr.top + TITLE_H + 5 * ROW_H + 10;
   return { x, y, x + APPLY_W, y + APPLY_H };
 }
 
 RECT DynamicsPanel::GetRmsToggleRect(RECT pr) const
 {
   int x = pr.left + R_LABEL_X;
-  int y = pr.top + TITLE_H + 4 * ROW_H + 10;
+  int y = pr.top + TITLE_H + 5 * ROW_H + 10;
   return { x, y, x + 42, y + APPLY_H };
 }
 
 RECT DynamicsPanel::GetDynToggleRect(RECT pr) const
 {
   int x = pr.left + MARGIN;
-  int y = pr.top + TITLE_H + 4 * ROW_H + 10;
+  int y = pr.top + TITLE_H + 5 * ROW_H + 10;
   return { x, y, x + TOGGLE_W, y + APPLY_H };
 }
 

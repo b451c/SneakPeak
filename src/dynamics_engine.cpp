@@ -154,12 +154,28 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   int lookaheadFrames = (m_params.lookaheadMs > 0.0 && dt > 0.0)
     ? (int)(m_params.lookaheadMs / 1000.0 / dt + 0.5) : 0;
 
+  // Gate parameters (operates on post-compression+makeup level)
+  bool gateEnabled = (m_params.gateThreshDb > -99.0);
+  double gateRange = std::min(0.0, m_params.gateRangeDb); // always <= 0
+  double gateThresh = m_params.gateThreshDb;
+  // Gate smoothing: fast attack (2ms open), moderate release (100ms close)
+  static constexpr double GATE_ATTACK_MS = 2.0;
+  static constexpr double GATE_RELEASE_MS = 100.0;
+  double gateAttCoeff = exp(-dt / (GATE_ATTACK_MS / 1000.0));
+  double gateRelCoeff = exp(-dt / (GATE_RELEASE_MS / 1000.0));
+  int gateHoldFrames = (m_params.gateHoldMs > 0.0 && dt > 0.0)
+    ? (int)(m_params.gateHoldMs / 1000.0 / dt + 0.5) : 0;
+
   out.reserve(m_results.size());
   double grSum = 0.0;
   int grCount = 0;
-  double smoothGR = 0.0; // smoothed gain reduction state (dB, <=0)
+  double smoothGR = 0.0; // smoothed compressor gain reduction (dB, <=0)
+  double smoothGateGR = 0.0; // smoothed gate gain reduction (dB, <=0)
+  int gateHoldCounter = 0;   // hold timer (frames remaining)
   int n = (int)m_results.size();
 
+  // First pass: compute compressor GR + auto-makeup (needed before gate)
+  std::vector<double> compGRs(n);
   for (int i = 0; i < n; i++) {
     auto& pt = m_results[i];
 
@@ -185,28 +201,57 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
       instantGR = slope * overshoot;
     }
 
-    // Smooth the GAIN REDUCTION (not the input level).
-    // instantGR <= 0 (negative = more compression).
-    // Attack = GR getting more negative (more compression needed).
-    // Release = GR returning toward 0 (less compression needed).
+    // Smooth compressor GR
     if (instantGR < smoothGR) {
       smoothGR = attCoeff * smoothGR + (1.0 - attCoeff) * instantGR;
     } else {
       smoothGR = relCoeff * smoothGR + (1.0 - relCoeff) * instantGR;
     }
 
-    pt.smoothedGR = smoothGR;
+    compGRs[i] = smoothGR;
     if (smoothGR < -0.01) { grSum += smoothGR; grCount++; }
-    out.push_back({pt.time, smoothGR});
   }
 
   m_avgGR = (grCount > 0) ? grSum / (double)grCount : 0.0;
-
-  // Apply makeup gain
   double makeup = m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
-  if (makeup != 0.0) {
-    for (auto& cp : out)
-      cp.dbAdjust += makeup;
+
+  // Second pass: gate (on post-compression+makeup level) + output
+  for (int i = 0; i < n; i++) {
+    auto& pt = m_results[i];
+    double compGR = compGRs[i];
+    double totalGR = compGR;
+
+    if (gateEnabled) {
+      double rawDb = 20.0 * log10(std::max(pt.peakLinear, EPSILON)) + m_itemVolDb;
+      double postLevel = rawDb + compGR + makeup;
+
+      double instantGateGR = 0.0;
+      if (postLevel < gateThresh) {
+        // Signal below gate threshold — apply reduction
+        if (gateHoldCounter > 0) {
+          gateHoldCounter--; // hold: keep gate open
+        } else {
+          instantGateGR = -(gateThresh - postLevel);
+          instantGateGR = std::max(instantGateGR, gateRange); // clamp to range
+        }
+      } else {
+        // Signal above threshold — gate open, reset hold
+        gateHoldCounter = gateHoldFrames;
+      }
+
+      // Smooth gate GR independently
+      // "Attack" = gate opening (GR toward 0), "Release" = gate closing (GR more negative)
+      if (instantGateGR < smoothGateGR) {
+        smoothGateGR = gateRelCoeff * smoothGateGR + (1.0 - gateRelCoeff) * instantGateGR;
+      } else {
+        smoothGateGR = gateAttCoeff * smoothGateGR + (1.0 - gateAttCoeff) * instantGateGR;
+      }
+
+      totalGR = compGR + smoothGateGR;
+    }
+
+    pt.smoothedGR = totalGR;
+    out.push_back({pt.time, totalGR + makeup});
   }
 
   return out;

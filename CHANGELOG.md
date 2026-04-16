@@ -4,6 +4,20 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0-alpha.12] - 2026-04-16
+
+### Added
+- **Gate in dynamics engine** - Noise gate integrated into the compressor for breath reduction in speech/podcast audio. Gate operates on post-compression+makeup level, catching quiet sounds (breaths) that were boosted by compression. Three new sliders in dynamics panel: G.Thr (gate threshold, -60 to 0 dB, default -100 = off), G.Range (max reduction, -40 to 0 dB, default -20 for natural sound), G.Hold (hold time, 0-200ms, default 50ms prevents syllable-level chattering). Gate threshold shown as dim red horizontal line on waveform. GR shading and purple curve include gate reduction. Based on research of ZamGate, x42/darc, Airwindows SoftGate, Faust compressors library.
+- **Envelope editing in timeline/SET modes** - All envelope editing operations now correctly use per-segment envelope lookup (GetEnvelopeAtTime) instead of first segment only. Fixed 12 code paths: point add/drag/delete, freehand drawing, rectangle selection, keyboard shortcuts (Delete/E), context menu shape/delete, A/B bypass (toggles all segments), Apply Dynamics (groups points per segment with segment-relative times), and auto-refresh (aggregates all segments).
+- **Multi-item to Timeline transition** - Click on "MULTI" label in mode bar shows dropdown menu with Mix/Layered modes and "Timeline View" option. Also available via context menu View > "Switch to Timeline View". Opening Dynamics Panel in multi-item mode auto-switches to timeline view.
+- **Dynamics curves hidden in multi-item view** - Dynamics curves no longer render in multi-item view where they would be meaningless (composite audio, no single envelope to write to).
+
+### Changed
+- **Dynamics panel layout** - 10 sliders in 5 rows (was 7 in 4 rows). New row 3: L.ahead + G.Thr. New row 4: G.Range + G.Hold. Panel height 148px (was 130px).
+- **Compressor + Gate in single pass** - ComputeCompression now runs two passes: first computes compressor GR + auto-makeup, then applies gate on post-compression level. Gate has independent smoothing (2ms attack / 100ms release, hardcoded) and hold timer.
+
+---
+
 ## [2.0.0-alpha.11] - 2026-04-16
 
 ### Added
