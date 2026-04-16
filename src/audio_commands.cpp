@@ -1367,8 +1367,9 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   }
 
   int scalingMode = g_GetEnvelopeScalingMode(env);
+  bool liveSession = m_dynamicsPanel.IsLive() && m_dynamicsPanel.LiveUndoOpen();
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+  if (!liveSession && g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
   double timeStart = comp.front().time;
   double timeEnd = comp.back().time;
@@ -1399,13 +1400,16 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   }
   g_Envelope_SortPoints(env);
 
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Apply Dynamics", -1);
+  if (!liveSession && g_Undo_EndBlock2)
+    g_Undo_EndBlock2(nullptr, "SneakPeak: Apply Dynamics", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
   if (g_UpdateArrange) g_UpdateArrange();
   m_dynamicsVisible = true;
-  char toast[64];
-  snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), (int)compRaw.size());
-  ShowToast(toast);
+  if (!liveSession) {
+    char toast[64];
+    snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), (int)compRaw.size());
+    ShowToast(toast);
+  }
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 

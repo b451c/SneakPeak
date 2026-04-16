@@ -208,6 +208,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
   // Dynamics panel interaction
   if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
+    bool wasLiveUndo = m_dynamicsPanel.LiveUndoOpen();
     if (m_dynamicsPanel.OnMouseDown(x, y, m_waveformRect)) {
       if (m_dynamicsPanel.IsDragging())
         SetCapture(m_hwnd);
@@ -215,6 +216,12 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       if (m_dynamicsPanel.ApplyRequested()) {
         m_dynamicsPanel.ClearApplyRequested();
         ApplyDynamicsToEnvelope();
+      }
+      // Close live undo block if panel was hidden (close button) or Live toggled off
+      if (wasLiveUndo && !m_dynamicsPanel.LiveUndoOpen() &&
+          (!m_dynamicsPanel.IsVisible() || !m_dynamicsPanel.IsLive())) {
+        if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
+        m_dynamicsPanel.SetLiveUndoOpen(false);
       }
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
@@ -599,6 +606,11 @@ void SneakPeak::OnMouseUp(int x, int y)
   }
   if (m_dynamicsPanel.IsDragging()) {
     m_dynamicsPanel.OnMouseUp();
+    // Close live undo block after slider drag completes
+    if (m_dynamicsPanel.LiveUndoOpen()) {
+      if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
+      m_dynamicsPanel.SetLiveUndoOpen(false);
+    }
     ReleaseCapture();
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
@@ -1231,6 +1243,15 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         // Update GR meter (compute compression to get avg GR)
         m_dynamics.ComputeCompression();
         m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
+
+        // Live mode: write envelope points in real-time
+        if (m_dynamicsPanel.IsLive()) {
+          if (!m_dynamicsPanel.LiveUndoOpen()) {
+            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+            m_dynamicsPanel.SetLiveUndoOpen(true);
+          }
+          ApplyDynamicsToEnvelope();
+        }
       }
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);

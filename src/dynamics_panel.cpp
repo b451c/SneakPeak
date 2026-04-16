@@ -81,6 +81,8 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   // Reset toggles to show everything on panel open
   m_showDyn = true;
   m_showEnv = true;
+  m_liveMode = false;
+  m_liveUndoOpen = false;
 }
 
 void DynamicsPanel::Hide()
@@ -88,6 +90,8 @@ void DynamicsPanel::Hide()
   m_visible = false;
   m_dragSlider = -1;
   m_panelDragging = false;
+  m_liveMode = false;
+  // Note: live undo block closure handled by SneakPeak (needs g_Undo_EndBlock2)
 }
 
 // --- Layout ---
@@ -141,6 +145,14 @@ RECT DynamicsPanel::GetEnvToggleRect(RECT pr) const
   int x = dyn.right + TOGGLE_GAP;
   int y = dyn.top;
   return { x, y, x + TOGGLE_W, y + APPLY_H };
+}
+
+RECT DynamicsPanel::GetLiveToggleRect(RECT pr) const
+{
+  RECT envR = GetEnvToggleRect(pr);
+  int x = envR.right + TOGGLE_GAP;
+  int y = envR.top;
+  return { x, y, x + TOGGLE_W + 4, y + APPLY_H }; // slightly wider for "Live"
 }
 
 RECT DynamicsPanel::GetCloseButtonRect(RECT pr) const
@@ -233,6 +245,14 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   RECT envR = GetEnvToggleRect(pr);
   if (x >= envR.left && x < envR.right && y >= envR.top && y < envR.bottom) {
     m_showEnv = !m_showEnv;
+    return true;
+  }
+
+  // Live toggle
+  RECT liveR = GetLiveToggleRect(pr);
+  if (x >= liveR.left && x < liveR.right && y >= liveR.top && y < liveR.bottom) {
+    m_liveMode = !m_liveMode;
+    if (m_liveMode) m_applyRequested = true; // initial apply when turning on
     return true;
   }
 
@@ -478,6 +498,21 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     }
     SetTextColor(hdc, m_showEnv ? RGB(0, 180, 220) : RGB(80, 80, 80));
     DrawText(hdc, "Env", -1, &envR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    // Live toggle
+    RECT liveR = GetLiveToggleRect(pr);
+    {
+      COLORREF col = m_liveMode ? RGB(100, 220, 100) : RGB(60, 60, 60);
+      OwnedPen btnPen(PS_SOLID, 1, col);
+      DCPenScope scope(hdc, btnPen);
+      MoveToEx(hdc, liveR.left, liveR.top, nullptr);
+      LineTo(hdc, liveR.right - 1, liveR.top);
+      LineTo(hdc, liveR.right - 1, liveR.bottom - 1);
+      LineTo(hdc, liveR.left, liveR.bottom - 1);
+      LineTo(hdc, liveR.left, liveR.top);
+    }
+    SetTextColor(hdc, m_liveMode ? RGB(100, 220, 100) : RGB(80, 80, 80));
+    DrawText(hdc, "Live", -1, &liveR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Apply button
     RECT ar = GetApplyButtonRect(pr);

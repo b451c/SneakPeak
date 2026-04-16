@@ -34,6 +34,11 @@ public:
   void SetShowDyn(bool v) { m_showDyn = v; }
   void SetShowEnv(bool v) { m_showEnv = v; }
 
+  // Live preview mode: write envelope points on every slider change
+  bool IsLive() const { return m_liveMode; }
+  bool LiveUndoOpen() const { return m_liveUndoOpen; }
+  void SetLiveUndoOpen(bool v) { m_liveUndoOpen = v; }
+
 private:
   static constexpr int NUM_SLIDERS = 6;
 
@@ -56,6 +61,7 @@ private:
   RECT GetRmsToggleRect(RECT panelRect) const;
   RECT GetDynToggleRect(RECT panelRect) const;
   RECT GetEnvToggleRect(RECT panelRect) const;
+  RECT GetLiveToggleRect(RECT panelRect) const;
   RECT GetCloseButtonRect(RECT panelRect) const;
   int HitTestSlider(int x, int y, RECT panelRect) const;
   double PixelToValue(int px, RECT trackRect, int idx) const;
@@ -75,6 +81,8 @@ private:
   bool m_applyRequested = false;
   bool m_showDyn = true;  // show dynamics curves (orange + purple + threshold)
   bool m_showEnv = true;  // show volume envelope (cyan)
+  bool m_liveMode = false;  // live preview: write envelope on slider change
+  bool m_liveUndoOpen = false; // undo block is open for live session
 
   // Panel dragging
   bool m_panelDragging = false;
