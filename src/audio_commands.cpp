@@ -1370,6 +1370,27 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
+  double timeStart = comp.front().time;
+  double timeEnd = comp.back().time;
+
+  // Clear existing points in the affected range to prevent accumulation.
+  // Insert guard points at boundaries first to preserve envelope outside the range.
+  if (g_Envelope_Evaluate && g_DeleteEnvelopePointRange) {
+    // Evaluate existing envelope at boundaries for guard points
+    double valStart = 0.0, valEnd = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
+    g_Envelope_Evaluate(env, timeStart, 44100.0, 0, &valStart, &d1, &d2, &d3);
+    g_Envelope_Evaluate(env, timeEnd, 44100.0, 0, &valEnd, &d1, &d2, &d3);
+
+    // Delete all existing points in range (slightly wider to include edge points)
+    g_DeleteEnvelopePointRange(env, timeStart - 0.0001, timeEnd + 0.0001);
+
+    // Insert guard points just outside the range to prevent discontinuity
+    bool noSortGuard = true;
+    if (timeStart > 0.001)
+      g_InsertEnvelopePointEx(env, -1, timeStart - 0.0001, valStart, 0, 0.0, false, &noSortGuard);
+    g_InsertEnvelopePointEx(env, -1, timeEnd + 0.0001, valEnd, 0, 0.0, false, &noSortGuard);
+  }
+
   bool noSort = true;
   for (const auto& cp : comp) {
     double gainLinear = pow(10.0, cp.dbAdjust / 20.0);

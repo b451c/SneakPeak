@@ -129,6 +129,7 @@ extern int (*g_Envelope_Evaluate)(TrackEnvelope* envelope, double time, double s
 extern bool (*g_SetEnvelopePoint)(TrackEnvelope* envelope, int ptidx, double* timeInOptional, double* valueInOptional, int* shapeInOptional, double* tensionInOptional, bool* selectedInOptional, bool* noSortInOptional);
 extern bool (*g_InsertEnvelopePointEx)(TrackEnvelope* envelope, int autoitem_idx, double time, double value, int shape, double tension, bool selected, bool* noSortInOptional);
 extern bool (*g_DeleteEnvelopePointEx)(TrackEnvelope* envelope, int autoitem_idx, int ptidx);
+extern bool (*g_DeleteEnvelopePointRange)(TrackEnvelope* envelope, double time_start, double time_end);
 extern bool (*g_Envelope_SortPoints)(TrackEnvelope* envelope);
 extern int (*g_GetEnvelopePointByTime)(TrackEnvelope* envelope, double time);
 extern double (*g_ScaleToEnvelopeMode)(int scaling_mode, double val);

@@ -118,6 +118,7 @@
 #define REAPERAPI_WANT_SetEnvelopePoint
 #define REAPERAPI_WANT_InsertEnvelopePointEx
 #define REAPERAPI_WANT_DeleteEnvelopePointEx
+#define REAPERAPI_WANT_DeleteEnvelopePointRange
 #define REAPERAPI_WANT_Envelope_SortPoints
 #define REAPERAPI_WANT_GetEnvelopePointByTime
 #define REAPERAPI_WANT_ScaleToEnvelopeMode
@@ -389,6 +390,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_SetEnvelopePoint = SetEnvelopePoint;
   g_InsertEnvelopePointEx = InsertEnvelopePointEx;
   g_DeleteEnvelopePointEx = DeleteEnvelopePointEx;
+  g_DeleteEnvelopePointRange = DeleteEnvelopePointRange;
   g_Envelope_SortPoints = Envelope_SortPoints;
   g_GetEnvelopePointByTime = GetEnvelopePointByTime;
   g_ScaleToEnvelopeMode = ScaleToEnvelopeMode;

@@ -102,6 +102,7 @@ int (*g_Envelope_Evaluate)(TrackEnvelope*, double, double, int, double*, double*
 bool (*g_SetEnvelopePoint)(TrackEnvelope*, int, double*, double*, int*, double*, bool*, bool*) = nullptr;
 bool (*g_InsertEnvelopePointEx)(TrackEnvelope*, int, double, double, int, double, bool, bool*) = nullptr;
 bool (*g_DeleteEnvelopePointEx)(TrackEnvelope*, int, int) = nullptr;
+bool (*g_DeleteEnvelopePointRange)(TrackEnvelope*, double, double) = nullptr;
 bool (*g_Envelope_SortPoints)(TrackEnvelope*) = nullptr;
 int (*g_GetEnvelopePointByTime)(TrackEnvelope*, double) = nullptr;
 double (*g_ScaleToEnvelopeMode)(int, double) = nullptr;
