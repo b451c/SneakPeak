@@ -140,6 +140,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression() 
 
   out.reserve(m_results.size());
   double grSum = 0.0;
+  int grCount = 0; // count only points with actual compression
 
   for (const auto& pt : m_results) {
     double overshoot = pt.db - thresh;
@@ -155,12 +156,13 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression() 
     }
     // Below threshold (and outside knee): no compression, gr = 0
 
-    grSum += gr;
+    if (gr < -0.01) { grSum += gr; grCount++; }
     out.push_back({pt.time, gr}); // makeup added below
   }
 
-  // Average gain reduction (for auto-makeup and GR meter)
-  m_avgGR = (out.empty()) ? 0.0 : grSum / (double)out.size();
+  // Average gain reduction from compressed points only (not diluted by silence).
+  // This makes auto-makeup match the actual loudness reduction.
+  m_avgGR = (grCount > 0) ? grSum / (double)grCount : 0.0;
 
   // Apply makeup gain
   double makeup = m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
