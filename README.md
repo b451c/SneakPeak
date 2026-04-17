@@ -68,7 +68,7 @@ SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timelin
 - **Undo** - Full REAPER undo integration. Independent 20-level undo stack in standalone mode.
 
 ### Dynamics Processing
-Open via right-click > Process > Apply Dynamics, or use the context menu. Analyzes audio and writes volume envelope automation - zero CPU cost during playback.
+First enable the take volume envelope in REAPER (right-click item > Take > Show take volume envelope). Then open via right-click > Process > Apply Dynamics. Analyzes audio and writes volume envelope automation - zero CPU cost during playback.
 - **Built-in compressor** - Industry-standard gain-smoothing architecture (ratio, threshold, soft knee, attack, release, auto makeup gain). Matches FabFilter Pro-C / Waves / ReaComp.
 - **Noise gate** - Post-compression gate for breath reduction in speech/podcast. Threshold, range, hold parameters.
 - **Lookahead** - 0-20ms transient detection without latency cost.
