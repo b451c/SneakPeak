@@ -46,6 +46,8 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 
 ## Features
 
+SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timeline View** (after cutting), **Multi-Item** (select 2+ items), **SET** (working set, press T), and **Standalone** (drag & drop files). All non-destructive editing goes through the REAPER API with full undo.
+
 ### Waveform Display
 - **Precision waveform rendering** - Peak + RMS display with dB scale, clip indicators, and zero-crossing line.
 - **Deep zoom** - Horizontal and vertical zoom with scroll wheel, toolbar buttons, and keyboard. Zoom to fit, zoom to selection.
@@ -59,13 +61,14 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Normalize** - Peak normalization to 0 dB, plus LUFS normalization (-14 / -16 LUFS).
 - **Fades** - Drag fade handles with continuous curvature control (horizontal = length, vertical = curve shape). 7 base shapes with smooth curvature matching REAPER's native D_FADEINDIR.
 - **Reverse** - Reverse selection or full item.
-- **Gain adjustment** - Interactive gain knob (+12 to -60 dB) with fine-adjust mode (Cmd+drag). Quick +3/-3 dB from context menu.
+- **Gain adjustment** - Interactive gain knob (+24 to -60 dB) with fine-adjust mode (Cmd+drag). Scroll wheel on knob for +/-0.5 dB. Quick +3/-3 dB from context menu.
 - **DC offset removal** - One-click DC bias correction.
 - **Silence / Insert silence** - Zero out selection or insert silence at cursor.
 - **Snap to zero-crossing** - Intelligent selection boundaries at zero-crossing points.
 - **Undo** - Full REAPER undo integration. Independent 20-level undo stack in standalone mode.
 
 ### Dynamics Processing
+Open via right-click > Process > Apply Dynamics, or use the context menu. Analyzes audio and writes volume envelope automation - zero CPU cost during playback.
 - **Built-in compressor** - Industry-standard gain-smoothing architecture (ratio, threshold, soft knee, attack, release, auto makeup gain). Matches FabFilter Pro-C / Waves / ReaComp.
 - **Noise gate** - Post-compression gate for breath reduction in speech/podcast. Threshold, range, hold parameters.
 - **Lookahead** - 0-20ms transient detection without latency cost.
@@ -78,6 +81,7 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Peak/RMS detection** - Toggle between peak and RMS analysis modes.
 
 ### Volume Envelope Editing
+Enable via right-click > View > Show Volume Envelope. The take must have a volume envelope enabled in REAPER.
 - **Envelope overlay** - Cyan curve showing take volume envelope, 1:1 with REAPER arrange view.
 - **Point editing** - Click to add, drag to move, double-click or Delete to remove. Right-click for curve shape (6 shapes).
 - **Multi-select** - Shift+click to toggle, batch drag/delete.
@@ -92,13 +96,15 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Per-channel display** - Stereo spectral view with stacked channels.
 
 ### Timeline View
-- **Post-cut continuity** - After cutting a section from an item, all surviving fragments are shown with gaps preserved, matching the REAPER timeline 1:1. Dark background marks gap regions.
+Enters automatically after cutting an item in ITEM mode. Shows all fragments with gaps preserved. Exit by clicking a single item. Also accessible via the MULTI dropdown menu.
+- **Post-cut continuity** - All surviving fragments shown with gaps preserved, matching the REAPER timeline 1:1. Dark background marks gap regions.
 - **Repeated editing** - Continue cutting, adjusting gain, and editing within timeline view. Zoom position preserved across operations.
 - **Auto lifecycle** - Enters automatically after cut, exits when you click a single item on REAPER timeline.
 - **Option+click segment snap** - Option+click on any segment to instantly select its full range for gain adjustment without creating new splits.
 
 ### Multi-Item View
-- **Cross-track editing** - Select 2+ items in REAPER and view them together on an absolute timeline.
+Select 2+ items in REAPER to enter automatically. Click the MULTI label for a dropdown to switch between Mix, Layered, and Timeline View.
+- **Cross-track editing** - View all selected items together on an absolute timeline.
 - **Mix mode** - Sum all items into a single waveform (like a folder track).
 - **Layered mode (per Item)** - Each item displayed in a distinct color with transparency, overlaid on each other. 8-color palette for clear visual separation.
 - **Layered mode (per Track)** - Items colored by their parent track for track-aware visualization.
@@ -107,8 +113,9 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Crossfade indicators** - Join-point lines at crossfade midpoints for easy visual reference.
 - **Batch gain** - One knob adjusts relative gain across all selected items.
 
-### Working Set (Track Editing)
-- **Lock items for editing** - Select items on timeline, press T to create a persistent Working Set. Items are shown as a continuous waveform with gaps collapsed.
+### Working Set (SET Mode)
+Select items on one track, press T to enter. Gaps collapse into a continuous waveform. Press T again or Escape to exit.
+- **Lock items for editing** - Persistent Working Set survives clicking elsewhere. Click any set item to restore.
 - **Persistent state** - Click elsewhere and come back - the set auto-restores when you click any set item.
 - **Non-destructive editing** - Delete, split, and gain operations work through REAPER API with full undo.
 - **Ripple edit** - Delete in SET mode automatically pulls subsequent items left to close gaps.
@@ -127,7 +134,8 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 - **Info panel** - Selection bounds, view range, format details (sample rate, bit depth, channels, file size, duration).
 
 ### Standalone File Mode
-- **Drag & drop WAV files** directly into SneakPeak for offline editing.
+Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully destructive editing with independent undo.
+- **Drag & drop** files directly into SneakPeak for offline editing.
 - **Multiple file tabs** - Up to 8 files open simultaneously with independent undo stacks.
 - **Smart Save** - Ctrl+S with overwrite confirmation for WAV, auto `_edit.wav` for MP3/FLAC. Ctrl+Shift+S for Save As.
 - **Drag-export** - Drag files to REAPER timeline. Clean files use original (no copy), dirty files auto-save first. Selections export as named WAV.
