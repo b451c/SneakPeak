@@ -290,6 +290,10 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppendSubmenu(menu, viewMenu, "View");
   MenuAppendSeparator(menu);
   MenuAppendSubmenu(menu, supportMenu, "Support");
+  if (m_waveform.IsStandaloneMode()) {
+    MenuAppendSeparator(menu);
+    MenuAppend(menu, MF_STRING, CM_REPLACE_SOURCE, "Replace Source in REAPER Timeline");
+  }
   MenuAppendSeparator(menu);
   MenuAppend(menu, MF_STRING, CM_DOCK_WINDOW,
              m_isDocked ? "Undock SneakPeak" : "Dock SneakPeak in Docker");
@@ -681,6 +685,9 @@ void SneakPeak::OnContextMenuCommand(int id)
         }
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
+      break;
+    case CM_REPLACE_SOURCE:
+      DoReplaceSourceInTimeline();
       break;
     case CM_DOCK_WINDOW:
       if (m_isDocked) {

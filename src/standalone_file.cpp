@@ -583,3 +583,98 @@ void SneakPeak::StandalonePlayStop()
     DBG("[SneakPeak] Standalone preview FAILED to start\n");
   }
 }
+
+// --- Replace Source in REAPER Timeline ---
+
+int SneakPeak::ReplaceSourceInTimeline(const std::string& oldPath, const std::string& newPath)
+{
+  if (oldPath.empty() || newPath.empty()) return 0;
+  if (!g_CountTracks || !g_GetTrack || !g_GetTrackNumMediaItems || !g_GetTrackMediaItem ||
+      !g_GetMediaItemNumTakes || !g_GetMediaItemTake || !g_GetMediaItemTake_Source ||
+      !g_GetMediaSourceFileName || !g_PCM_Source_CreateFromFile || !g_GetSetMediaItemTakeInfo)
+    return 0;
+
+  std::vector<MediaItem*> touchedItems;
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+
+  int trackCount = g_CountTracks(nullptr);
+  char pathBuf[4096];
+  for (int t = 0; t < trackCount; t++) {
+    MediaTrack* track = g_GetTrack(nullptr, t);
+    if (!track) continue;
+    int itemCount = g_GetTrackNumMediaItems(track);
+    for (int i = 0; i < itemCount; i++) {
+      MediaItem* item = g_GetTrackMediaItem(track, i);
+      if (!item) continue;
+      int takeCount = g_GetMediaItemNumTakes(item);
+      bool itemTouched = false;
+      for (int k = 0; k < takeCount; k++) {
+        MediaItem_Take* take = g_GetMediaItemTake(item, k);
+        if (!take) continue;
+        PCM_source* src = g_GetMediaItemTake_Source(take);
+        if (!src) continue;
+        pathBuf[0] = 0;
+        g_GetMediaSourceFileName(src, pathBuf, sizeof(pathBuf));
+        if (strcasecmp(pathBuf, oldPath.c_str()) != 0) continue;
+        PCM_source* newSrc = g_PCM_Source_CreateFromFile(newPath.c_str());
+        if (!newSrc) continue;
+        // P_SOURCE with set transfers ownership; REAPER destroys the old source
+        g_GetSetMediaItemTakeInfo(take, "P_SOURCE", newSrc);
+        itemTouched = true;
+      }
+      if (itemTouched) touchedItems.push_back(item);
+    }
+  }
+
+  // Notify REAPER per item so peak cache invalidates and arrange redraws immediately
+  // (without this, waveforms stay stale until REAPER regains window focus)
+  if (g_UpdateItemInProject)
+    for (MediaItem* it : touchedItems) g_UpdateItemInProject(it);
+
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Replace source in timeline", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+
+  if (!touchedItems.empty() && g_CountSelectedMediaItems && g_GetSelectedMediaItem &&
+      g_SetMediaItemSelected && g_Main_OnCommand) {
+    // Force peak rebuild on touched items: swap selection to them, trigger action, restore
+    std::vector<MediaItem*> savedSel;
+    int prevCount = g_CountSelectedMediaItems(nullptr);
+    savedSel.reserve((size_t)prevCount);
+    for (int i = 0; i < prevCount; i++)
+      if (MediaItem* s = g_GetSelectedMediaItem(nullptr, i)) savedSel.push_back(s);
+    for (MediaItem* s : savedSel) g_SetMediaItemSelected(s, false);
+    for (MediaItem* it : touchedItems) g_SetMediaItemSelected(it, true);
+    g_Main_OnCommand(40047, 0);  // Item: Build any missing peaks for selected items
+    for (MediaItem* it : touchedItems) g_SetMediaItemSelected(it, false);
+    for (MediaItem* s : savedSel) g_SetMediaItemSelected(s, true);
+  }
+
+  if (g_UpdateArrange) g_UpdateArrange();
+  if (g_UpdateTimeline) g_UpdateTimeline();
+  return (int)touchedItems.size();
+}
+
+void SneakPeak::DoReplaceSourceInTimeline()
+{
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
+
+  std::string origPath = m_waveform.GetStandaloneFilePath();
+  if (origPath.empty()) {
+    ShowToast("No source path to replace");
+    return;
+  }
+
+  // Save any pending edits first - SaveStandaloneFile handles overwrite prompt / Save As for non-WAV.
+  // If user cancels the save dialog, m_savedPath stays empty and we abort the swap.
+  if (m_dirty || m_savedPath.empty()) {
+    SaveStandaloneFile();
+    if (m_savedPath.empty()) return;  // user cancelled
+  }
+
+  int count = ReplaceSourceInTimeline(origPath, m_savedPath);
+  char buf[128];
+  if (count > 0) snprintf(buf, sizeof(buf), "Replaced %d item%s in timeline", count, count == 1 ? "" : "s");
+  else snprintf(buf, sizeof(buf), "No items in timeline reference this file");
+  ShowToast(buf);
+}

@@ -57,8 +57,12 @@ MediaItem_Take* (*g_AddTakeToMediaItem)(MediaItem*) = nullptr;
 void (*g_UpdateItemInProject)(MediaItem*) = nullptr;
 
 // Track items (for track follow)
+int (*g_CountTracks)(ReaProject*) = nullptr;
+MediaTrack* (*g_GetTrack)(ReaProject*, int) = nullptr;
 int (*g_GetTrackNumMediaItems)(MediaTrack*) = nullptr;
 MediaItem* (*g_GetTrackMediaItem)(MediaTrack*, int) = nullptr;
+int (*g_GetMediaItemNumTakes)(MediaItem*) = nullptr;
+MediaItem_Take* (*g_GetMediaItemTake)(MediaItem*, int) = nullptr;
 MediaTrack* (*g_GetSelectedTrack)(ReaProject*, int) = nullptr;
 int (*g_CountSelectedTracks)(ReaProject*) = nullptr;
 

@@ -120,6 +120,7 @@ enum ContextMenuID {
   CM_ENV_SHAPE_BEZIER,
   CM_ENV_DELETE_POINT,
   CM_SWITCH_TIMELINE,
+  CM_REPLACE_SOURCE,
   CM_PRESET_BASE,  // + PRESET_COUNT entries
   CM_PRESET_LAST = CM_PRESET_BASE + 10,
   CM_LAST // sentinel -- keep last
@@ -193,6 +194,12 @@ private:
   // the current item selection. Returns the envelope handle, or nullptr on
   // failure. Optional out: wasCreated = true if we activated, false if existed.
   TrackEnvelope* EnsureVolumeEnvelope(MediaItem_Take* take, MediaItem* item, bool* wasCreated = nullptr);
+
+  // Replace every REAPER take whose source file matches oldPath with a source pointing
+  // to newPath. Returns the number of takes updated. Used by "Replace Source in REAPER
+  // Timeline" in standalone mode. Path comparison is case-insensitive on Windows.
+  int ReplaceSourceInTimeline(const std::string& oldPath, const std::string& newPath);
+  void DoReplaceSourceInTimeline();
 
   // Clipboard operations
   void DoCopy();

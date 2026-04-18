@@ -75,8 +75,12 @@
 #define REAPERAPI_WANT_UpdateItemInProject
 
 // Track items (for track follow)
+#define REAPERAPI_WANT_CountTracks
+#define REAPERAPI_WANT_GetTrack
 #define REAPERAPI_WANT_GetTrackNumMediaItems
 #define REAPERAPI_WANT_GetTrackMediaItem
+#define REAPERAPI_WANT_GetMediaItemNumTakes
+#define REAPERAPI_WANT_GetMediaItemTake
 #define REAPERAPI_WANT_GetSelectedTrack
 #define REAPERAPI_WANT_CountSelectedTracks
 
@@ -367,6 +371,10 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
 
   g_GetTrackNumMediaItems = GetTrackNumMediaItems;
   g_GetTrackMediaItem = GetTrackMediaItem;
+  g_CountTracks = CountTracks;
+  g_GetTrack = GetTrack;
+  g_GetMediaItemNumTakes = GetMediaItemNumTakes;
+  g_GetMediaItemTake = GetMediaItemTake;
   g_GetSelectedTrack = GetSelectedTrack;
   g_CountSelectedTracks = CountSelectedTracks;
 

@@ -76,8 +76,12 @@ extern MediaItem_Take* (*g_AddTakeToMediaItem)(MediaItem* item);
 extern void (*g_UpdateItemInProject)(MediaItem* item);
 
 // Track items (for track follow)
+extern int (*g_CountTracks)(ReaProject* proj);
+extern MediaTrack* (*g_GetTrack)(ReaProject* proj, int trackidx);
 extern int (*g_GetTrackNumMediaItems)(MediaTrack* tr);
 extern MediaItem* (*g_GetTrackMediaItem)(MediaTrack* tr, int itemidx);
+extern int (*g_GetMediaItemNumTakes)(MediaItem* item);
+extern MediaItem_Take* (*g_GetMediaItemTake)(MediaItem* item, int tk);
 extern MediaTrack* (*g_GetSelectedTrack)(ReaProject* proj, int seltrackidx);
 extern int (*g_CountSelectedTracks)(ReaProject* proj);
 
