@@ -294,14 +294,7 @@ void SneakPeak::OnRightClick(int x, int y)
   ClientToScreen(m_hwnd, &pt);
   TrackPopupMenu(menu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
 
-#ifndef _WIN32
-  DestroyMenu(editMenu);
-  DestroyMenu(procMenu);
-  DestroyMenu(markerMenu);
-  if (multiMenu) DestroyMenu(multiMenu);
-  DestroyMenu(viewMenu);
-  DestroyMenu(supportMenu);
-#endif
+  // Parent owns submenus on all platforms (SWELL releases submenu in InsertMenuItem) - do not destroy separately: use-after-free on Catalina.
   DestroyMenu(menu);
 }
 
