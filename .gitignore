@@ -8,12 +8,14 @@ WDL/
 .harness/
 CLAUDE.md
 ROADMAP_v2.0.md
+ROADMAP_v2.0.1.md
 AUDIT.md
 REFACTOR_LOG.md
 init.sh
 next_session_prompt.txt
 
 # Forum/messaging drafts
+drafts/
 forum_post*.txt
 forum_reply*.txt
 pm_saxmand*.txt
