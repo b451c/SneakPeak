@@ -201,6 +201,10 @@ private:
   int ReplaceSourceInTimeline(const std::string& oldPath, const std::string& newPath);
   void DoReplaceSourceInTimeline();
 
+  // Fetch latest release tag from GitHub API via curl; toast the result
+  // (up-to-date / update available with version numbers). Blocking with 5s timeout.
+  void DoCheckForUpdate();
+
   // Clipboard operations
   void DoCopy();
   void DoCut();
@@ -239,6 +243,7 @@ private:
   RECT m_modeBarRect = {};
   RECT m_modeLabelRect = {};  // clickable area of the mode label (MULTI/TIMELINE/ITEM/SET)
   RECT m_supportRect = {};    // clickable support link in mode bar
+  RECT m_versionRect = {};    // clickable version label in mode bar (runs update check)
   RECT m_toolbarRect = {};
   RECT m_rulerRect = {};
   RECT m_waveformRect = {};

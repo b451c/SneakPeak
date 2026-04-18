@@ -358,6 +358,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     int verRight = m_modeBarRect.right - 70;
     RECT verR = { verRight - 130, m_modeBarRect.top, verRight - 50, m_modeBarRect.bottom };
     DrawText(hdc, "v" SNEAKPEAK_VERSION, -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    m_versionRect = verR;
     // Support button (heart + text)
     SetTextColor(hdc, RGB(160, 80, 80));
     m_supportRect = { verRight - 46, m_modeBarRect.top, verRight, m_modeBarRect.bottom };

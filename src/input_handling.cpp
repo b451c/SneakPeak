@@ -102,6 +102,12 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
   // Mode bar click
   if (y >= m_modeBarRect.top && y < m_modeBarRect.bottom) {
+    // Click on version label: check for updates
+    if (x >= m_versionRect.left && x < m_versionRect.right &&
+        y >= m_versionRect.top && y < m_versionRect.bottom) {
+      DoCheckForUpdate();
+      return;
+    }
     // Click on Support link: show support menu
     if (x >= m_supportRect.left && x < m_supportRect.right &&
         y >= m_supportRect.top && y < m_supportRect.bottom) {

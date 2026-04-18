@@ -1378,6 +1378,50 @@ TrackEnvelope* SneakPeak::EnsureVolumeEnvelope(MediaItem_Take* take, MediaItem* 
   return env;
 }
 
+// --- Update check ---
+
+void SneakPeak::DoCheckForUpdate()
+{
+  const char* cmd = "curl -sfL -m 5 https://api.github.com/repos/b451c/SneakPeak/releases/latest";
+#ifdef _WIN32
+  FILE* pipe = _popen(cmd, "r");
+#else
+  FILE* pipe = popen(cmd, "r");
+#endif
+  if (!pipe) { ShowToast("Update check failed (curl missing?)"); return; }
+
+  std::string response;
+  char buf[4096];
+  while (fgets(buf, sizeof(buf), pipe)) response += buf;
+#ifdef _WIN32
+  int rc = _pclose(pipe);
+#else
+  int rc = pclose(pipe);
+#endif
+  if (rc != 0 || response.empty()) { ShowToast("Update check failed (no response)"); return; }
+
+  // Minimal JSON parse for "tag_name":"vX.Y.Z"
+  size_t key = response.find("\"tag_name\"");
+  if (key == std::string::npos) { ShowToast("Update check failed (parse)"); return; }
+  size_t colon = response.find(':', key);
+  size_t q1 = (colon == std::string::npos) ? std::string::npos : response.find('"', colon);
+  size_t q2 = (q1 == std::string::npos) ? std::string::npos : response.find('"', q1 + 1);
+  if (q2 == std::string::npos) { ShowToast("Update check failed (parse)"); return; }
+  std::string tag = response.substr(q1 + 1, q2 - q1 - 1);
+
+  const char* local = SNEAKPEAK_VERSION;
+  const char* remote = tag.c_str();
+  if (remote[0] == 'v') remote++;  // strip leading 'v' if present
+
+  char msg[256];
+  if (strcmp(remote, local) == 0) {
+    snprintf(msg, sizeof(msg), "SneakPeak is up to date (v%s)", local);
+  } else {
+    snprintf(msg, sizeof(msg), "Update available: v%s (you have v%s)", remote, local);
+  }
+  ShowToast(msg);
+}
+
 // --- Layout ---
 
 void SneakPeak::RecalcLayout(int w, int h)
