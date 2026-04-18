@@ -28,6 +28,7 @@ extern int (*g_plugin_register)(const char*, void*);
 // Media item API
 extern int (*g_CountSelectedMediaItems)(ReaProject* proj);
 extern MediaItem* (*g_GetSelectedMediaItem)(ReaProject* proj, int selitem);
+extern void (*g_SetMediaItemSelected)(MediaItem* item, bool selected);
 extern MediaItem_Take* (*g_GetActiveTake)(MediaItem* item);
 extern PCM_source* (*g_GetMediaItemTake_Source)(MediaItem_Take* take);
 extern double (*g_GetMediaItemInfo_Value)(MediaItem* item, const char* parmname);

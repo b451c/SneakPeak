@@ -188,6 +188,12 @@ private:
   void ReloadAfterGainChange(double savedViewStart, double savedViewDur,
                              const WaveformSelection& savedSel, double savedCursor, double db);
 
+  // Auto-activate take volume envelope if missing. Uses REAPER action 40693
+  // (native toggle) which targets active take of selected items. Saves/restores
+  // the current item selection. Returns the envelope handle, or nullptr on
+  // failure. Optional out: wasCreated = true if we activated, false if existed.
+  TrackEnvelope* EnsureVolumeEnvelope(MediaItem_Take* take, MediaItem* item, bool* wasCreated = nullptr);
+
   // Clipboard operations
   void DoCopy();
   void DoCut();

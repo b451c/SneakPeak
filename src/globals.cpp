@@ -13,6 +13,7 @@ int (*g_plugin_register)(const char*, void*) = nullptr;
 // Media item API
 int (*g_CountSelectedMediaItems)(ReaProject*) = nullptr;
 MediaItem* (*g_GetSelectedMediaItem)(ReaProject*, int) = nullptr;
+void (*g_SetMediaItemSelected)(MediaItem*, bool) = nullptr;
 MediaItem_Take* (*g_GetActiveTake)(MediaItem*) = nullptr;
 PCM_source* (*g_GetMediaItemTake_Source)(MediaItem_Take*) = nullptr;
 double (*g_GetMediaItemInfo_Value)(MediaItem*, const char*) = nullptr;

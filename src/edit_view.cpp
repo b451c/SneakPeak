@@ -1336,6 +1336,48 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
   return -1;
 }
 
+// --- Envelope helpers ---
+
+TrackEnvelope* SneakPeak::EnsureVolumeEnvelope(MediaItem_Take* take, MediaItem* item, bool* wasCreated)
+{
+  if (wasCreated) *wasCreated = false;
+  if (!take || !item) return nullptr;
+  if (!g_GetTakeEnvelopeByName || !g_Main_OnCommand ||
+      !g_CountSelectedMediaItems || !g_GetSelectedMediaItem ||
+      !g_SetMediaItemSelected) return nullptr;
+
+  TrackEnvelope* env = g_GetTakeEnvelopeByName(take, "Volume");
+  if (env) return env;
+
+  // Action 40693 toggles the ACTIVE take's envelope. Skip if our take isn't
+  // the active take (avoids creating envelope on wrong take of multi-take item).
+  if (g_GetActiveTake && g_GetActiveTake(item) != take) return nullptr;
+
+  std::vector<MediaItem*> savedSelection;
+  int selCount = g_CountSelectedMediaItems(nullptr);
+  savedSelection.reserve((size_t)selCount);
+  for (int i = 0; i < selCount; i++) {
+    MediaItem* sel = g_GetSelectedMediaItem(nullptr, i);
+    if (sel) savedSelection.push_back(sel);
+  }
+
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+  for (MediaItem* sel : savedSelection)
+    if (sel != item) g_SetMediaItemSelected(sel, false);
+  g_SetMediaItemSelected(item, true);
+
+  g_Main_OnCommand(40693, 0);  // Take: Toggle take volume envelope
+
+  // Restore prior selection
+  g_SetMediaItemSelected(item, false);
+  for (MediaItem* sel : savedSelection) g_SetMediaItemSelected(sel, true);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+
+  env = g_GetTakeEnvelopeByName(take, "Volume");
+  if (env && wasCreated) *wasCreated = true;
+  return env;
+}
+
 // --- Layout ---
 
 void SneakPeak::RecalcLayout(int w, int h)

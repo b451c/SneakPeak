@@ -466,12 +466,22 @@ void SneakPeak::OnContextMenuCommand(int id)
                                         m_waveform.GetShowJoinLines() ? "1" : "0", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
-    case CM_SHOW_VOLUME_ENVELOPE:
-      m_waveform.SetShowVolumeEnvelope(!m_waveform.GetShowVolumeEnvelope());
+    case CM_SHOW_VOLUME_ENVELOPE: {
+      bool newShow = !m_waveform.GetShowVolumeEnvelope();
+      if (newShow && !m_waveform.IsStandaloneMode() &&
+          m_waveform.GetItem() && m_waveform.GetTake()) {
+        bool wasCreated = false;
+        EnsureVolumeEnvelope(m_waveform.GetTake(), m_waveform.GetItem(), &wasCreated);
+        if (wasCreated) ShowToast("Volume envelope enabled");
+      }
+      m_waveform.SetShowVolumeEnvelope(newShow);
+      // Keep dynamics panel [Env] in sync (rendering syncs panel -> waveform each frame, so without this the menu toggle would be overridden on next paint)
+      if (m_dynamicsPanel.IsVisible()) m_dynamicsPanel.SetShowEnv(newShow);
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_vol_env",
-                                        m_waveform.GetShowVolumeEnvelope() ? "1" : "0", true);
+                                        newShow ? "1" : "0", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
+    }
     case CM_SHOW_RMS:
       m_waveform.SetShowRMS(!m_waveform.GetShowRMS());
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_rms",
@@ -538,6 +548,12 @@ void SneakPeak::OnContextMenuCommand(int id)
         m_waveform.Invalidate();
       }
       if (!m_waveform.GetTake()) break;
+      // Auto-activate take volume envelope if missing (dynamics panel writes to it)
+      {
+        bool wasCreated = false;
+        EnsureVolumeEnvelope(m_waveform.GetTake(), m_waveform.GetItem(), &wasCreated);
+        if (wasCreated) ShowToast("Volume envelope enabled");
+      }
       // Ensure analysis is done
       if (!m_dynamics.HasResults() && m_waveform.GetAudioSampleCount() > 0) {
         double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
