@@ -4,6 +4,13 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.1] - 2026-04-18
+
+### Fixed
+- **Destructive edits on Linux did not refresh until REAPER restart** - `RefreshItemSource` (called after Reverse, Normalize, DC Remove, LUFS normalize, etc.) swapped `P_SOURCE` and called `UpdateArrange` but did not invalidate REAPER's cached audio data. On macOS the arrange refresh was enough; on Linux the cache persisted until a full REAPER relaunch, making destructive edits appear to have no effect during the session. Fix adds `UpdateItemInProject(item)` on every refresh, matching the pattern already used by the Replace Source in Timeline feature. (Reporter: reaperfreaker, Debian Trixie)
+
+---
+
 ## [2.1.0] - 2026-04-18
 
 ### Highlights

@@ -368,6 +368,9 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
     }
   }
 
+  // Invalidate REAPER's cached media data. On macOS UpdateArrange alone is enough, but on Linux the audio cache survives until UpdateItemInProject fires, leaving destructive edits (Reverse, DC remove, Normalize) inaudible until REAPER restart.
+  if (g_UpdateItemInProject) g_UpdateItemInProject(item);
+
   // Rebuild peaks
   if (g_Main_OnCommand) g_Main_OnCommand(40441, 0);
 

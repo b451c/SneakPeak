@@ -40,6 +40,21 @@
 ]]></description>
       </metadata>
 
+      <version name="2.1.1" author="b451c" time="2026-04-18T22:00:00Z">
+        <changelog><![CDATA[Linux destructive-edit refresh hotfix
+
+Bug fix:
+- Destructive edits (Reverse, Normalize, DC Remove, LUFS normalize) now take effect immediately on Linux. Previously RefreshItemSource swapped P_SOURCE + UpdateArrange but did not call UpdateItemInProject, leaving REAPER's audio cache stale until a full restart. macOS/Windows were less affected; Linux required REAPER relaunch to hear edited audio.
+
+Reporter: reaperfreaker (Debian Trixie)
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.1.1/reaper_sneakpeak-arm64.dylib</source>
+        <source platform="darwin64" file="reaper_sneakpeak-x86_64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.1.1/reaper_sneakpeak-x86_64.dylib</source>
+        <source platform="win64" file="reaper_sneakpeak-x64.dll">https://github.com/b451c/SneakPeak/releases/download/v2.1.1/reaper_sneakpeak-x64.dll</source>
+        <source platform="linux64" file="reaper_sneakpeak-x86_64.so">https://github.com/b451c/SneakPeak/releases/download/v2.1.1/reaper_sneakpeak-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_sneakpeak-aarch64.so">https://github.com/b451c/SneakPeak/releases/download/v2.1.1/reaper_sneakpeak-aarch64.so</source>
+      </version>
+
       <version name="2.1.0" author="b451c" time="2026-04-18T00:00:00Z">
         <changelog><![CDATA[Bug Fixes + Workflow Features
 
