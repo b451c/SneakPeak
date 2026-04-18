@@ -60,6 +60,8 @@ public:
   MultiItemMode GetMultiItemMode() const { return m_multiItem.GetMode(); }
   void SetShowJoinLines(bool show) { m_showJoinLines = show; }
   bool GetShowJoinLines() const { return m_showJoinLines; }
+  void SetShowRMS(bool v) { m_showRMS = v; }
+  bool GetShowRMS() const { return m_showRMS; }
   const MultiItemView& GetMultiItemView() const { return m_multiItem; }
   void SetBatchGainOffset(double linearOffset);
   double GetBatchGainOffset() const { return m_batchGainOffset; }
@@ -261,6 +263,7 @@ private:
   MultiItemView m_multiItem;
   bool m_multiItemActive = false;
   bool m_showJoinLines = true;
+  bool m_showRMS = true;
   double m_batchGainOffset = 1.0; // visual gain multiplier for batch mode (linear)
 
   // Working set / track view (concatenated items, gaps collapsed)

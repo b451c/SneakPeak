@@ -393,7 +393,8 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     }
   }
 
-  // Draw RMS overlay (narrower, darker)
+  // Draw RMS overlay (narrower, darker) - skipped if user hid RMS via View menu
+  if (m_showRMS) {
   curPen = rmsNormPen;
   SelectObject(hdc, curPen);
   colTime = viewStart;
@@ -440,6 +441,7 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     MoveToEx(hdc, x, yRmsTop, nullptr);
     LineTo(hdc, x, yRmsBot + 1);
   }
+  } // m_showRMS
 
   SelectObject(hdc, oldPen);
   DeleteObject(normalPen);

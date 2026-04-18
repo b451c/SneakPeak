@@ -239,6 +239,10 @@ void SneakPeak::OnRightClick(int x, int y)
                m_dynamicsVisible
                    ? "Show Dynamics Curve  \xE2\x9C\x93" : "Show Dynamics Curve");
   }
+  MenuAppend(viewMenu, MF_STRING, CM_SHOW_RMS,
+             m_waveform.GetShowRMS() ? "Show RMS  \xE2\x9C\x93" : "Show RMS");
+  MenuAppend(viewMenu, MF_STRING, CM_SHOW_METERS,
+             m_showMeters ? "Show Meters  \xE2\x9C\x93" : "Show Meters");
   if (!m_waveform.IsStandaloneMode() && hasItem) {
     MenuAppend(viewMenu, MF_STRING, CM_TRACK_VIEW,
                (m_workingSet.active || m_workingSet.dormant)
@@ -466,6 +470,24 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_waveform.SetShowVolumeEnvelope(!m_waveform.GetShowVolumeEnvelope());
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_vol_env",
                                         m_waveform.GetShowVolumeEnvelope() ? "1" : "0", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_SHOW_RMS:
+      m_waveform.SetShowRMS(!m_waveform.GetShowRMS());
+      if (g_SetExtState) g_SetExtState("SneakPeak", "show_rms",
+                                        m_waveform.GetShowRMS() ? "1" : "0", true);
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_SHOW_METERS:
+      m_showMeters = !m_showMeters;
+      if (g_SetExtState) g_SetExtState("SneakPeak", "show_meters",
+                                        m_showMeters ? "1" : "0", true);
+      {
+        RECT cr;
+        GetClientRect(m_hwnd, &cr);
+        RecalcLayout(cr.right, cr.bottom);
+        m_waveform.Invalidate();
+      }
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_SHOW_DYNAMICS:

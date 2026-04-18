@@ -78,7 +78,7 @@ void SneakPeak::OnPaint(HDC hdc)
   }
   if (m_minimapVisible) m_minimap.Paint(hdc, m_waveform);
   DrawScrollbar(hdc);
-  DrawBottomPanel(hdc);
+  if (m_showMeters) DrawBottomPanel(hdc);
   DrawToast(hdc);
 }
 

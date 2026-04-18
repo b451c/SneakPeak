@@ -87,6 +87,10 @@ void SneakPeak::Create()
     else if (meterMode && strcmp(meterMode, "vu") == 0) m_levels.SetMode(MeterMode::VU);
     const char* meterSrc = g_GetExtState("SneakPeak", "meter_source");
     if (meterSrc && strcmp(meterSrc, "master") == 0) m_meterFromMaster = true;
+    const char* showRms = g_GetExtState("SneakPeak", "show_rms");
+    if (showRms && showRms[0] == '0') m_waveform.SetShowRMS(false);
+    const char* showMeters = g_GetExtState("SneakPeak", "show_meters");
+    if (showMeters && showMeters[0] == '0') m_showMeters = false;
   }
 
   // Recalc layout after restoring settings (minimap visibility etc.)
@@ -1339,9 +1343,10 @@ void SneakPeak::RecalcLayout(int w, int h)
   m_toolbarRect      = { 0, 0, w, TOOLBAR_HEIGHT };
   m_modeBarRect      = { 0, TOOLBAR_HEIGHT, w, TOOLBAR_HEIGHT + MODE_BAR_HEIGHT };
   m_rulerRect        = { 0, TOOLBAR_HEIGHT + MODE_BAR_HEIGHT, w, TOOLBAR_HEIGHT + MODE_BAR_HEIGHT + RULER_HEIGHT };
-  m_bottomPanelRect  = { 0, h - BOTTOM_PANEL_HEIGHT, w, h };
+  int bottomH = m_showMeters ? BOTTOM_PANEL_HEIGHT : 0;
+  m_bottomPanelRect  = { 0, h - bottomH, w, h };
   int minimapH = m_minimapVisible ? m_minimapHeight : 0;
-  m_scrollbarRect    = { 0, h - BOTTOM_PANEL_HEIGHT - SCROLLBAR_HEIGHT, w, h - BOTTOM_PANEL_HEIGHT };
+  m_scrollbarRect    = { 0, h - bottomH - SCROLLBAR_HEIGHT, w, h - bottomH };
   m_minimapRect      = { 0, m_scrollbarRect.top - minimapH, w, m_scrollbarRect.top };
 
   int contentTop = TOOLBAR_HEIGHT + MODE_BAR_HEIGHT + RULER_HEIGHT;
