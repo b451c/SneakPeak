@@ -565,8 +565,9 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
               if (cmdDown) {
                 // Cmd+click+drag on line = freehand envelope drawing
                 if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-                bool noSort = true;
+                bool noSort = false;
                 g_InsertEnvelopePointEx(env, -1, ei.envTime, newRawVal, 0, 0.0, false, &noSort);
+                g_Envelope_SortPoints(env);  // unsorted envelope yields invalid Envelope_Evaluate values until mouseUp
                 m_envFreehand = true;
                 m_envFreehandLastX = x;
                 m_envDragPointIdx = -1;
@@ -584,6 +585,24 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
                 if (g_UpdateArrange) g_UpdateArrange();
                 int newIdx = g_GetEnvelopePointByTime ? g_GetEnvelopePointByTime(env, ei.envTime) : -1;
                 if (newIdx >= 0) {
+                  // New point inserted unselected; deselect others and select only it (drag loop filters by psel==true).
+                  // Also compute drag clamp bounds from non-selected neighbors (hit-branch pattern, lines 519-537).
+                  m_envDragMinTime = 0.0;
+                  m_envDragMaxTime = segDuration;
+                  if (g_SetEnvelopePoint && g_CountEnvelopePoints && g_GetEnvelopePoint) {
+                    int ptCount = g_CountEnvelopePoints(env);
+                    bool noSortSel = true;
+                    for (int j = 0; j < ptCount; j++) {
+                      bool sel = (j == newIdx);
+                      g_SetEnvelopePoint(env, j, nullptr, nullptr, nullptr, nullptr, &sel, &noSortSel);
+                      if (!sel) {
+                        double nt = 0, nv = 0, ntn = 0; int ns = 0; bool npsel = false;
+                        g_GetEnvelopePoint(env, j, &nt, &nv, &ns, &ntn, &npsel);
+                        if (nt < ei.envTime && nt > m_envDragMinTime) m_envDragMinTime = nt + 0.0001;
+                        if (nt > ei.envTime && nt < m_envDragMaxTime) m_envDragMaxTime = nt - 0.0001;
+                      }
+                    }
+                  }
                   m_envDragging = true;
                   m_envDragPointIdx = newIdx;
                   m_envDragEnv = env;
