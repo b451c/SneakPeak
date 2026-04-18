@@ -68,7 +68,7 @@ SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timelin
 - **Undo** - Full REAPER undo integration. Independent 20-level undo stack in standalone mode.
 
 ### Dynamics Processing
-First enable the take volume envelope in REAPER (right-click item > Take > Show take volume envelope). Then open via right-click > Process > Apply Dynamics. Analyzes audio and writes volume envelope automation - zero CPU cost during playback.
+Right-click > Process > Dynamics Panel. SneakPeak auto-activates the take volume envelope if it isn't already enabled (no manual setup). Analyzes audio and writes volume envelope automation - zero CPU cost during playback.
 - **Built-in compressor** - Industry-standard gain-smoothing architecture (ratio, threshold, soft knee, attack, release, auto makeup gain). Matches FabFilter Pro-C / Waves / ReaComp.
 - **Noise gate** - Post-compression gate for breath reduction in speech/podcast. Threshold, range, hold parameters.
 - **Lookahead** - 0-20ms transient detection without latency cost.
@@ -81,7 +81,7 @@ First enable the take volume envelope in REAPER (right-click item > Take > Show 
 - **Peak/RMS detection** - Toggle between peak and RMS analysis modes.
 
 ### Volume Envelope Editing
-Enable via right-click > View > Show Volume Envelope. The take must have a volume envelope enabled in REAPER.
+Enable via right-click > View > Show Volume Envelope. SneakPeak auto-activates the take volume envelope on the current item if it is not yet enabled in REAPER.
 - **Envelope overlay** - Cyan curve showing take volume envelope, 1:1 with REAPER arrange view.
 - **Point editing** - Click to add, drag to move, double-click or Delete to remove. Right-click for curve shape (6 shapes).
 - **Multi-select** - Shift+click to toggle, batch drag/delete.
@@ -138,6 +138,7 @@ Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully d
 - **Drag & drop** files directly into SneakPeak for offline editing.
 - **Multiple file tabs** - Up to 8 files open simultaneously with independent undo stacks.
 - **Smart Save** - Ctrl+S with overwrite confirmation for WAV, auto `_edit.wav` for MP3/FLAC. Ctrl+Shift+S for Save As.
+- **Replace Source in REAPER Timeline** - Right-click > Replace Source in REAPER Timeline after editing: one click saves the file and swaps `P_SOURCE` on every project take that references the original path. Immediate arrange redraw.
 - **Drag-export** - Drag files to REAPER timeline. Clean files use original (no copy), dirty files auto-save first. Selections export as named WAV.
 
 ### Markers
@@ -157,7 +158,9 @@ Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully d
 - **Drag export** - Drag a selection outside SneakPeak to place it on REAPER timeline. Alt+drag for immediate export to Finder.
 - **Track solo** - Solo button (S) for quick track isolation.
 - **REAPER markers** - Full integration with REAPER's project markers.
-- **Persistent settings** - All preferences (meter mode, view mode, minimap, snap, dock state) survive REAPER restarts.
+- **Persistent settings** - All preferences (meter mode, view mode, minimap, snap, dock state, RMS/meter visibility) survive REAPER restarts.
+- **Check for updates** - Click the version label in the mode bar to query the latest release on GitHub.
+- **Hide RMS / hide meters** - View menu toggles to show peak-only waveforms or give the waveform the full vertical space.
 
 ---
 
@@ -293,9 +296,9 @@ make -j$(sysctl -n hw.ncpu)
 |----------|-------------|--------|
 | **macOS** | arm64 (Apple Silicon) | Stable (primary development) |
 | **macOS** | x86_64 (Intel) | Stable |
-| **Windows** | x64 | New in v2.0 |
-| **Linux** | x86_64 | New in v2.0 |
-| **Linux** | aarch64 | New in v2.0 |
+| **Windows** | x64 | Stable |
+| **Linux** | x86_64 | Stable |
+| **Linux** | aarch64 | Stable |
 
 All platforms built via GitHub Actions CI on every tagged release. The codebase is pure C++ with WDL/SWELL - zero external dependencies.
 

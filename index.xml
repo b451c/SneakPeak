@@ -40,6 +40,27 @@
 ]]></description>
       </metadata>
 
+      <version name="2.1.0" author="b451c" time="2026-04-18T00:00:00Z">
+        <changelog><![CDATA[Bug Fixes + Workflow Features
+
+Bug fixes:
+- macOS Catalina crash on right-click context menu (use-after-free on submenus)
+- Envelope point add did not drag the new point (selected=false + stale clamp bounds + unsorted freehand insert)
+
+New features:
+- Auto-activate take volume envelope on demand (no manual REAPER setup needed)
+- View > Show RMS toggle (peak-only waveform when off)
+- View > Show Meters toggle (collapses bottom panel for more waveform area)
+- Replace Source in REAPER Timeline (standalone mode: edit a file, one click pushes it back to every project take referencing it)
+- Check for Updates via clickable version label in mode bar
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.1.0/reaper_sneakpeak-arm64.dylib</source>
+        <source platform="darwin64" file="reaper_sneakpeak-x86_64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.1.0/reaper_sneakpeak-x86_64.dylib</source>
+        <source platform="win64" file="reaper_sneakpeak-x64.dll">https://github.com/b451c/SneakPeak/releases/download/v2.1.0/reaper_sneakpeak-x64.dll</source>
+        <source platform="linux64" file="reaper_sneakpeak-x86_64.so">https://github.com/b451c/SneakPeak/releases/download/v2.1.0/reaper_sneakpeak-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_sneakpeak-aarch64.so">https://github.com/b451c/SneakPeak/releases/download/v2.1.0/reaper_sneakpeak-aarch64.so</source>
+      </version>
+
       <version name="2.0.0" author="b451c" time="2026-04-16T00:00:00Z">
         <changelog><![CDATA[Multiplatform + Dynamics Engine + Envelope Editing
 

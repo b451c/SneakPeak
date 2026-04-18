@@ -127,7 +127,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <nav class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div class="sidebar-logo">SneakPeak</div>
-    <div class="sidebar-version">v2.0.0 User Guide</div>
+    <div class="sidebar-version">v2.1.0 User Guide</div>
   </div>
 
   <div class="nav-group">
@@ -219,11 +219,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Hero -->
 <h1>Sneak<span>Peak</span> User Guide</h1>
-<p class="subtitle">Precision waveform editor for REAPER - v2.0.0</p>
+<p class="subtitle">Precision waveform editor for REAPER - v2.1.0</p>
 
-<img src="images/sneakpeak-hero.png" alt="SneakPeak v2.0" style="width:100%;border-radius:var(--radius);margin:0 0 32px;border:1px solid var(--border)">
+<img src="images/sneakpeak-hero.png" alt="SneakPeak v2.1" style="width:100%;border-radius:var(--radius);margin:0 0 32px;border:1px solid var(--border)">
 
-<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. New in v2.0: volume envelope editing, dynamics processing (compressor + gate), and multiplatform support (macOS, Windows, Linux).</p>
+<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. v2.0 added volume envelope editing, dynamics processing, and multiplatform support. v2.1 polishes the release with automatic envelope activation, source replacement back into the timeline, hide RMS/meter toggles, an update checker, and two fixes for bugs reported on v2.0.</p>
 
 <div class="hero-modes">
   <div class="hero-mode">
@@ -619,6 +619,17 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Any pending fade previews are baked into the audio data at save time.</p>
 
+<h2 id="standalone-replace-source">Replace Source in REAPER Timeline</h2>
+
+<p>After editing a file in standalone mode, right-click > <strong>Replace Source in REAPER Timeline</strong>. One click saves the edited content (using Smart Save rules above) and swaps <code>P_SOURCE</code> on every take in the project whose file path matches the standalone's original path. All referenced items refresh their waveforms immediately in REAPER's arrange view.</p>
+
+<ul>
+  <li><strong>Multiple references</strong> - if the same file is used on several tracks, all matching takes are updated in one pass.</li>
+  <li><strong>Case-insensitive</strong> on Windows; exact match on macOS/Linux.</li>
+  <li><strong>Single undo</strong> - <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Z</kbd> reverts every replaced take at once.</li>
+  <li><strong>No references</strong> - toast reports "No items in timeline reference this file" (e.g. when the standalone file was dragged from outside the project).</li>
+</ul>
+
 <h2 id="standalone-export">Drag Export</h2>
 
 <p>Click inside a selection and drag outside the SneakPeak window to export audio to the REAPER timeline or other applications.</p>
@@ -651,7 +662,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>SneakPeak displays the take volume envelope as a cyan curve overlaid on the waveform. The envelope is fully editable - add, move, delete, and draw points directly on the waveform without switching to REAPER's envelope lanes. The waveform shape always reflects the effect of the envelope in real-time.</p>
 
-<p>Enable the overlay via right-click > <strong>View > Show Volume Envelope</strong>. The envelope must first be enabled on the take in REAPER (right-click item > Take > Show take volume envelope).</p>
+<p>Enable the overlay via right-click > <strong>View > Show Volume Envelope</strong>. If the take does not yet have an active volume envelope, SneakPeak creates and activates one automatically (toast: "Volume envelope enabled"). For multi-take items, auto-activation only runs when the take SneakPeak is displaying is the item's active take.</p>
 
 <div class="tip">
   <strong>Accurate display</strong>
@@ -700,7 +711,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Red shading</strong> - gain reduction fill between original and compressed curves (toggle with [GR])</li>
 </ul>
 
-<p>First enable the take volume envelope in REAPER (right-click item > Take > Show take volume envelope). Then open the dynamics panel from right-click > <strong>Process > Apply Dynamics...</strong></p>
+<p>Open the dynamics panel from right-click > <strong>Process > Dynamics Panel</strong>. SneakPeak auto-activates the take volume envelope on first open if it isn't already enabled - no manual REAPER setup needed.</p>
 
 <img src="images/dynamics-gr-shading.png" alt="SneakPeak dynamics with GR shading" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
@@ -822,6 +833,17 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </table>
 
 <p>Enable <strong>Master Output</strong> from the meter context menu to read levels from the master track instead of the current item. This lets you monitor the master bus while editing individual items.</p>
+
+<h3>Hide RMS / Hide Meters</h3>
+
+<p>Two View menu toggles let you minimize the UI when you want more waveform area:</p>
+
+<ul>
+  <li><strong>Show RMS</strong> (default on) - when off, waveforms show the peak outline only. Useful on dense stereo material where the RMS fill obscures detail.</li>
+  <li><strong>Show Meters</strong> (default on) - when off, the entire bottom panel (meters + info) collapses to zero height and the waveform expands into that space. The scrollbar stays at the bottom.</li>
+</ul>
+
+<p>Both settings persist across REAPER sessions via ExtState.</p>
 
 <h2 id="minimap">Minimap</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
@@ -969,12 +991,23 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <ul>
   <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Ripple Delete, Silence, Select All, Split at Cursor (S)</li>
-  <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix, Apply Dynamics...</li>
-  <li><strong>View</strong> - Zoom controls, Spectral View, Show Volume Envelope, Show Dynamics Curve, Snap to Zero-Crossing, Minimap, Ruler mode (Relative/Absolute/Bars & Beats), Working Set toggle, Group, Switch to Timeline View</li>
+  <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix, Dynamics Panel</li>
+  <li><strong>View</strong> - Zoom controls, Spectral View, Show Volume Envelope, Show Dynamics Curve, Show RMS, Show Meters, Snap to Zero-Crossing, Minimap, Ruler mode (Relative/Absolute/Bars & Beats), Working Set toggle, Group, Switch to Timeline View</li>
   <li><strong>Multi-Item</strong> - Mix/Layered modes, Show Join Lines, Switch to Timeline View (when multiple items are loaded)</li>
   <li><strong>Markers</strong> - Add Marker, Add Region, Edit, Delete, Show/Hide</li>
-  <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal</li>
+  <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal, GitHub</li>
+  <li><strong>Replace Source in REAPER Timeline</strong> - standalone mode only; see Replace Source section</li>
   <li><strong>Dock SneakPeak in Docker / Undock SneakPeak</strong> - toggle between floating and docked window</li>
+</ul>
+
+<h3>Check for Updates</h3>
+
+<p>Click the version label (<code>v2.1.0</code>) in the mode bar. SneakPeak queries GitHub's Releases API via <code>curl</code> (5 s timeout) and reports the result in a toast:</p>
+
+<ul>
+  <li><strong>SneakPeak is up to date (vX.Y.Z)</strong> - you are on the latest release</li>
+  <li><strong>Update available: vA.B.C (you have vX.Y.Z)</strong> - visit the Releases page on GitHub to download</li>
+  <li><strong>Update check failed</strong> - offline, firewall, or <code>curl</code> missing. No further consequences - SneakPeak continues to work.</li>
 </ul>
 
 <h2 id="toolbar">Toolbar Buttons</h2>

@@ -4,6 +4,24 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-04-18
+
+### Highlights
+SneakPeak v2.1 addresses critical bug reports from the v2.0 release and adds workflow features: two crash/UX bugs fixed, automatic envelope activation, RMS/meter visibility toggles, source replacement back into the REAPER timeline, and an update checker.
+
+### Fixed
+- **Catalina right-click menu crash** - On macOS 10.15 opening the main context menu triggered a use-after-free when the submenus were double-released (SWELL `InsertMenuItem` transfers submenu ownership to the parent, so the explicit `DestroyMenu` calls left dangling references). The parent now cleans up submenus on every platform. Newer macOS and Linux allocators were lenient and hid the bug; Catalina's stricter reuse made it deterministic. (Reporter: alphoc, forum #42/#46)
+- **Envelope point add did not drag the new point** - Clicking on the envelope line inserted a point with `selected=false` and the drag loop moves only selected points, so the newly added point stayed still while a previously-selected point slid underneath. Add-point now deselects all others, selects the new point, and initializes the drag clamp bounds from its neighbors. Also sorts the envelope immediately after Cmd+click (freehand start) so `Envelope_Evaluate` returns correct values during the gesture - previously the waveform on the unrelated side briefly distorted until mouse-up. (Reporter: Lunar Ladder, forum #41)
+
+### Added
+- **Auto-activate take volume envelope** - Enabling Show Volume Envelope or opening the Dynamics Panel on a take without an active volume envelope now creates and activates it automatically via REAPER action 40693. No more manually right-clicking the item and enabling the envelope before SneakPeak can work with it. Toast confirms "Volume envelope enabled" on first activation. Multi-take items: only activates when SneakPeak's displayed take is the item's active take. (Reporter: Khron Studio)
+- **Hide RMS toggle** - View menu entry to hide the darker RMS overlay inside the waveform, leaving only the peak outline. Useful on dense stereo content where RMS fill obscures detail. Persists via ExtState. (Reporter: Khron Studio, forum #35)
+- **Hide Meters toggle** - View menu entry to collapse the bottom meter/info panel entirely, giving the waveform the full vertical space. Scrollbar stays at the bottom. Persists via ExtState. (Reporter: Khron Studio)
+- **Replace Source in REAPER Timeline** - New context menu entry in standalone mode: after editing a file in SneakPeak, one click saves the edited content (respecting the existing smart-save rules: WAV overwrites with a prompt, non-WAV auto-creates `name_edit.wav`) and swaps `P_SOURCE` on every take in the project whose source file matches the standalone's original path. Toast reports the number of items updated. Immediate waveform refresh in REAPER arrange (no need to change window focus). (Reporter: Lunar Ladder, forum #41)
+- **Check for Updates** - Click the version label in the mode bar to query GitHub's Releases API via `curl` (5 s timeout). Toast reports either "SneakPeak is up to date (vX.Y.Z)" or "Update available: vX.Y.Z (you have vA.B.C)". Graceful failure when offline.
+
+---
+
 ## [2.0.0] - 2026-04-16
 
 ### Highlights
