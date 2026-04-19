@@ -251,7 +251,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h3>ReaPack (recommended)</h3>
 <ol>
   <li>In REAPER: <strong>Extensions > ReaPack > Import repositories...</strong></li>
-  <li>Paste: <code>https://raw.githubusercontent.com/b451c/SneakPeak/main/index.xml?v=2.1.1</code> (the <code>?v=</code> suffix is a cache-buster bumped per release; forces a fresh CDN fetch instead of the 5-min GitHub raw cache)</li>
+  <li>Paste: <code>https://raw.githubusercontent.com/b451c/SneakPeak/main/index.xml</code></li>
   <li><strong>Extensions > ReaPack > Browse packages</strong>, search "SneakPeak"</li>
   <li>If a new release does not appear after <strong>Synchronize packages</strong>, wait ~5 minutes (GitHub's raw CDN serves <code>Cache-Control: max-age=300</code> so the previous index may still be cached at your edge node) and try again. Faster alternative: remove the repo from <strong>ReaPack > Manage repositories</strong> and re-add it - the dialog click-through usually buys enough time for the CDN to refresh.</li>
   <li>Right-click > Install, restart REAPER</li>
