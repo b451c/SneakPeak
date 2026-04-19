@@ -205,12 +205,15 @@ Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully d
 1. In REAPER, go to **Extensions > ReaPack > Import repositories...**
 2. Paste this URL:
    ```
-   https://raw.githubusercontent.com/b451c/SneakPeak/main/index.xml
+   https://raw.githubusercontent.com/b451c/SneakPeak/main/index.xml?v=2.1.1
    ```
+   (The `?v=` suffix is a cache-buster that bypasses GitHub's 5-min CDN cache so you get the latest release immediately. URL is bumped with each new version.)
 3. Go to **Extensions > ReaPack > Browse packages**, search for **SneakPeak**.
 4. Right-click > **Install**, then restart REAPER.
 
 ReaPack will automatically notify you of future updates.
+
+> **Tip:** If a new release was just published and ReaPack still shows the previous version after **Synchronize packages**, the cause is GitHub's raw-content CDN: `raw.githubusercontent.com` returns `Cache-Control: max-age=300` (5 minutes). Either wait ~5 minutes and run Synchronize again, or remove the repo from **ReaPack > Manage repositories...** and re-add it - the click-through delay is usually enough for the CDN to roll over.
 
 ### Manual install
 
