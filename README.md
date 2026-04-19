@@ -212,7 +212,11 @@ Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully d
 
 ReaPack will automatically notify you of future updates.
 
-> **Tip:** If a new release was just published and ReaPack still shows the previous version after **Synchronize packages**, the cause is GitHub's raw-content CDN: `raw.githubusercontent.com` returns `Cache-Control: max-age=300` (5 minutes). Either wait ~5 minutes and run Synchronize again, or remove the repo from **ReaPack > Manage repositories...** and re-add it - the click-through delay is usually enough for the CDN to roll over.
+> **Troubleshooting:** if Synchronize packages does not show the latest version after a new release, check these in order:
+> 1. **URL path** in **ReaPack > Manage repositories...** must contain `/main/`, not `/testing/`. Testing-branch URLs from alpha/beta periods serve an independent index that does not track production releases.
+> 2. **Cache file mtime** - after Synchronize, `~/Library/Application Support/REAPER/ReaPack/Cache/SneakPeak.xml` (or your platform's equivalent) should be freshly updated. If it's stale, the download is silently failing to write (permissions, AV quarantine, disk). Remove and re-add the repo - this deletes and rewrites the cache file.
+> 3. **Corporate proxy or AV** may strip `Cache-Control: no-cache` and serve a cached copy. Verify with `curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/b451c/SneakPeak/main/index.xml` - should return the current index.
+> 4. **Fresh release (<5 min ago)** - GitHub raw CDN (`raw.githubusercontent.com` via Fastly) returns `Cache-Control: max-age=300`. Wait 5 minutes and retry. Does not apply once more than 5 minutes have elapsed.
 
 ### Manual install
 

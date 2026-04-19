@@ -253,7 +253,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li>In REAPER: <strong>Extensions > ReaPack > Import repositories...</strong></li>
   <li>Paste: <code>https://raw.githubusercontent.com/b451c/SneakPeak/main/index.xml</code></li>
   <li><strong>Extensions > ReaPack > Browse packages</strong>, search "SneakPeak"</li>
-  <li>If a new release does not appear after <strong>Synchronize packages</strong>, wait ~5 minutes (GitHub's raw CDN serves <code>Cache-Control: max-age=300</code> so the previous index may still be cached at your edge node) and try again. Faster alternative: remove the repo from <strong>ReaPack > Manage repositories</strong> and re-add it - the dialog click-through usually buys enough time for the CDN to refresh.</li>
+  <li>If <strong>Synchronize packages</strong> does not show the latest version, check (in order): (a) the URL in <strong>ReaPack > Manage repositories</strong> contains <code>/main/</code> not <code>/testing/</code>; (b) <code>~/Library/Application Support/REAPER/ReaPack/Cache/SneakPeak.xml</code> mtime is fresh after Synchronize (if not, the write silently failed - remove/re-add the repo); (c) a proxy/AV isn't stripping <code>Cache-Control: no-cache</code> (verify with <code>curl -H 'Cache-Control: no-cache' &lt;URL&gt;</code>); (d) if the release is less than 5 minutes old, wait - GitHub's raw CDN has a 300 s cache.</li>
   <li>Right-click > Install, restart REAPER</li>
 </ol>
 
