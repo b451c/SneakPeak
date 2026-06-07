@@ -47,6 +47,24 @@ struct DynPanelVM {
   const char* presetName = nullptr; // null -> "Preset"
 };
 
+// Plain rectangle (logical px, panel-relative); no Blend2D so it can be shared by
+// the renderer and the panel's hit-testing.
+struct URect {
+  double x = 0, y = 0, w = 0, h = 0;
+  bool contains(double px, double py) const {
+    return px >= x && px < x + w && py >= y && py < y + h;
+  }
+};
+
+// Computed panel geometry - the SINGLE source of truth for BOTH RenderPanel and
+// DynamicsPanel hit-testing (so draw and click can never drift). Panel-relative px.
+struct DynLayout {
+  URect header, footer, plotWell, grMeter;
+  URect preset, abBtn, closeBtn, apply;
+  URect tabSeg[3];   // Compressor / Gate / View pill segments
+};
+DynLayout ComputeDynLayout(double w, double h);
+
 class UiCanvas {
 public:
   UiCanvas();                 // defined in .cpp (Gfx must be complete - pimpl)
