@@ -7,18 +7,20 @@
 #include <cmath>
 #include <algorithm>
 
-// Slider definitions: label, min, max, unit, precision
+// Slider/knob definitions: label, min, max, unit, precision, defaultVal.
+// defaultVal feeds the knob default-tick + Cmd-reset (Inc 4); it mirrors the
+// DynamicsParams defaults. -100 on Thresh = "use the analysed average peak".
 const DynamicsPanel::SliderDef DynamicsPanel::SLIDER_DEFS[NUM_SLIDERS] = {
-  { "Thresh",  -60.0,    0.0, "dB",  1 },  // 0: left col row 0
-  { "Ratio",     1.0,   20.0, ":1",  1 },  // 1: left col row 1
-  { "Knee",      0.0,   24.0, "dB",  0 },  // 2: left col row 2
-  { "Attack",    0.0,  500.0, "ms",  0 },  // 3: right col row 0
-  { "Release",   0.0, 1000.0, "ms",  0 },  // 4: right col row 1
-  { "Makeup",    0.0,   24.0, "dB",  1 },  // 5: right col row 2
-  { "L.ahead",   0.0,   20.0, "ms",  1 },  // 6: left col row 3
-  { "G.Thr",   -60.0,    0.0, "dB",  1 },  // 7: right col row 3 (gate threshold)
-  { "G.Range", -40.0,    0.0, "dB",  0 },  // 8: left col row 4 (gate max reduction)
-  { "G.Hold",    0.0,  200.0, "ms",  0 },  // 9: right col row 4 (gate hold time)
+  { "Thresh",  -60.0,    0.0, "dB",  1, -100.0 },  // 0: operating-point default
+  { "Ratio",     1.0,   20.0, ":1",  1,    4.0 },  // 1
+  { "Knee",      0.0,   24.0, "dB",  0,    6.0 },  // 2
+  { "Attack",    0.0,  500.0, "ms",  0,    5.0 },  // 3
+  { "Release",   0.0, 1000.0, "ms",  0,  100.0 },  // 4
+  { "Makeup",    0.0,   24.0, "dB",  1,    0.0 },  // 5
+  { "L.ahead",   0.0,   20.0, "ms",  1,    0.0 },  // 6
+  { "G.Thr",   -60.0,    0.0, "dB",  1, -100.0 },  // 7: gate threshold (-100 = off, engine default)
+  { "G.Range", -40.0,    0.0, "dB",  0,  -20.0 },  // 8: gate max reduction
+  { "G.Hold",    0.0,  200.0, "ms",  0,   50.0 },  // 9: gate hold time
 };
 
 // --- Layout constants ---
@@ -195,7 +197,7 @@ RECT DynamicsPanel::GetABToggleRect(RECT pr) const
 RECT DynamicsPanel::GetPresetButtonRect(RECT pr) const
 {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
-  DynLayout L = ComputeDynLayout(pr.right - pr.left, pr.bottom - pr.top);
+  DynLayout L = ComputeDynLayout(pr.right - pr.left, pr.bottom - pr.top, (int)m_tab);
   return { pr.left + (int)L.preset.x, pr.top + (int)L.preset.y,
            pr.left + (int)(L.preset.x + L.preset.w), pr.top + (int)(L.preset.y + L.preset.h) };
 #else
@@ -273,7 +275,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
 {
   const double lx = (double)(x - pr.left), ly = (double)(y - pr.top);
   const DynLayout L = ComputeDynLayout((double)(pr.right - pr.left),
-                                       (double)(pr.bottom - pr.top));
+                                       (double)(pr.bottom - pr.top), (int)m_tab);
 
   if (L.closeBtn.contains(lx, ly)) { Hide(); return true; }
   if (L.preset.contains(lx, ly))   { m_presetMenuRequested = true; return true; }
@@ -281,6 +283,34 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   for (int i = 0; i < 3; ++i)
     if (L.tabSeg[i].contains(lx, ly)) { m_tab = (Tab)i; return true; }
   if (!m_liveMode && L.apply.contains(lx, ly)) { m_applyRequested = true; return true; }
+
+  // Knob hit (only on-tab params have a non-empty rect). Cmd-click resets to the
+  // param default; otherwise start a velocity-sensitive vertical drag. Reusing
+  // m_dragSlider keeps IsDragging()/SetCapture/reanalyze/Live byte-for-byte with
+  // the GDI slider path.
+  for (int i = 0; i < NUM_SLIDERS; ++i) {
+    if (!L.knob[i].contains(lx, ly)) continue;
+    if (IsFineMode()) {                          // Cmd-click = reset to the param default
+      if (i == 5) {                              // Makeup -> auto (DynamicsParams default)
+        m_params.makeupDb = 0.0;
+        m_params.autoMakeup = true;
+      } else if (i == 7) {                       // Gate threshold -> off (engine sentinel -100)
+        m_params.gateThreshDb = -100.0;
+      } else {
+        double dflt = SLIDER_DEFS[i].defaultVal;
+        if (i == 0 && dflt <= -99.0) dflt = m_avgPeakDb;
+        SetSliderValue(i, dflt);
+      }
+      m_paramsChanged = true;
+      m_presetIdx = -1;
+      return true;
+    }
+    m_dragSlider = i;
+    m_dragStartY = y;
+    m_dragLastY = y;
+    m_dragStartVal = GetSliderValue(i);
+    return true;                                 // IsDragging() -> host SetCapture
+  }
 
   m_panelDragging = true;          // empty area -> drag (OnMouseMove consumes offsets)
   m_dragOffsetX = x - pr.left;
@@ -392,6 +422,29 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
 void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
 {
   if (m_dragSlider >= 0) {
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+    // Velocity-sensitive vertical knob drag: moving up increases. Faster motion
+    // covers more range (slow = fine). Accumulates on the live value - relative,
+    // no wind-up because the clamped value is read back each move. (x unused.)
+    (void)x;
+    const auto& def = SLIDER_DEFS[m_dragSlider];
+    const double range = (def.maxVal - def.minVal) != 0.0 ? (def.maxVal - def.minVal) : 1.0;
+    const int dy = m_dragLastY - y;              // +ve = moved up
+    m_dragLastY = y;
+    const int ady = dy < 0 ? -dy : dy;
+    const double speed = ady > 40 ? 40.0 : (double)ady;
+    const double gainPerPx = (1.0 / 240.0) * (1.0 + speed * 0.05);
+    // Seed from the value the user actually SEES: with auto-makeup on, the knob
+    // displays the computed makeup (fabs(avgGR)), but GetSliderValue(5) reports 0
+    // while auto is engaged - seeding from 0 would snap the knob down on first move.
+    const double cur = (m_dragSlider == 5 && m_params.autoMakeup)
+                         ? fabs(m_avgGR) : GetSliderValue(m_dragSlider);
+    double nrm = (cur - def.minVal) / range;
+    nrm = std::max(0.0, std::min(1.0, nrm + (double)dy * gainPerPx));
+    SetSliderValue(m_dragSlider, def.minVal + nrm * range);
+    m_paramsChanged = true;
+    m_presetIdx = -1; // manual adjustment = custom
+#else
     RECT pr = GetRect(wr);
     RECT tr = GetSliderTrackRect(pr, m_dragSlider);
 
@@ -411,6 +464,7 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     SetSliderValue(m_dragSlider, val);
     m_paramsChanged = true;
     m_presetIdx = -1; // manual adjustment = custom
+#endif
   }
   else if (m_panelDragging) {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
@@ -723,6 +777,27 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.activeTab  = (int)m_tab;
   vm.presetName = (m_presetIdx >= 0 && m_presetIdx < PRESET_COUNT)
                     ? g_dynamicsPresets[m_presetIdx].name : nullptr;
+
+  // Per-knob render state. norm/defaultNorm in [0,1]; Threshold's default tracks
+  // the operating point (avgPeak). Makeup shows "auto" + the computed value when
+  // autoMakeup is on. Gate params (>=7) tint violet.
+  for (int i = 0; i < NUM_SLIDERS; ++i) {
+    const auto& def = SLIDER_DEFS[i];
+    const double range = (def.maxVal - def.minVal) != 0.0 ? (def.maxVal - def.minVal) : 1.0;
+    auto norm = [&](double v) { return std::max(0.0, std::min(1.0, (v - def.minVal) / range)); };
+    double dflt = def.defaultVal;
+    if (i == 0 && dflt <= -99.0) dflt = m_avgPeakDb;   // threshold default = operating point
+    KnobVM& k = vm.knobs[i];
+    k.value       = GetSliderValue(i);
+    k.norm        = norm(k.value);
+    k.defaultNorm = norm(dflt);
+    k.label       = def.label;
+    k.unit        = def.unit;
+    k.precision   = def.precision;
+    k.isGate      = (i >= 7);
+    k.showAuto    = (i == 5 && m_params.autoMakeup);
+    if (k.showAuto) { k.value = fabs(m_avgGR); k.norm = norm(k.value); }
+  }
 
   m_canvas.RenderPanel(hdc, pr.left, pr.top, pr.right - pr.left, pr.bottom - pr.top, dpr, vm);
 }

@@ -37,6 +37,20 @@ struct DynCurveParams {
 // strict warning flags off the library headers - see the header note above).
 struct Gfx;
 
+// One knob's render state (pure data). The panel builds these from its params;
+// the renderer draws the arc/fill/indicator/tick from norm, and the text from
+// value/unit/precision. Geometry (the cell rect) comes from ComputeDynLayout.
+struct KnobVM {
+  double value       = 0.0;   // display value (engine units)
+  double norm        = 0.0;   // 0..1 within [min,max] -> fill arc + indicator
+  double defaultNorm = 0.0;   // 0..1 default position -> ring tick + Cmd-reset target
+  const char* label  = nullptr;
+  const char* unit   = nullptr;
+  int    precision   = 1;
+  bool   isGate      = false; // violet fill (gate params) vs amber (compressor)
+  bool   showAuto    = false; // Makeup in auto mode -> "<n> auto" readout
+};
+
 // View-model handed to UiCanvas::RenderPanel - pure data (no Blend2D, no engine
 // types beyond DynCurveParams). DynamicsPanel builds it each paint from its state;
 // the renderer is a pure function of it. Geometry comes from ComputeDynLayout
@@ -45,6 +59,7 @@ struct DynPanelVM {
   DynCurveParams curve;              // transfer plot + GR meter
   int   activeTab   = 0;            // 0=Compressor, 1=Gate, 2=View
   const char* presetName = nullptr; // null -> "Preset"
+  KnobVM knobs[10];                  // all 10 params; only on-tab ones get a rect
 };
 
 // Plain rectangle (logical px, panel-relative); no Blend2D so it can be shared by
@@ -62,8 +77,9 @@ struct DynLayout {
   URect header, footer, plotWell, grMeter;
   URect preset, abBtn, closeBtn, apply;
   URect tabSeg[3];   // Compressor / Gate / View pill segments
+  URect knob[10];    // per-param knob cells; empty (w==0) when not on the active tab
 };
-DynLayout ComputeDynLayout(double w, double h);
+DynLayout ComputeDynLayout(double w, double h, int activeTab = 0);
 
 class UiCanvas {
 public:
