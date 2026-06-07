@@ -159,6 +159,8 @@ private:
   INT_PTR HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam);
   void OnSize(int w, int h);
   void OnPaint(HDC hdc);
+  void OnPaintOverlay(HDC hdc);   // HiDPI overlay (premium panel/spike) on the real window DC, post-composite
+  double GetUiDpr() const;        // device-pixel ratio for crisp HiDPI Blend2D rendering
   void OnMouseDown(int x, int y, WPARAM wParam);
   void OnMouseDownWaveform(int x, int y, WPARAM wParam);
   void OnMouseUp(int x, int y);

@@ -1195,6 +1195,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
           OnPaint(hdc);
         }
 #endif
+        OnPaintOverlay(hdc);   // HiDPI overlay (premium panel/spike) on the real window DC
       }
       EndPaint(m_hwnd, &ps);
       return 0;

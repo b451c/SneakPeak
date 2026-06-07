@@ -412,5 +412,11 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
       d[col2] = s[col2] | 0xFF000000u;
   }
 
-  BitBlt(hdc, x, y, devW, devH, m_memDC, 0, 0, SRCCOPY);
+  // Scaled blit: source is devW x devH device px, dest is w x h in the target DC's
+  // coordinate space. dpr==1 -> devW==w -> 1:1 (identical to BitBlt; Windows/Linux
+  // unchanged). dpr>1 onto the real Retina window DC -> SWELL maps the 2x source
+  // onto the 2x backing => crisp HiDPI. (Plain BitBlt(devW,devH) would instead
+  // place device-sized pixels at a logical position = 2x-too-large; this is the
+  // BitBlt-1:1 trap documented in .harness/design_phase2_architecture.md.)
+  StretchBlt(hdc, x, y, w, h, m_memDC, 0, 0, devW, devH, SRCCOPY);
 }
