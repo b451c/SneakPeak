@@ -20,6 +20,24 @@
 #include <cmath>
 #include <algorithm>
 
+#ifdef SNEAKPEAK_UI_SPIKE
+// PHASE 0 (branch feat/premium-ui): Blend2D renderer de-risk. Draws a demo tile
+// in the top-right of the waveform to prove Blend2D compiles, links, JITs and
+// rasterises inside the REAPER process on every platform. Removed once the
+// premium UI migration moves past Phase 0.
+void SneakPeak::DrawUiSpike(HDC hdc)
+{
+  RECT wr = m_waveformRect;
+  const int tileW = 240;
+  const int tileH = 130;
+  const int margin = 12;
+  int x = wr.right - tileW - margin;
+  int y = wr.top + margin;
+  if (x < wr.left || y + tileH > wr.bottom) return;
+  m_uiSpikeCanvas.RenderSpikeDemo(hdc, x, y, tileW, tileH);
+}
+#endif
+
 void SneakPeak::OnPaint(HDC hdc)
 {
   if (!hdc) return;
@@ -42,6 +60,9 @@ void SneakPeak::OnPaint(HDC hdc)
     if (showDyn)
       DrawDynamicsCurve(hdc);
     m_dynamicsPanel.Draw(hdc, m_waveformRect);
+#ifdef SNEAKPEAK_UI_SPIKE
+    DrawUiSpike(hdc);
+#endif
     // Envelope selection rectangle overlay (hatched semi-transparent fill + cyan border)
     if (m_envRectSelecting) {
       int rx1 = std::min(m_envRectStartX, m_envRectEndX);
