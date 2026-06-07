@@ -103,7 +103,7 @@ static void GlowStroke(BLContext& ctx, const BLPath& path, uint32_t baseArgb) {
 struct Gfx {
   BLImage img;
   int imgW = 0, imgH = 0;
-  BLFont fTick, fLabel, fUnit, fGrHero;
+  BLFont fTick, fLabel, fUnit, fGrHero, fTab, fValue;
   bool fontsReady = false;
 
   void ensureFonts() {
@@ -112,7 +112,9 @@ struct Gfx {
         fTick  .create_from_face(InterRegularFace(), (float)dynui::kFsTick)   == BL_SUCCESS &&
         fLabel .create_from_face(InterRegularFace(), (float)dynui::kFsLabel)  == BL_SUCCESS &&
         fUnit  .create_from_face(InterRegularFace(), (float)dynui::kFsUnit)   == BL_SUCCESS &&
-        fGrHero.create_from_face(InterMediumFace(),  (float)dynui::kFsGrHero) == BL_SUCCESS;
+        fGrHero.create_from_face(InterMediumFace(),  (float)dynui::kFsGrHero) == BL_SUCCESS &&
+        fTab   .create_from_face(InterMediumFace(),  (float)dynui::kFsTab)    == BL_SUCCESS &&
+        fValue .create_from_face(InterMediumFace(),  (float)dynui::kFsValue)  == BL_SUCCESS;
   }
   // (re)create the offscreen image only when the device pixel size changes.
   bool ensureImage(int devW, int devH) {
@@ -451,6 +453,86 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
   presentSurface(hdc, x, y, w, h, devW, devH);
 }
 
+// --- panel layout + chrome (Inc 3b) ----------------------------------------
+
+DynLayout ComputeDynLayout(double w, double h)
+{
+  DynLayout L;
+  const double pad = dynui::kPanelPad;
+  L.header = { 0, 0, w, (double)dynui::kHeaderH };
+  L.footer = { 0, h - (double)dynui::kFooterH, w, (double)dynui::kFooterH };
+
+  const double hMid = L.header.h * 0.5;
+  L.closeBtn = { w - pad - 18.0, hMid - 9.0, 18.0, 18.0 };
+  L.abBtn    = { L.closeBtn.x - 48.0, hMid - 11.0, 40.0, 22.0 };
+  L.preset   = { pad + 96.0, hMid - 11.0, 120.0, 22.0 };
+
+  const double bodyTop = L.header.h;
+  const double bodyH = L.footer.y - bodyTop;
+  const double plotSide = std::max(40.0, std::min((w - 2.0 * pad) * 0.56, bodyH - 2.0 * pad));
+  L.plotWell = { pad, bodyTop + pad, plotSide, plotSide };
+  L.grMeter  = { L.plotWell.x + plotSide + (double)dynui::kMeterGap, L.plotWell.y,
+                 (double)(dynui::kMeterBarW + dynui::kMeterNumGap) + 48.0, plotSide };
+
+  const double fMid = L.footer.y + L.footer.h * 0.5;
+  L.apply = { pad, fMid - 12.0, 84.0, 24.0 };
+  const double segW = 86.0, segGap = 2.0;
+  const double pillW = 3.0 * segW + 2.0 * segGap;
+  const double pillX = w - pad - pillW;
+  for (int i = 0; i < 3; ++i)
+    L.tabSeg[i] = { pillX + (double)i * (segW + segGap), fMid - 12.0, segW, 24.0 };
+  return L;
+}
+
+static void FillURound(BLContext& ctx, const URect& r, double rad, uint32_t argb) {
+  ctx.fill_round_rect(BLRoundRect(r.x, r.y, r.w, r.h, rad), col(argb));
+}
+
+// Horizontally-centered text within rect r (approx vertical centering).
+static void TextCentered(BLContext& ctx, const BLFont& f, const URect& r,
+                         const char* s, uint32_t argb) {
+  const double tw = TextWidth(f, s);
+  ctx.fill_utf8_text(BLPoint(r.x + (r.w - tw) * 0.5, r.y + r.h * 0.5 + 4.0), f, s,
+                     SIZE_MAX, col(argb));
+}
+
+static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const DynPanelVM& vm) {
+  if (gfx.fontsReady) {
+    ctx.fill_utf8_text(BLPoint(dynui::kPanelPad, L.header.h * 0.5 + 5.0), gfx.fValue,
+                       "DYNAMICS", SIZE_MAX, col(dynui::kInkPrimary));
+    FillURound(ctx, L.preset, dynui::kRadiusCtrl, dynui::kSurface2);
+    ctx.fill_utf8_text(BLPoint(L.preset.x + 8.0, L.preset.y + L.preset.h * 0.5 + 4.0),
+                       gfx.fLabel, vm.presetName ? vm.presetName : "Preset", SIZE_MAX,
+                       col(dynui::kInkSecondary));
+    FillURound(ctx, L.abBtn, dynui::kRadiusCtrl, dynui::kSurface2);
+    TextCentered(ctx, gfx.fLabel, L.abBtn, "A/B", dynui::kInkSecondary);
+    TextCentered(ctx, gfx.fValue, L.closeBtn, "x", dynui::kInkMuted);
+  }
+  ctx.set_stroke_width(1.0);
+  ctx.stroke_line(BLLine(0, L.header.h, L.header.w, L.header.h), col(dynui::kHairline));
+}
+
+static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L, int activeTab) {
+  const char* labels[3] = { "COMP", "GATE", "VIEW" };
+  for (int i = 0; i < 3; ++i) {
+    const URect& s = L.tabSeg[i];
+    const bool active = (i == activeTab);
+    FillURound(ctx, s, dynui::kRadiusCtrl, active ? dynui::kSurface3 : dynui::kSurface1);
+    if (active)
+      ctx.fill_rect(BLRect(s.x + 6.0, s.y + s.h - 2.0, s.w - 12.0, 2.0), col(dynui::kAmber));
+    if (gfx.fontsReady)
+      TextCentered(ctx, gfx.fTab, s, labels[i], active ? dynui::kAmber : dynui::kInkSecondary);
+  }
+}
+
+static void DrawFooter(BLContext& ctx, const Gfx& gfx, const DynLayout& L) {
+  ctx.set_stroke_width(1.0);
+  ctx.stroke_line(BLLine(0, L.footer.y, L.footer.w, L.footer.y), col(dynui::kHairline));
+  FillURound(ctx, L.apply, dynui::kRadiusCtrl, dynui::kAmber);
+  if (gfx.fontsReady)
+    TextCentered(ctx, gfx.fValue, L.apply, "Apply", dynui::kSurface0);
+}
+
 // --- the premium panel -----------------------------------------------------
 
 void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
@@ -481,18 +563,15 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                             col(dynui::kHairline));
     }
 
-    // Inc 3a: transfer plot + GR meter in the body (header/tabbar/footer zones
-    // and knobs land in Inc 3b/4 via ComputeDynLayout). Square plot fits between
-    // the header and footer bands.
-    const double pad = dynui::kPanelPad;
-    const double top = pad + dynui::kHeaderH;
-    const double bottom = H - pad - dynui::kFooterH;
-    const double plotSide = std::max(40.0, std::min((W - 2 * pad) * 0.62, bottom - top));
-    const double px0 = pad;
-    const double py0 = top;
-    const double px1 = px0 + plotSide;
-    DrawTransferPlot(ctx, *m_gfx, px0, py0, plotSide, vm.curve);
-    DrawGrMeter(ctx, *m_gfx, px1, py0, plotSide, vm.curve);
+    // Inc 3b: full chrome from the shared layout (header / tab pill / footer) +
+    // transfer plot + GR meter. Knobs land in Inc 4; hit-testing shares the same
+    // ComputeDynLayout so clicks always match what is drawn.
+    const DynLayout L = ComputeDynLayout(W, H);
+    DrawHeader(ctx, *m_gfx, L, vm);
+    DrawTabBar(ctx, *m_gfx, L, vm.activeTab);
+    DrawFooter(ctx, *m_gfx, L);
+    DrawTransferPlot(ctx, *m_gfx, L.plotWell.x, L.plotWell.y, L.plotWell.w, vm.curve);
+    DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w, vm.curve);
 
     if (ctx.end() != BL_SUCCESS) return;
   }
