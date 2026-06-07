@@ -14,6 +14,7 @@
 
 #include "platform.h"
 #include <cstdint>
+#include <memory>
 
 // Inputs for the transfer-curve hero. Plain values (no Blend2D in the header);
 // the compression math mirrors dynamics_engine.cpp ComputeCompression().
@@ -29,9 +30,14 @@ struct DynCurveParams {
   bool   showGate     = true;
 };
 
+// Cached Blend2D objects (offscreen image + per-role fonts), owned by UiCanvas.
+// Defined in ui_render.cpp so no Blend2D types leak into this header (keeps the
+// strict warning flags off the library headers - see the header note above).
+struct Gfx;
+
 class UiCanvas {
 public:
-  UiCanvas() = default;
+  UiCanvas();                 // defined in .cpp (Gfx must be complete - pimpl)
   ~UiCanvas();
   UiCanvas(const UiCanvas&) = delete;
   UiCanvas& operator=(const UiCanvas&) = delete;
@@ -51,4 +57,5 @@ private:
 #endif
   int m_w = 0;
   int m_h = 0;
+  std::unique_ptr<Gfx> m_gfx;   // cached BLImage + fonts (opaque; see ui_render.cpp)
 };
