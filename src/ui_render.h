@@ -23,8 +23,10 @@ struct DynCurveParams {
   double ratio        = 3.5;
   double kneeDb       = 6.0;
   double gateThreshDb = -55.0;
-  double gateRangeDb  = 24.0;
+  double gateRangeDb  = 24.0;   // POSITIVE magnitude (engine value is negated at the wiring point)
+  double makeupDb     = 0.0;    // post-comp makeup; used for the GATE onset (engine gates post-makeup)
   double avgPeakDb    = -18.0;  // operating point (signal level); < inMinDb hides it
+  double avgGrDb      = 0.0;    // engine GetAvgGainReduction(), NEGATIVE dB - drives the GR meter value
   double inMinDb      = -60.0;  // plot range (square: out uses the same range)
   double inMaxDb      = 0.0;
   bool   showGate     = true;
