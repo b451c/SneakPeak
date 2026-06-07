@@ -28,7 +28,7 @@
 void SneakPeak::DrawUiSpike(HDC hdc)
 {
   RECT wr = m_waveformRect;
-  const int tileW = 260;
+  const int tileW = 360;
   const int tileH = 260;
   const int margin = 12;
   int x = wr.right - tileW - margin;

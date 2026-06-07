@@ -284,6 +284,49 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
         }
       }
     }
+
+    // --- GR meter (right of the plot): track + downward red fill + ticks +
+    //     peak-hold marker + the hero numeric readout ---
+    {
+      const double grMag = -CompressionGrDb(p.avgPeakDb, p.thresholdDb, p.ratio, p.kneeDb);
+      const double rangeDb = 24.0;
+      const double meterX = px1 + 14.0;
+      const double barW = 18.0;
+      const double barTop = py0;
+      const double barH = plotSide;
+
+      ctx.fill_round_rect(BLRoundRect(meterX, barTop, barW, barH, 4.0),
+                          col(dynui::kSurface2));
+      const double fillH = std::clamp(grMag / rangeDb, 0.0, 1.0) * barH;
+      if (fillH > 0.5) {
+        BLGradient g(BLLinearGradientValues(0, barTop, 0, barTop + barH));
+        g.add_stop(0.0, col(dynui::kGrRed));
+        g.add_stop(1.0, colA(dynui::kGrRed, 120));
+        ctx.fill_round_rect(BLRoundRect(meterX, barTop, barW, fillH, 4.0), g);
+        ctx.fill_rect(BLRect(meterX, barTop + fillH - 1.0, barW, 2.0),
+                      col(dynui::kAmberGlow));   // peak-hold marker
+      }
+      const double ticks[] = { 0.0, 3.0, 6.0, 12.0, 24.0 };
+      ctx.set_stroke_width(1.0);
+      for (double t : ticks) {
+        const double ty = barTop + (t / rangeDb) * barH;
+        ctx.stroke_line(BLLine(meterX - 3.0, ty, meterX, ty), colA(dynui::kInkMuted, 200));
+      }
+
+      const double numX = meterX + barW + 12.0;
+      BLFont fLbl, fGr, fUnit;
+      char num[16];
+      std::snprintf(num, sizeof(num), "%.1f", grMag);
+      if (fLbl.create_from_face(InterMediumFace(), (float)dynui::kFsLabel) == BL_SUCCESS)
+        ctx.fill_utf8_text(BLPoint(numX, barTop + 13.0), fLbl, "GR", SIZE_MAX,
+                           col(dynui::kInkSecondary));
+      if (fGr.create_from_face(InterMediumFace(), (float)dynui::kFsGrHero) == BL_SUCCESS)
+        ctx.fill_utf8_text(BLPoint(numX, barTop + 40.0), fGr, num, SIZE_MAX,
+                           col(dynui::kGrRed));
+      if (fUnit.create_from_face(InterMediumFace(), (float)dynui::kFsUnit) == BL_SUCCESS)
+        ctx.fill_utf8_text(BLPoint(numX + 46.0, barTop + 40.0), fUnit, "dB", SIZE_MAX,
+                           col(dynui::kInkMuted));
+    }
     ctx.end();
   }
 
