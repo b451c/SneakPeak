@@ -65,6 +65,17 @@ constexpr int   kMeterBarW   = 18;   // GR meter bar width
 constexpr int   kMeterGap    = 14;   // gap from plot right edge to the meter bar
 constexpr int   kMeterNumGap = 12;   // gap from the meter bar to the numeric column
 
+// --- knob render constants (Phase 2 Inc 4; compact 2-col grid right of the plot) ---
+constexpr int    kKnobDiaSm     = 40;     // compact-grid knob diameter (logical px)
+constexpr double kKnobArcStartDeg = 135.0; // ring start angle (7:30, lower-left)
+constexpr double kKnobArcSweepDeg = 270.0; // ring sweep, clockwise over the top to 4:30
+constexpr int    kKnobCols      = 2;      // grid columns (DYNAMICS | TIME)
+constexpr int    kKnobRows      = 4;      // grid rows
+constexpr int    kKnobColGap    = 8;      // gap between the two knob columns
+constexpr int    kKnobTextGap   = 8;      // gap from knob edge to label/value column
+constexpr int    kKnobGridGap   = 18;     // gap from the GR meter to the knob grid
+constexpr int    kDefaultTickLen = 5;     // default-value notch length on the ring
+
 // --- Type scale (logical px) ---
 constexpr float kFsValue     = 16.0f;  // value readouts (tabular)
 constexpr float kFsGrHero    = 20.0f;  // big GR readout

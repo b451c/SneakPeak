@@ -57,6 +57,7 @@ private:
     double minVal, maxVal;
     const char* unit;
     int precision;
+    double defaultVal;   // knob default-tick + Cmd-reset target (Inc 4); -100 = use avgPeak
   };
   static const SliderDef SLIDER_DEFS[NUM_SLIDERS];
 
@@ -98,6 +99,8 @@ private:
   int m_dragSlider = -1;
   int m_dragGrabOffset = 0;   // pixel offset: thumbX - clickX (prevents jump on grab)
   int m_dragStartX = 0;       // mouse X at drag start (for fine mode delta)
+  [[maybe_unused]] int m_dragStartY = 0;  // mouse Y at knob-drag start (premium-only)
+  [[maybe_unused]] int m_dragLastY = 0;   // mouse Y last move (premium velocity drag)
   double m_dragStartVal = 0.0; // slider value at drag start (for fine mode delta)
   bool m_paramsChanged = false;
   bool m_applyRequested = false;

@@ -25,6 +25,7 @@
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 
@@ -322,7 +323,7 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
 // value + scale at Inc 2; this is the verbatim spike behaviour.)
 static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
                         double px1, double py0, double plotSide,
-                        const DynCurveParams& p)
+                        const DynCurveParams& p, bool withNumber = true)
 {
   // Value = real engine average GR (p.avgGrDb, negative) -> magnitude: the truthful
   // applied/average GR (what auto-makeup compensated, what Apply does). Scale = the
@@ -354,10 +355,13 @@ static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
     ctx.stroke_line(BLLine(meterX - 3.0, ty, meterX, ty), colA(dynui::kInkMuted, 200));
   }
 
-  const double numX = meterX + barW + (double)dynui::kMeterNumGap;
-  char num[16];
-  std::snprintf(num, sizeof(num), "%.1f", grMag);
-  if (gfx.fontsReady) {
+  // Numeric hero column (spike layout). The premium panel passes withNumber=false
+  // and renders the GR hero number in the header instead (compact grid needs the
+  // body width for the knob grid).
+  if (withNumber && gfx.fontsReady) {
+    const double numX = meterX + barW + (double)dynui::kMeterNumGap;
+    char num[16];
+    std::snprintf(num, sizeof(num), "%.1f", grMag);
     ctx.fill_utf8_text(BLPoint(numX, barTop + 13.0), gfx.fLabel, "GR", SIZE_MAX,
                        col(dynui::kInkSecondary));
     ctx.fill_utf8_text(BLPoint(numX, barTop + 40.0), gfx.fGrHero, num, SIZE_MAX,
@@ -365,6 +369,96 @@ static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
     const double numAdvance = TextWidth(gfx.fGrHero, num);
     ctx.fill_utf8_text(BLPoint(numX + numAdvance + 5.0, barTop + 40.0), gfx.fUnit, "dB",
                        SIZE_MAX, col(dynui::kInkMuted));
+  }
+}
+
+// --- knob grid (Inc 4) -----------------------------------------------------
+
+// Param index -> (tab, column, row) in the compact knob grid. Tab 0=Compressor
+// (DYNAMICS column 0: Thresh/Ratio/Knee/Makeup; TIME column 1: Attack/Release/
+// L.ahead), tab 1=Gate (G.Thr/G.Range/G.Hold), tab 2=View (no knobs). Matches the
+// SLIDER_DEFS order in dynamics_panel.cpp. The single IA source for render + hit.
+struct KnobSlot { int tab, col, row; };
+static const KnobSlot KNOB_SLOTS[10] = {
+  { 0, 0, 0 },  // 0  Thresh   (Compressor / DYNAMICS)
+  { 0, 0, 1 },  // 1  Ratio
+  { 0, 0, 2 },  // 2  Knee
+  { 0, 1, 0 },  // 3  Attack   (Compressor / TIME)
+  { 0, 1, 1 },  // 4  Release
+  { 0, 0, 3 },  // 5  Makeup   (Compressor / DYNAMICS)
+  { 0, 1, 2 },  // 6  L.ahead  (Compressor / TIME)
+  { 1, 0, 0 },  // 7  G.Thr    (Gate)
+  { 1, 0, 1 },  // 8  G.Range
+  { 1, 0, 2 },  // 9  G.Hold
+};
+
+static inline double Deg2Rad(double d) { return d * 3.14159265358979323846 / 180.0; }
+
+// One knob in its cell: arc track (270deg) + value fill arc + center cap +
+// indicator line + default-value tick on the ring, with the UPPERCASE label and
+// value/unit text in a column to the right. Gate knobs fill violet, others amber.
+static void DrawKnob(BLContext& ctx, const Gfx& gfx, const URect& cell, const KnobVM& k)
+{
+  if (cell.w < 1.0) return;   // not on the active tab
+  const double dia = (double)dynui::kKnobDiaSm;
+  const double r   = dia * 0.5;
+  const double cx  = cell.x + 2.0 + r;
+  const double cy  = cell.y + cell.h * 0.5;
+  const double a0  = Deg2Rad(dynui::kKnobArcStartDeg);
+  const double sw  = Deg2Rad(dynui::kKnobArcSweepDeg);
+  const double norm = std::clamp(k.norm, 0.0, 1.0);
+  const uint32_t fillCol = k.isGate ? dynui::kGateViolet : dynui::kAmber;
+
+  // ring track (full sweep)
+  ctx.set_stroke_width(3.0);
+  { BLPath p; p.arc_to(cx, cy, r, r, a0, sw, true); ctx.stroke_path(p, col(dynui::kSurface2)); }
+  // value fill (start -> norm)
+  if (norm > 0.001) {
+    BLPath p; p.arc_to(cx, cy, r, r, a0, sw * norm, true);
+    ctx.stroke_path(p, col(fillCol));
+  }
+  // center cap (faint depth)
+  ctx.fill_circle(BLCircle(cx, cy, r - 4.5), col(dynui::kSurface3));
+  // indicator line at the current angle
+  {
+    const double a = a0 + sw * norm;
+    ctx.set_stroke_width(2.0);
+    ctx.stroke_line(BLLine(cx + std::cos(a) * (r - 12.0), cy + std::sin(a) * (r - 12.0),
+                           cx + std::cos(a) * (r - 3.0),  cy + std::sin(a) * (r - 3.0)),
+                    col(fillCol));
+  }
+  // default-value tick notch just outside the ring
+  {
+    const double a = a0 + sw * std::clamp(k.defaultNorm, 0.0, 1.0);
+    const double r0 = r + 1.0, r1 = r + 1.0 + (double)dynui::kDefaultTickLen;
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_line(BLLine(cx + std::cos(a) * r0, cy + std::sin(a) * r0,
+                           cx + std::cos(a) * r1, cy + std::sin(a) * r1),
+                    colA(dynui::kInkMuted, 200));
+  }
+  // label + value text column to the right of the knob
+  if (gfx.fontsReady) {
+    const double tx = cell.x + dia + (double)dynui::kKnobTextGap;
+    char up[24];
+    int n = 0;
+    for (const char* s = k.label ? k.label : ""; *s && n < (int)sizeof(up) - 1; ++s)
+      up[n++] = (char)std::toupper((unsigned char)*s);
+    up[n] = '\0';
+    ctx.fill_utf8_text(BLPoint(tx, cy - 3.0), gfx.fLabel, up, SIZE_MAX, col(dynui::kInkSecondary));
+
+    // Value number (16px primary) + unit (11px muted) on its own advance, per the
+    // type spec - keeps long readouts ("1000 ms") inside the content margin and lets
+    // ":1" abut the number. Auto-makeup shows the computed value with a muted "auto".
+    char num[24];
+    std::snprintf(num, sizeof(num), k.precision == 1 ? "%.1f" : "%.0f", k.value);
+    const double vy = cy + 15.0;
+    ctx.fill_utf8_text(BLPoint(tx, vy), gfx.fValue, num, SIZE_MAX, col(dynui::kInkPrimary));
+    const char* unit = k.showAuto ? "auto" : (k.unit ? k.unit : "");
+    if (*unit) {
+      const bool abut = (unit[0] == ':');   // ratio ":1" sits flush against the number
+      const double ux = tx + TextWidth(gfx.fValue, num) + (abut ? 1.0 : 4.0);
+      ctx.fill_utf8_text(BLPoint(ux, vy), gfx.fUnit, unit, SIZE_MAX, col(dynui::kInkMuted));
+    }
   }
 }
 
@@ -455,7 +549,7 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
 
 // --- panel layout + chrome (Inc 3b) ----------------------------------------
 
-DynLayout ComputeDynLayout(double w, double h)
+DynLayout ComputeDynLayout(double w, double h, int activeTab)
 {
   DynLayout L;
   const double pad = dynui::kPanelPad;
@@ -469,10 +563,31 @@ DynLayout ComputeDynLayout(double w, double h)
 
   const double bodyTop = L.header.h;
   const double bodyH = L.footer.y - bodyTop;
-  const double plotSide = std::max(40.0, std::min((w - 2.0 * pad) * 0.56, bodyH - 2.0 * pad));
-  L.plotWell = { pad, bodyTop + pad, plotSide, plotSide };
+
+  // Hero transfer plot: square on the LEFT, sized to the body height. The GR meter
+  // is a bar-only column right of it (the hero number lives in the header for this
+  // compact grid). The remaining width on the right holds the 2-col knob grid.
+  const double plotSide = std::max(40.0, std::min(bodyH - 2.0 * pad, (w - 2.0 * pad) * 0.40));
+  const double bodyMid = bodyTop + bodyH * 0.5;
+  L.plotWell = { pad, bodyMid - plotSide * 0.5, plotSide, plotSide };
   L.grMeter  = { L.plotWell.x + plotSide + (double)dynui::kMeterGap, L.plotWell.y,
-                 (double)(dynui::kMeterBarW + dynui::kMeterNumGap) + 48.0, plotSide };
+                 (double)dynui::kMeterBarW, plotSide };
+
+  // Knob grid: kKnobCols x kKnobRows cells filling the band right of the meter,
+  // vertically aligned with the plot. Each param maps to a (tab,col,row) slot;
+  // off-tab params get an empty rect so render + hit-test both skip them.
+  const double gridX = L.grMeter.x + L.grMeter.w + (double)dynui::kKnobGridGap;
+  const double gridR = w - pad;
+  const double colGap = (double)dynui::kKnobColGap;
+  const double cellW = (gridR - gridX - colGap * (dynui::kKnobCols - 1)) / (double)dynui::kKnobCols;
+  const double cellH = plotSide / (double)dynui::kKnobRows;
+  for (int i = 0; i < 10; ++i) {
+    const KnobSlot& s = KNOB_SLOTS[i];
+    L.knob[i] = (s.tab == activeTab)
+      ? URect{ gridX + (double)s.col * (cellW + colGap), L.plotWell.y + (double)s.row * cellH,
+               cellW, cellH }
+      : URect{ 0, 0, 0, 0 };
+  }
 
   const double fMid = L.footer.y + L.footer.h * 0.5;
   L.apply = { pad, fMid - 12.0, 84.0, 24.0 };
@@ -504,6 +619,23 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
     ctx.fill_utf8_text(BLPoint(L.preset.x + 8.0, L.preset.y + L.preset.h * 0.5 + 4.0),
                        gfx.fLabel, vm.presetName ? vm.presetName : "Preset", SIZE_MAX,
                        col(dynui::kInkSecondary));
+
+    // GR hero readout: "GR <n> dB", right-aligned just left of the A/B button. This
+    // is the load-bearing number from the engine average GR (truthful applied GR).
+    char num[16];
+    std::snprintf(num, sizeof(num), "%.1f", std::max(0.0, -vm.curve.avgGrDb));
+    const double unitW = TextWidth(gfx.fUnit, "dB");
+    const double numW  = TextWidth(gfx.fGrHero, num);
+    const double lblW  = TextWidth(gfx.fLabel, "GR");
+    const double xR    = L.abBtn.x - 12.0;
+    const double unitX = xR - unitW;
+    const double numX  = unitX - 4.0 - numW;
+    const double lblX  = numX - 6.0 - lblW;
+    const double baseY = L.header.h * 0.5 + 7.0;
+    ctx.fill_utf8_text(BLPoint(lblX,  baseY), gfx.fLabel,  "GR", SIZE_MAX, col(dynui::kInkSecondary));
+    ctx.fill_utf8_text(BLPoint(numX,  baseY), gfx.fGrHero, num,  SIZE_MAX, col(dynui::kGrRed));
+    ctx.fill_utf8_text(BLPoint(unitX, baseY), gfx.fUnit,   "dB", SIZE_MAX, col(dynui::kInkMuted));
+
     FillURound(ctx, L.abBtn, dynui::kRadiusCtrl, dynui::kSurface2);
     TextCentered(ctx, gfx.fLabel, L.abBtn, "A/B", dynui::kInkSecondary);
     TextCentered(ctx, gfx.fValue, L.closeBtn, "x", dynui::kInkMuted);
@@ -563,15 +695,19 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                             col(dynui::kHairline));
     }
 
-    // Inc 3b: full chrome from the shared layout (header / tab pill / footer) +
-    // transfer plot + GR meter. Knobs land in Inc 4; hit-testing shares the same
-    // ComputeDynLayout so clicks always match what is drawn.
-    const DynLayout L = ComputeDynLayout(W, H);
+    // Full chrome from the shared layout (header / tab pill / footer) + transfer
+    // plot + bar-only GR meter (number is in the header) + the per-tab knob grid.
+    // Hit-testing shares the same ComputeDynLayout(activeTab) so clicks always
+    // match what is drawn.
+    const DynLayout L = ComputeDynLayout(W, H, vm.activeTab);
     DrawHeader(ctx, *m_gfx, L, vm);
     DrawTabBar(ctx, *m_gfx, L, vm.activeTab);
     DrawFooter(ctx, *m_gfx, L);
     DrawTransferPlot(ctx, *m_gfx, L.plotWell.x, L.plotWell.y, L.plotWell.w, vm.curve);
-    DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w, vm.curve);
+    DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w,
+                vm.curve, /*withNumber=*/false);
+    for (int i = 0; i < 10; ++i)
+      DrawKnob(ctx, *m_gfx, L.knob[i], vm.knobs[i]);
 
     if (ctx.end() != BL_SUCCESS) return;
   }
