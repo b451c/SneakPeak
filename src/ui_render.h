@@ -52,6 +52,8 @@ public:
 
 private:
   bool ensure(HDC hdc, int devW, int devH);   // (re)create offscreen surface
+  bool prepareSurface(HDC hdc, int devW, int devH);              // surface + cached image/fonts
+  void presentSurface(HDC hdc, int x, int y, int w, int h, int devW, int devH); // copy + scaled blit
 
   HDC m_memDC = nullptr;
 #ifdef _WIN32
