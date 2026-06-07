@@ -98,7 +98,35 @@ static void GlowStroke(BLContext& ctx, const BLPath& path, uint32_t baseArgb) {
   ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
 }
 
+// --- cached Blend2D objects (must-do #4: no per-paint image/font allocation) -
+
+struct Gfx {
+  BLImage img;
+  int imgW = 0, imgH = 0;
+  BLFont fTick, fLabel, fUnit, fGrHero;
+  bool fontsReady = false;
+
+  void ensureFonts() {
+    if (fontsReady) return;
+    fontsReady =
+        fTick  .create_from_face(InterRegularFace(), (float)dynui::kFsTick)   == BL_SUCCESS &&
+        fLabel .create_from_face(InterRegularFace(), (float)dynui::kFsLabel)  == BL_SUCCESS &&
+        fUnit  .create_from_face(InterRegularFace(), (float)dynui::kFsUnit)   == BL_SUCCESS &&
+        fGrHero.create_from_face(InterMediumFace(),  (float)dynui::kFsGrHero) == BL_SUCCESS;
+  }
+  // (re)create the offscreen image only when the device pixel size changes.
+  bool ensureImage(int devW, int devH) {
+    if (imgW != devW || imgH != devH) {
+      if (img.create(devW, devH, BL_FORMAT_PRGB32) != BL_SUCCESS) return false;
+      imgW = devW; imgH = devH;
+    }
+    return true;
+  }
+};
+
 // --- lifecycle -------------------------------------------------------------
+
+UiCanvas::UiCanvas() = default;   // out-of-line: Gfx is complete here (pimpl)
 
 UiCanvas::~UiCanvas()
 {
@@ -161,11 +189,14 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
 #endif
   if (!fbuf) return;
 
-  BLImage img(devW, devH, BL_FORMAT_PRGB32);
-  if (!img) return;
+  if (!m_gfx) m_gfx = std::make_unique<Gfx>();
+  m_gfx->ensureFonts();
+  if (!m_gfx->ensureImage(devW, devH)) return;
+  BLImage& img = m_gfx->img;
   {
     BLContext ctx;
     if (ctx.begin(img) != BL_SUCCESS) return;
+    ctx.clear_all();                // cached image persists prior pixels - start clean
     ctx.scale(dpr);                 // draw everything in LOGICAL coordinates
     ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
 
@@ -292,16 +323,14 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
     ctx.restore();   // remove plot clip
 
     // input-axis dB tick labels on a 12 dB grid within [inMin, inMax]
-    {
-      BLFont f;
-      if (f.create_from_face(InterRegularFace(), (float)dynui::kFsTick) == BL_SUCCESS) {
-        const double step = 12.0;
-        for (double db = std::ceil(inMin / step) * step; db <= inMax + 0.001; db += step) {
-          char buf[8];
-          std::snprintf(buf, sizeof(buf), "%d", (int)std::lround(db));
-          ctx.fill_utf8_text(BLPoint(dbToX(db) + 2.0, py1 + 11.0), f, buf,
-                             SIZE_MAX, col(dynui::kInkMuted));
-        }
+    if (m_gfx->fontsReady) {
+      const BLFont& f = m_gfx->fTick;
+      const double step = 12.0;
+      for (double db = std::ceil(inMin / step) * step; db <= inMax + 0.001; db += step) {
+        char buf[8];
+        std::snprintf(buf, sizeof(buf), "%d", (int)std::lround(db));
+        ctx.fill_utf8_text(BLPoint(dbToX(db) + 2.0, py1 + 11.0), f, buf,
+                           SIZE_MAX, col(dynui::kInkMuted));
       }
     }
 
@@ -334,21 +363,17 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
       }
 
       const double numX = meterX + barW + 12.0;
-      BLFont fLbl, fGr, fUnit;
       char num[16];
       std::snprintf(num, sizeof(num), "%.1f", grMag);
-      if (fLbl.create_from_face(InterRegularFace(), (float)dynui::kFsLabel) == BL_SUCCESS)
-        ctx.fill_utf8_text(BLPoint(numX, barTop + 13.0), fLbl, "GR", SIZE_MAX,
+      if (m_gfx->fontsReady) {
+        ctx.fill_utf8_text(BLPoint(numX, barTop + 13.0), m_gfx->fLabel, "GR", SIZE_MAX,
                            col(dynui::kInkSecondary));
-      double numAdvance = 40.0;
-      if (fGr.create_from_face(InterMediumFace(), (float)dynui::kFsGrHero) == BL_SUCCESS) {
-        ctx.fill_utf8_text(BLPoint(numX, barTop + 40.0), fGr, num, SIZE_MAX,
+        ctx.fill_utf8_text(BLPoint(numX, barTop + 40.0), m_gfx->fGrHero, num, SIZE_MAX,
                            col(dynui::kGrRed));
-        numAdvance = TextWidth(fGr, num);
-      }
-      if (fUnit.create_from_face(InterRegularFace(), (float)dynui::kFsUnit) == BL_SUCCESS)
-        ctx.fill_utf8_text(BLPoint(numX + numAdvance + 5.0, barTop + 40.0), fUnit, "dB",
+        const double numAdvance = TextWidth(m_gfx->fGrHero, num);
+        ctx.fill_utf8_text(BLPoint(numX + numAdvance + 5.0, barTop + 40.0), m_gfx->fUnit, "dB",
                            SIZE_MAX, col(dynui::kInkMuted));
+      }
     }
     if (ctx.end() != BL_SUCCESS) return;
   }
