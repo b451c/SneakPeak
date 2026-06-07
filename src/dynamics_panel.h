@@ -83,6 +83,7 @@ private:
   RECT GetABToggleRect(RECT panelRect) const;
   RECT GetCloseButtonRect(RECT panelRect) const;
   int HitTestSlider(int x, int y, RECT panelRect) const;
+  bool OnMouseDownPremium(int x, int y, RECT panelRect);  // Blend2D panel hit-routing (Inc 3c)
   double PixelToValue(int px, RECT trackRect, int idx) const;
   int ValueToPixel(double val, RECT trackRect, int idx) const;
   static bool IsFineMode();

@@ -194,7 +194,13 @@ RECT DynamicsPanel::GetABToggleRect(RECT pr) const
 
 RECT DynamicsPanel::GetPresetButtonRect(RECT pr) const
 {
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  DynLayout L = ComputeDynLayout(pr.right - pr.left, pr.bottom - pr.top);
+  return { pr.left + (int)L.preset.x, pr.top + (int)L.preset.y,
+           pr.left + (int)(L.preset.x + L.preset.w), pr.top + (int)(L.preset.y + L.preset.h) };
+#else
   return { pr.left + 92, pr.top + 4, pr.left + 198, pr.top + 18 };
+#endif
 }
 
 RECT DynamicsPanel::GetCloseButtonRect(RECT pr) const
@@ -258,12 +264,41 @@ int DynamicsPanel::HitTestSlider(int x, int y, RECT pr) const
 
 // --- Mouse interaction ---
 
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+// Premium-panel hit routing via the shared ComputeDynLayout (panel-relative px),
+// so clicks match exactly what RenderPanel drew. Sets the same poll flags the host
+// already handles (preset/apply/bypass) + the internal tab; empty area drags the
+// panel. (Knob + curve-handle interaction land in Inc 4/7.)
+bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
+{
+  const double lx = (double)(x - pr.left), ly = (double)(y - pr.top);
+  const DynLayout L = ComputeDynLayout((double)(pr.right - pr.left),
+                                       (double)(pr.bottom - pr.top));
+
+  if (L.closeBtn.contains(lx, ly)) { Hide(); return true; }
+  if (L.preset.contains(lx, ly))   { m_presetMenuRequested = true; return true; }
+  if (L.abBtn.contains(lx, ly))    { m_bypassed = !m_bypassed; return true; }
+  for (int i = 0; i < 3; ++i)
+    if (L.tabSeg[i].contains(lx, ly)) { m_tab = (Tab)i; return true; }
+  if (!m_liveMode && L.apply.contains(lx, ly)) { m_applyRequested = true; return true; }
+
+  m_panelDragging = true;          // empty area -> drag (OnMouseMove consumes offsets)
+  m_dragOffsetX = x - pr.left;
+  m_dragOffsetY = y - pr.top;
+  return true;
+}
+#endif
+
 bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
 {
   if (!m_visible) return false;
   if (!HitTest(x, y, wr)) return false;
 
   RECT pr = GetRect(wr);
+
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  return OnMouseDownPremium(x, y, pr);
+#endif
 
   // Close button
   RECT closeR = GetCloseButtonRect(pr);
@@ -378,11 +413,16 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     m_presetIdx = -1; // manual adjustment = custom
   }
   else if (m_panelDragging) {
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+    const int pw = dynui::kPanelW, ph = dynui::kPanelH;
+#else
+    const int pw = PANEL_W, ph = PANEL_H;
+#endif
     int defaultCX = (wr.left + wr.right) / 2;
-    int defaultCY = wr.bottom - PANEL_H - 10;
+    int defaultCY = wr.bottom - ph - 10;
     int newLeft = x - m_dragOffsetX;
     int newTop = y - m_dragOffsetY;
-    m_offsetX = (newLeft + PANEL_W / 2) - defaultCX;
+    m_offsetX = (newLeft + pw / 2) - defaultCX;
     m_offsetY = newTop - defaultCY;
   }
 }
