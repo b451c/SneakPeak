@@ -3,10 +3,12 @@
 
 #include "platform.h"
 #include "dynamics_engine.h"
+#include "ui_render.h"
 
 class DynamicsPanel {
 public:
   void Draw(HDC hdc, RECT waveformRect);
+  void DrawPremium(HDC hdc, RECT waveformRect, double dpr);  // Blend2D panel (Phase 2)
   bool HitTest(int x, int y, RECT waveformRect) const;
   RECT GetRect(RECT waveformRect) const;
 
@@ -47,6 +49,7 @@ public:
   void SetLiveUndoOpen(bool v) { m_liveUndoOpen = v; }
 
 private:
+  enum class Tab { Compressor, Gate, View };   // premium panel active tab
   static constexpr int NUM_SLIDERS = 10;
 
   struct SliderDef {
@@ -88,6 +91,8 @@ private:
   DynamicsParams m_params;
   double m_avgPeakDb = -18.0;
   double m_avgGR = 0.0;
+  Tab m_tab = Tab::Compressor;   // active tab (premium panel)
+  UiCanvas m_canvas;             // Blend2D renderer for the premium panel
 
   int m_dragSlider = -1;
   int m_dragGrabOffset = 0;   // pixel offset: thumbX - clickX (prevents jump on grab)
