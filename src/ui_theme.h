@@ -56,6 +56,13 @@ constexpr int   kRowH        = 40;   // parameter row (replaces legacy ROW_H 18)
 constexpr int   kKnobDia     = 48;
 constexpr int   kHitMin      = 44;   // minimum interactive hit target
 
+// --- transfer plot / GR meter render constants (Phase 2 Inc 2; replace magic numbers) ---
+constexpr int   kPlotSamples = 96;   // transfer-curve sampling resolution
+constexpr int   kTickStepDb  = 12;   // dB spacing for input-axis tick labels
+constexpr int   kMeterBarW   = 18;   // GR meter bar width
+constexpr int   kMeterGap    = 14;   // gap from plot right edge to the meter bar
+constexpr int   kMeterNumGap = 12;   // gap from the meter bar to the numeric column
+
 // --- Type scale (logical px) ---
 constexpr float kFsValue     = 16.0f;  // value readouts (tabular)
 constexpr float kFsGrHero    = 20.0f;  // big GR readout

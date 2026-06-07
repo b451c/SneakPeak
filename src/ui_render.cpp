@@ -188,9 +188,25 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   const double span = (inMax - inMin) != 0 ? (inMax - inMin) : 1.0;
   auto dbToX = [&](double db) { return px0 + (db - inMin) / span * plotSide; };
   auto dbToY = [&](double db) { return py1 - (db - inMin) / span * plotSide; };
-  auto outAt = [&](double in) {
-    return in + CompressionGrDb(in, p.thresholdDb, p.ratio, p.kneeDb);
+
+  // Curve math mirrors dynamics_engine ComputeCompression() steady state. The
+  // plotted curve is the COMPRESSION CHARACTERISTIC y = x + GR (per the design
+  // spec); makeup gain is a constant offset shown via its own control, NOT baked
+  // into the curve (keeps red=reduction and the wedge clean). The GATE onset/depth
+  // DO depend on makeup (the engine gates on the post-comp+makeup level), so
+  // makeup is used only inside gateGrDb to place the cliff correctly.
+  auto compGrDb = [&](double in) {
+    return CompressionGrDb(in, p.thresholdDb, p.ratio, p.kneeDb);            // <= 0
   };
+  auto gateGrDb = [&](double in, double compGr) -> double {
+    if (!p.showGate) return 0.0;
+    const double postLvl = in + compGr + p.makeupDb;                         // engine: post-comp+makeup
+    if (postLvl >= p.gateThreshDb) return 0.0;
+    const double gateRangeNeg = -std::fabs(p.gateRangeDb);                   // engine range is negative
+    return std::max(postLvl - p.gateThreshDb, gateRangeNeg);                 // ramp 0 -> range, clamped
+  };
+  auto compOut = [&](double in) { return in + compGrDb(in); };              // wedge: compression only
+  auto outAt   = [&](double in) { const double g = compGrDb(in); return in + g + gateGrDb(in, g); };
 
   // clip to the plot well so curves never spill over the rounded corners
   ctx.save();
@@ -200,17 +216,18 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   ctx.set_stroke_width(1.0);
   ctx.stroke_line(BLLine(px0, py1, px1, py0), col(dynui::kCurveUnity));
 
-  const int N = 96;
+  const int N = dynui::kPlotSamples;
   auto sampleDb = [&](int i) { return inMin + span * (double)i / (double)N; };
 
-  // reduction wedge: area between unity diagonal and the curve, red->transparent
+  // reduction wedge: area between unity diagonal and the COMPRESSION curve (gate
+  // excluded so red = compression reduction only), red->transparent
   {
     BLPath wedge;
     wedge.move_to(dbToX(inMin), dbToY(inMin));
     wedge.line_to(dbToX(inMax), dbToY(inMax));        // along the diagonal
     for (int i = N; i >= 0; --i) {                    // back along the curve
       const double in = sampleDb(i);
-      wedge.line_to(dbToX(in), dbToY(outAt(in)));
+      wedge.line_to(dbToX(in), dbToY(compOut(in)));
     }
     wedge.close();
     BLGradient g(BLLinearGradientValues(0, py0, 0, py1));
@@ -228,25 +245,7 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
                       colA(dynui::kInkMuted, 200));
   }
 
-  // gate cliff (lower-left): violet, output drops by gateRange below gate thr
-  if (p.showGate && p.gateRangeDb > 0.0) {
-    BLPath gate;
-    bool started = false;
-    for (int i = 0; i <= N; ++i) {
-      const double in = sampleDb(i);
-      if (in > p.gateThreshDb) break;
-      const double out = std::max(inMin, in - p.gateRangeDb);
-      if (!started) { gate.move_to(dbToX(in), dbToY(out)); started = true; }
-      else          gate.line_to(dbToX(in), dbToY(out));
-    }
-    if (started) {
-      gate.line_to(dbToX(p.gateThreshDb), dbToY(outAt(p.gateThreshDb))); // riser
-      ctx.set_stroke_width(2.0);
-      ctx.stroke_path(gate, col(dynui::kGateViolet));
-    }
-  }
-
-  // static transfer curve (neutral)
+  // static transfer curve (neutral), full shape including the gate drop
   BLPath curve;
   for (int i = 0; i <= N; ++i) {
     const double in = sampleDb(i);
@@ -255,6 +254,26 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   }
   ctx.set_stroke_width(2.0);
   ctx.stroke_path(curve, col(dynui::kCurveStatic));
+
+  // gate cliff: re-stroke the input subrange where the gate is active, in violet.
+  // Onset is at input (gateThresh - makeup); depth ramps to the gate range and
+  // clamps - matches engine min(|gateThr-postLevel|,|gateRange|) on the
+  // post-comp+makeup level. Drawn ON the curve (outAt) so it stays continuous.
+  if (p.showGate) {
+    BLPath gate;
+    bool started = false;
+    for (int i = 0; i <= N; ++i) {
+      const double in = sampleDb(i);
+      if (gateGrDb(in, compGrDb(in)) < 0.0) {
+        const double cx = dbToX(in), cy = dbToY(outAt(in));
+        if (!started) { gate.move_to(cx, cy); started = true; } else gate.line_to(cx, cy);
+      }
+    }
+    if (started) {
+      ctx.set_stroke_width(2.0);
+      ctx.stroke_path(gate, col(dynui::kGateViolet));
+    }
+  }
 
   // live segment up to the operating point (avgPeak), amber + glow
   const bool hasOp = p.avgPeakDb > inMin && p.avgPeakDb <= inMax;
@@ -286,7 +305,7 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   // input-axis dB tick labels on a 12 dB grid within [inMin, inMax]
   if (gfx.fontsReady) {
     const BLFont& f = gfx.fTick;
-    const double step = 12.0;
+    const double step = (double)dynui::kTickStepDb;
     for (double db = std::ceil(inMin / step) * step; db <= inMax + 0.001; db += step) {
       char buf[8];
       std::snprintf(buf, sizeof(buf), "%d", (int)std::lround(db));
@@ -303,16 +322,21 @@ static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
                         double px1, double py0, double plotSide,
                         const DynCurveParams& p)
 {
-  const double grMag = -CompressionGrDb(p.avgPeakDb, p.thresholdDb, p.ratio, p.kneeDb);
-  const double rangeDb = 24.0;
-  const double meterX = px1 + 14.0;
-  const double barW = 18.0;
+  // Value = real engine average GR (p.avgGrDb, negative) -> magnitude: the truthful
+  // applied/average GR (what auto-makeup compensated, what Apply does). Scale = the
+  // PLOT's px-per-dB so the fill height equals the curve-to-diagonal gap (must-do
+  // #2: shared scale, not a private 24 dB range).
+  const double span = (p.inMaxDb - p.inMinDb) != 0 ? (p.inMaxDb - p.inMinDb) : 1.0;
+  const double pxPerDb = plotSide / span;
+  const double grMag = std::max(0.0, -p.avgGrDb);
+  const double meterX = px1 + (double)dynui::kMeterGap;
+  const double barW = (double)dynui::kMeterBarW;
   const double barTop = py0;
   const double barH = plotSide;
 
   ctx.fill_round_rect(BLRoundRect(meterX, barTop, barW, barH, 4.0),
                       col(dynui::kSurface2));
-  const double fillH = std::clamp(grMag / rangeDb, 0.0, 1.0) * barH;
+  const double fillH = std::clamp(grMag * pxPerDb, 0.0, barH);
   if (fillH > 0.5) {
     BLGradient g(BLLinearGradientValues(0, barTop, 0, barTop + barH));
     g.add_stop(0.0, col(dynui::kGrRed));
@@ -324,11 +348,11 @@ static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
   const double ticks[] = { 0.0, 3.0, 6.0, 12.0, 24.0 };
   ctx.set_stroke_width(1.0);
   for (double t : ticks) {
-    const double ty = barTop + (t / rangeDb) * barH;
+    const double ty = barTop + std::clamp(t * pxPerDb, 0.0, barH);
     ctx.stroke_line(BLLine(meterX - 3.0, ty, meterX, ty), colA(dynui::kInkMuted, 200));
   }
 
-  const double numX = meterX + barW + 12.0;
+  const double numX = meterX + barW + (double)dynui::kMeterNumGap;
   char num[16];
   std::snprintf(num, sizeof(num), "%.1f", grMag);
   if (gfx.fontsReady) {

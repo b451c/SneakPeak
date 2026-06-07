@@ -62,7 +62,8 @@ void SneakPeak::DrawUiSpike(HDC hdc)
   if (x < wr.left || y + tileH > wr.bottom) return;
   DynCurveParams p;  // representative (Voice-ish); real panel params wired in Phase 2
   p.thresholdDb = -24.0; p.ratio = 3.5; p.kneeDb = 6.0;
-  p.gateThreshDb = -50.0; p.gateRangeDb = 20.0; p.avgPeakDb = -16.0;
+  p.gateThreshDb = -40.0; p.gateRangeDb = 20.0; p.avgPeakDb = -16.0;
+  p.makeupDb = 6.0; p.avgGrDb = -6.0;  // representative auto-makeup + engine avg GR
   m_uiSpikeCanvas.RenderTransferCurve(hdc, x, y, tileW, tileH, GetUiDpr(), p);
 }
 #endif
