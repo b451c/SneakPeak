@@ -13,6 +13,7 @@
 #include "minimap_view.h"
 #include "dynamics_engine.h"
 #include "dynamics_panel.h"
+#include "ui_render.h"
 #include <vector>
 #include <string>
 
@@ -303,6 +304,7 @@ private:
   MinimapView m_minimap;
   DynamicsEngine m_dynamics;
   DynamicsPanel m_dynamicsPanel;
+  UiCanvas m_uiSpikeCanvas;   // PHASE 0: Blend2D renderer de-risk spike
   bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;
   bool m_spectralPainted = false;  // triggers one repaint after FFT completes
@@ -422,6 +424,7 @@ private:
   int m_masterPeakCount = 0;
   void DrawMasterWaveform(HDC hdc);
   void DrawDynamicsCurve(HDC hdc);
+  void DrawUiSpike(HDC hdc);   // PHASE 0: Blend2D renderer de-risk spike
   void ApplyDynamicsToEnvelope();
   void SaveDynamicsToItem();
   bool LoadDynamicsFromItem();
