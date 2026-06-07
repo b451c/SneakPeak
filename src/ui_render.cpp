@@ -169,6 +169,179 @@ bool UiCanvas::ensure(HDC hdc, int devW, int devH)
   return true;
 }
 
+// --- composable draw helpers (shared by the spike now; RenderPanel in Phase 2) -
+
+// Transfer-curve plot inside the square well at (px0,py0,plotSide): well bg,
+// unity diagonal, reduction wedge, dotted threshold, gate cliff, static curve,
+// amber operating-point segment + glow dot, and input-axis dB tick labels.
+// Drawn in logical coordinates; mirrors dynamics_engine ComputeCompression math.
+static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
+                             double px0, double py0, double plotSide,
+                             const DynCurveParams& p)
+{
+  const double px1 = px0 + plotSide;
+  const double py1 = py0 + plotSide;
+  ctx.fill_round_rect(BLRoundRect(px0, py0, plotSide, plotSide, dynui::kRadiusCtrl),
+                      col(dynui::kSurface1));
+
+  const double inMin = p.inMinDb, inMax = p.inMaxDb;
+  const double span = (inMax - inMin) != 0 ? (inMax - inMin) : 1.0;
+  auto dbToX = [&](double db) { return px0 + (db - inMin) / span * plotSide; };
+  auto dbToY = [&](double db) { return py1 - (db - inMin) / span * plotSide; };
+  auto outAt = [&](double in) {
+    return in + CompressionGrDb(in, p.thresholdDb, p.ratio, p.kneeDb);
+  };
+
+  // clip to the plot well so curves never spill over the rounded corners
+  ctx.save();
+  ctx.clip_to_rect(BLRect(px0, py0, plotSide, plotSide));
+
+  // unity 1:1 diagonal (faint reference)
+  ctx.set_stroke_width(1.0);
+  ctx.stroke_line(BLLine(px0, py1, px1, py0), col(dynui::kCurveUnity));
+
+  const int N = 96;
+  auto sampleDb = [&](int i) { return inMin + span * (double)i / (double)N; };
+
+  // reduction wedge: area between unity diagonal and the curve, red->transparent
+  {
+    BLPath wedge;
+    wedge.move_to(dbToX(inMin), dbToY(inMin));
+    wedge.line_to(dbToX(inMax), dbToY(inMax));        // along the diagonal
+    for (int i = N; i >= 0; --i) {                    // back along the curve
+      const double in = sampleDb(i);
+      wedge.line_to(dbToX(in), dbToY(outAt(in)));
+    }
+    wedge.close();
+    BLGradient g(BLLinearGradientValues(0, py0, 0, py1));
+    g.add_stop(0.0, colA(dynui::kGrRed, 70));
+    g.add_stop(1.0, colA(dynui::kGrRed, 0));
+    ctx.fill_path(wedge, g);
+  }
+
+  // dotted threshold line (vertical), persists regardless of overlays
+  {
+    const double tx = dbToX(p.thresholdDb);
+    ctx.set_stroke_width(1.0);
+    for (double yy = py0; yy < py1; yy += 5.0)
+      ctx.stroke_line(BLLine(tx, yy, tx, std::min(yy + 2.5, py1)),
+                      colA(dynui::kInkMuted, 200));
+  }
+
+  // gate cliff (lower-left): violet, output drops by gateRange below gate thr
+  if (p.showGate && p.gateRangeDb > 0.0) {
+    BLPath gate;
+    bool started = false;
+    for (int i = 0; i <= N; ++i) {
+      const double in = sampleDb(i);
+      if (in > p.gateThreshDb) break;
+      const double out = std::max(inMin, in - p.gateRangeDb);
+      if (!started) { gate.move_to(dbToX(in), dbToY(out)); started = true; }
+      else          gate.line_to(dbToX(in), dbToY(out));
+    }
+    if (started) {
+      gate.line_to(dbToX(p.gateThreshDb), dbToY(outAt(p.gateThreshDb))); // riser
+      ctx.set_stroke_width(2.0);
+      ctx.stroke_path(gate, col(dynui::kGateViolet));
+    }
+  }
+
+  // static transfer curve (neutral)
+  BLPath curve;
+  for (int i = 0; i <= N; ++i) {
+    const double in = sampleDb(i);
+    const double cx = dbToX(in), cy = dbToY(outAt(in));
+    if (i == 0) curve.move_to(cx, cy); else curve.line_to(cx, cy);
+  }
+  ctx.set_stroke_width(2.0);
+  ctx.stroke_path(curve, col(dynui::kCurveStatic));
+
+  // live segment up to the operating point (avgPeak), amber + glow
+  const bool hasOp = p.avgPeakDb > inMin && p.avgPeakDb <= inMax;
+  if (hasOp) {
+    BLPath lit;
+    bool started = false;
+    for (int i = 0; i <= N; ++i) {
+      const double in = sampleDb(i);
+      if (in > p.avgPeakDb) break;
+      const double cx = dbToX(in), cy = dbToY(outAt(in));
+      if (!started) { lit.move_to(cx, cy); started = true; } else lit.line_to(cx, cy);
+    }
+    lit.line_to(dbToX(p.avgPeakDb), dbToY(outAt(p.avgPeakDb)));
+    GlowStroke(ctx, lit, dynui::kAmberGlow);
+    ctx.set_stroke_width(2.0);
+    ctx.stroke_path(lit, col(dynui::kAmber));
+
+    // operating-point dot + glow
+    const double dx = dbToX(p.avgPeakDb), dy = dbToY(outAt(p.avgPeakDb));
+    ctx.set_comp_op(BL_COMP_OP_PLUS);
+    ctx.fill_circle(BLCircle(dx, dy, 7.0), colA(dynui::kAmberGlow, 60));
+    ctx.fill_circle(BLCircle(dx, dy, 4.5), colA(dynui::kAmberGlow, 110));
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+    ctx.fill_circle(BLCircle(dx, dy, 3.0), col(dynui::kAmber));
+  }
+
+  ctx.restore();   // remove plot clip
+
+  // input-axis dB tick labels on a 12 dB grid within [inMin, inMax]
+  if (gfx.fontsReady) {
+    const BLFont& f = gfx.fTick;
+    const double step = 12.0;
+    for (double db = std::ceil(inMin / step) * step; db <= inMax + 0.001; db += step) {
+      char buf[8];
+      std::snprintf(buf, sizeof(buf), "%d", (int)std::lround(db));
+      ctx.fill_utf8_text(BLPoint(dbToX(db) + 2.0, py1 + 11.0), f, buf,
+                         SIZE_MAX, col(dynui::kInkMuted));
+    }
+  }
+}
+
+// GR meter to the right of the plot (anchored at px1): track + downward red fill
+// + ticks + peak-hold marker + hero numeric readout. (must-dos #2/#3 refine the
+// value + scale at Inc 2; this is the verbatim spike behaviour.)
+static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
+                        double px1, double py0, double plotSide,
+                        const DynCurveParams& p)
+{
+  const double grMag = -CompressionGrDb(p.avgPeakDb, p.thresholdDb, p.ratio, p.kneeDb);
+  const double rangeDb = 24.0;
+  const double meterX = px1 + 14.0;
+  const double barW = 18.0;
+  const double barTop = py0;
+  const double barH = plotSide;
+
+  ctx.fill_round_rect(BLRoundRect(meterX, barTop, barW, barH, 4.0),
+                      col(dynui::kSurface2));
+  const double fillH = std::clamp(grMag / rangeDb, 0.0, 1.0) * barH;
+  if (fillH > 0.5) {
+    BLGradient g(BLLinearGradientValues(0, barTop, 0, barTop + barH));
+    g.add_stop(0.0, col(dynui::kGrRed));
+    g.add_stop(1.0, colA(dynui::kGrRed, 120));
+    ctx.fill_round_rect(BLRoundRect(meterX, barTop, barW, fillH, 4.0), g);
+    ctx.fill_rect(BLRect(meterX, barTop + fillH - 1.0, barW, 2.0),
+                  col(dynui::kAmberGlow));   // peak-hold marker
+  }
+  const double ticks[] = { 0.0, 3.0, 6.0, 12.0, 24.0 };
+  ctx.set_stroke_width(1.0);
+  for (double t : ticks) {
+    const double ty = barTop + (t / rangeDb) * barH;
+    ctx.stroke_line(BLLine(meterX - 3.0, ty, meterX, ty), colA(dynui::kInkMuted, 200));
+  }
+
+  const double numX = meterX + barW + 12.0;
+  char num[16];
+  std::snprintf(num, sizeof(num), "%.1f", grMag);
+  if (gfx.fontsReady) {
+    ctx.fill_utf8_text(BLPoint(numX, barTop + 13.0), gfx.fLabel, "GR", SIZE_MAX,
+                       col(dynui::kInkSecondary));
+    ctx.fill_utf8_text(BLPoint(numX, barTop + 40.0), gfx.fGrHero, num, SIZE_MAX,
+                       col(dynui::kGrRed));
+    const double numAdvance = TextWidth(gfx.fGrHero, num);
+    ctx.fill_utf8_text(BLPoint(numX + numAdvance + 5.0, barTop + 40.0), gfx.fUnit, "dB",
+                       SIZE_MAX, col(dynui::kInkMuted));
+  }
+}
+
 // --- the hero render -------------------------------------------------------
 
 void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double dpr,
@@ -213,168 +386,16 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
                             col(dynui::kHairline));
     }
 
-    // --- plot well (square, inset) ---
+    // --- plot well geometry (square, inset); helpers draw the content ---
     const double pad = dynui::kPanelPad;
     const double plotSide = std::min(W - 2 * pad, H - 2 * pad);
     const double px0 = pad;
     const double py0 = (H - plotSide) * 0.5;
     const double px1 = px0 + plotSide;
-    const double py1 = py0 + plotSide;
-    ctx.fill_round_rect(BLRoundRect(px0, py0, plotSide, plotSide, dynui::kRadiusCtrl),
-                        col(dynui::kSurface1));
 
-    const double inMin = p.inMinDb, inMax = p.inMaxDb;
-    const double span = (inMax - inMin) != 0 ? (inMax - inMin) : 1.0;
-    auto dbToX = [&](double db) { return px0 + (db - inMin) / span * plotSide; };
-    auto dbToY = [&](double db) { return py1 - (db - inMin) / span * plotSide; };
-    auto outAt = [&](double in) {
-      return in + CompressionGrDb(in, p.thresholdDb, p.ratio, p.kneeDb);
-    };
+    DrawTransferPlot(ctx, *m_gfx, px0, py0, plotSide, p);
+    DrawGrMeter(ctx, *m_gfx, px1, py0, plotSide, p);
 
-    // clip to the plot well so curves never spill over the rounded corners
-    ctx.save();
-    ctx.clip_to_rect(BLRect(px0, py0, plotSide, plotSide));
-
-    // unity 1:1 diagonal (faint reference)
-    ctx.set_stroke_width(1.0);
-    ctx.stroke_line(BLLine(px0, py1, px1, py0), col(dynui::kCurveUnity));
-
-    const int N = 96;
-    auto sampleDb = [&](int i) { return inMin + span * (double)i / (double)N; };
-
-    // reduction wedge: area between unity diagonal and the curve, red->transparent
-    {
-      BLPath wedge;
-      wedge.move_to(dbToX(inMin), dbToY(inMin));
-      wedge.line_to(dbToX(inMax), dbToY(inMax));        // along the diagonal
-      for (int i = N; i >= 0; --i) {                    // back along the curve
-        const double in = sampleDb(i);
-        wedge.line_to(dbToX(in), dbToY(outAt(in)));
-      }
-      wedge.close();
-      BLGradient g(BLLinearGradientValues(0, py0, 0, py1));
-      g.add_stop(0.0, colA(dynui::kGrRed, 70));
-      g.add_stop(1.0, colA(dynui::kGrRed, 0));
-      ctx.fill_path(wedge, g);
-    }
-
-    // dotted threshold line (vertical), persists regardless of overlays
-    {
-      const double tx = dbToX(p.thresholdDb);
-      ctx.set_stroke_width(1.0);
-      for (double yy = py0; yy < py1; yy += 5.0)
-        ctx.stroke_line(BLLine(tx, yy, tx, std::min(yy + 2.5, py1)),
-                        colA(dynui::kInkMuted, 200));
-    }
-
-    // gate cliff (lower-left): violet, output drops by gateRange below gate thr
-    if (p.showGate && p.gateRangeDb > 0.0) {
-      BLPath gate;
-      bool started = false;
-      for (int i = 0; i <= N; ++i) {
-        const double in = sampleDb(i);
-        if (in > p.gateThreshDb) break;
-        const double out = std::max(inMin, in - p.gateRangeDb);
-        if (!started) { gate.move_to(dbToX(in), dbToY(out)); started = true; }
-        else          gate.line_to(dbToX(in), dbToY(out));
-      }
-      if (started) {
-        gate.line_to(dbToX(p.gateThreshDb), dbToY(outAt(p.gateThreshDb))); // riser
-        ctx.set_stroke_width(2.0);
-        ctx.stroke_path(gate, col(dynui::kGateViolet));
-      }
-    }
-
-    // static transfer curve (neutral)
-    BLPath curve;
-    for (int i = 0; i <= N; ++i) {
-      const double in = sampleDb(i);
-      const double cx = dbToX(in), cy = dbToY(outAt(in));
-      if (i == 0) curve.move_to(cx, cy); else curve.line_to(cx, cy);
-    }
-    ctx.set_stroke_width(2.0);
-    ctx.stroke_path(curve, col(dynui::kCurveStatic));
-
-    // live segment up to the operating point (avgPeak), amber + glow
-    const bool hasOp = p.avgPeakDb > inMin && p.avgPeakDb <= inMax;
-    if (hasOp) {
-      BLPath lit;
-      bool started = false;
-      for (int i = 0; i <= N; ++i) {
-        const double in = sampleDb(i);
-        if (in > p.avgPeakDb) break;
-        const double cx = dbToX(in), cy = dbToY(outAt(in));
-        if (!started) { lit.move_to(cx, cy); started = true; } else lit.line_to(cx, cy);
-      }
-      lit.line_to(dbToX(p.avgPeakDb), dbToY(outAt(p.avgPeakDb)));
-      GlowStroke(ctx, lit, dynui::kAmberGlow);
-      ctx.set_stroke_width(2.0);
-      ctx.stroke_path(lit, col(dynui::kAmber));
-
-      // operating-point dot + glow
-      const double dx = dbToX(p.avgPeakDb), dy = dbToY(outAt(p.avgPeakDb));
-      ctx.set_comp_op(BL_COMP_OP_PLUS);
-      ctx.fill_circle(BLCircle(dx, dy, 7.0), colA(dynui::kAmberGlow, 60));
-      ctx.fill_circle(BLCircle(dx, dy, 4.5), colA(dynui::kAmberGlow, 110));
-      ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
-      ctx.fill_circle(BLCircle(dx, dy, 3.0), col(dynui::kAmber));
-    }
-
-    ctx.restore();   // remove plot clip
-
-    // input-axis dB tick labels on a 12 dB grid within [inMin, inMax]
-    if (m_gfx->fontsReady) {
-      const BLFont& f = m_gfx->fTick;
-      const double step = 12.0;
-      for (double db = std::ceil(inMin / step) * step; db <= inMax + 0.001; db += step) {
-        char buf[8];
-        std::snprintf(buf, sizeof(buf), "%d", (int)std::lround(db));
-        ctx.fill_utf8_text(BLPoint(dbToX(db) + 2.0, py1 + 11.0), f, buf,
-                           SIZE_MAX, col(dynui::kInkMuted));
-      }
-    }
-
-    // --- GR meter (right of the plot): track + downward red fill + ticks +
-    //     peak-hold marker + the hero numeric readout ---
-    {
-      const double grMag = -CompressionGrDb(p.avgPeakDb, p.thresholdDb, p.ratio, p.kneeDb);
-      const double rangeDb = 24.0;
-      const double meterX = px1 + 14.0;
-      const double barW = 18.0;
-      const double barTop = py0;
-      const double barH = plotSide;
-
-      ctx.fill_round_rect(BLRoundRect(meterX, barTop, barW, barH, 4.0),
-                          col(dynui::kSurface2));
-      const double fillH = std::clamp(grMag / rangeDb, 0.0, 1.0) * barH;
-      if (fillH > 0.5) {
-        BLGradient g(BLLinearGradientValues(0, barTop, 0, barTop + barH));
-        g.add_stop(0.0, col(dynui::kGrRed));
-        g.add_stop(1.0, colA(dynui::kGrRed, 120));
-        ctx.fill_round_rect(BLRoundRect(meterX, barTop, barW, fillH, 4.0), g);
-        ctx.fill_rect(BLRect(meterX, barTop + fillH - 1.0, barW, 2.0),
-                      col(dynui::kAmberGlow));   // peak-hold marker
-      }
-      const double ticks[] = { 0.0, 3.0, 6.0, 12.0, 24.0 };
-      ctx.set_stroke_width(1.0);
-      for (double t : ticks) {
-        const double ty = barTop + (t / rangeDb) * barH;
-        ctx.stroke_line(BLLine(meterX - 3.0, ty, meterX, ty), colA(dynui::kInkMuted, 200));
-      }
-
-      const double numX = meterX + barW + 12.0;
-      char num[16];
-      std::snprintf(num, sizeof(num), "%.1f", grMag);
-      if (m_gfx->fontsReady) {
-        ctx.fill_utf8_text(BLPoint(numX, barTop + 13.0), m_gfx->fLabel, "GR", SIZE_MAX,
-                           col(dynui::kInkSecondary));
-        ctx.fill_utf8_text(BLPoint(numX, barTop + 40.0), m_gfx->fGrHero, num, SIZE_MAX,
-                           col(dynui::kGrRed));
-        const double numAdvance = TextWidth(m_gfx->fGrHero, num);
-        ctx.fill_utf8_text(BLPoint(numX + numAdvance + 5.0, barTop + 40.0), m_gfx->fUnit, "dB",
-                           SIZE_MAX, col(dynui::kInkMuted));
-      }
-    }
     if (ctx.end() != BL_SUCCESS) return;
   }
 
