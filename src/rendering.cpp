@@ -28,13 +28,16 @@
 void SneakPeak::DrawUiSpike(HDC hdc)
 {
   RECT wr = m_waveformRect;
-  const int tileW = 240;
-  const int tileH = 130;
+  const int tileW = 260;
+  const int tileH = 260;
   const int margin = 12;
   int x = wr.right - tileW - margin;
   int y = wr.top + margin;
   if (x < wr.left || y + tileH > wr.bottom) return;
-  m_uiSpikeCanvas.RenderSpikeDemo(hdc, x, y, tileW, tileH);
+  DynCurveParams p;  // representative (Voice-ish); real panel params wired in Phase 2
+  p.thresholdDb = -24.0; p.ratio = 3.5; p.kneeDb = 6.0;
+  p.gateThreshDb = -50.0; p.gateRangeDb = 20.0; p.avgPeakDb = -16.0;
+  m_uiSpikeCanvas.RenderTransferCurve(hdc, x, y, tileW, tileH, 1.0, p);
 }
 #endif
 
