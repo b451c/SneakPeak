@@ -37,6 +37,16 @@ struct DynCurveParams {
 // strict warning flags off the library headers - see the header note above).
 struct Gfx;
 
+// View-model handed to UiCanvas::RenderPanel - pure data (no Blend2D, no engine
+// types beyond DynCurveParams). DynamicsPanel builds it each paint from its state;
+// the renderer is a pure function of it. Geometry comes from ComputeDynLayout
+// (shared with hit-testing), not carried here.
+struct DynPanelVM {
+  DynCurveParams curve;              // transfer plot + GR meter
+  int   activeTab   = 0;            // 0=Compressor, 1=Gate, 2=View
+  const char* presetName = nullptr; // null -> "Preset"
+};
+
 class UiCanvas {
 public:
   UiCanvas();                 // defined in .cpp (Gfx must be complete - pimpl)
@@ -49,6 +59,11 @@ public:
   // device pixels (w*dpr x h*dpr) with a dpr scale so it is crisp on HiDPI.
   void RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double dpr,
                            const DynCurveParams& p);
+
+  // Render the full premium Dynamics Panel into the offscreen buffer, then
+  // scaled-blit to hdc at (x,y), sized w x h logical px (crisp on HiDPI).
+  void RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                   const DynPanelVM& vm);
 
 private:
   bool ensure(HDC hdc, int devW, int devH);   // (re)create offscreen surface

@@ -42,6 +42,9 @@ double SneakPeak::GetUiDpr() const
 void SneakPeak::OnPaintOverlay(HDC hdc)
 {
   if (!hdc) return;
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  m_dynamicsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
+#endif
 #ifdef SNEAKPEAK_UI_SPIKE
   DrawUiSpike(hdc);
 #endif
@@ -89,8 +92,10 @@ void SneakPeak::OnPaint(HDC hdc)
         (!m_dynamicsPanel.IsVisible() || m_dynamicsPanel.GetShowDyn());
     if (showDyn)
       DrawDynamicsCurve(hdc);
+#ifndef SNEAKPEAK_BLEND2D_PANEL
     m_dynamicsPanel.Draw(hdc, m_waveformRect);
-    // (premium overlay/spike now drawn in OnPaintOverlay on the real window DC)
+#endif
+    // (premium panel + spike drawn in OnPaintOverlay on the real window DC)
     // Envelope selection rectangle overlay (hatched semi-transparent fill + cyan border)
     if (m_envRectSelecting) {
       int rx1 = std::min(m_envRectStartX, m_envRectEndX);

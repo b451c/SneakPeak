@@ -2,6 +2,7 @@
 #include "dynamics_panel.h"
 #include "theme.h"
 #include "config.h"
+#include "ui_theme.h"
 #include <cstdio>
 #include <cmath>
 #include <algorithm>
@@ -113,14 +114,19 @@ void DynamicsPanel::Hide()
 
 RECT DynamicsPanel::GetRect(RECT wr) const
 {
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  const int pw = dynui::kPanelW, ph = dynui::kPanelH;
+#else
+  const int pw = PANEL_W, ph = PANEL_H;
+#endif
   int cx = (wr.left + wr.right) / 2 + m_offsetX;
-  int cy = wr.bottom - PANEL_H - 10 + m_offsetY;
-  int left = cx - PANEL_W / 2;
+  int cy = wr.bottom - ph - 10 + m_offsetY;
+  int left = cx - pw / 2;
   if (left < wr.left) left = wr.left;
-  if (left + PANEL_W > wr.right) left = wr.right - PANEL_W;
+  if (left + pw > wr.right) left = wr.right - pw;
   if (cy < wr.top) cy = wr.top;
-  if (cy + PANEL_H > wr.bottom) cy = wr.bottom - PANEL_H;
-  return { left, cy, left + PANEL_W, cy + PANEL_H };
+  if (cy + ph > wr.bottom) cy = wr.bottom - ph;
+  return { left, cy, left + pw, cy + ph };
 }
 
 RECT DynamicsPanel::GetSliderTrackRect(RECT pr, int idx) const
@@ -652,4 +658,31 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     DrawText(hdc, "Apply", -1, &ar, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }
+}
+
+// --- Premium panel (Blend2D, Phase 2) --------------------------------------
+// Builds a pure-data DynPanelVM from live params and hands it to the renderer.
+// Drawn from OnPaintOverlay on the REAL window DC (HiDPI). Knobs/tabs/interaction
+// land in Inc 4/5; this skeleton renders the slab + live transfer plot + GR meter.
+
+void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
+{
+  if (!m_visible) return;
+  RECT pr = GetRect(wr);
+
+  DynPanelVM vm;
+  vm.curve.thresholdDb  = (m_params.threshold <= -99.0) ? m_avgPeakDb : m_params.threshold;
+  vm.curve.ratio        = m_params.ratio;
+  vm.curve.kneeDb       = m_params.kneeDb;
+  vm.curve.gateThreshDb = m_params.gateThreshDb;
+  vm.curve.gateRangeDb  = -m_params.gateRangeDb;   // engine NEGATIVE -> render POSITIVE magnitude (#1)
+  vm.curve.makeupDb     = m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
+  vm.curve.avgPeakDb    = m_avgPeakDb;
+  vm.curve.avgGrDb      = m_avgGR;                  // engine avg GR (negative) drives the meter (#2)
+  vm.curve.showGate     = (m_params.gateThreshDb > -99.0);
+  vm.activeTab  = (int)m_tab;
+  vm.presetName = (m_presetIdx >= 0 && m_presetIdx < PRESET_COUNT)
+                    ? g_dynamicsPresets[m_presetIdx].name : nullptr;
+
+  m_canvas.RenderPanel(hdc, pr.left, pr.top, pr.right - pr.left, pr.bottom - pr.top, dpr, vm);
 }
