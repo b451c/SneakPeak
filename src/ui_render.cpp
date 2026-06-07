@@ -366,17 +366,23 @@ static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
   }
 }
 
-// --- the hero render -------------------------------------------------------
-
-void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double dpr,
-                                   const DynCurveParams& p)
+// Ensure the platform surface + cached BLImage/fonts are ready at devW x devH.
+bool UiCanvas::prepareSurface(HDC hdc, int devW, int devH)
 {
-  if (!hdc || w < 8 || h < 8) return;
-  if (dpr < 1.0) dpr = 1.0;
-  const int devW = (int)std::lround(w * dpr);
-  const int devH = (int)std::lround(h * dpr);
-  if (!ensure(hdc, devW, devH)) return;
+  if (!ensure(hdc, devW, devH)) return false;
+  if (!m_gfx) m_gfx = std::make_unique<Gfx>();
+  m_gfx->ensureFonts();
+  return m_gfx->ensureImage(devW, devH);
+}
 
+// Copy the rendered BLImage scanlines into the platform framebuffer (forcing
+// opaque alpha), then scaled-blit to the destination DC. dpr==1 -> devW==w -> 1:1
+// (Windows/Linux unchanged); dpr>1 onto the real Retina window DC -> SWELL maps
+// the 2x source onto the 2x backing => crisp HiDPI. (Plain BitBlt(devW,devH) would
+// place device-sized px at a logical position = 2x-too-large; the BitBlt-1:1 trap
+// documented in .harness/design_phase2_architecture.md.)
+void UiCanvas::presentSurface(HDC hdc, int x, int y, int w, int h, int devW, int devH)
+{
   unsigned int* fbuf = nullptr;
 #ifdef _WIN32
   BITMAP bm;
@@ -386,13 +392,33 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
 #endif
   if (!fbuf) return;
 
-  if (!m_gfx) m_gfx = std::make_unique<Gfx>();
-  m_gfx->ensureFonts();
-  if (!m_gfx->ensureImage(devW, devH)) return;
-  BLImage& img = m_gfx->img;
+  BLImageData dat;
+  if (m_gfx->img.get_data(&dat) != BL_SUCCESS) return;
+  if (!dat.pixel_data) return;
+  if (dat.stride <= 0 || (dat.stride % 4) != 0 || dat.stride < (intptr_t)devW * 4) return;
+  const uint8_t* srcBase = (const uint8_t*)dat.pixel_data;
+  for (int row = 0; row < devH; ++row) {
+    const unsigned int* s = (const unsigned int*)(srcBase + (intptr_t)row * dat.stride);
+    unsigned int* d = fbuf + (size_t)row * (size_t)devW;
+    for (int col2 = 0; col2 < devW; ++col2)
+      d[col2] = s[col2] | 0xFF000000u;
+  }
+  StretchBlt(hdc, x, y, w, h, m_memDC, 0, 0, devW, devH, SRCCOPY);
+}
+
+// --- the hero render (spike) -----------------------------------------------
+
+void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double dpr,
+                                   const DynCurveParams& p)
+{
+  if (!hdc || w < 8 || h < 8) return;
+  if (dpr < 1.0) dpr = 1.0;
+  const int devW = (int)std::lround(w * dpr);
+  const int devH = (int)std::lround(h * dpr);
+  if (!prepareSurface(hdc, devW, devH)) return;
   {
     BLContext ctx;
-    if (ctx.begin(img) != BL_SUCCESS) return;
+    if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
     ctx.clear_all();                // cached image persists prior pixels - start clean
     ctx.scale(dpr);                 // draw everything in LOGICAL coordinates
     ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
@@ -422,25 +448,5 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
 
     if (ctx.end() != BL_SUCCESS) return;
   }
-
-  // --- copy Blend2D scanlines into the platform framebuffer (force opaque) ---
-  BLImageData dat;
-  if (img.get_data(&dat) != BL_SUCCESS) return;
-  if (!dat.pixel_data) return;
-  if (dat.stride <= 0 || (dat.stride % 4) != 0 || dat.stride < (intptr_t)devW * 4) return;
-  const uint8_t* srcBase = (const uint8_t*)dat.pixel_data;
-  for (int row = 0; row < devH; ++row) {
-    const unsigned int* s = (const unsigned int*)(srcBase + (intptr_t)row * dat.stride);
-    unsigned int* d = fbuf + (size_t)row * (size_t)devW;
-    for (int col2 = 0; col2 < devW; ++col2)
-      d[col2] = s[col2] | 0xFF000000u;
-  }
-
-  // Scaled blit: source is devW x devH device px, dest is w x h in the target DC's
-  // coordinate space. dpr==1 -> devW==w -> 1:1 (identical to BitBlt; Windows/Linux
-  // unchanged). dpr>1 onto the real Retina window DC -> SWELL maps the 2x source
-  // onto the 2x backing => crisp HiDPI. (Plain BitBlt(devW,devH) would instead
-  // place device-sized pixels at a logical position = 2x-too-large; this is the
-  // BitBlt-1:1 trap documented in .harness/design_phase2_architecture.md.)
-  StretchBlt(hdc, x, y, w, h, m_memDC, 0, 0, devW, devH, SRCCOPY);
+  presentSurface(hdc, x, y, w, h, devW, devH);
 }
