@@ -48,6 +48,22 @@ if(APPLE AND CMAKE_OSX_DEPLOYMENT_TARGET)
 endif()
 FetchContent_MakeAvailable(blend2d)
 
+# --- Embed UI fonts (Inter Medium/Regular, OFL-1.1) as C arrays at configure ---
+# Keeps git clean (only the small TTFs are tracked) and ships a single self-
+# contained dylib with no external font files to deploy.
+set(SNEAKPEAK_FONT_GEN "${CMAKE_BINARY_DIR}/generated/embedded_fonts.cpp")
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+file(WRITE "${SNEAKPEAK_FONT_GEN}" "// generated at configure time - do not edit\n")
+function(_sp_embed_font varname path)
+  file(READ "${path}" _hex HEX)
+  string(REGEX REPLACE "(..)" "0x\\1," _bytes "${_hex}")
+  file(APPEND "${SNEAKPEAK_FONT_GEN}"
+       "extern const unsigned char ${varname}[] = {${_bytes}};\n"
+       "extern const unsigned int ${varname}_size = sizeof(${varname});\n")
+endfunction()
+_sp_embed_font(g_fontInterMedium  "${CMAKE_SOURCE_DIR}/src/assets/fonts/Inter-Medium.ttf")
+_sp_embed_font(g_fontInterRegular "${CMAKE_SOURCE_DIR}/src/assets/fonts/Inter-Regular.ttf")
+
 add_library(reaper_sneakpeak SHARED
   src/main.cpp
   src/globals.cpp
@@ -74,6 +90,7 @@ add_library(reaper_sneakpeak SHARED
   src/dynamics_engine.cpp
   src/dynamics_panel.cpp
   src/ui_render.cpp
+  ${SNEAKPEAK_FONT_GEN}
 )
 
 target_include_directories(reaper_sneakpeak PRIVATE
