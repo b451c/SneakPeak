@@ -234,6 +234,15 @@ void DynamicsPanel::ApplyPreset(int idx)
   m_paramsChanged = true;
 }
 
+void DynamicsPanel::ApplyParams(const DynamicsParams& p)
+{
+  m_params = p;
+  if (m_params.threshold <= -99.0)   // sentinel -> operating point
+    m_params.threshold = m_avgPeakDb;
+  m_presetIdx = -1;                  // custom (user preset, not a built-in slot)
+  m_paramsChanged = true;
+}
+
 // --- Coordinate conversion ---
 
 int DynamicsPanel::ValueToPixel(double val, RECT tr, int idx) const
@@ -369,12 +378,13 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   // counterpart does, so the host's existing polls fire unchanged: m_showDyn/Env/GR
   // are read each paint (overlay + envelope sync); Live arms with an initial Apply
   // and the undo block is managed by the host; A/B drives the ACTIVE edge-compare.
-  if (L.viewToggle[0].contains(lx, ly)) { m_showDyn = !m_showDyn; return true; }
-  if (L.viewToggle[1].contains(lx, ly)) { m_showEnv = !m_showEnv; return true; }
-  if (L.viewToggle[2].contains(lx, ly)) { m_showGR  = !m_showGR;  return true; }
+  if (L.viewToggle[0].contains(lx, ly)) { m_showDyn = !m_showDyn; m_viewPrefsChanged = true; return true; }
+  if (L.viewToggle[1].contains(lx, ly)) { m_showEnv = !m_showEnv; m_viewPrefsChanged = true; return true; }
+  if (L.viewToggle[2].contains(lx, ly)) { m_showGR  = !m_showGR;  m_viewPrefsChanged = true; return true; }
   if (L.viewToggle[3].contains(lx, ly)) {
     m_liveMode = !m_liveMode;
     if (m_liveMode) m_applyRequested = true;     // initial apply when arming (GDI parity)
+    m_viewPrefsChanged = true;                   // Live persists across sessions (user request)
     return true;
   }
   if (L.viewToggle[4].contains(lx, ly)) { m_bypassed = !m_bypassed; return true; }
@@ -432,6 +442,7 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   RECT dynR = GetDynToggleRect(pr);
   if (x >= dynR.left && x < dynR.right && y >= dynR.top && y < dynR.bottom) {
     m_showDyn = !m_showDyn;
+    m_viewPrefsChanged = true;
     return true;
   }
 
@@ -439,6 +450,7 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   RECT envR = GetEnvToggleRect(pr);
   if (x >= envR.left && x < envR.right && y >= envR.top && y < envR.bottom) {
     m_showEnv = !m_showEnv;
+    m_viewPrefsChanged = true;
     return true;
   }
 
@@ -447,6 +459,7 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   if (x >= liveR.left && x < liveR.right && y >= liveR.top && y < liveR.bottom) {
     m_liveMode = !m_liveMode;
     if (m_liveMode) m_applyRequested = true; // initial apply when turning on
+    m_viewPrefsChanged = true;               // Live persists across sessions
     return true;
   }
 
@@ -454,6 +467,7 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   RECT grR = GetGRToggleRect(pr);
   if (x >= grR.left && x < grR.right && y >= grR.top && y < grR.bottom) {
     m_showGR = !m_showGR;
+    m_viewPrefsChanged = true;
     return true;
   }
 

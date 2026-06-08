@@ -42,7 +42,11 @@ static void MenuAppendSeparator(HMENU menu)
 #ifdef _WIN32
   AppendMenuA(menu, MF_SEPARATOR, 0, nullptr);
 #else
-  SWELL_Menu_AddMenuItem(menu, "", 0, MF_SEPARATOR);
+  // SWELL makes a real separator (NSMenuItem separatorItem) ONLY when name == NULL
+  // (swell-menu.mm: `if (!name) fType = MFT_SEPARATOR`). The `flags` arg is used only
+  // for graying, NOT separator detection - so passing "" + MF_SEPARATOR makes a blank
+  // grayed text item (the "empty gap" instead of a divider line). Pass NULL.
+  SWELL_Menu_AddMenuItem(menu, NULL, 0, 0);
 #endif
 }
 
@@ -53,6 +57,43 @@ static void MenuAppendSubmenu(HMENU menu, HMENU submenu, const char* str)
 #else
   InsertMenu(menu, -1, MF_BYPOSITION | MF_POPUP, (UINT_PTR)submenu, str);
 #endif
+}
+
+// Dynamics Preset dropdown: factory presets, then the user's saved presets, then
+// "Save preset as..." and a "Delete preset" submenu. User presets live globally in
+// ExtState (see LoadUserPresets/AddUserPreset). The parent menu owns its submenu, so
+// only DestroyMenu(presetMenu) is needed (do not destroy the submenu separately -
+// SWELL releases it inside InsertMenu; destroying it again is a use-after-free. See
+// the submenu-ownership note in OnRightClick below).
+void SneakPeak::ShowDynamicsPresetMenu()
+{
+  HMENU presetMenu = CreatePopupMenu();
+  for (int i = 0; i < PRESET_COUNT; i++)
+    MenuAppend(presetMenu, MF_STRING, CM_PRESET_BASE + i, g_dynamicsPresets[i].name);
+
+  std::vector<DynUserPreset> userPresets = LoadUserPresets();
+  if (!userPresets.empty()) {
+    MenuAppendSeparator(presetMenu);
+    for (size_t i = 0; i < userPresets.size(); i++)
+      MenuAppend(presetMenu, MF_STRING, CM_DYN_USER_PRESET_BASE + (unsigned)i,
+                 userPresets[i].name.c_str());
+  }
+  MenuAppendSeparator(presetMenu);
+  MenuAppend(presetMenu, MF_STRING, CM_DYN_SAVE_PRESET, "Save preset as...");
+  if (!userPresets.empty()) {
+    HMENU delMenu = CreatePopupMenu();
+    for (size_t i = 0; i < userPresets.size(); i++)
+      MenuAppend(delMenu, MF_STRING, CM_DYN_DEL_PRESET_BASE + (unsigned)i,
+                 userPresets[i].name.c_str());
+    MenuAppendSubmenu(presetMenu, delMenu, "Delete preset");
+  }
+
+  RECT pr = m_dynamicsPanel.GetRect(m_waveformRect);
+  RECT pbr = m_dynamicsPanel.GetPresetButtonRect(pr);
+  POINT pt = { pbr.left, pbr.bottom + 2 };
+  ClientToScreen(m_hwnd, &pt);
+  TrackPopupMenu(presetMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
+  DestroyMenu(presetMenu);
 }
 
 
@@ -570,7 +611,8 @@ void SneakPeak::OnContextMenuCommand(int id)
       // Show inline dynamics panel - try loading saved params from item P_EXT first
       if (!LoadDynamicsFromItem()) {
         m_dynamicsPanel.Show(m_dynamics.GetParams(), m_dynamics.GetAveragePeakDb());
-        RefreshDynamicsAvgGr();   // correct avg GR from the first paint (no makeup leap on first drag)
+        RefreshDynamicsAvgGr();      // correct avg GR from the first paint (no makeup leap on first drag)
+        RestoreDynamicsViewPrefs();  // apply persisted Dyn/Env/GR overlay prefs (load path does it itself)
       }
       m_dynamicsVisible = true;
       if (g_SetExtState) g_SetExtState("SneakPeak", "dynamics_visible", "1", true);
@@ -668,10 +710,23 @@ void SneakPeak::OnContextMenuCommand(int id)
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     }
-    default:
-      // Preset selection (CM_PRESET_BASE + index)
+    case CM_DYN_SAVE_PRESET:
+      AddUserPreset();   // prompt for a name + store the current panel params globally
+      break;
+    default: {
+      // Preset selection: factory (CM_PRESET_BASE+i), a user preset
+      // (CM_DYN_USER_PRESET_BASE+i), or a user-preset delete (CM_DYN_DEL_PRESET_BASE+i).
+      bool applied = false;
       if (id >= CM_PRESET_BASE && id < CM_PRESET_BASE + PRESET_COUNT) {
         m_dynamicsPanel.ApplyPreset(id - CM_PRESET_BASE);
+        applied = true;
+      } else if (id >= CM_DYN_USER_PRESET_BASE && id < CM_DYN_USER_PRESET_BASE + MAX_USER_PRESETS) {
+        applied = ApplyUserPreset(id - CM_DYN_USER_PRESET_BASE);
+      } else if (id >= CM_DYN_DEL_PRESET_BASE && id < CM_DYN_DEL_PRESET_BASE + MAX_USER_PRESETS) {
+        DeleteUserPreset(id - CM_DYN_DEL_PRESET_BASE);
+      }
+      if (applied) {
+        // Same re-analysis + Live path as a knob drag, so the curve/GR update at once.
         m_dynamics.SetParams(m_dynamicsPanel.GetParams());
         if (m_waveform.GetAudioSampleCount() > 0) {
           double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
@@ -688,6 +743,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
       break;
+    }
     case CM_REPLACE_SOURCE:
       DoReplaceSourceInTimeline();
       break;

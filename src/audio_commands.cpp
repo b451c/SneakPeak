@@ -1338,6 +1338,22 @@ void SneakPeak::ApplyDynamicsToEnvelope()
 {
   if (!m_waveform.HasItem() || m_waveform.IsStandaloneMode() || !m_waveform.GetTake()) return;
 
+  // Self-ensure the target take volume envelope(s) exist before writing. This makes
+  // Live (and Apply) work on items that have no envelope yet - including a session
+  // where Live was restored ON - without the user first enabling the envelope by hand.
+  // Done lazily (only on an actual write, not on panel open) and BEFORE the undo/refresh
+  // transaction below; EnsureVolumeEnvelope no-ops once the envelope is present.
+  if (g_GetTakeEnvelopeByName) {
+    auto& ensSegs = m_waveform.GetSegments();
+    if ((m_waveform.IsTimelineView() || m_waveform.IsTrackView()) && ensSegs.size() > 1) {
+      for (const auto& seg : ensSegs)
+        if (seg.take && seg.item && !g_GetTakeEnvelopeByName(seg.take, "Volume"))
+          EnsureVolumeEnvelope(seg.take, seg.item);
+    } else if (m_waveform.GetItem() && !g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume")) {
+      EnsureVolumeEnvelope(m_waveform.GetTake(), m_waveform.GetItem());
+    }
+  }
+
   // Ensure analysis is current
   if (!m_dynamics.HasResults() && m_waveform.GetAudioSampleCount() > 0) {
     double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
@@ -1466,7 +1482,125 @@ bool SneakPeak::LoadDynamicsFromItem()
   if (!DynamicsParamsFromString(buf, loaded)) return false;
   m_dynamicsPanel.Show(loaded, m_dynamics.GetAveragePeakDb());
   RefreshDynamicsAvgGr();
+  RestoreDynamicsViewPrefs();
   return true;
+}
+
+// Dyn/Env/GR overlay toggles are treated as GLOBAL user view-prefs: set once, they
+// follow the user on subsequent panel opens. Show() resets them to "all on"; these
+// two helpers persist/restore them via ExtState (Live and A-B are deliberately NOT
+// persisted - they are per-session action state). Saved on toggle, restored on open.
+void SneakPeak::RestoreDynamicsViewPrefs()
+{
+  if (!g_GetExtState) return;
+  auto rd = [&](const char* key, bool def) {
+    const char* v = g_GetExtState("SneakPeak", key);
+    return (v && v[0]) ? (v[0] != '0') : def;
+  };
+  m_dynamicsPanel.SetShowDyn(rd("dyn_show_dyn", true));
+  // Env shares the EXISTING "show_vol_env" key (the waveform overlay, the right-click
+  // "Show Volume Envelope" menu, and the startup restore all read/write it; rendering
+  // syncs panel->waveform each frame). Using a separate key would give Env two
+  // un-reconciled sources of truth that silently revert each other. Default true keeps
+  // the prior "panel open -> env on" behaviour while honouring an explicit "0".
+  m_dynamicsPanel.SetShowEnv(rd("show_vol_env", true));
+  m_dynamicsPanel.SetShowGR (rd("dyn_show_gr",  true));
+  // Live persists too (user request). Default OFF. A/B (bypass) stays ephemeral.
+  m_dynamicsPanel.SetLiveMode(rd("dyn_live", false));
+  // If Live was restored ON, write the envelope NOW so it already reflects the dynamics
+  // (otherwise it sits flat until the first param nudge). Runs only when Live is on, so
+  // browsing items with Live off never modifies the project. Self-ensures the envelope
+  // and opens its own undo block.
+  if (m_dynamicsPanel.IsLive())
+    ApplyDynamicsToEnvelope();
+}
+
+void SneakPeak::SaveDynamicsViewPrefs()
+{
+  if (!g_SetExtState) return;
+  g_SetExtState("SneakPeak", "dyn_show_dyn", m_dynamicsPanel.GetShowDyn() ? "1" : "0", true);
+  g_SetExtState("SneakPeak", "show_vol_env", m_dynamicsPanel.GetShowEnv() ? "1" : "0", true);  // shared with the menu/waveform/startup
+  g_SetExtState("SneakPeak", "dyn_show_gr",  m_dynamicsPanel.GetShowGR()  ? "1" : "0", true);
+  g_SetExtState("SneakPeak", "dyn_live",     m_dynamicsPanel.IsLive()     ? "1" : "0", true);
+}
+
+// --- User dynamics presets (global, persisted in ExtState) ------------------
+// Stored as one blob: each preset is "name\tparamsStr", presets separated by '\n'.
+// Names are sanitized to contain neither '\t' nor '\n'; the params string is the
+// DynamicsParamsToString() output (key=value pairs with spaces - no tab/newline).
+
+std::vector<DynUserPreset> SneakPeak::LoadUserPresets()
+{
+  std::vector<DynUserPreset> out;
+  if (!g_GetExtState) return out;
+  const char* blob = g_GetExtState("SneakPeak", "dyn_user_presets");
+  if (!blob || !blob[0]) return out;
+  std::string s(blob);
+  size_t pos = 0;
+  while (pos < s.size() && (int)out.size() < MAX_USER_PRESETS) {
+    size_t nl = s.find('\n', pos);
+    std::string line = s.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+    pos = (nl == std::string::npos) ? s.size() : nl + 1;
+    size_t tab = line.find('\t');
+    if (tab == std::string::npos || tab == 0) continue;
+    out.push_back({ line.substr(0, tab), line.substr(tab + 1) });
+  }
+  return out;
+}
+
+void SneakPeak::SaveUserPresets(const std::vector<DynUserPreset>& list)
+{
+  if (!g_SetExtState) return;
+  std::string blob;
+  for (const auto& p : list) {
+    blob += p.name;  blob += '\t';  blob += p.params;  blob += '\n';
+  }
+  g_SetExtState("SneakPeak", "dyn_user_presets", blob.c_str(), true);
+}
+
+void SneakPeak::AddUserPreset()
+{
+  if (!g_GetUserInputs) return;
+  char name[128] = "My Preset";
+  if (!g_GetUserInputs("Save Dynamics Preset", 1, "Preset name:", name, sizeof(name)))
+    return;  // cancelled
+  // Sanitize: drop the field/record delimiters and trim surrounding blanks.
+  std::string n(name);
+  for (char& c : n) if (c == '\t' || c == '\n' || c == '\r') c = ' ';
+  size_t a = n.find_first_not_of(' '), b = n.find_last_not_of(' ');
+  if (a == std::string::npos) return;            // empty / all blanks
+  n = n.substr(a, b - a + 1);
+
+  char params[256];
+  DynamicsParamsToString(m_dynamicsPanel.GetParams(), params, sizeof(params));
+
+  auto list = LoadUserPresets();
+  bool replaced = false;
+  for (auto& p : list)
+    if (p.name == n) { p.params = params; replaced = true; break; }  // overwrite by name
+  if (!replaced) {
+    if ((int)list.size() >= MAX_USER_PRESETS) return;                 // cap reached
+    list.push_back({ n, params });
+  }
+  SaveUserPresets(list);
+}
+
+bool SneakPeak::ApplyUserPreset(int idx)
+{
+  auto list = LoadUserPresets();
+  if (idx < 0 || idx >= (int)list.size()) return false;
+  DynamicsParams p;
+  if (!DynamicsParamsFromString(list[idx].params.c_str(), p)) return false;
+  m_dynamicsPanel.ApplyParams(p);
+  return true;
+}
+
+void SneakPeak::DeleteUserPreset(int idx)
+{
+  auto list = LoadUserPresets();
+  if (idx < 0 || idx >= (int)list.size()) return;
+  list.erase(list.begin() + idx);
+  SaveUserPresets(list);
 }
 
 // Run the canonical reanalysis ONCE right after the panel opens so the panel's
