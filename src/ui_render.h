@@ -72,6 +72,7 @@ struct DynPanelVM {
   bool  liveMode = false;
   bool  bypassed = false;
   bool  rmsMode  = false;
+  int   meterFloorSel = 0;          // active meter-scale segment (0=-60dB default, 1=-36, 2=-24)
   int   dragHandle = -1;            // curve handle being dragged (-1 none, 0 knee, 1 gate) -> glow
   int   hoverHandle = -1;           // curve handle under the cursor -> lights its accent colour
   // Motion pass: the panel computes these from its animation clock; the renderer is a
@@ -99,6 +100,7 @@ struct DynLayout {
   URect knob[10];    // per-param knob cells; empty (w==0) when not on the active tab
   URect rms[2];      // Peak / RMS segmented halves (Compressor tab; empty otherwise)
   URect viewToggle[5]; // Dyn / Env / GR / Live / A-B pills (View tab; empty otherwise)
+  URect meterScale[3]; // plot/GR-meter dB-floor selector segments (View tab; empty otherwise)
   URect resizeGrip;  // bottom-right corner drag handle (free resize)
 };
 DynLayout ComputeDynLayout(double w, double h, int activeTab = 0);

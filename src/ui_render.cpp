@@ -674,6 +674,15 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab)
       const URect c = cellRect(slot[i][0], slot[i][1]);
       L.viewToggle[i] = { c.x, c.y + (c.h - tH) * 0.5, c.w, tH };
     }
+    // Meter-scale selector: a 3-segment dB-floor control on the bottom grid row,
+    // spanning both columns. A "SCALE" caption (render-only) sits in the left gutter.
+    const URect c0 = cellRect(0, 3), c1 = cellRect(1, 3);
+    const double segH = 24.0, segGap = 2.0, capW = 44.0;
+    const double segY = c0.y + (c0.h - segH) * 0.5;
+    const double x0 = c0.x + capW, right = c1.x + c1.w;
+    const double segW = (right - x0 - 2.0 * segGap) / 3.0;
+    for (int i = 0; i < 3; ++i)
+      L.meterScale[i] = { x0 + (double)i * (segW + segGap), segY, segW, segH };
   }
 
   const double fMid = L.footer.y + L.footer.h * 0.5;
@@ -855,6 +864,24 @@ static void DrawSegmented2(BLContext& ctx, const Gfx& gfx, const URect& a, const
   }
 }
 
+// 3-segment selector (the meter-scale dB floor). Same treatment as DrawSegmented2:
+// active = surface3 + a 2 px amber underline + primary ink; inactive = surface1 +
+// secondary ink. Self-skips when empty (off the View tab).
+static void DrawSegmented3(BLContext& ctx, const Gfx& gfx, const URect segs[3],
+                           const char* const labels[3], int activeIdx) {
+  if (segs[0].w < 1.0) return;
+  for (int i = 0; i < 3; ++i) {
+    const bool active = (i == activeIdx);
+    const URect& s = segs[i];
+    FillURound(ctx, s, dynui::kRadiusCtrl, active ? dynui::kSurface3 : dynui::kSurface1);
+    if (active)
+      ctx.fill_rect(BLRect(s.x + 6.0, s.y + s.h - 2.0, s.w - 12.0, 2.0), col(dynui::kAmber));
+    if (gfx.fontsReady)
+      TextCentered(ctx, gfx.fLabel, s, labels[i],
+                   active ? dynui::kInkPrimary : dynui::kInkSecondary);
+  }
+}
+
 // Bottom-right corner resize grip: 3 short diagonal hairlines, kept inside the
 // panel's rounded corner (radius kRadiusPanel). Drawn in base coords -> scales
 // uniformly with the panel via the context transform.
@@ -956,6 +983,17 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[3], "LIVE", vm.liveMode, dynui::kAmber,   false, vm.livePulse);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[4], vm.bypassed ? "BYP" : "A/B",
                    vm.bypassed, dynui::kAmber, true, 0.0);
+
+    // Meter-scale dB-floor selector (View tab) + its left "SCALE" caption. Both
+    // self-skip when the rects are empty (off the View tab).
+    static const char* const kScaleLabels[3] = { "-60", "-36", "-24" };
+    DrawSegmented3(ctx, *m_gfx, L.meterScale, kScaleLabels, vm.meterFloorSel);
+    if (m_gfx->fontsReady && L.meterScale[0].w >= 1.0) {
+      const URect& s0 = L.meterScale[0];
+      const double cw = TextWidth(m_gfx->fLabel, "SCALE");
+      ctx.fill_utf8_text(BLPoint(s0.x - 8.0 - cw, s0.y + s0.h * 0.5 + 4.0), m_gfx->fLabel,
+                         "SCALE", SIZE_MAX, col(dynui::kInkSecondary));
+    }
 
     DrawResizeGrip(ctx, L.resizeGrip);
 

@@ -1507,6 +1507,9 @@ void SneakPeak::RestoreDynamicsViewPrefs()
   m_dynamicsPanel.SetShowGR (rd("dyn_show_gr",  true));
   // Live persists too (user request). Default OFF. A/B (bypass) stays ephemeral.
   m_dynamicsPanel.SetLiveMode(rd("dyn_live", false));
+  // Meter-scale dB-floor selector (premium View tab). Stored as an index; default -60.
+  const char* mf = g_GetExtState("SneakPeak", "dyn_meter_floor");
+  m_dynamicsPanel.SetMeterFloor((mf && mf[0]) ? atoi(mf) : 0);
   // If Live was restored ON, write the envelope NOW so it already reflects the dynamics
   // (otherwise it sits flat until the first param nudge). Runs only when Live is on, so
   // browsing items with Live off never modifies the project. Self-ensures the envelope
@@ -1522,6 +1525,9 @@ void SneakPeak::SaveDynamicsViewPrefs()
   g_SetExtState("SneakPeak", "show_vol_env", m_dynamicsPanel.GetShowEnv() ? "1" : "0", true);  // shared with the menu/waveform/startup
   g_SetExtState("SneakPeak", "dyn_show_gr",  m_dynamicsPanel.GetShowGR()  ? "1" : "0", true);
   g_SetExtState("SneakPeak", "dyn_live",     m_dynamicsPanel.IsLive()     ? "1" : "0", true);
+  char mf[8];
+  snprintf(mf, sizeof(mf), "%d", m_dynamicsPanel.GetMeterFloor());
+  g_SetExtState("SneakPeak", "dyn_meter_floor", mf, true);
 }
 
 // --- User dynamics presets (global, persisted in ExtState) ------------------
