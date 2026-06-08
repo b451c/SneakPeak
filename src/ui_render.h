@@ -49,6 +49,7 @@ struct KnobVM {
   int    precision   = 1;
   bool   isGate      = false; // violet fill (gate params) vs amber (compressor)
   bool   showAuto    = false; // Makeup in auto mode -> "<n> auto" readout
+  bool   hover       = false; // cursor over (or dragging) this knob -> glow + cap tint
 };
 
 // View-model handed to UiCanvas::RenderPanel - pure data (no Blend2D, no engine

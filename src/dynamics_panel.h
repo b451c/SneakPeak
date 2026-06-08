@@ -15,6 +15,9 @@ public:
   bool OnMouseDown(int x, int y, RECT waveformRect);
   void OnMouseMove(int x, int y, RECT waveformRect);
   void OnMouseUp();
+  bool OnMouseWheel(int x, int y, double steps, bool fine, RECT waveformRect);  // nudge knob under cursor (premium)
+  bool OnHover(int x, int y, RECT waveformRect);              // update hovered knob; true if it changed (premium)
+  bool IsOverResizeGrip(int x, int y, RECT waveformRect) const;  // for the diagonal resize cursor (premium)
 
   bool IsVisible() const { return m_visible; }
   void Show(const DynamicsParams& params, double avgPeakDb);
@@ -84,6 +87,7 @@ private:
   RECT GetABToggleRect(RECT panelRect) const;
   RECT GetCloseButtonRect(RECT panelRect) const;
   int HitTestSlider(int x, int y, RECT panelRect) const;
+  int HitTestKnob(int x, int y, RECT panelRect) const;    // knob under cursor in base coords, or -1 (premium)
   bool OnMouseDownPremium(int x, int y, RECT panelRect);  // Blend2D panel hit-routing (Inc 3c)
   double PixelToValue(int px, RECT trackRect, int idx) const;
   int ValueToPixel(double val, RECT trackRect, int idx) const;
@@ -97,6 +101,7 @@ private:
   UiCanvas m_canvas;             // Blend2D renderer for the premium panel
 
   int m_dragSlider = -1;
+  int m_hoverKnob = -1;       // premium: knob under the cursor (glow); -1 = none
   int m_dragGrabOffset = 0;   // pixel offset: thumbX - clickX (prevents jump on grab)
   int m_dragStartX = 0;       // mouse X at drag start (for fine mode delta)
   [[maybe_unused]] int m_dragStartY = 0;  // mouse Y at knob-drag start (premium-only)

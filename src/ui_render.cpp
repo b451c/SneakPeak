@@ -409,6 +409,16 @@ static void DrawKnob(BLContext& ctx, const Gfx& gfx, const URect& cell, const Kn
   const double norm = std::clamp(k.norm, 0.0, 1.0);
   const uint32_t fillCol = k.isGate ? dynui::kGateViolet : dynui::kAmber;
 
+  // hover/drag: soft additive glow around the ring (the track + fill draw on top,
+  // crisp, with the glow bleeding outside) - the "adjustable" affordance cue.
+  if (k.hover) {
+    ctx.set_comp_op(BL_COMP_OP_PLUS);
+    BLPath ring; ring.arc_to(cx, cy, r, r, a0, sw, true);
+    ctx.set_stroke_width(7.0); ctx.stroke_path(ring, colA(fillCol, 22));
+    ctx.set_stroke_width(4.0); ctx.stroke_path(ring, colA(fillCol, 32));
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+  }
+
   // ring track (full sweep)
   ctx.set_stroke_width(3.0);
   { BLPath p; p.arc_to(cx, cy, r, r, a0, sw, true); ctx.stroke_path(p, col(dynui::kSurface2)); }
