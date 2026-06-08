@@ -1465,6 +1465,27 @@ bool SneakPeak::LoadDynamicsFromItem()
   DynamicsParams loaded;
   if (!DynamicsParamsFromString(buf, loaded)) return false;
   m_dynamicsPanel.Show(loaded, m_dynamics.GetAveragePeakDb());
+  RefreshDynamicsAvgGr();
   return true;
+}
+
+// Run the canonical reanalysis ONCE right after the panel opens so the panel's
+// avg GR (and therefore the auto-makeup curve baseline + GR meter) is correct from
+// the first paint. Without this, Show() leaves m_avgGR at 0, the transfer curve is
+// drawn with makeup=0, and the FIRST handle/knob drag triggers the reanalysis that
+// makes the whole curve leap up by the (now non-zero) makeup - the on-grab jump the
+// user reported. Mirrors the OnMouseMove path (input_handling.cpp ~1455-1467).
+void SneakPeak::RefreshDynamicsAvgGr()
+{
+  if (m_waveform.GetAudioSampleCount() <= 0) return;
+  m_dynamics.SetParams(m_dynamicsPanel.GetParams());
+  const double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+  m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                     m_waveform.GetAudioSampleCount(),
+                     m_waveform.GetNumChannels(),
+                     m_waveform.GetSampleRate(),
+                     ivDb, m_dynamicsPanel.GetParams());
+  m_dynamics.ComputeCompression();
+  m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
 }
 

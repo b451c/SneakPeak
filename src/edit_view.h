@@ -430,6 +430,7 @@ private:
   void ApplyDynamicsToEnvelope();
   void SaveDynamicsToItem();
   bool LoadDynamicsFromItem();
+  void RefreshDynamicsAvgGr();   // push real avg GR into the panel after open (no makeup leap on first drag)
 
   static AudioClipboard s_clipboard;
   static const int TIMER_REFRESH = 100;
