@@ -94,9 +94,9 @@ static double CurveOutDb(double in, const DynCurveParams& p) {
   const double g = CompressionGrDb(in, p.thresholdDb, p.ratio, p.kneeDb);
   double out = in + g + p.makeupDb;
   if (p.showGate) {
-    const double postLvl = in + g + p.makeupDb;
-    if (postLvl < p.gateThreshDb)
-      out += std::max(postLvl - p.gateThreshDb, -std::fabs(p.gateRangeDb));
+    const double detect = in + g;   // engine gates on the post-comp, PRE-makeup level (makeup is output-only)
+    if (detect < p.gateThreshDb)
+      out += std::max(detect - p.gateThreshDb, -std::fabs(p.gateRangeDb));
   }
   return out;
 }
@@ -218,10 +218,10 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   };
   auto gateGrDb = [&](double in, double compGr) -> double {
     if (!p.showGate) return 0.0;
-    const double postLvl = in + compGr + p.makeupDb;                         // engine: post-comp+makeup
-    if (postLvl >= p.gateThreshDb) return 0.0;
+    const double detect = in + compGr;                                       // engine: post-comp, PRE-makeup
+    if (detect >= p.gateThreshDb) return 0.0;
     const double gateRangeNeg = -std::fabs(p.gateRangeDb);                   // engine range is negative
-    return std::max(postLvl - p.gateThreshDb, gateRangeNeg);                 // ramp 0 -> range, clamped
+    return std::max(detect - p.gateThreshDb, gateRangeNeg);                  // ramp 0 -> range, clamped
   };
   auto compOut = [&](double in) { return in + compGrDb(in) + p.makeupDb; }; // wedge bottom: comp + makeup
   auto outAt   = [&](double in) { return CurveOutDb(in, p); };             // full output (shared w/ handles)
@@ -275,9 +275,10 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   ctx.stroke_path(curve, col(dynui::kCurveStatic));
 
   // gate cliff: re-stroke the input subrange where the gate is active, in violet.
-  // Onset is at input (gateThresh - makeup); depth ramps to the gate range and
-  // clamps - matches engine min(|gateThr-postLevel|,|gateRange|) on the
-  // post-comp+makeup level. Drawn ON the curve (outAt) so it stays continuous.
+  // Onset is at input where the post-comp (pre-makeup) level crosses gateThresh - i.e.
+  // input == gateThresh while below the comp knee - so the gate node at input=gateThresh
+  // sits on the cliff regardless of makeup (makeup only lifts the whole curve). Depth
+  // ramps to the gate range + clamps. Drawn ON the curve (outAt) so it stays continuous.
   if (p.showGate) {
     BLPath gate;
     bool started = false;

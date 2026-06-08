@@ -206,7 +206,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   int lookaheadFrames = (m_params.lookaheadMs > 0.0 && dt > 0.0)
     ? (int)(m_params.lookaheadMs / 1000.0 / dt + 0.5) : 0;
 
-  // Gate parameters (operates on post-compression+makeup level)
+  // Gate parameters (detects on the post-compression, PRE-makeup level - see the second pass)
   bool gateEnabled = (m_params.gateThreshDb > -99.0);
   double gateRange = std::min(0.0, m_params.gateRangeDb); // always <= 0
   double gateThresh = m_params.gateThreshDb;
@@ -267,7 +267,14 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   m_avgGR = (grCount > 0) ? grSum / (double)grCount : 0.0;
   double makeup = m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
 
-  // Second pass: gate (on post-compression+makeup level) + output
+  // Second pass: gate (detects on the post-compression, PRE-makeup level) + output.
+  // Makeup/output gain is a final stage and is NOT in the gate detector - the audio-
+  // industry standard (FabFilter/Waves/Logic/Cubase/iZotope + Calf/LSP/CTAGDRC): the
+  // gate/expander threshold is an input-domain control, makeup only translates the
+  // output. Gating on `rawDb + compGR` keeps the deliberate "breath reduction after
+  // compression" intent while making the gate threshold makeup-independent (so the
+  // transfer-curve gate node at input=threshold always sits on the cliff). At makeup==0
+  // this is byte-identical to the previous post-makeup detection.
   for (int i = 0; i < n; i++) {
     auto& pt = m_results[i];
     double compGR = compGRs[i];
@@ -275,15 +282,15 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
 
     if (gateEnabled) {
       double rawDb = 20.0 * log10(std::max(pt.peakLinear, EPSILON)) + m_itemVolDb;
-      double postLevel = rawDb + compGR + makeup;
+      double detectLevel = rawDb + compGR;   // post-comp, pre-makeup (gate detection)
 
       double instantGateGR = 0.0;
-      if (postLevel < gateThresh) {
+      if (detectLevel < gateThresh) {
         // Signal below gate threshold — apply reduction
         if (gateHoldCounter > 0) {
           gateHoldCounter--; // hold: keep gate open
         } else {
-          instantGateGR = -(gateThresh - postLevel);
+          instantGateGR = -(gateThresh - detectLevel);
           instantGateGR = std::max(instantGateGR, gateRange); // clamp to range
         }
       } else {
