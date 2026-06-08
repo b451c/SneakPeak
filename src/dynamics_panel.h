@@ -27,6 +27,11 @@ public:
   bool OnEditKey(int vk);  // feed one key to the editor; true = consumed (commit sets ParamsChanged)
   bool CommitValueEdit();  // parse the buffer + apply via SetSliderValue; true if the value changed (host commits on click)
 
+  // Motion pass (premium): true while any animation is in flight (caret blink, Live
+  // breathing pulse, tab-slide, knob value-ease). The host polls this each timer tick
+  // and repaints only when true - zero idle cost.
+  bool WantsAnimationFrame() const;
+
   bool IsVisible() const { return m_visible; }
   void Show(const DynamicsParams& params, double avgPeakDb);
   void Hide();
@@ -137,6 +142,15 @@ private:
   [[maybe_unused]] int  m_editIdx = -1;       // param being typed (0..9), -1 = not editing
   [[maybe_unused]] bool m_editFresh = false;  // true until the first keystroke (then the seeded text is cleared)
   [[maybe_unused]] char m_editBuf[16] = {};   // current edit text (digits/./-)
+
+  // Motion pass. All times are steady_clock seconds (NowSec()). [[maybe_unused]]: premium only.
+  [[maybe_unused]] bool   m_motionInit = false;          // first paint seeds the ease arrays (no spurious ease on open)
+  [[maybe_unused]] double m_caretBlinkRef = 0.0;         // caret blink phase ref (reset on each keystroke -> solid then blinks)
+  [[maybe_unused]] double m_tabSlideStartSec = -1.0;     // tab-slide start (<0 = none); fill glides m_tabFrom -> m_tab
+  [[maybe_unused]] int    m_tabFrom = 0;                 // tab the slide animates from
+  [[maybe_unused]] double m_knobEaseFrom[NUM_SLIDERS]    = {}; // arc norm at the start of the current ease
+  [[maybe_unused]] double m_knobTargetNorm[NUM_SLIDERS]  = {}; // last target norm (detect a non-drag change)
+  [[maybe_unused]] double m_knobEaseStartSec[NUM_SLIDERS] = {}; // value-ease start (0 = settled)
 
   bool m_paramsChanged = false;
   bool m_applyRequested = false;

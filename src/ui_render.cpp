@@ -491,8 +491,10 @@ static void DrawKnob(BLContext& ctx, const Gfx& gfx, const URect& cell, const Kn
       ctx.save();
       ctx.clip_to_rect(BLRect(boxX, boxY, boxW, boxH));
       ctx.fill_utf8_text(BLPoint(tx, vy), gfx.fValue, et, SIZE_MAX, col(dynui::kInkPrimary));
-      const double caretX = tx + TextWidth(gfx.fValue, et) + 1.0;
-      ctx.fill_rect(BLRect(caretX, vy - 11.0, 1.6, 14.0), col(dynui::kAmber));
+      if (k.caretOn) {   // blink (motion pass): solid right after a keystroke, then ~1s on/off
+        const double caretX = tx + TextWidth(gfx.fValue, et) + 1.0;
+        ctx.fill_rect(BLRect(caretX, vy - 11.0, 1.6, 14.0), col(dynui::kAmber));
+      }
       ctx.restore();
     } else {
       // Value number (16px primary) + unit (11px muted) on its own advance, per the
@@ -745,17 +747,28 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
   ctx.stroke_line(BLLine(0, L.header.h, L.header.w, L.header.h), col(dynui::kHairline));
 }
 
-static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L, int activeTab) {
+static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L,
+                       int activeTab, int tabFrom, double slideT) {
   const char* labels[3] = { "COMP", "GATE", "VIEW" };
-  for (int i = 0; i < 3; ++i) {
-    const URect& s = L.tabSeg[i];
-    const bool active = (i == activeTab);
-    FillURound(ctx, s, dynui::kRadiusCtrl, active ? dynui::kSurface3 : dynui::kSurface1);
-    if (active)
-      ctx.fill_rect(BLRect(s.x + 6.0, s.y + s.h - 2.0, s.w - 12.0, 2.0), col(dynui::kAmber));
-    if (gfx.fontsReady)
-      TextCentered(ctx, gfx.fTab, s, labels[i], active ? dynui::kAmber : dynui::kInkSecondary);
+  // inactive backgrounds first
+  for (int i = 0; i < 3; ++i)
+    FillURound(ctx, L.tabSeg[i], dynui::kRadiusCtrl, dynui::kSurface1);
+  // one active fill + amber underline that GLIDES between segments (motion pass); at
+  // slideT==1 it sits exactly on tabSeg[activeTab] (byte-identical to the static layout).
+  {
+    const URect& a = L.tabSeg[tabFrom < 0 || tabFrom > 2 ? activeTab : tabFrom];
+    const URect& b = L.tabSeg[activeTab];
+    const double t = std::clamp(slideT, 0.0, 1.0);
+    const URect s{ a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
+                   a.w + (b.w - a.w) * t, a.h + (b.h - a.h) * t };
+    FillURound(ctx, s, dynui::kRadiusCtrl, dynui::kSurface3);
+    ctx.fill_rect(BLRect(s.x + 6.0, s.y + s.h - 2.0, s.w - 12.0, 2.0), col(dynui::kAmber));
   }
+  // labels: the destination tab is amber immediately; the fill catches up underneath
+  if (gfx.fontsReady)
+    for (int i = 0; i < 3; ++i)
+      TextCentered(ctx, gfx.fTab, L.tabSeg[i], labels[i],
+                   i == activeTab ? dynui::kAmber : dynui::kInkSecondary);
 }
 
 // Apply is disabled in Live mode (points are written in real-time, so there is
@@ -779,7 +792,7 @@ static void DrawFooter(BLContext& ctx, const Gfx& gfx, const DynLayout& L, bool 
 // additive halo on the LED (armed Live - the breathing animation is deferred motion).
 static void DrawTogglePill(BLContext& ctx, const Gfx& gfx, const URect& r,
                            const char* label, bool on, uint32_t onColor,
-                           bool outline, bool glow) {
+                           bool outline, double glow) {
   if (r.w < 1.0) return;
   FillURound(ctx, r, dynui::kRadiusCtrl, on ? dynui::kSurface3 : dynui::kSurface2);
   if (on && outline) {
@@ -789,10 +802,11 @@ static void DrawTogglePill(BLContext& ctx, const Gfx& gfx, const URect& r,
   }
   const double ledR = 4.0, ledX = r.x + 12.0, ledY = r.y + r.h * 0.5;
   if (on) {
-    if (glow) {
+    if (glow > 0.0) {   // breathing intensity 0..1 (motion pass: Live pill pulses)
+      const int a0 = (int)std::lround(60.0 * glow), a1 = (int)std::lround(110.0 * glow);
       ctx.set_comp_op(BL_COMP_OP_PLUS);
-      ctx.fill_circle(BLCircle(ledX, ledY, ledR + 3.0), colA(onColor, 60));
-      ctx.fill_circle(BLCircle(ledX, ledY, ledR + 1.5), colA(onColor, 110));
+      ctx.fill_circle(BLCircle(ledX, ledY, ledR + 3.0), colA(onColor, a0));
+      ctx.fill_circle(BLCircle(ledX, ledY, ledR + 1.5), colA(onColor, a1));
       ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
     }
     ctx.fill_circle(BLCircle(ledX, ledY, ledR), col(onColor));
@@ -909,7 +923,7 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     // match what is drawn.
     const DynLayout L = ComputeDynLayout(W, H, vm.activeTab);
     DrawHeader(ctx, *m_gfx, L, vm);
-    DrawTabBar(ctx, *m_gfx, L, vm.activeTab);
+    DrawTabBar(ctx, *m_gfx, L, vm.activeTab, vm.tabFrom, vm.tabSlideT);
     DrawFooter(ctx, *m_gfx, L, /*applyEnabled=*/!vm.liveMode);
     DrawTransferPlot(ctx, *m_gfx, L.plotWell.x, L.plotWell.y, L.plotWell.w, vm.curve);
     DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w,
@@ -920,12 +934,12 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     // Peak/RMS switch (Compressor tab) + View-tab state toggles. Each helper
     // self-skips when its rect is empty, so these are no-ops on the other tabs.
     DrawSegmented2(ctx, *m_gfx, L.rms[0], L.rms[1], "PEAK", "RMS", vm.rmsMode);
-    DrawTogglePill(ctx, *m_gfx, L.viewToggle[0], "DYN",  vm.showDyn,  dynui::kAmber,   false, false);
-    DrawTogglePill(ctx, *m_gfx, L.viewToggle[1], "ENV",  vm.showEnv,  dynui::kEnvCyan, false, false);
-    DrawTogglePill(ctx, *m_gfx, L.viewToggle[2], "GR",   vm.showGR,   dynui::kGrRed,   false, false);
-    DrawTogglePill(ctx, *m_gfx, L.viewToggle[3], "LIVE", vm.liveMode, dynui::kAmber,   false, true);
+    DrawTogglePill(ctx, *m_gfx, L.viewToggle[0], "DYN",  vm.showDyn,  dynui::kAmber,   false, 0.0);
+    DrawTogglePill(ctx, *m_gfx, L.viewToggle[1], "ENV",  vm.showEnv,  dynui::kEnvCyan, false, 0.0);
+    DrawTogglePill(ctx, *m_gfx, L.viewToggle[2], "GR",   vm.showGR,   dynui::kGrRed,   false, 0.0);
+    DrawTogglePill(ctx, *m_gfx, L.viewToggle[3], "LIVE", vm.liveMode, dynui::kAmber,   false, vm.livePulse);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[4], vm.bypassed ? "BYP" : "A/B",
-                   vm.bypassed, dynui::kAmber, true, false);
+                   vm.bypassed, dynui::kAmber, true, 0.0);
 
     DrawResizeGrip(ctx, L.resizeGrip);
 

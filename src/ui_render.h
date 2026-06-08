@@ -52,6 +52,7 @@ struct KnobVM {
   bool   hover       = false; // cursor over (or dragging) this knob -> glow + cap tint
   bool   editing     = false; // inline type-value editor open on this knob (Inc 8)
   const char* editText = nullptr; // live edit buffer (valid only during the paint)
+  bool   caretOn     = true;  // editor caret visible this frame (blink; motion pass)
 };
 
 // View-model handed to UiCanvas::RenderPanel - pure data (no Blend2D, no engine
@@ -73,6 +74,11 @@ struct DynPanelVM {
   bool  rmsMode  = false;
   int   dragHandle = -1;            // curve handle being dragged (-1 none, 0 knee, 1 gate) -> glow
   int   hoverHandle = -1;           // curve handle under the cursor -> lights its accent colour
+  // Motion pass: the panel computes these from its animation clock; the renderer is a
+  // pure function of them (no time access in ui_render.cpp).
+  int    tabFrom    = 0;            // tab the active-pill fill slides from
+  double tabSlideT  = 1.0;          // 0..1 eased slide progress (1 = settled at activeTab)
+  double livePulse  = 0.0;          // Live-pill glow intensity 0..1 (0 = off; breathes when armed)
 };
 
 // Plain rectangle (logical px, panel-relative); no Blend2D so it can be shared by
