@@ -112,6 +112,8 @@ void DynamicsPanel::Hide()
   m_visible = false;
   m_dragSlider = -1;
   m_hoverKnob = -1;
+  m_hoverHandle = -1;
+  m_dragHandle = -1;
   m_panelDragging = false;
   m_resizing = false;
   m_bypassed = false;
@@ -308,6 +310,23 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
     if (L.tabSeg[i].contains(lx, ly)) { m_tab = (Tab)i; return true; }
   if (!m_liveMode && L.apply.contains(lx, ly)) { m_applyRequested = true; return true; }
 
+  // Curve drag-handles on the plot (knee = Threshold/Ratio on Comp; gate node =
+  // Gate Thr/Range on Gate). Records the grab Y + the secondary param value for the
+  // relative vertical axis; reuses m_dragHandle's IsDragging() -> host SetCapture +
+  // re-analyse + Live-undo lifecycle (identical to a knob drag).
+  {
+    URect handles[2];
+    ComputeCurveHandles(L.plotWell, BuildCurveParams(), (int)m_tab, handles);
+    for (int h = 0; h < 2; ++h) {
+      if (!handles[h].contains(lx, ly)) continue;
+      m_dragHandle = h;
+      m_handleStartY = y;
+      m_handleStartVal = GetSliderValue(h == HANDLE_KNEE ? 1 : 8);   // ratio / gate range
+      m_handleGrabDx = lx - (handles[h].x + handles[h].w * 0.5);     // no X jump on grab (base px)
+      return true;                                 // IsDragging() -> host SetCapture
+    }
+  }
+
   // Knob hit (only on-tab params have a non-empty rect). Cmd-click resets to the
   // param default; otherwise start a velocity-sensitive vertical drag. Reusing
   // m_dragSlider keeps IsDragging()/SetCapture/reanalyze/Live byte-for-byte with
@@ -488,6 +507,7 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     m_offsetY = m_resizeAnchorT - (wr.bottom - H1 - 10);
     return;
   }
+  if (m_dragHandle >= 0) { DragCurveHandle(x, y, GetRect(wr)); return; }
 #endif
   if (m_dragSlider >= 0) {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
@@ -555,6 +575,7 @@ void DynamicsPanel::OnMouseUp()
   m_dragSlider = -1;
   m_panelDragging = false;
   m_resizing = false;
+  m_dragHandle = -1;
 }
 
 // --- Premium wheel-nudge + hover (Inc 6) ------------------------------------
@@ -591,12 +612,24 @@ bool DynamicsPanel::OnMouseWheel(int x, int y, double steps, bool fine, RECT wr)
   return true;
 }
 
-// Update the hovered knob; returns true if it changed (host repaints for the glow).
+// Update the hovered knob AND curve handle; returns true if either changed (the
+// host repaints then - for the knob glow and the handle lighting its accent).
 bool DynamicsPanel::OnHover(int x, int y, RECT wr)
 {
-  const int h = m_visible ? HitTestKnob(x, y, GetRect(wr)) : -1;
-  if (h == m_hoverKnob) return false;
-  m_hoverKnob = h;
+  int hk = -1, hh = -1;
+  if (m_visible) {
+    const RECT pr = GetRect(wr);
+    hk = HitTestKnob(x, y, pr);
+    const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+    const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
+    const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+    URect handles[2];
+    ComputeCurveHandles(L.plotWell, BuildCurveParams(), (int)m_tab, handles);
+    for (int h = 0; h < 2; ++h) if (handles[h].contains(lx, ly)) { hh = h; break; }
+  }
+  if (hk == m_hoverKnob && hh == m_hoverHandle) return false;
+  m_hoverKnob = hk;
+  m_hoverHandle = hh;
   return true;
 }
 
@@ -609,6 +642,52 @@ bool DynamicsPanel::IsOverResizeGrip(int x, int y, RECT wr) const
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
   const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
   return L.resizeGrip.contains(lx, ly);
+}
+
+// --- Premium curve handles (Inc 7) -----------------------------------------
+
+// Live params -> DynCurveParams, shared by the render VM and the curve-handle
+// hit-test/drag so the drawn curve and the grab boxes can never drift apart.
+DynCurveParams DynamicsPanel::BuildCurveParams() const
+{
+  DynCurveParams c;
+  c.thresholdDb  = (m_params.threshold <= -99.0) ? m_avgPeakDb : m_params.threshold;
+  c.ratio        = m_params.ratio;
+  c.kneeDb       = m_params.kneeDb;
+  c.gateThreshDb = m_params.gateThreshDb;
+  c.gateRangeDb  = -m_params.gateRangeDb;            // engine NEGATIVE -> render POSITIVE magnitude (#1)
+  c.makeupDb     = m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
+  c.avgPeakDb    = m_avgPeakDb;
+  c.avgGrDb      = m_avgGR;                          // engine avg GR (negative) drives the meter (#2)
+  c.showGate     = (m_params.gateThreshDb > -99.0);
+  return c;
+}
+
+// Apply a curve-handle drag to params. Primary axis = absolute X -> input dB
+// (Threshold / Gate Thr); secondary = relative vertical drag from the grab point
+// (Ratio / Gate Range). All through SetSliderValue so the host re-analyses exactly
+// as for a knob drag (same m_paramsChanged poll, Live undo lifecycle via IsDragging).
+void DynamicsPanel::DragCurveHandle(int x, int y, RECT pr)
+{
+  if (m_dragHandle < 0) return;
+  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const DynCurveParams cp = BuildCurveParams();
+  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  const double span = (cp.inMaxDb - cp.inMinDb) != 0.0 ? (cp.inMaxDb - cp.inMinDb) : 1.0;
+  const double lx = (double)(x - pr.left) / S - m_handleGrabDx;   // subtract grab offset (no jump)
+  const double inDb = cp.inMinDb + (lx - L.plotWell.x) / L.plotWell.w * span;   // X -> input dB
+  const int primary   = (m_dragHandle == HANDLE_KNEE) ? 0 : 7;   // Threshold / Gate Thr
+  const int secondary = (m_dragHandle == HANDLE_KNEE) ? 1 : 8;   // Ratio / Gate Range
+  const double secSign = (m_dragHandle == HANDLE_KNEE) ? 1.0 : -1.0;  // drag down: +ratio / deeper gate
+  SetSliderValue(primary, inDb);                                  // clamps to the slider range
+  const auto& sd = SLIDER_DEFS[secondary];
+  const double rng = (sd.maxVal - sd.minVal) != 0.0 ? (sd.maxVal - sd.minVal) : 1.0;
+  const double startNorm = (m_handleStartVal - sd.minVal) / rng;
+  const double norm = std::max(0.0, std::min(1.0,
+      startNorm + secSign * (double)(y - m_handleStartY) / S / 160.0));
+  SetSliderValue(secondary, sd.minVal + norm * rng);
+  m_paramsChanged = true;
+  m_presetIdx = -1;
 }
 
 // --- Drawing ---
@@ -889,15 +968,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   RECT pr = GetRect(wr);
 
   DynPanelVM vm;
-  vm.curve.thresholdDb  = (m_params.threshold <= -99.0) ? m_avgPeakDb : m_params.threshold;
-  vm.curve.ratio        = m_params.ratio;
-  vm.curve.kneeDb       = m_params.kneeDb;
-  vm.curve.gateThreshDb = m_params.gateThreshDb;
-  vm.curve.gateRangeDb  = -m_params.gateRangeDb;   // engine NEGATIVE -> render POSITIVE magnitude (#1)
-  vm.curve.makeupDb     = m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
-  vm.curve.avgPeakDb    = m_avgPeakDb;
-  vm.curve.avgGrDb      = m_avgGR;                  // engine avg GR (negative) drives the meter (#2)
-  vm.curve.showGate     = (m_params.gateThreshDb > -99.0);
+  vm.curve      = BuildCurveParams();               // shared with curve-handle hit-testing
   vm.activeTab  = (int)m_tab;
   vm.presetName = (m_presetIdx >= 0 && m_presetIdx < PRESET_COUNT)
                     ? g_dynamicsPresets[m_presetIdx].name : nullptr;
@@ -907,6 +978,8 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.liveMode = m_liveMode;
   vm.bypassed = m_bypassed;
   vm.rmsMode  = m_params.rmsMode;
+  vm.dragHandle = m_dragHandle;
+  vm.hoverHandle = m_hoverHandle;
 
   // Per-knob render state. norm/defaultNorm in [0,1]; Threshold's default tracks
   // the operating point (avgPeak). Makeup shows "auto" + the computed value when

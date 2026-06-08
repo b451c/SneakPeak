@@ -69,6 +69,8 @@ struct DynPanelVM {
   bool  liveMode = false;
   bool  bypassed = false;
   bool  rmsMode  = false;
+  int   dragHandle = -1;            // curve handle being dragged (-1 none, 0 knee, 1 gate) -> glow
+  int   hoverHandle = -1;           // curve handle under the cursor -> lights its accent colour
 };
 
 // Plain rectangle (logical px, panel-relative); no Blend2D so it can be shared by
@@ -92,6 +94,14 @@ struct DynLayout {
   URect resizeGrip;  // bottom-right corner drag handle (free resize)
 };
 DynLayout ComputeDynLayout(double w, double h, int activeTab = 0);
+
+// Curve drag-handle hit boxes (base panel coords, ~13px radius), shared by the
+// renderer and DynamicsPanel hit-testing so the glyph and the grab box always
+// coincide. Computed from the plot well + curve params. [0] = knee handle
+// (Threshold/Ratio, Compressor tab), [1] = gate node (Gate Thr/Range, Gate tab);
+// the off-tab entry is empty (w==0). Positions clamp into the plot well.
+void ComputeCurveHandles(const URect& plotWell, const DynCurveParams& p, int activeTab,
+                         URect out[2]);
 
 class UiCanvas {
 public:
