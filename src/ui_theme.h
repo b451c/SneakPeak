@@ -48,6 +48,7 @@ constexpr uint32_t kCurveStatic = 0xFFC3CAD2; // static transfer curve at rest
 constexpr int   kGrid        = 8;    // base spacing unit (4px half-step allowed)
 constexpr int   kPanelW      = 480;  // premium panel default size (Normal), logical px
 constexpr int   kPanelH      = 300;
+constexpr int   kPanelHCompact = 220; // View-tab Compact mode: hero plot hidden, knobs reflow to a 4-col grid
 constexpr int   kPanelPad    = 16;
 constexpr int   kRadiusPanel = 12;
 constexpr int   kRadiusCtrl  = 6;

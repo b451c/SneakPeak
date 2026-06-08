@@ -63,6 +63,10 @@ public:
   // 0 = -60 dB (default), 1 = -36, 2 = -24. Render-only; persisted as a global pref.
   int  GetMeterFloor() const { return m_meterFloorSel; }
   void SetMeterFloor(int idx) { m_meterFloorSel = idx < 0 ? 0 : (idx > 2 ? 2 : idx); }
+  // Compact mode (View tab, premium): hides the hero plot + GR meter and reflows the
+  // knobs into a wider 4-col grid, shrinking the panel height. Persisted as a global pref.
+  bool GetCompact() const { return m_compactMode; }
+  void SetCompact(bool v) { m_compactMode = v; }
   // Set when a Dyn/Env/GR overlay toggle is clicked, so the host can persist them
   // as global user prefs (restored on the next panel open). Live/A-B are NOT persisted.
   bool ViewPrefsChanged() const { return m_viewPrefsChanged; }
@@ -114,6 +118,8 @@ private:
   int HitTestSlider(int x, int y, RECT panelRect) const;
   int HitTestKnob(int x, int y, RECT panelRect) const;    // knob under cursor in base coords, or -1 (premium)
   DynCurveParams BuildCurveParams() const;                // VM curve params from live state (render + handles)
+  double PanelBaseH() const;                              // premium base height (kPanelHCompact in Compact, else kPanelH)
+  DynLayout PanelLayout() const;                          // ComputeDynLayout for the current tab + compact state
   void DragCurveHandle(int x, int y, RECT panelRect);     // apply a curve-handle drag to params (premium)
   void BeginValueEdit(int idx);                           // open the inline editor on param idx (seed buffer)
   void CancelValueEdit();                                 // discard + close the inline editor
@@ -165,6 +171,7 @@ private:
   bool m_showEnv = true;  // show volume envelope (cyan)
   bool m_showGR = true;   // show gain reduction shading between curves
   int  m_meterFloorSel = 0;  // meter-scale dB floor: 0=-60 (default), 1=-36, 2=-24; render-only, persisted
+  bool m_compactMode = false; // Compact mode: hero plot hidden, knobs in a 4-col grid; persisted
   bool m_bypassed = false;  // A/B: envelope bypass for comparison
   bool m_liveMode = false;  // live preview: write envelope on slider change
   bool m_liveUndoOpen = false; // undo block is open for live session

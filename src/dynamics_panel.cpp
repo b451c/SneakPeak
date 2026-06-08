@@ -123,6 +123,7 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   m_showEnv = true;
   m_showGR = true;
   m_meterFloorSel = 0;   // default -60 dB floor (RestoreDynamicsViewPrefs overrides from ExtState)
+  m_compactMode = false; // default normal layout (RestoreDynamicsViewPrefs overrides from ExtState)
   m_bypassed = false;
   m_liveMode = false;
   m_liveUndoOpen = false;
@@ -145,11 +146,26 @@ void DynamicsPanel::Hide()
 
 // --- Layout ---
 
+// Premium panel base dimensions. Width is always kPanelW; the height shrinks in
+// Compact mode (the hero plot is hidden). All premium geometry (GetRect, the resize
+// fit-clamp, hit-testing) derives the height from here so the two modes stay in sync.
+double DynamicsPanel::PanelBaseH() const
+{
+  return m_compactMode ? (double)dynui::kPanelHCompact : (double)dynui::kPanelH;
+}
+
+// The current panel layout (single source for render-prep + every hit-test): base
+// coords, current tab, current compact state.
+DynLayout DynamicsPanel::PanelLayout() const
+{
+  return ComputeDynLayout((double)dynui::kPanelW, PanelBaseH(), (int)m_tab, m_compactMode);
+}
+
 RECT DynamicsPanel::GetRect(RECT wr) const
 {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   const int pw = (int)std::lround((double)dynui::kPanelW * m_uiScale);
-  const int ph = (int)std::lround((double)dynui::kPanelH * m_uiScale);
+  const int ph = (int)std::lround(PanelBaseH() * m_uiScale);
 #else
   const int pw = PANEL_W, ph = PANEL_H;
 #endif
@@ -231,7 +247,7 @@ RECT DynamicsPanel::GetPresetButtonRect(RECT pr) const
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   // Layout is in base coords; scale onto the on-screen (scaled) panel rect.
   const double S = m_uiScale;
-  DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  DynLayout L = PanelLayout();
   return { pr.left + (int)(L.preset.x * S), pr.top + (int)(L.preset.y * S),
            pr.left + (int)((L.preset.x + L.preset.w) * S),
            pr.top + (int)((L.preset.y + L.preset.h) * S) };
@@ -321,8 +337,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   // convert the click into base coords so hit-tests match exactly what was drawn.
   const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
-  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW,
-                                       (double)dynui::kPanelH, (int)m_tab);
+  const DynLayout L = PanelLayout();
 
   // Bottom-right grip -> start an aspect-locked resize (top-left stays anchored).
   if (L.resizeGrip.contains(lx, ly)) {
@@ -417,6 +432,8 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   // the pref but do NOT mark params changed (no re-analysis).
   for (int i = 0; i < 3; ++i)
     if (L.meterScale[i].contains(lx, ly)) { m_meterFloorSel = i; m_viewPrefsChanged = true; return true; }
+  // Compact toggle: relayout only (panel resizes on the next paint); persist the pref.
+  if (L.compactToggle.contains(lx, ly)) { m_compactMode = !m_compactMode; m_viewPrefsChanged = true; return true; }
 
   m_panelDragging = true;          // empty area -> drag (OnMouseMove consumes offsets)
   m_dragOffsetX = x - pr.left;
@@ -541,13 +558,13 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     // so the panel never overflows (which would make GetRect re-clamp and break the
     // anchor). Since the anchor came from a fitting rect, both fits are >= current S.
     const double fitW = (double)(wr.right - m_resizeAnchorL) / (double)dynui::kPanelW;
-    const double fitH = (double)(wr.bottom - m_resizeAnchorT) / (double)dynui::kPanelH;
+    const double fitH = (double)(wr.bottom - m_resizeAnchorT) / PanelBaseH();
     double smax = std::min(UI_SCALE_MAX, std::min(fitW, fitH));
     if (smax < UI_SCALE_MIN) smax = UI_SCALE_MIN;
     m_uiScale = std::max(UI_SCALE_MIN, std::min(smax, S));
     // Pin the top-left corner: solve GetRect's centring offsets for the new size.
     const int W1 = (int)std::lround((double)dynui::kPanelW * m_uiScale);
-    const int H1 = (int)std::lround((double)dynui::kPanelH * m_uiScale);
+    const int H1 = (int)std::lround(PanelBaseH() * m_uiScale);
     m_offsetX = (m_resizeAnchorL + W1 / 2) - (wr.left + wr.right) / 2;
     m_offsetY = m_resizeAnchorT - (wr.bottom - H1 - 10);
     return;
@@ -602,7 +619,7 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
   else if (m_panelDragging) {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
     const int pw = (int)std::lround((double)dynui::kPanelW * m_uiScale);
-    const int ph = (int)std::lround((double)dynui::kPanelH * m_uiScale);
+    const int ph = (int)std::lround(PanelBaseH() * m_uiScale);
 #else
     const int pw = PANEL_W, ph = PANEL_H;
 #endif
@@ -631,7 +648,7 @@ int DynamicsPanel::HitTestKnob(int x, int y, RECT pr) const
 {
   const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
-  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  const DynLayout L = PanelLayout();
   for (int i = 0; i < NUM_SLIDERS; ++i)
     if (L.knob[i].contains(lx, ly)) return i;
   return -1;
@@ -667,7 +684,7 @@ bool DynamicsPanel::OnHover(int x, int y, RECT wr)
     hk = HitTestKnob(x, y, pr);
     const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
     const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
-    const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+    const DynLayout L = PanelLayout();
     URect handles[2];
     ComputeCurveHandles(L.plotWell, BuildCurveParams(), (int)m_tab, handles);
     for (int h = 0; h < 2; ++h) if (handles[h].contains(lx, ly)) { hh = h; break; }
@@ -685,7 +702,7 @@ bool DynamicsPanel::IsOverResizeGrip(int x, int y, RECT wr) const
   RECT pr = GetRect(wr);
   const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
-  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  const DynLayout L = PanelLayout();
   return L.resizeGrip.contains(lx, ly);
 }
 
@@ -723,7 +740,7 @@ void DynamicsPanel::DragCurveHandle(int x, int y, RECT pr)
   if (m_dragHandle < 0) return;
   const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
   const DynCurveParams cp = BuildCurveParams();
-  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  const DynLayout L = PanelLayout();
   const double span = (cp.inMaxDb - cp.inMinDb) != 0.0 ? (cp.inMaxDb - cp.inMinDb) : 1.0;
   const double lx = (double)(x - pr.left) / S - m_handleGrabDx;   // subtract grab offset (no jump)
   const double inDb = cp.inMinDb + (lx - L.plotWell.x) / L.plotWell.w * span;   // X -> input dB
@@ -837,7 +854,7 @@ bool DynamicsPanel::OnDoubleClick(int x, int y, RECT wr)
   if (k >= 0) { BeginValueEdit(k); return true; }
   const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
-  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  const DynLayout L = PanelLayout();
   URect handles[2];
   ComputeCurveHandles(L.plotWell, BuildCurveParams(), (int)m_tab, handles);
   if (handles[HANDLE_KNEE].contains(lx, ly)) { BeginValueEdit(0); return true; }   // knee -> Threshold
@@ -1188,6 +1205,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.bypassed = m_bypassed;
   vm.rmsMode  = m_params.rmsMode;
   vm.meterFloorSel = m_meterFloorSel;
+  vm.compact  = m_compactMode;
   vm.dragHandle = m_dragHandle;
   vm.hoverHandle = m_hoverHandle;
 
