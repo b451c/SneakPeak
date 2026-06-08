@@ -568,8 +568,10 @@ void SneakPeak::OnContextMenuCommand(int id)
                            ivDb, m_dynamics.GetParams());
       }
       // Show inline dynamics panel - try loading saved params from item P_EXT first
-      if (!LoadDynamicsFromItem())
+      if (!LoadDynamicsFromItem()) {
         m_dynamicsPanel.Show(m_dynamics.GetParams(), m_dynamics.GetAveragePeakDb());
+        RefreshDynamicsAvgGr();   // correct avg GR from the first paint (no makeup leap on first drag)
+      }
       m_dynamicsVisible = true;
       if (g_SetExtState) g_SetExtState("SneakPeak", "dynamics_visible", "1", true);
       InvalidateRect(m_hwnd, nullptr, FALSE);
