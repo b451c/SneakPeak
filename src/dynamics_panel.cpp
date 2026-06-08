@@ -567,6 +567,7 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     const int H1 = (int)std::lround(PanelBaseH() * m_uiScale);
     m_offsetX = (m_resizeAnchorL + W1 / 2) - (wr.left + wr.right) / 2;
     m_offsetY = m_resizeAnchorT - (wr.bottom - H1 - 10);
+    m_geomChanged = true;            // persist size + position on mouse-up
     return;
   }
   if (m_dragHandle >= 0) { DragCurveHandle(x, y, GetRect(wr)); return; }
@@ -629,6 +630,7 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     int newTop = y - m_dragOffsetY;
     m_offsetX = (newLeft + pw / 2) - defaultCX;
     m_offsetY = newTop - defaultCY;
+    m_geomChanged = true;            // persist size + position on mouse-up
   }
 }
 

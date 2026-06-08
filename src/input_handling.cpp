@@ -834,6 +834,11 @@ void SneakPeak::OnMouseUp(int x, int y)
   }
   if (m_dynamicsPanel.IsDragging()) {
     m_dynamicsPanel.OnMouseUp();
+    // Persist panel size/position if a resize or panel-drag changed it.
+    if (m_dynamicsPanel.GeomChanged()) {
+      m_dynamicsPanel.ClearGeomChanged();
+      SaveDynamicsGeom();
+    }
     // Close live undo block after slider drag completes
     if (m_dynamicsPanel.LiveUndoOpen()) {
       if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);

@@ -67,6 +67,16 @@ public:
   // knobs into a wider 4-col grid, shrinking the panel height. Persisted as a global pref.
   bool GetCompact() const { return m_compactMode; }
   void SetCompact(bool v) { m_compactMode = v; }
+  // Panel size (free-resize scale) + position, persisted globally so the panel
+  // reopens where/how the user left it. m_geomChanged is set by a resize/drag and
+  // polled by the host (after OnMouseUp) to persist. GetRect clamps on use.
+  bool GeomChanged() const { return m_geomChanged; }
+  void ClearGeomChanged() { m_geomChanged = false; }
+  double GetUiScale() const { return m_uiScale; }
+  void SetUiScale(double s) { m_uiScale = s < 0.8 ? 0.8 : (s > 2.0 ? 2.0 : s); }  // [UI_SCALE_MIN, UI_SCALE_MAX]
+  int  GetPanelOffsetX() const { return m_offsetX; }
+  int  GetPanelOffsetY() const { return m_offsetY; }
+  void SetPanelOffset(int x, int y) { m_offsetX = x; m_offsetY = y; }
   // Set when a Dyn/Env/GR overlay toggle is clicked, so the host can persist them
   // as global user prefs (restored on the next panel open). Live/A-B are NOT persisted.
   bool ViewPrefsChanged() const { return m_viewPrefsChanged; }
@@ -166,6 +176,7 @@ private:
   bool m_applyRequested = false;
   bool m_presetMenuRequested = false;
   bool m_viewPrefsChanged = false;  // a Dyn/Env/GR overlay toggle changed -> host persists
+  bool m_geomChanged = false;       // a resize/panel-drag changed size/position -> host persists
   int m_presetIdx = -1;  // -1 = custom, 0..PRESET_COUNT-1 = built-in
   bool m_showDyn = true;  // show dynamics curves (orange + purple + threshold)
   bool m_showEnv = true;  // show volume envelope (cyan)
