@@ -4,6 +4,7 @@
 #include "config.h"
 #include "ui_theme.h"
 #include <cstdio>
+#include <cstring>
 #include <cmath>
 #include <algorithm>
 
@@ -97,6 +98,7 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   m_paramsChanged = false;
   m_applyRequested = false;
   m_dragSlider = -1;
+  m_editIdx = -1;
   m_avgGR = 0.0;
   // Reset toggles to show everything on panel open
   m_showDyn = true;
@@ -111,6 +113,7 @@ void DynamicsPanel::Hide()
 {
   m_visible = false;
   m_dragSlider = -1;
+  m_editIdx = -1;
   m_hoverKnob = -1;
   m_hoverHandle = -1;
   m_dragHandle = -1;
@@ -715,6 +718,138 @@ void DynamicsPanel::DragCurveHandle(int x, int y, RECT pr)
   m_presetIdx = -1;
 }
 
+// --- Inline type-value editor (Inc 8) ---------------------------------------
+
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+
+// VK/char -> the single character to append, or 0 if not an accepted edit key.
+// macOS SWELL delivers punctuation as its ASCII code ('.', '-', ':'); Windows
+// delivers VK_OEM_*/numpad codes. Handle both. The field is context-aware (it knows
+// which param), so ':' and unit letters are optional - the user just types the number.
+static char MapEditChar(int vk)
+{
+  if (vk >= '0' && vk <= '9') return (char)vk;                  // top-row digits (all platforms)
+  if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD0 + 9) return (char)('0' + (vk - VK_NUMPAD0));
+  if (vk == '.' || vk == VK_DECIMAL  || vk == 0xBE) return '.'; // 0xBE = Win VK_OEM_PERIOD
+  if (vk == '-' || vk == VK_SUBTRACT || vk == 0xBD) return '-'; // 0xBD = Win VK_OEM_MINUS
+  if (vk == ':') return ':';                                    // mac ratio "4:1" (optional, parse ignores it)
+  return 0;
+}
+
+// Locale-independent parse. MapEditChar normalises input to ASCII, so '.' is ALWAYS the
+// decimal separator regardless of the C locale - atof/strtod would misread '.' under a
+// comma locale (pl_PL/de_DE: "3.5" -> 3.0). Tolerant of a trailing unit (stops at the
+// first non-numeric char): "12ms"->12, "4:1"->4, "-18.5"->-18.5, ".5"->0.5.
+static double ParseEditValue(const char* s)
+{
+  while (*s == ' ') ++s;
+  double sign = 1.0;
+  if (*s == '-') { sign = -1.0; ++s; }
+  else if (*s == '+') ++s;
+  double val = 0.0;
+  while (*s >= '0' && *s <= '9') { val = val * 10.0 + (double)(*s - '0'); ++s; }
+  if (*s == '.') {
+    ++s;
+    double frac = 0.1;
+    while (*s >= '0' && *s <= '9') { val += (double)(*s - '0') * frac; frac *= 0.1; ++s; }
+  }
+  return sign * val;
+}
+
+// Open the editor on param idx, seeding the buffer with the current displayed value so
+// the user sees what they are replacing. m_editFresh makes the first accepted keystroke
+// clear the seed (select-all-then-type feel); Backspace edits the seed in place instead.
+void DynamicsPanel::BeginValueEdit(int idx)
+{
+  if (idx < 0 || idx >= NUM_SLIDERS) return;
+  m_paramsChanged = false;   // editor is a clean transaction: only ITS own commit re-analyses
+                             // (drops any stale pending flag so ESC/edit keys can't trigger one)
+  m_editIdx = idx;
+  m_editFresh = true;
+  const double v = (idx == 5 && m_params.autoMakeup) ? fabs(m_avgGR) : GetSliderValue(idx);
+  std::snprintf(m_editBuf, sizeof(m_editBuf),
+                SLIDER_DEFS[idx].precision == 1 ? "%.1f" : "%.0f", v);
+  for (char* s = m_editBuf; *s; ++s) if (*s == ',') *s = '.';  // locale comma -> '.' (we only accept '.')
+}
+
+// Parse the buffer (ParseEditValue: locale-independent, unit-tolerant - "12ms"->12,
+// "-18"->-18, "4:1"->4) and apply via SetSliderValue (clamps + clears autoMakeup for
+// Makeup). Only commits when the text holds a digit, so a stray non-numeric entry cancels
+// rather than snapping to 0. Returns true if the value actually changed. Always closes it.
+bool DynamicsPanel::CommitValueEdit()
+{
+  if (m_editIdx < 0) return false;
+  const int idx = m_editIdx;
+  m_editIdx = -1;
+  bool hasDigit = false;
+  for (const char* s = m_editBuf; *s; ++s) if (*s >= '0' && *s <= '9') { hasDigit = true; break; }
+  if (!hasDigit) return false;                                 // nothing usable -> treat as cancel
+  const double oldVal = GetSliderValue(idx);
+  const bool wasAuto = (idx == 5 && m_params.autoMakeup);
+  SetSliderValue(idx, ParseEditValue(m_editBuf));              // clamps to the param range
+  const bool changed = wasAuto || GetSliderValue(idx) != oldVal;
+  if (changed) { m_paramsChanged = true; m_presetIdx = -1; }
+  return changed;
+}
+
+void DynamicsPanel::CancelValueEdit()
+{
+  m_editIdx = -1;
+}
+
+// Double-click a knob (or a curve handle, which maps to its param: knee->Threshold,
+// gate node->Gate Thr) to start typing an exact value. The editor renders on the param's
+// knob cell (both the handle and its knob are on the active tab), so there is one edit
+// surface. Returns true if editing started.
+bool DynamicsPanel::OnDoubleClick(int x, int y, RECT wr)
+{
+  if (!m_visible) return false;
+  const RECT pr = GetRect(wr);
+  const int k = HitTestKnob(x, y, pr);
+  if (k >= 0) { BeginValueEdit(k); return true; }
+  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
+  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  URect handles[2];
+  ComputeCurveHandles(L.plotWell, BuildCurveParams(), (int)m_tab, handles);
+  if (handles[HANDLE_KNEE].contains(lx, ly)) { BeginValueEdit(0); return true; }   // knee -> Threshold
+  if (handles[HANDLE_GATE].contains(lx, ly)) { BeginValueEdit(7); return true; }   // gate -> Gate Thr
+  return false;
+}
+
+// Feed one key to the editor. Enter commits, ESC cancels, Backspace deletes a char,
+// accepted chars append (first keystroke replaces the seeded value). Every key is
+// consumed while editing so global shortcuts never fire mid-entry.
+bool DynamicsPanel::OnEditKey(int vk)
+{
+  if (m_editIdx < 0) return false;
+  if (vk == VK_RETURN) { CommitValueEdit(); return true; }
+  if (vk == VK_ESCAPE) { CancelValueEdit(); return true; }
+  if (vk == VK_BACK) {
+    m_editFresh = false;
+    const size_t n = strlen(m_editBuf);
+    if (n > 0) m_editBuf[n - 1] = '\0';
+    return true;
+  }
+  const char c = MapEditChar(vk);
+  if (c) {
+    if (m_editFresh) { m_editBuf[0] = '\0'; m_editFresh = false; }
+    const size_t n = strlen(m_editBuf);
+    if (n < sizeof(m_editBuf) - 1) { m_editBuf[n] = c; m_editBuf[n + 1] = '\0'; }
+  }
+  return true;   // trap every key while editing
+}
+
+#else   // GDI build: the inline type-value editor is premium-only.
+
+bool DynamicsPanel::OnDoubleClick(int, int, RECT) { return false; }
+bool DynamicsPanel::OnEditKey(int) { return false; }
+void DynamicsPanel::BeginValueEdit(int) {}
+bool DynamicsPanel::CommitValueEdit() { return false; }
+void DynamicsPanel::CancelValueEdit() {}
+
+#endif
+
 // --- Drawing ---
 
 void DynamicsPanel::Draw(HDC hdc, RECT wr)
@@ -1029,6 +1164,11 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   // Glow the knob under the cursor (hover) and the one being dragged (active).
   if (m_hoverKnob >= 0 && m_hoverKnob < NUM_SLIDERS) vm.knobs[m_hoverKnob].hover = true;
   if (m_dragSlider >= 0 && m_dragSlider < NUM_SLIDERS) vm.knobs[m_dragSlider].hover = true;
+  // Inline editor: the target knob renders the edit box + caret instead of its readout.
+  if (m_editIdx >= 0 && m_editIdx < NUM_SLIDERS) {
+    vm.knobs[m_editIdx].editing = true;
+    vm.knobs[m_editIdx].editText = m_editBuf;
+  }
 
   m_canvas.RenderPanel(hdc, pr.left, pr.top, pr.right - pr.left, pr.bottom - pr.top, dpr, vm);
 }

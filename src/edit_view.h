@@ -163,6 +163,10 @@ public:
 
   // Called directly from accelerator callback (SWS pattern - no SendMessage bounce)
   void OnKeyDown(WPARAM key);
+  // Inline dynamics type-value editor (Inc 8): the accelerator routes keys here while
+  // an editor is open, so typed digits/Enter/ESC never trigger global shortcuts.
+  bool IsDynamicsEditingValue() const { return m_dynamicsPanel.IsEditingValue(); }
+  void HandleDynamicsEditKey(WPARAM key);
   bool HasFocus() const { return m_hasFocus; }
   bool IsDocked() const { return m_isDocked; }
 
@@ -442,6 +446,7 @@ private:
   void SaveDynamicsToItem();
   bool LoadDynamicsFromItem();
   void RefreshDynamicsAvgGr();   // push real avg GR into the panel after open (no makeup leap on first drag)
+  void ReanalyzeDynamicsAfterEdit(); // re-run Analyze/ComputeCompression after a type-value commit (mirrors wheel)
   void RestoreDynamicsViewPrefs(); // apply persisted Dyn/Env/GR overlay prefs after the panel opens
   void SaveDynamicsViewPrefs();    // persist Dyn/Env/GR overlay toggles as global user prefs (ExtState)
   // User dynamics presets (stored globally in ExtState, shown in the Preset dropdown).

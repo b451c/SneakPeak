@@ -174,6 +174,14 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
   if (!ours) return 0;
 
   if (msg->message == WM_KEYDOWN) {
+    // Inline dynamics value editor open -> route EVERY key to it (digits/./-/Bksp/
+    // Enter/ESC) and consume, so typed characters never trigger global shortcuts.
+    // Must come before the normal shortcut filter. Inert when not editing (and in the
+    // GDI build, where IsDynamicsEditingValue() is always false).
+    if (g_sneakPeak->IsDynamicsEditingValue()) {
+      g_sneakPeak->HandleDynamicsEditKey(msg->wParam);
+      return 1;
+    }
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
     WPARAM k = msg->wParam;
     bool handled = false;

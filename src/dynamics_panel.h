@@ -19,6 +19,14 @@ public:
   bool OnHover(int x, int y, RECT waveformRect);              // update hovered knob; true if it changed (premium)
   bool IsOverResizeGrip(int x, int y, RECT waveformRect) const;  // for the diagonal resize cursor (premium)
 
+  // Inline type-value editor (Inc 8, premium): double-click a knob or curve handle
+  // to type an exact value; ESC cancels, Enter commits. Keys arrive via the SWS
+  // accelerator (see SneakPeak::HandleDynamicsEditKey), so OnEditKey takes a VK/char.
+  bool OnDoubleClick(int x, int y, RECT waveformRect);  // begin editing the knob/handle under the cursor; true if started
+  bool IsEditingValue() const { return m_editIdx >= 0; }
+  bool OnEditKey(int vk);  // feed one key to the editor; true = consumed (commit sets ParamsChanged)
+  bool CommitValueEdit();  // parse the buffer + apply via SetSliderValue; true if the value changed (host commits on click)
+
   bool IsVisible() const { return m_visible; }
   void Show(const DynamicsParams& params, double avgPeakDb);
   void Hide();
@@ -98,6 +106,8 @@ private:
   int HitTestKnob(int x, int y, RECT panelRect) const;    // knob under cursor in base coords, or -1 (premium)
   DynCurveParams BuildCurveParams() const;                // VM curve params from live state (render + handles)
   void DragCurveHandle(int x, int y, RECT panelRect);     // apply a curve-handle drag to params (premium)
+  void BeginValueEdit(int idx);                           // open the inline editor on param idx (seed buffer)
+  void CancelValueEdit();                                 // discard + close the inline editor
   bool OnMouseDownPremium(int x, int y, RECT panelRect);  // Blend2D panel hit-routing (Inc 3c)
   double PixelToValue(int px, RECT trackRect, int idx) const;
   int ValueToPixel(double val, RECT trackRect, int idx) const;
@@ -122,6 +132,12 @@ private:
   [[maybe_unused]] int m_dragStartY = 0;  // mouse Y at knob-drag start (premium-only)
   [[maybe_unused]] int m_dragLastY = 0;   // mouse Y last move (premium velocity drag)
   double m_dragStartVal = 0.0; // slider value at drag start (for fine mode delta)
+
+  // Inline type-value editor (Inc 8). [[maybe_unused]]: premium build only.
+  [[maybe_unused]] int  m_editIdx = -1;       // param being typed (0..9), -1 = not editing
+  [[maybe_unused]] bool m_editFresh = false;  // true until the first keystroke (then the seeded text is cleared)
+  [[maybe_unused]] char m_editBuf[16] = {};   // current edit text (digits/./-)
+
   bool m_paramsChanged = false;
   bool m_applyRequested = false;
   bool m_presetMenuRequested = false;
