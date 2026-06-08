@@ -1512,6 +1512,14 @@ void SneakPeak::RestoreDynamicsViewPrefs()
   m_dynamicsPanel.SetMeterFloor((mf && mf[0]) ? atoi(mf) : 0);
   // Compact mode (premium View tab). Default off (normal layout).
   m_dynamicsPanel.SetCompact(rd("dyn_compact", false));
+  // Panel size (free-resize scale) + position: reopen where/how the user left it.
+  // Scale is stored x1000 as an integer (locale-independent); offsets are plain ints.
+  // GetRect clamps to the window on use, so a stale offset can never go off-screen.
+  const char* us = g_GetExtState("SneakPeak", "dyn_ui_scale");
+  if (us && us[0]) m_dynamicsPanel.SetUiScale(atoi(us) / 1000.0);
+  const char* ox = g_GetExtState("SneakPeak", "dyn_off_x");
+  const char* oy = g_GetExtState("SneakPeak", "dyn_off_y");
+  m_dynamicsPanel.SetPanelOffset(ox && ox[0] ? atoi(ox) : 0, oy && oy[0] ? atoi(oy) : 0);
   // If Live was restored ON, write the envelope NOW so it already reflects the dynamics
   // (otherwise it sits flat until the first param nudge). Runs only when Live is on, so
   // browsing items with Live off never modifies the project. Self-ensures the envelope
@@ -1531,6 +1539,21 @@ void SneakPeak::SaveDynamicsViewPrefs()
   snprintf(mf, sizeof(mf), "%d", m_dynamicsPanel.GetMeterFloor());
   g_SetExtState("SneakPeak", "dyn_meter_floor", mf, true);
   g_SetExtState("SneakPeak", "dyn_compact", m_dynamicsPanel.GetCompact() ? "1" : "0", true);
+}
+
+// Persist the premium panel size (free-resize scale, stored x1000 as an integer so
+// it's locale-independent) + position offsets. Called by the host after a resize or
+// panel-drag completes (DynamicsPanel::GeomChanged()).
+void SneakPeak::SaveDynamicsGeom()
+{
+  if (!g_SetExtState) return;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", (int)(m_dynamicsPanel.GetUiScale() * 1000.0 + 0.5));
+  g_SetExtState("SneakPeak", "dyn_ui_scale", buf, true);
+  snprintf(buf, sizeof(buf), "%d", m_dynamicsPanel.GetPanelOffsetX());
+  g_SetExtState("SneakPeak", "dyn_off_x", buf, true);
+  snprintf(buf, sizeof(buf), "%d", m_dynamicsPanel.GetPanelOffsetY());
+  g_SetExtState("SneakPeak", "dyn_off_y", buf, true);
 }
 
 // --- User dynamics presets (global, persisted in ExtState) ------------------

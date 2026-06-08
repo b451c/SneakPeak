@@ -447,8 +447,9 @@ private:
   bool LoadDynamicsFromItem();
   void RefreshDynamicsAvgGr();   // push real avg GR into the panel after open (no makeup leap on first drag)
   void ReanalyzeDynamicsAfterEdit(); // re-run Analyze/ComputeCompression after a type-value commit (mirrors wheel)
-  void RestoreDynamicsViewPrefs(); // apply persisted Dyn/Env/GR overlay prefs after the panel opens
+  void RestoreDynamicsViewPrefs(); // apply persisted Dyn/Env/GR overlay prefs (+ panel size/pos) after the panel opens
   void SaveDynamicsViewPrefs();    // persist Dyn/Env/GR overlay toggles as global user prefs (ExtState)
+  void SaveDynamicsGeom();         // persist the premium panel size (free-resize scale) + position (ExtState)
   // User dynamics presets (stored globally in ExtState, shown in the Preset dropdown).
   static constexpr int MAX_USER_PRESETS = 32;
   void ShowDynamicsPresetMenu();                 // build + track the Preset dropdown (factory + user)
