@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+#include <chrono>
 
 // Slider/knob definitions: label, min, max, unit, precision, defaultVal.
 // defaultVal feeds the knob default-tick + Cmd-reset (Inc 4); it mirrors the
@@ -48,6 +49,21 @@ static constexpr int TOGGLE_GAP = 3;
 // [[maybe_unused]]: only the premium build references these (OFF build = GDI panel).
 [[maybe_unused]] static constexpr double UI_SCALE_MIN = 0.8;   // ~384x240 floor
 [[maybe_unused]] static constexpr double UI_SCALE_MAX = 2.0;   // ~960x600 cap (clamped to window)
+
+// --- Motion pass (premium) durations (seconds) + clock ---
+// [[maybe_unused]]: only the premium build references these.
+[[maybe_unused]] static constexpr double kTabSlideSec  = 0.18;  // active tab fill glide
+[[maybe_unused]] static constexpr double kValueEaseSec = 0.12;  // knob arc ease on wheel/type/reset
+[[maybe_unused]] static constexpr double kLivePulseSec = 1.5;   // Live pill breathing cycle
+[[maybe_unused]] static constexpr double kCaretBlinkSec = 1.0;  // editor caret on+off cycle
+
+// Monotonic wall-clock seconds for animation timing (steady, cross-platform; not the
+// REAPER API). Animation values are derived from elapsed = NowSec() - <startSec>.
+[[maybe_unused]] static double NowSec()
+{
+  using namespace std::chrono;
+  return duration<double>(steady_clock::now().time_since_epoch()).count();
+}
 
 // --- Value access ---
 
@@ -99,6 +115,8 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   m_applyRequested = false;
   m_dragSlider = -1;
   m_editIdx = -1;
+  m_motionInit = false;        // re-seed value-ease on open (no glide from a stale value)
+  m_tabSlideStartSec = -1.0;   // no tab-slide on open
   m_avgGR = 0.0;
   // Reset toggles to show everything on panel open
   m_showDyn = true;
@@ -319,7 +337,10 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   if (L.preset.contains(lx, ly))   { m_presetMenuRequested = true; return true; }
   if (L.abBtn.contains(lx, ly))    { m_bypassed = !m_bypassed; return true; }
   for (int i = 0; i < 3; ++i)
-    if (L.tabSeg[i].contains(lx, ly)) { m_tab = (Tab)i; return true; }
+    if (L.tabSeg[i].contains(lx, ly)) {
+      if ((Tab)i != m_tab) { m_tabFrom = (int)m_tab; m_tabSlideStartSec = NowSec(); m_tab = (Tab)i; }
+      return true;                                // start the active-pill slide (motion pass)
+    }
   if (!m_liveMode && L.apply.contains(lx, ly)) { m_applyRequested = true; return true; }
 
   // Curve drag-handles on the plot. Knee handle = Threshold only (HORIZONTAL; ratio
@@ -766,6 +787,7 @@ void DynamicsPanel::BeginValueEdit(int idx)
                              // (drops any stale pending flag so ESC/edit keys can't trigger one)
   m_editIdx = idx;
   m_editFresh = true;
+  m_caretBlinkRef = NowSec();   // caret starts solid, then blinks
   const double v = (idx == 5 && m_params.autoMakeup) ? fabs(m_avgGR) : GetSliderValue(idx);
   std::snprintf(m_editBuf, sizeof(m_editBuf),
                 SLIDER_DEFS[idx].precision == 1 ? "%.1f" : "%.0f", v);
@@ -827,6 +849,7 @@ bool DynamicsPanel::OnEditKey(int vk)
   if (vk == VK_ESCAPE) { CancelValueEdit(); return true; }
   if (vk == VK_BACK) {
     m_editFresh = false;
+    m_caretBlinkRef = NowSec();   // keep the caret solid right after editing
     const size_t n = strlen(m_editBuf);
     if (n > 0) m_editBuf[n - 1] = '\0';
     return true;
@@ -836,17 +859,34 @@ bool DynamicsPanel::OnEditKey(int vk)
     if (m_editFresh) { m_editBuf[0] = '\0'; m_editFresh = false; }
     const size_t n = strlen(m_editBuf);
     if (n < sizeof(m_editBuf) - 1) { m_editBuf[n] = c; m_editBuf[n + 1] = '\0'; }
+    m_caretBlinkRef = NowSec();    // caret solid right after a keystroke, then blinks
   }
   return true;   // trap every key while editing
 }
 
-#else   // GDI build: the inline type-value editor is premium-only.
+// True while any animation needs another frame: caret blink (editing) and the Live
+// breathing pulse are continuous; tab-slide + value-ease are time-boxed. Polled by the
+// host each timer tick - returns false when idle so there is no background repaint cost.
+bool DynamicsPanel::WantsAnimationFrame() const
+{
+  if (!m_visible) return false;
+  if (m_editIdx >= 0) return true;                 // caret blink
+  if (m_liveMode)     return true;                 // Live breathing pulse
+  const double now = NowSec();
+  if (m_tabSlideStartSec >= 0.0 && now - m_tabSlideStartSec < kTabSlideSec) return true;
+  for (int i = 0; i < NUM_SLIDERS; ++i)
+    if (m_knobEaseStartSec[i] > 0.0 && now - m_knobEaseStartSec[i] < kValueEaseSec) return true;
+  return false;
+}
+
+#else   // GDI build: the inline type-value editor + motion are premium-only.
 
 bool DynamicsPanel::OnDoubleClick(int, int, RECT) { return false; }
 bool DynamicsPanel::OnEditKey(int) { return false; }
 void DynamicsPanel::BeginValueEdit(int) {}
 bool DynamicsPanel::CommitValueEdit() { return false; }
 void DynamicsPanel::CancelValueEdit() {}
+bool DynamicsPanel::WantsAnimationFrame() const { return false; }
 
 #endif
 
@@ -1141,6 +1181,8 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.dragHandle = m_dragHandle;
   vm.hoverHandle = m_hoverHandle;
 
+  const double now = NowSec();
+
   // Per-knob render state. norm/defaultNorm in [0,1]; Threshold's default tracks
   // the operating point (avgPeak). Makeup shows "auto" + the computed value when
   // autoMakeup is on. Gate params (>=7) tint violet.
@@ -1152,22 +1194,65 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
     if (i == 0 && dflt <= -99.0) dflt = m_avgPeakDb;   // threshold default = operating point
     KnobVM& k = vm.knobs[i];
     k.value       = GetSliderValue(i);
-    k.norm        = norm(k.value);
+    double targetN = norm(k.value);
     k.defaultNorm = norm(dflt);
     k.label       = def.label;
     k.unit        = def.unit;
     k.precision   = def.precision;
     k.isGate      = (i >= 7);
     k.showAuto    = (i == 5 && m_params.autoMakeup);
-    if (k.showAuto) { k.value = fabs(m_avgGR); k.norm = norm(k.value); }
+    if (k.showAuto) { k.value = fabs(m_avgGR); targetN = norm(k.value); }
+
+    // Value-ease (motion pass): the arc + indicator glide ~120ms to a value set by
+    // wheel/type/reset; a drag (or active edit) on THIS knob is direct (no lag). Change
+    // is auto-detected by watching targetN, so no value-change site needs hooking.
+    double dispN;
+    if (!m_motionInit || i == m_dragSlider || i == m_editIdx) {
+      dispN = targetN; m_knobEaseFrom[i] = targetN; m_knobEaseStartSec[i] = 0.0;
+    } else {
+      if (targetN != m_knobTargetNorm[i]) {            // target jumped -> (re)start an ease
+        double cur = m_knobTargetNorm[i];              // displayed value at the interruption
+        if (m_knobEaseStartSec[i] > 0.0) {
+          const double t = (now - m_knobEaseStartSec[i]) / kValueEaseSec;
+          if (t < 1.0) { const double e = 1.0 - std::pow(1.0 - t, 3.0);
+                         cur = m_knobEaseFrom[i] + (m_knobTargetNorm[i] - m_knobEaseFrom[i]) * e; }
+        }
+        m_knobEaseFrom[i] = cur; m_knobEaseStartSec[i] = now;
+      }
+      if (m_knobEaseStartSec[i] > 0.0) {
+        const double t = (now - m_knobEaseStartSec[i]) / kValueEaseSec;
+        if (t >= 1.0) { dispN = targetN; m_knobEaseStartSec[i] = 0.0; }
+        else { const double e = 1.0 - std::pow(1.0 - t, 3.0);
+               dispN = m_knobEaseFrom[i] + (targetN - m_knobEaseFrom[i]) * e; }
+      } else dispN = targetN;
+    }
+    m_knobTargetNorm[i] = targetN;
+    k.norm = dispN;
   }
+  m_motionInit = true;
+
   // Glow the knob under the cursor (hover) and the one being dragged (active).
   if (m_hoverKnob >= 0 && m_hoverKnob < NUM_SLIDERS) vm.knobs[m_hoverKnob].hover = true;
   if (m_dragSlider >= 0 && m_dragSlider < NUM_SLIDERS) vm.knobs[m_dragSlider].hover = true;
   // Inline editor: the target knob renders the edit box + caret instead of its readout.
+  // The caret blinks (~1s on/off); m_caretBlinkRef is reset on each keystroke (solid then blinks).
   if (m_editIdx >= 0 && m_editIdx < NUM_SLIDERS) {
-    vm.knobs[m_editIdx].editing = true;
+    vm.knobs[m_editIdx].editing  = true;
     vm.knobs[m_editIdx].editText = m_editBuf;
+    vm.knobs[m_editIdx].caretOn  = std::fmod(now - m_caretBlinkRef, kCaretBlinkSec) < kCaretBlinkSec * 0.5;
+  }
+
+  // Tab-slide: the active pill fill glides from m_tabFrom to the current tab over ~180ms.
+  vm.tabFrom = m_tabFrom;
+  if (m_tabSlideStartSec >= 0.0) {
+    const double t = (now - m_tabSlideStartSec) / kTabSlideSec;
+    vm.tabSlideT = (t >= 1.0) ? 1.0 : 1.0 - std::pow(1.0 - t, 3.0);
+  } else vm.tabSlideT = 1.0;
+
+  // Live-pill breathing pulse (~1.5s): glow intensity oscillates [0.45..1] while armed.
+  if (m_liveMode) {
+    const double ph = std::sin(2.0 * 3.14159265358979323846 * now / kLivePulseSec);
+    vm.livePulse = 0.45 + 0.55 * (0.5 * (1.0 + ph));
   }
 
   m_canvas.RenderPanel(hdc, pr.left, pr.top, pr.right - pr.left, pr.bottom - pr.top, dpr, vm);

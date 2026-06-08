@@ -683,6 +683,11 @@ void SneakPeak::OnTimer()
   UpdatePlaybackFollow();
   UpdateGainPreview();
   UpdateItemState();
+
+  // Motion pass: pump a repaint only while the premium dynamics panel has an animation
+  // in flight (caret blink, Live pulse, tab-slide, value-ease). Idle -> no extra repaint.
+  if (m_dynamicsPanel.WantsAnimationFrame())
+    InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
 bool SneakPeak::HandlePendingClose()
