@@ -64,6 +64,9 @@ constexpr int   kTickStepDb  = 12;   // dB spacing for input-axis tick labels
 constexpr int   kMeterBarW   = 18;   // GR meter bar width
 constexpr int   kMeterGap    = 14;   // gap from plot right edge to the meter bar
 constexpr int   kMeterNumGap = 12;   // gap from the meter bar to the numeric column
+// View-tab meter-scale selector: the plot/GR-meter dB FLOOR options (inMaxDb stays 0).
+// Index 0 (-60) is the default and renders byte-identical to the pre-selector behaviour.
+constexpr double kMeterFloorOptDb[3] = { -60.0, -36.0, -24.0 };
 
 // --- knob render constants (Phase 2 Inc 4; compact 2-col grid right of the plot) ---
 constexpr int    kKnobDiaSm     = 40;     // compact-grid knob diameter (logical px)

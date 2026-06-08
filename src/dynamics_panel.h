@@ -59,6 +59,10 @@ public:
   void SetShowDyn(bool v) { m_showDyn = v; }
   void SetShowEnv(bool v) { m_showEnv = v; }
   void SetShowGR(bool v) { m_showGR = v; }
+  // Meter-scale selector (View tab, premium): the plot/GR-meter dB floor.
+  // 0 = -60 dB (default), 1 = -36, 2 = -24. Render-only; persisted as a global pref.
+  int  GetMeterFloor() const { return m_meterFloorSel; }
+  void SetMeterFloor(int idx) { m_meterFloorSel = idx < 0 ? 0 : (idx > 2 ? 2 : idx); }
   // Set when a Dyn/Env/GR overlay toggle is clicked, so the host can persist them
   // as global user prefs (restored on the next panel open). Live/A-B are NOT persisted.
   bool ViewPrefsChanged() const { return m_viewPrefsChanged; }
@@ -160,6 +164,7 @@ private:
   bool m_showDyn = true;  // show dynamics curves (orange + purple + threshold)
   bool m_showEnv = true;  // show volume envelope (cyan)
   bool m_showGR = true;   // show gain reduction shading between curves
+  int  m_meterFloorSel = 0;  // meter-scale dB floor: 0=-60 (default), 1=-36, 2=-24; render-only, persisted
   bool m_bypassed = false;  // A/B: envelope bypass for comparison
   bool m_liveMode = false;  // live preview: write envelope on slider change
   bool m_liveUndoOpen = false; // undo block is open for live session

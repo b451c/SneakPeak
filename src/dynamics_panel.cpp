@@ -122,6 +122,7 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   m_showDyn = true;
   m_showEnv = true;
   m_showGR = true;
+  m_meterFloorSel = 0;   // default -60 dB floor (RestoreDynamicsViewPrefs overrides from ExtState)
   m_bypassed = false;
   m_liveMode = false;
   m_liveUndoOpen = false;
@@ -412,6 +413,10 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
     return true;
   }
   if (L.viewToggle[4].contains(lx, ly)) { m_bypassed = !m_bypassed; return true; }
+  // Meter-scale dB-floor selector: render-only (rescales plot + GR meter), so persist
+  // the pref but do NOT mark params changed (no re-analysis).
+  for (int i = 0; i < 3; ++i)
+    if (L.meterScale[i].contains(lx, ly)) { m_meterFloorSel = i; m_viewPrefsChanged = true; return true; }
 
   m_panelDragging = true;          // empty area -> drag (OnMouseMove consumes offsets)
   m_dragOffsetX = x - pr.left;
@@ -700,6 +705,7 @@ DynCurveParams DynamicsPanel::BuildCurveParams() const
   c.avgPeakDb    = m_avgPeakDb;
   c.avgGrDb      = m_avgGR;                          // engine avg GR (negative) drives the meter (#2)
   c.showGate     = (m_params.gateThreshDb > -99.0);
+  c.inMinDb      = dynui::kMeterFloorOptDb[m_meterFloorSel];  // View-tab meter-scale floor (default -60); inMaxDb stays 0
   return c;
 }
 
@@ -1181,6 +1187,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.liveMode = m_liveMode;
   vm.bypassed = m_bypassed;
   vm.rmsMode  = m_params.rmsMode;
+  vm.meterFloorSel = m_meterFloorSel;
   vm.dragHandle = m_dragHandle;
   vm.hoverHandle = m_hoverHandle;
 
