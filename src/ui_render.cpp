@@ -821,17 +821,25 @@ static void DrawResizeGrip(BLContext& ctx, const URect& g) {
 static void DrawCurveHandle(BLContext& ctx, const URect& box, uint32_t accentCol,
                             bool lit, bool dragging) {
   if (box.w < 1.0) return;
-  const double cx = box.x + box.w * 0.5, cy = box.y + box.h * 0.5, r = 5.5;
-  const uint32_t ringCol = lit ? accentCol : dynui::kInkSecondary;
+  const double cx = box.x + box.w * 0.5, cy = box.y + box.h * 0.5;
+  // At REST the handle is small + HOLLOW (no opaque centre) so the transfer curve - and
+  // especially the knee rounding it sits on - reads straight through it; turning the
+  // Knee knob then shows the bend instead of being masked. On hover/drag it grows,
+  // lights to its accent, fills with a faint core (so it reads as grabbable), and (drag)
+  // gets the additive glow. The hit-box (ComputeCurveHandles) is unchanged - still easy
+  // to grab despite the smaller glyph.
+  const bool active = lit || dragging;
+  const double r = active ? 5.5 : 4.0;
+  const uint32_t ringCol = active ? accentCol : dynui::kInkSecondary;
   if (dragging) {
     ctx.set_comp_op(BL_COMP_OP_PLUS);
     ctx.fill_circle(BLCircle(cx, cy, r + 5.0), colA(accentCol, 40));
     ctx.fill_circle(BLCircle(cx, cy, r + 2.0), colA(accentCol, 75));
     ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
   }
-  ctx.fill_circle(BLCircle(cx, cy, r), col(dynui::kSurface0));
-  ctx.set_stroke_width(2.0);
-  ctx.stroke_circle(BLCircle(cx, cy, r), col(ringCol));
+  if (active) ctx.fill_circle(BLCircle(cx, cy, r), colA(dynui::kSurface0, 150));
+  ctx.set_stroke_width(active ? 2.0 : 1.5);
+  ctx.stroke_circle(BLCircle(cx, cy, r), colA(ringCol, active ? 255 : 150));
 }
 
 // --- the premium panel -----------------------------------------------------
