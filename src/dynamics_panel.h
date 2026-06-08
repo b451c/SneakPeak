@@ -29,7 +29,7 @@ public:
   void ClearPresetMenuRequested() { m_presetMenuRequested = false; }
   void ApplyPreset(int presetIdx);
   RECT GetPresetButtonRect(RECT panelRect) const;
-  bool IsDragging() const { return m_dragSlider >= 0 || m_panelDragging; }
+  bool IsDragging() const { return m_dragSlider >= 0 || m_panelDragging || m_resizing; }
 
   // For GR meter display
   void SetAvgGainReduction(double gr) { m_avgGR = gr; }
@@ -117,6 +117,15 @@ private:
   bool m_panelDragging = false;
   int m_dragOffsetX = 0, m_dragOffsetY = 0;
   int m_offsetX = 0, m_offsetY = 0;
+
+  // Premium panel free-resize (aspect-locked uniform scale; bottom-right grip).
+  // [[maybe_unused]]: only the premium build references these (OFF build = GDI).
+  [[maybe_unused]] double m_uiScale = 1.0;       // 1.0 = default 480x300; clamped [0.8, 2.0]
+  [[maybe_unused]] bool m_resizing = false;
+  [[maybe_unused]] int m_resizeAnchorL = 0;      // fixed top-left during a resize drag
+  [[maybe_unused]] int m_resizeAnchorT = 0;
+  [[maybe_unused]] int m_resizeStartX = 0;       // cursor X at grab (relative-delta scaling)
+  [[maybe_unused]] double m_resizeStartScale = 1.0;  // m_uiScale at grab -> first move = no-op
 
   static const int PANEL_W = 380;
   static const int PANEL_H = 148;

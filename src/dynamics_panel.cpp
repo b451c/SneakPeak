@@ -43,6 +43,11 @@ static constexpr int APPLY_H = 14;
 static constexpr int TOGGLE_W = 28;
 static constexpr int TOGGLE_GAP = 3;
 
+// Premium panel free-resize bounds (aspect-locked uniform scale; bottom-right grip).
+// [[maybe_unused]]: only the premium build references these (OFF build = GDI panel).
+[[maybe_unused]] static constexpr double UI_SCALE_MIN = 0.8;   // ~384x240 floor
+[[maybe_unused]] static constexpr double UI_SCALE_MAX = 2.0;   // ~960x600 cap (clamped to window)
+
 // --- Value access ---
 
 double DynamicsPanel::GetSliderValue(int idx) const
@@ -107,6 +112,7 @@ void DynamicsPanel::Hide()
   m_visible = false;
   m_dragSlider = -1;
   m_panelDragging = false;
+  m_resizing = false;
   m_bypassed = false;
   m_liveMode = false;
   // Note: live undo block closure handled by SneakPeak (needs g_Undo_EndBlock2)
@@ -117,7 +123,8 @@ void DynamicsPanel::Hide()
 RECT DynamicsPanel::GetRect(RECT wr) const
 {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
-  const int pw = dynui::kPanelW, ph = dynui::kPanelH;
+  const int pw = (int)std::lround((double)dynui::kPanelW * m_uiScale);
+  const int ph = (int)std::lround((double)dynui::kPanelH * m_uiScale);
 #else
   const int pw = PANEL_W, ph = PANEL_H;
 #endif
@@ -197,9 +204,12 @@ RECT DynamicsPanel::GetABToggleRect(RECT pr) const
 RECT DynamicsPanel::GetPresetButtonRect(RECT pr) const
 {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
-  DynLayout L = ComputeDynLayout(pr.right - pr.left, pr.bottom - pr.top, (int)m_tab);
-  return { pr.left + (int)L.preset.x, pr.top + (int)L.preset.y,
-           pr.left + (int)(L.preset.x + L.preset.w), pr.top + (int)(L.preset.y + L.preset.h) };
+  // Layout is in base coords; scale onto the on-screen (scaled) panel rect.
+  const double S = m_uiScale;
+  DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  return { pr.left + (int)(L.preset.x * S), pr.top + (int)(L.preset.y * S),
+           pr.left + (int)((L.preset.x + L.preset.w) * S),
+           pr.top + (int)((L.preset.y + L.preset.h) * S) };
 #else
   return { pr.left + 92, pr.top + 4, pr.left + 198, pr.top + 18 };
 #endif
@@ -273,9 +283,22 @@ int DynamicsPanel::HitTestSlider(int x, int y, RECT pr) const
 // panel. (Knob + curve-handle interaction land in Inc 4/7.)
 bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
 {
-  const double lx = (double)(x - pr.left), ly = (double)(y - pr.top);
-  const DynLayout L = ComputeDynLayout((double)(pr.right - pr.left),
-                                       (double)(pr.bottom - pr.top), (int)m_tab);
+  // Layout authority is in base coords (RenderPanel scales the whole panel by S);
+  // convert the click into base coords so hit-tests match exactly what was drawn.
+  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
+  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW,
+                                       (double)dynui::kPanelH, (int)m_tab);
+
+  // Bottom-right grip -> start an aspect-locked resize (top-left stays anchored).
+  if (L.resizeGrip.contains(lx, ly)) {
+    m_resizing = true;
+    m_resizeAnchorL = pr.left;
+    m_resizeAnchorT = pr.top;
+    m_resizeStartX = x;                          // relative-delta: first move = no-op
+    m_resizeStartScale = m_uiScale;              // (no snap wherever in the grip you grab)
+    return true;                                 // IsDragging() -> host SetCapture
+  }
 
   if (L.closeBtn.contains(lx, ly)) { Hide(); return true; }
   if (L.preset.contains(lx, ly))   { m_presetMenuRequested = true; return true; }
@@ -311,6 +334,28 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
     m_dragStartVal = GetSliderValue(i);
     return true;                                 // IsDragging() -> host SetCapture
   }
+
+  // Peak/RMS detection switch (Compressor tab): mutually-exclusive, sets rmsMode +
+  // m_paramsChanged so the host re-analyses immediately - identical to the GDI toggle.
+  if (L.rms[0].contains(lx, ly) || L.rms[1].contains(lx, ly)) {
+    const bool wantRms = L.rms[1].contains(lx, ly);
+    if (wantRms != m_params.rmsMode) { m_params.rmsMode = wantRms; m_paramsChanged = true; }
+    return true;
+  }
+
+  // View-tab state toggles (independent). Each flips exactly the member its GDI
+  // counterpart does, so the host's existing polls fire unchanged: m_showDyn/Env/GR
+  // are read each paint (overlay + envelope sync); Live arms with an initial Apply
+  // and the undo block is managed by the host; A/B drives the ACTIVE edge-compare.
+  if (L.viewToggle[0].contains(lx, ly)) { m_showDyn = !m_showDyn; return true; }
+  if (L.viewToggle[1].contains(lx, ly)) { m_showEnv = !m_showEnv; return true; }
+  if (L.viewToggle[2].contains(lx, ly)) { m_showGR  = !m_showGR;  return true; }
+  if (L.viewToggle[3].contains(lx, ly)) {
+    m_liveMode = !m_liveMode;
+    if (m_liveMode) m_applyRequested = true;     // initial apply when arming (GDI parity)
+    return true;
+  }
+  if (L.viewToggle[4].contains(lx, ly)) { m_bypassed = !m_bypassed; return true; }
 
   m_panelDragging = true;          // empty area -> drag (OnMouseMove consumes offsets)
   m_dragOffsetX = x - pr.left;
@@ -421,6 +466,28 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
 
 void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
 {
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  if (m_resizing) {
+    // Aspect-locked: the cursor's horizontal travel from the grab point drives the
+    // uniform scale (relative so the grabbed pixel stays put - no first-move snap
+    // wherever in the grip you clicked); height follows. Clamp to [min, fit-in-window].
+    double S = m_resizeStartScale + (double)(x - m_resizeStartX) / (double)dynui::kPanelW;
+    // Fit is measured from the pinned top-left to the window's right/bottom edges,
+    // so the panel never overflows (which would make GetRect re-clamp and break the
+    // anchor). Since the anchor came from a fitting rect, both fits are >= current S.
+    const double fitW = (double)(wr.right - m_resizeAnchorL) / (double)dynui::kPanelW;
+    const double fitH = (double)(wr.bottom - m_resizeAnchorT) / (double)dynui::kPanelH;
+    double smax = std::min(UI_SCALE_MAX, std::min(fitW, fitH));
+    if (smax < UI_SCALE_MIN) smax = UI_SCALE_MIN;
+    m_uiScale = std::max(UI_SCALE_MIN, std::min(smax, S));
+    // Pin the top-left corner: solve GetRect's centring offsets for the new size.
+    const int W1 = (int)std::lround((double)dynui::kPanelW * m_uiScale);
+    const int H1 = (int)std::lround((double)dynui::kPanelH * m_uiScale);
+    m_offsetX = (m_resizeAnchorL + W1 / 2) - (wr.left + wr.right) / 2;
+    m_offsetY = m_resizeAnchorT - (wr.bottom - H1 - 10);
+    return;
+  }
+#endif
   if (m_dragSlider >= 0) {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
     // Velocity-sensitive vertical knob drag: moving up increases. Faster motion
@@ -468,7 +535,8 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
   }
   else if (m_panelDragging) {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
-    const int pw = dynui::kPanelW, ph = dynui::kPanelH;
+    const int pw = (int)std::lround((double)dynui::kPanelW * m_uiScale);
+    const int ph = (int)std::lround((double)dynui::kPanelH * m_uiScale);
 #else
     const int pw = PANEL_W, ph = PANEL_H;
 #endif
@@ -485,6 +553,7 @@ void DynamicsPanel::OnMouseUp()
 {
   m_dragSlider = -1;
   m_panelDragging = false;
+  m_resizing = false;
 }
 
 // --- Drawing ---
@@ -777,6 +846,12 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.activeTab  = (int)m_tab;
   vm.presetName = (m_presetIdx >= 0 && m_presetIdx < PRESET_COUNT)
                     ? g_dynamicsPresets[m_presetIdx].name : nullptr;
+  vm.showDyn  = m_showDyn;
+  vm.showEnv  = m_showEnv;
+  vm.showGR   = m_showGR;
+  vm.liveMode = m_liveMode;
+  vm.bypassed = m_bypassed;
+  vm.rmsMode  = m_params.rmsMode;
 
   // Per-knob render state. norm/defaultNorm in [0,1]; Threshold's default tracks
   // the operating point (avgPeak). Makeup shows "auto" + the computed value when
