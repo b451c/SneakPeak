@@ -124,7 +124,18 @@ enum ContextMenuID {
   CM_REPLACE_SOURCE,
   CM_PRESET_BASE,  // + PRESET_COUNT entries
   CM_PRESET_LAST = CM_PRESET_BASE + 10,
+  CM_DYN_SAVE_PRESET,                                  // "Save preset as..."
+  CM_DYN_USER_PRESET_BASE,                             // + MAX_USER_PRESETS apply entries
+  CM_DYN_USER_PRESET_LAST = CM_DYN_USER_PRESET_BASE + 32,
+  CM_DYN_DEL_PRESET_BASE,                              // + MAX_USER_PRESETS delete entries
+  CM_DYN_DEL_PRESET_LAST = CM_DYN_DEL_PRESET_BASE + 32,
   CM_LAST // sentinel -- keep last
+};
+
+// A user-saved dynamics preset (name + the serialized DynamicsParams string).
+struct DynUserPreset {
+  std::string name;
+  std::string params;   // DynamicsParamsToString() output
 };
 
 class SneakPeak {
@@ -431,6 +442,16 @@ private:
   void SaveDynamicsToItem();
   bool LoadDynamicsFromItem();
   void RefreshDynamicsAvgGr();   // push real avg GR into the panel after open (no makeup leap on first drag)
+  void RestoreDynamicsViewPrefs(); // apply persisted Dyn/Env/GR overlay prefs after the panel opens
+  void SaveDynamicsViewPrefs();    // persist Dyn/Env/GR overlay toggles as global user prefs (ExtState)
+  // User dynamics presets (stored globally in ExtState, shown in the Preset dropdown).
+  static constexpr int MAX_USER_PRESETS = 32;
+  void ShowDynamicsPresetMenu();                 // build + track the Preset dropdown (factory + user)
+  std::vector<DynUserPreset> LoadUserPresets();  // parse user presets from ExtState
+  void SaveUserPresets(const std::vector<DynUserPreset>& list);
+  void AddUserPreset();                          // prompt for a name, save current panel params
+  bool ApplyUserPreset(int idx);                 // load preset idx into the panel; false if out of range
+  void DeleteUserPreset(int idx);
 
   static AudioClipboard s_clipboard;
   static const int TIMER_REFRESH = 100;

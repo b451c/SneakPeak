@@ -31,6 +31,7 @@ public:
   bool PresetMenuRequested() const { return m_presetMenuRequested; }
   void ClearPresetMenuRequested() { m_presetMenuRequested = false; }
   void ApplyPreset(int presetIdx);
+  void ApplyParams(const DynamicsParams& p);  // load arbitrary params (user preset); marks custom + changed
   RECT GetPresetButtonRect(RECT panelRect) const;
   bool IsDragging() const { return m_dragSlider >= 0 || m_panelDragging || m_resizing || m_dragHandle >= 0; }
 
@@ -45,9 +46,14 @@ public:
   void SetShowDyn(bool v) { m_showDyn = v; }
   void SetShowEnv(bool v) { m_showEnv = v; }
   void SetShowGR(bool v) { m_showGR = v; }
+  // Set when a Dyn/Env/GR overlay toggle is clicked, so the host can persist them
+  // as global user prefs (restored on the next panel open). Live/A-B are NOT persisted.
+  bool ViewPrefsChanged() const { return m_viewPrefsChanged; }
+  void ClearViewPrefsChanged() { m_viewPrefsChanged = false; }
 
   // Live preview mode: write envelope points on every slider change
   bool IsLive() const { return m_liveMode; }
+  void SetLiveMode(bool v) { m_liveMode = v; }   // host restores the persisted Live state after open
   bool LiveUndoOpen() const { return m_liveUndoOpen; }
   void SetLiveUndoOpen(bool v) { m_liveUndoOpen = v; }
 
@@ -119,6 +125,7 @@ private:
   bool m_paramsChanged = false;
   bool m_applyRequested = false;
   bool m_presetMenuRequested = false;
+  bool m_viewPrefsChanged = false;  // a Dyn/Env/GR overlay toggle changed -> host persists
   int m_presetIdx = -1;  // -1 = custom, 0..PRESET_COUNT-1 = built-in
   bool m_showDyn = true;  // show dynamics curves (orange + purple + threshold)
   bool m_showEnv = true;  // show volume envelope (cyan)
