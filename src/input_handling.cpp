@@ -1529,6 +1529,13 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       else if (m_gainPanel.IsVisible() && m_gainPanel.HitTest(x, y, m_waveformRect)) {
         cur = LoadCursor(nullptr, IDC_HAND);
       }
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+      // Dynamics panel: hand over the body, diagonal-resize over the corner grip.
+      else if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
+        cur = m_dynamicsPanel.IsOverResizeGrip(x, y, m_waveformRect)
+                ? LoadCursor(nullptr, IDC_SIZENWSE) : LoadCursor(nullptr, IDC_HAND);
+      }
+#endif
       // Fade handles (near item edges)
       else if (m_fadeDragging != FADE_NONE) {
         cur = LoadCursor(nullptr, IDC_SIZEWE);
@@ -1552,6 +1559,13 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     SetCursor(cur);
   }
 
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  // Hover-glow: repaint only when the hovered knob changes (cheap; no per-pixel
+  // redraw). Drag paths already repaint, so this just covers free hover.
+  if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.OnHover(x, y, m_waveformRect))
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+#endif
+
   m_lastMouseX = x;
   m_lastMouseY = y;
 }
@@ -1565,6 +1579,47 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;    // Option on macOS
 
   double steps = (double)delta / 120.0;
+
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  // Scroll over a dynamics knob = nudge its value (no need to grab tiny targets;
+  // directly mitigates the DPI/scaling complaint). Consume the wheel whenever the
+  // cursor is over the panel so the waveform underneath does not zoom/pan.
+  if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_dynamicsPanel.OnMouseWheel(x, y, steps, cmd, m_waveformRect) &&
+        m_dynamicsPanel.ParamsChanged()) {
+      m_dynamicsPanel.ClearParamsChanged();
+      m_dynamics.SetParams(m_dynamicsPanel.GetParams());
+      if (m_waveform.GetAudioSampleCount() > 0) {
+        double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+        m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                           m_waveform.GetAudioSampleCount(),
+                           m_waveform.GetNumChannels(),
+                           m_waveform.GetSampleRate(),
+                           ivDb, m_dynamicsPanel.GetParams());
+        m_dynamics.ComputeCompression();
+        m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
+        if (m_dynamicsPanel.IsLive()) {
+          // Single-shot undo for this wheel nudge. Mirror the drag path exactly:
+          // mark LiveUndoOpen so ApplyDynamicsToEnvelope suppresses its OWN inner
+          // undo block AND its per-apply toast (the audio_commands liveSession
+          // gate); the wheel's Begin/End is then the single "Live Dynamics" block.
+          // If a drag already holds a live block open (mid-drag wheel), don't nest
+          // a second one - leave that block + its mouseup to own the lifecycle.
+          bool alreadyOpen = m_dynamicsPanel.LiveUndoOpen();
+          if (!alreadyOpen && g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+          m_dynamicsPanel.SetLiveUndoOpen(true);
+          ApplyDynamicsToEnvelope();
+          if (!alreadyOpen) {
+            m_dynamicsPanel.SetLiveUndoOpen(false);
+            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
+          }
+        }
+      }
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+#endif
 
   // Scroll on gain knob = adjust gain (+/-0.5 dB per notch, Cmd = +/-0.1 dB fine)
   if (m_gainPanel.IsVisible() && m_gainPanel.HitTest(x, y, m_waveformRect)) {

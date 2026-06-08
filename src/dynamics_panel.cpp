@@ -111,6 +111,7 @@ void DynamicsPanel::Hide()
 {
   m_visible = false;
   m_dragSlider = -1;
+  m_hoverKnob = -1;
   m_panelDragging = false;
   m_resizing = false;
   m_bypassed = false;
@@ -556,6 +557,60 @@ void DynamicsPanel::OnMouseUp()
   m_resizing = false;
 }
 
+// --- Premium wheel-nudge + hover (Inc 6) ------------------------------------
+
+// Knob under the cursor in BASE coords (same convention as OnMouseDownPremium),
+// or -1. Shared by hover + wheel. Premium layout; only called from premium paths.
+int DynamicsPanel::HitTestKnob(int x, int y, RECT pr) const
+{
+  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
+  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  for (int i = 0; i < NUM_SLIDERS; ++i)
+    if (L.knob[i].contains(lx, ly)) return i;
+  return -1;
+}
+
+// Scroll over a knob nudges its value in normalized space (coarse 1/40 per notch,
+// fine 1/200 with Cmd). Reuses SetSliderValue (clamp + autoMakeup side-effect) and
+// sets the same poll flags a knob drag does, so the host re-analyses identically.
+bool DynamicsPanel::OnMouseWheel(int x, int y, double steps, bool fine, RECT wr)
+{
+  if (!m_visible) return false;
+  const int i = HitTestKnob(x, y, GetRect(wr));
+  if (i < 0) return false;
+  const auto& def = SLIDER_DEFS[i];
+  const double range = (def.maxVal - def.minVal) != 0.0 ? (def.maxVal - def.minVal) : 1.0;
+  // Seed Makeup from the displayed value while auto (GetSliderValue(5)==0 then).
+  const double cur = (i == 5 && m_params.autoMakeup) ? fabs(m_avgGR) : GetSliderValue(i);
+  double nrm = (cur - def.minVal) / range;
+  nrm = std::max(0.0, std::min(1.0, nrm + (fine ? 0.005 : 0.025) * steps));
+  SetSliderValue(i, def.minVal + nrm * range);
+  m_paramsChanged = true;
+  m_presetIdx = -1;
+  return true;
+}
+
+// Update the hovered knob; returns true if it changed (host repaints for the glow).
+bool DynamicsPanel::OnHover(int x, int y, RECT wr)
+{
+  const int h = m_visible ? HitTestKnob(x, y, GetRect(wr)) : -1;
+  if (h == m_hoverKnob) return false;
+  m_hoverKnob = h;
+  return true;
+}
+
+// Cursor-feedback helper: is the cursor over the bottom-right resize grip?
+bool DynamicsPanel::IsOverResizeGrip(int x, int y, RECT wr) const
+{
+  if (!m_visible) return false;
+  RECT pr = GetRect(wr);
+  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
+  const DynLayout L = ComputeDynLayout((double)dynui::kPanelW, (double)dynui::kPanelH, (int)m_tab);
+  return L.resizeGrip.contains(lx, ly);
+}
+
 // --- Drawing ---
 
 void DynamicsPanel::Draw(HDC hdc, RECT wr)
@@ -873,6 +928,9 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
     k.showAuto    = (i == 5 && m_params.autoMakeup);
     if (k.showAuto) { k.value = fabs(m_avgGR); k.norm = norm(k.value); }
   }
+  // Glow the knob under the cursor (hover) and the one being dragged (active).
+  if (m_hoverKnob >= 0 && m_hoverKnob < NUM_SLIDERS) vm.knobs[m_hoverKnob].hover = true;
+  if (m_dragSlider >= 0 && m_dragSlider < NUM_SLIDERS) vm.knobs[m_dragSlider].hover = true;
 
   m_canvas.RenderPanel(hdc, pr.left, pr.top, pr.right - pr.left, pr.bottom - pr.top, dpr, vm);
 }
