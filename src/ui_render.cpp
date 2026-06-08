@@ -87,6 +87,20 @@ static double CompressionGrDb(double inDb, double thrDb, double ratio, double kn
   return slope * overshoot;
 }
 
+// Full output transfer at an input level: y = x + compGR + makeup + gateGR (mirrors
+// dynamics_engine ComputeCompression :306). Shared by the plotted curve and the
+// curve-handle positions so the handle always sits exactly on the drawn line.
+static double CurveOutDb(double in, const DynCurveParams& p) {
+  const double g = CompressionGrDb(in, p.thresholdDb, p.ratio, p.kneeDb);
+  double out = in + g + p.makeupDb;
+  if (p.showGate) {
+    const double postLvl = in + g + p.makeupDb;
+    if (postLvl < p.gateThreshDb)
+      out += std::max(postLvl - p.gateThreshDb, -std::fabs(p.gateRangeDb));
+  }
+  return out;
+}
+
 // Stacked-stroke additive glow for a path (Blend2D has no blur primitive).
 static void GlowStroke(BLContext& ctx, const BLPath& path, uint32_t baseArgb) {
   ctx.set_comp_op(BL_COMP_OP_PLUS);
@@ -192,12 +206,13 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   auto dbToX = [&](double db) { return px0 + (db - inMin) / span * plotSide; };
   auto dbToY = [&](double db) { return py1 - (db - inMin) / span * plotSide; };
 
-  // Curve math mirrors dynamics_engine ComputeCompression() steady state. The
-  // plotted curve is the COMPRESSION CHARACTERISTIC y = x + GR (per the design
-  // spec); makeup gain is a constant offset shown via its own control, NOT baked
-  // into the curve (keeps red=reduction and the wedge clean). The GATE onset/depth
-  // DO depend on makeup (the engine gates on the post-comp+makeup level), so
-  // makeup is used only inside gateGrDb to place the cliff correctly.
+  // Curve math mirrors dynamics_engine ComputeCompression() steady state, INCLUDING
+  // makeup: the plotted curve is the true output y = x + GR + makeup + gate (engine
+  // :306), so the amber line rises with the Makeup knob and never lies about what
+  // Apply does (the anti-slop "curve == Apply" rule). Makeup is a constant vertical
+  // shift; the reduction wedge measures from the makeup baseline (x+makeup), so red
+  // still = pure gain reduction. The unity diagonal stays as the 1:1 reference -
+  // the gap between it and the curve at low input is the visible makeup boost.
   auto compGrDb = [&](double in) {
     return CompressionGrDb(in, p.thresholdDb, p.ratio, p.kneeDb);            // <= 0
   };
@@ -208,8 +223,8 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
     const double gateRangeNeg = -std::fabs(p.gateRangeDb);                   // engine range is negative
     return std::max(postLvl - p.gateThreshDb, gateRangeNeg);                 // ramp 0 -> range, clamped
   };
-  auto compOut = [&](double in) { return in + compGrDb(in); };              // wedge: compression only
-  auto outAt   = [&](double in) { const double g = compGrDb(in); return in + g + gateGrDb(in, g); };
+  auto compOut = [&](double in) { return in + compGrDb(in) + p.makeupDb; }; // wedge bottom: comp + makeup
+  auto outAt   = [&](double in) { return CurveOutDb(in, p); };             // full output (shared w/ handles)
 
   // clip to the plot well so curves never spill over the rounded corners
   ctx.save();
@@ -222,13 +237,14 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   const int N = dynui::kPlotSamples;
   auto sampleDb = [&](int i) { return inMin + span * (double)i / (double)N; };
 
-  // reduction wedge: area between unity diagonal and the COMPRESSION curve (gate
-  // excluded so red = compression reduction only), red->transparent
+  // reduction wedge: area between the makeup baseline (x+makeup) and the COMPRESSION
+  // curve (x+compGR+makeup; gate excluded so red = compression reduction only). The
+  // gap equals -compGR regardless of makeup, so red stays = pure reduction.
   {
     BLPath wedge;
-    wedge.move_to(dbToX(inMin), dbToY(inMin));
-    wedge.line_to(dbToX(inMax), dbToY(inMax));        // along the diagonal
-    for (int i = N; i >= 0; --i) {                    // back along the curve
+    wedge.move_to(dbToX(inMin), dbToY(inMin + p.makeupDb));
+    wedge.line_to(dbToX(inMax), dbToY(inMax + p.makeupDb));   // along the makeup baseline
+    for (int i = N; i >= 0; --i) {                            // back along the curve
       const double in = sampleDb(i);
       wedge.line_to(dbToX(in), dbToY(compOut(in)));
     }
@@ -633,6 +649,24 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab)
   return L;
 }
 
+void ComputeCurveHandles(const URect& pw, const DynCurveParams& p, int activeTab, URect out[2])
+{
+  out[0] = URect{ 0, 0, 0, 0 };
+  out[1] = URect{ 0, 0, 0, 0 };
+  const double span = (p.inMaxDb - p.inMinDb) != 0.0 ? (p.inMaxDb - p.inMinDb) : 1.0;
+  auto dbToX = [&](double db) { return pw.x + (db - p.inMinDb) / span * pw.w; };
+  auto dbToY = [&](double db) { return pw.y + pw.h - (db - p.inMinDb) / span * pw.h; };
+  const double R = 13.0;                                  // hit radius (base px)
+  const double inset = 6.0;                               // keep the ~5.5px disc inside the well
+  auto box = [&](double db) -> URect {
+    double cx = std::clamp(dbToX(db), pw.x + inset, pw.x + pw.w - inset);
+    double cy = std::clamp(dbToY(CurveOutDb(db, p)), pw.y + inset, pw.y + pw.h - inset);
+    return URect{ cx - R, cy - R, 2.0 * R, 2.0 * R };
+  };
+  if (activeTab == 0)                    out[0] = box(p.thresholdDb);   // knee handle (always)
+  else if (activeTab == 1 && p.showGate) out[1] = box(p.gateThreshDb);  // gate node only when gate on
+}
+
 static void FillURound(BLContext& ctx, const URect& r, double rad, uint32_t argb) {
   ctx.fill_round_rect(BLRoundRect(r.x, r.y, r.w, r.h, rad), col(argb));
 }
@@ -780,6 +814,26 @@ static void DrawResizeGrip(BLContext& ctx, const URect& g) {
   }
 }
 
+// A draggable curve handle: dark-filled disc with a ring. NEUTRAL grey at rest so
+// it doesn't compete with the amber operating-point dot (a readout); lights to its
+// accent colour (amber/violet) only when hovered or dragged - the spec's "accent =
+// active/focused" restraint. Adds an additive halo while dragged. Off-tab -> skipped.
+static void DrawCurveHandle(BLContext& ctx, const URect& box, uint32_t accentCol,
+                            bool lit, bool dragging) {
+  if (box.w < 1.0) return;
+  const double cx = box.x + box.w * 0.5, cy = box.y + box.h * 0.5, r = 5.5;
+  const uint32_t ringCol = lit ? accentCol : dynui::kInkSecondary;
+  if (dragging) {
+    ctx.set_comp_op(BL_COMP_OP_PLUS);
+    ctx.fill_circle(BLCircle(cx, cy, r + 5.0), colA(accentCol, 40));
+    ctx.fill_circle(BLCircle(cx, cy, r + 2.0), colA(accentCol, 75));
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+  }
+  ctx.fill_circle(BLCircle(cx, cy, r), col(dynui::kSurface0));
+  ctx.set_stroke_width(2.0);
+  ctx.stroke_circle(BLCircle(cx, cy, r), col(ringCol));
+}
+
 // --- the premium panel -----------------------------------------------------
 
 void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
@@ -843,6 +897,14 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                    vm.bypassed, dynui::kAmber, true, false);
 
     DrawResizeGrip(ctx, L.resizeGrip);
+
+    // Curve drag-handles (on top of the plot): knee (amber, Comp) / gate (violet, Gate).
+    URect handles[2];
+    ComputeCurveHandles(L.plotWell, vm.curve, vm.activeTab, handles);
+    DrawCurveHandle(ctx, handles[0], dynui::kAmber,
+                    vm.hoverHandle == 0 || vm.dragHandle == 0, vm.dragHandle == 0);
+    DrawCurveHandle(ctx, handles[1], dynui::kGateViolet,
+                    vm.hoverHandle == 1 || vm.dragHandle == 1, vm.dragHandle == 1);
 
     if (ctx.end() != BL_SUCCESS) return;
   }

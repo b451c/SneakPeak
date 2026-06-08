@@ -32,7 +32,7 @@ public:
   void ClearPresetMenuRequested() { m_presetMenuRequested = false; }
   void ApplyPreset(int presetIdx);
   RECT GetPresetButtonRect(RECT panelRect) const;
-  bool IsDragging() const { return m_dragSlider >= 0 || m_panelDragging || m_resizing; }
+  bool IsDragging() const { return m_dragSlider >= 0 || m_panelDragging || m_resizing || m_dragHandle >= 0; }
 
   // For GR meter display
   void SetAvgGainReduction(double gr) { m_avgGR = gr; }
@@ -54,6 +54,8 @@ public:
 private:
   enum class Tab { Compressor, Gate, View };   // premium panel active tab
   static constexpr int NUM_SLIDERS = 10;
+  static constexpr int HANDLE_KNEE = 0;        // curve drag-handle ids
+  static constexpr int HANDLE_GATE = 1;
 
   struct SliderDef {
     const char* label;
@@ -88,6 +90,8 @@ private:
   RECT GetCloseButtonRect(RECT panelRect) const;
   int HitTestSlider(int x, int y, RECT panelRect) const;
   int HitTestKnob(int x, int y, RECT panelRect) const;    // knob under cursor in base coords, or -1 (premium)
+  DynCurveParams BuildCurveParams() const;                // VM curve params from live state (render + handles)
+  void DragCurveHandle(int x, int y, RECT panelRect);     // apply a curve-handle drag to params (premium)
   bool OnMouseDownPremium(int x, int y, RECT panelRect);  // Blend2D panel hit-routing (Inc 3c)
   double PixelToValue(int px, RECT trackRect, int idx) const;
   int ValueToPixel(double val, RECT trackRect, int idx) const;
@@ -102,6 +106,11 @@ private:
 
   int m_dragSlider = -1;
   int m_hoverKnob = -1;       // premium: knob under the cursor (glow); -1 = none
+  int m_hoverHandle = -1;     // premium: curve handle under the cursor (lights accent); -1 = none
+  [[maybe_unused]] int m_dragHandle = -1;      // premium: curve handle being dragged (-1/0=knee/1=gate)
+  [[maybe_unused]] int m_handleStartY = 0;     // grab Y for the relative secondary (ratio/range)
+  [[maybe_unused]] double m_handleStartVal = 0.0;  // secondary param value at grab
+  [[maybe_unused]] double m_handleGrabDx = 0.0;    // base-px offset cursor->handle center (no X jump on grab)
   int m_dragGrabOffset = 0;   // pixel offset: thumbX - clickX (prevents jump on grab)
   int m_dragStartX = 0;       // mouse X at drag start (for fine mode delta)
   [[maybe_unused]] int m_dragStartY = 0;  // mouse Y at knob-drag start (premium-only)
