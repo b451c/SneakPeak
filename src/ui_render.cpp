@@ -424,6 +424,23 @@ static const KnobSlot KNOB_SLOTS[10] = {
   { 1, 0, 2 },  // 9  G.Hold
 };
 
+// Compact-mode slots: the hero plot is hidden, so the knobs reflow into a wider
+// 4-col x 2-row grid filling the full body width. Compressor row0 = Thresh/Ratio/
+// Knee/Makeup, row1 = Attack/Release/L.ahead (+ Peak/RMS in col3); Gate row0 = the
+// three gate knobs. Same param indices as KNOB_SLOTS, different cell positions.
+static const KnobSlot COMPACT_KNOB_SLOTS[10] = {
+  { 0, 0, 0 },  // 0  Thresh
+  { 0, 1, 0 },  // 1  Ratio
+  { 0, 2, 0 },  // 2  Knee
+  { 0, 0, 1 },  // 3  Attack
+  { 0, 1, 1 },  // 4  Release
+  { 0, 3, 0 },  // 5  Makeup
+  { 0, 2, 1 },  // 6  L.ahead
+  { 1, 0, 0 },  // 7  G.Thr
+  { 1, 1, 0 },  // 8  G.Range
+  { 1, 2, 0 },  // 9  G.Hold
+};
+
 static inline double Deg2Rad(double d) { return d * 3.14159265358979323846 / 180.0; }
 
 // One knob in its cell: arc track (270deg) + value fill arc + center cap +
@@ -616,7 +633,7 @@ void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double d
 
 // --- panel layout + chrome (Inc 3b) ----------------------------------------
 
-DynLayout ComputeDynLayout(double w, double h, int activeTab)
+DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
 {
   DynLayout L;
   const double pad = dynui::kPanelPad;
@@ -631,6 +648,51 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab)
   const double bodyTop = L.header.h;
   const double bodyH = L.footer.y - bodyTop;
 
+  if (compact) {
+    // Compact mode: the hero plot + GR meter are hidden (the on-waveform overlay is
+    // the visual); the knobs reflow into a wider 4-col x 2-row grid filling the body.
+    L.plotWell = { 0, 0, 0, 0 };
+    L.grMeter  = { 0, 0, 0, 0 };
+    const int COLS = 4, ROWS = 2;
+    const double gridX = pad, gridR = w - pad;
+    const double colGap = (double)dynui::kKnobColGap;
+    const double cCellW = (gridR - gridX - colGap * (COLS - 1)) / (double)COLS;
+    const double gridTop = bodyTop + 8.0;
+    const double cCellH = ((L.footer.y - 8.0) - gridTop) / (double)ROWS;
+    auto ccell = [&](int ccol, int crow) -> URect {
+      return { gridX + (double)ccol * (cCellW + colGap), gridTop + (double)crow * cCellH,
+               cCellW, cCellH };
+    };
+    for (int i = 0; i < 10; ++i) {
+      const KnobSlot& s = COMPACT_KNOB_SLOTS[i];
+      L.knob[i] = (s.tab == activeTab) ? ccell(s.col, s.row) : URect{ 0, 0, 0, 0 };
+    }
+    if (activeTab == 0) {   // Peak/RMS occupies col3/row1 (no knob maps there)
+      const URect c = ccell(3, 1);
+      const double segH = 24.0, segY = c.y + (c.h - segH) * 0.5, halfW = c.w * 0.5;
+      L.rms[0] = { c.x, segY, halfW, segH };
+      L.rms[1] = { c.x + halfW, segY, c.w - halfW, segH };
+    }
+    if (activeTab == 2) {   // View: 4 toggles on row0; A/B + Compact + meter-scale on row1
+      const double tH = 36.0;
+      auto pill = [&](int ccol, int crow) -> URect {
+        const URect c = ccell(ccol, crow); return { c.x, c.y + (c.h - tH) * 0.5, c.w, tH };
+      };
+      L.viewToggle[0] = pill(0, 0);  // DYN
+      L.viewToggle[1] = pill(1, 0);  // ENV
+      L.viewToggle[2] = pill(2, 0);  // GR
+      L.viewToggle[3] = pill(3, 0);  // LIVE
+      L.viewToggle[4] = pill(0, 1);  // A/B
+      L.compactToggle = pill(1, 1);  // COMPACT
+      const URect c2 = ccell(2, 1), c3 = ccell(3, 1);  // meter-scale spans cols 2-3
+      const double segH = 24.0, segGap = 2.0, capW = 44.0;
+      const double segY = c2.y + (c2.h - segH) * 0.5;
+      const double x0 = c2.x + capW, right = c3.x + c3.w;
+      const double segW = (right - x0 - 2.0 * segGap) / 3.0;
+      for (int i = 0; i < 3; ++i)
+        L.meterScale[i] = { x0 + (double)i * (segW + segGap), segY, segW, segH };
+    }
+  } else {
   // Hero transfer plot: square on the LEFT, sized to the body height. The GR meter
   // is a bar-only column right of it (the hero number lives in the header for this
   // compact grid). The remaining width on the right holds the 2-col knob grid.
@@ -683,6 +745,10 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab)
     const double segW = (right - x0 - 2.0 * segGap) / 3.0;
     for (int i = 0; i < 3; ++i)
       L.meterScale[i] = { x0 + (double)i * (segW + segGap), segY, segW, segH };
+    // Compact-mode toggle: the free col1-row2 cell (between A/B and the meter-scale row).
+    const URect cc = cellRect(1, 2);
+    L.compactToggle = { cc.x, cc.y + (cc.h - tH) * 0.5, cc.w, tH };
+  }
   }
 
   const double fMid = L.footer.y + L.footer.h * 0.5;
@@ -703,6 +769,7 @@ void ComputeCurveHandles(const URect& pw, const DynCurveParams& p, int activeTab
 {
   out[0] = URect{ 0, 0, 0, 0 };
   out[1] = URect{ 0, 0, 0, 0 };
+  if (pw.w < 1.0 || pw.h < 1.0) return;   // no plot well (Compact mode) -> no handles
   const double span = (p.inMaxDb - p.inMinDb) != 0.0 ? (p.inMaxDb - p.inMinDb) : 1.0;
   auto dbToX = [&](double db) { return pw.x + (db - p.inMinDb) / span * pw.w; };
   auto dbToY = [&](double db) { return pw.y + pw.h - (db - p.inMinDb) / span * pw.h; };
@@ -933,12 +1000,15 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
   // kPanelW x kPanelH coords; S folds into the context transform alongside dpr so
   // fonts/chrome/controls all scale together and stay vector-crisp at any size.
   const double S = (double)w / (double)dynui::kPanelW;
+  // Compact mode lays out in a shorter base height (plot hidden); width base is
+  // always kPanelW so S (the uniform scale) is unchanged.
+  const double baseH = vm.compact ? (double)dynui::kPanelHCompact : (double)dynui::kPanelH;
   // The device buffer must match the painted content exactly: base content fills
-  // [0..kPanelW]x[0..kPanelH] under ctx.scale(dpr*S). Derive BOTH dims from base*S*dpr
+  // [0..kPanelW]x[0..baseH] under ctx.scale(dpr*S). Derive BOTH dims from base*S*dpr
   // (not h*dpr) - pw/ph in GetRect round independently from m_uiScale, so h*dpr could
-  // exceed kPanelH*S*dpr and leave a sub-px unpainted (black) strip at the bottom.
+  // exceed baseH*S*dpr and leave a sub-px unpainted (black) strip at the bottom.
   const int devW = (int)std::lround((double)dynui::kPanelW * S * dpr);
-  const int devH = (int)std::lround((double)dynui::kPanelH * S * dpr);
+  const int devH = (int)std::lround(baseH * S * dpr);
   if (!prepareSurface(hdc, devW, devH)) return;
   {
     BLContext ctx;
@@ -947,7 +1017,7 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     ctx.scale(dpr * S);
     ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
 
-    const double W = dynui::kPanelW, H = dynui::kPanelH;   // base layout coords
+    const double W = dynui::kPanelW, H = baseH;   // base layout coords (H shrinks in Compact)
 
     // panel slab: vertical gradient + rounded body + top hairline highlight
     {
@@ -964,13 +1034,16 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     // plot + bar-only GR meter (number is in the header) + the per-tab knob grid.
     // Hit-testing shares the same ComputeDynLayout(activeTab) so clicks always
     // match what is drawn.
-    const DynLayout L = ComputeDynLayout(W, H, vm.activeTab);
+    const DynLayout L = ComputeDynLayout(W, H, vm.activeTab, vm.compact);
     DrawHeader(ctx, *m_gfx, L, vm);
     DrawTabBar(ctx, *m_gfx, L, vm.activeTab, vm.tabFrom, vm.tabSlideT);
     DrawFooter(ctx, *m_gfx, L, /*applyEnabled=*/!vm.liveMode);
-    DrawTransferPlot(ctx, *m_gfx, L.plotWell.x, L.plotWell.y, L.plotWell.w, vm.curve, vm.activeTab);
-    DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w,
-                vm.curve, /*withNumber=*/false);
+    // Hero plot + GR meter: hidden in Compact mode (plotWell is empty there).
+    if (L.plotWell.w >= 1.0) {
+      DrawTransferPlot(ctx, *m_gfx, L.plotWell.x, L.plotWell.y, L.plotWell.w, vm.curve, vm.activeTab);
+      DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w,
+                  vm.curve, /*withNumber=*/false);
+    }
     for (int i = 0; i < 10; ++i)
       DrawKnob(ctx, *m_gfx, L.knob[i], vm.knobs[i]);
 
@@ -994,6 +1067,8 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
       ctx.fill_utf8_text(BLPoint(s0.x - 8.0 - cw, s0.y + s0.h * 0.5 + 4.0), m_gfx->fLabel,
                          "SCALE", SIZE_MAX, col(dynui::kInkSecondary));
     }
+    // Compact-mode toggle (View tab; self-skips when empty).
+    DrawTogglePill(ctx, *m_gfx, L.compactToggle, "COMPACT", vm.compact, dynui::kAmber, false, 0.0);
 
     DrawResizeGrip(ctx, L.resizeGrip);
 

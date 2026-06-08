@@ -1510,6 +1510,8 @@ void SneakPeak::RestoreDynamicsViewPrefs()
   // Meter-scale dB-floor selector (premium View tab). Stored as an index; default -60.
   const char* mf = g_GetExtState("SneakPeak", "dyn_meter_floor");
   m_dynamicsPanel.SetMeterFloor((mf && mf[0]) ? atoi(mf) : 0);
+  // Compact mode (premium View tab). Default off (normal layout).
+  m_dynamicsPanel.SetCompact(rd("dyn_compact", false));
   // If Live was restored ON, write the envelope NOW so it already reflects the dynamics
   // (otherwise it sits flat until the first param nudge). Runs only when Live is on, so
   // browsing items with Live off never modifies the project. Self-ensures the envelope
@@ -1528,6 +1530,7 @@ void SneakPeak::SaveDynamicsViewPrefs()
   char mf[8];
   snprintf(mf, sizeof(mf), "%d", m_dynamicsPanel.GetMeterFloor());
   g_SetExtState("SneakPeak", "dyn_meter_floor", mf, true);
+  g_SetExtState("SneakPeak", "dyn_compact", m_dynamicsPanel.GetCompact() ? "1" : "0", true);
 }
 
 // --- User dynamics presets (global, persisted in ExtState) ------------------
