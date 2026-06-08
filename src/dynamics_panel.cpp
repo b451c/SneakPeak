@@ -310,10 +310,12 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
     if (L.tabSeg[i].contains(lx, ly)) { m_tab = (Tab)i; return true; }
   if (!m_liveMode && L.apply.contains(lx, ly)) { m_applyRequested = true; return true; }
 
-  // Curve drag-handles on the plot (knee = Threshold/Ratio on Comp; gate node =
-  // Gate Thr/Range on Gate). Records the grab Y + the secondary param value for the
-  // relative vertical axis; reuses m_dragHandle's IsDragging() -> host SetCapture +
-  // re-analyse + Live-undo lifecycle (identical to a knob drag).
+  // Curve drag-handles on the plot. Knee handle = Threshold only (HORIZONTAL; ratio
+  // is the line's slope, set by the dedicated knob - the universal compressor
+  // convention confirmed across FabFilter Pro-C/Ableton/Logic and the readable OSS
+  // LSP/Calf/JUCE comps). Gate node = Gate Thr (X) + Gate Range (Y). Records the grab
+  // Y + gate-range value for the gate's vertical axis; reuses m_dragHandle's
+  // IsDragging() -> host SetCapture + re-analyse + Live-undo lifecycle (knob-identical).
   {
     URect handles[2];
     ComputeCurveHandles(L.plotWell, BuildCurveParams(), (int)m_tab, handles);
@@ -321,7 +323,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
       if (!handles[h].contains(lx, ly)) continue;
       m_dragHandle = h;
       m_handleStartY = y;
-      m_handleStartVal = GetSliderValue(h == HANDLE_KNEE ? 1 : 8);   // ratio / gate range
+      if (h == HANDLE_GATE) m_handleStartVal = GetSliderValue(8);    // gate range -> vertical axis
       m_handleGrabDx = lx - (handles[h].x + handles[h].w * 0.5);     // no X jump on grab (base px)
       return true;                                 // IsDragging() -> host SetCapture
     }
@@ -663,10 +665,15 @@ DynCurveParams DynamicsPanel::BuildCurveParams() const
   return c;
 }
 
-// Apply a curve-handle drag to params. Primary axis = absolute X -> input dB
-// (Threshold / Gate Thr); secondary = relative vertical drag from the grab point
-// (Ratio / Gate Range). All through SetSliderValue so the host re-analyses exactly
-// as for a knob drag (same m_paramsChanged poll, Live undo lifecycle via IsDragging).
+// Apply a curve-handle drag to params. Primary axis = absolute cursor-X -> input dB:
+// knee handle -> Threshold (idx 0), gate node -> Gate Thr (idx 7). The KNEE handle is
+// HORIZONTAL-ONLY: ratio is the slope of the line above the knee and is set by the
+// dedicated Ratio knob, matching the universal convention (no proven compressor -
+// closed or open source - maps a knee point's vertical drag to ratio; threshold is a
+// horizontal point, ratio is a knob/slope). The GATE node keeps a vertical axis ->
+// Gate Range (a genuine depth, not a slope; drag-down = deeper). All via SetSliderValue
+// so the host re-analyses exactly as for a knob drag (same m_paramsChanged poll, Live
+// undo lifecycle via IsDragging).
 void DynamicsPanel::DragCurveHandle(int x, int y, RECT pr)
 {
   if (m_dragHandle < 0) return;
@@ -676,16 +683,20 @@ void DynamicsPanel::DragCurveHandle(int x, int y, RECT pr)
   const double span = (cp.inMaxDb - cp.inMinDb) != 0.0 ? (cp.inMaxDb - cp.inMinDb) : 1.0;
   const double lx = (double)(x - pr.left) / S - m_handleGrabDx;   // subtract grab offset (no jump)
   const double inDb = cp.inMinDb + (lx - L.plotWell.x) / L.plotWell.w * span;   // X -> input dB
-  const int primary   = (m_dragHandle == HANDLE_KNEE) ? 0 : 7;   // Threshold / Gate Thr
-  const int secondary = (m_dragHandle == HANDLE_KNEE) ? 1 : 8;   // Ratio / Gate Range
-  const double secSign = (m_dragHandle == HANDLE_KNEE) ? 1.0 : -1.0;  // drag down: +ratio / deeper gate
+
+  const int primary = (m_dragHandle == HANDLE_KNEE) ? 0 : 7;     // Threshold / Gate Thr
   SetSliderValue(primary, inDb);                                  // clamps to the slider range
-  const auto& sd = SLIDER_DEFS[secondary];
-  const double rng = (sd.maxVal - sd.minVal) != 0.0 ? (sd.maxVal - sd.minVal) : 1.0;
-  const double startNorm = (m_handleStartVal - sd.minVal) / rng;
-  const double norm = std::max(0.0, std::min(1.0,
-      startNorm + secSign * (double)(y - m_handleStartY) / S / 160.0));
-  SetSliderValue(secondary, sd.minVal + norm * rng);
+
+  // Vertical axis applies ONLY to the gate node (Gate Range): relative drag from the
+  // grab point, drag-down = deeper reduction. The knee handle has no vertical mapping.
+  if (m_dragHandle == HANDLE_GATE) {
+    const auto& sd = SLIDER_DEFS[8];                              // Gate Range [-40, 0]
+    const double rng = (sd.maxVal - sd.minVal) != 0.0 ? (sd.maxVal - sd.minVal) : 1.0;
+    const double startNorm = (m_handleStartVal - sd.minVal) / rng;
+    const double norm = std::max(0.0, std::min(1.0,
+        startNorm - (double)(y - m_handleStartY) / S / 160.0));   // drag down = deeper range
+    SetSliderValue(8, sd.minVal + norm * rng);
+  }
   m_paramsChanged = true;
   m_presetIdx = -1;
 }
