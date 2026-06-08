@@ -472,18 +472,41 @@ static void DrawKnob(BLContext& ctx, const Gfx& gfx, const URect& cell, const Kn
     up[n] = '\0';
     ctx.fill_utf8_text(BLPoint(tx, cy - 3.0), gfx.fLabel, up, SIZE_MAX, col(dynui::kInkSecondary));
 
-    // Value number (16px primary) + unit (11px muted) on its own advance, per the
-    // type spec - keeps long readouts ("1000 ms") inside the content margin and lets
-    // ":1" abut the number. Auto-makeup shows the computed value with a muted "auto".
-    char num[24];
-    std::snprintf(num, sizeof(num), k.precision == 1 ? "%.1f" : "%.0f", k.value);
     const double vy = cy + 15.0;
-    ctx.fill_utf8_text(BLPoint(tx, vy), gfx.fValue, num, SIZE_MAX, col(dynui::kInkPrimary));
-    const char* unit = k.showAuto ? "auto" : (k.unit ? k.unit : "");
-    if (*unit) {
-      const bool abut = (unit[0] == ':');   // ratio ":1" sits flush against the number
-      const double ux = tx + TextWidth(gfx.fValue, num) + (abut ? 1.0 : 4.0);
-      ctx.fill_utf8_text(BLPoint(ux, vy), gfx.fUnit, unit, SIZE_MAX, col(dynui::kInkMuted));
+    if (k.editing) {
+      // Inline type-value editor (Inc 8): a surface3 box with an amber outline holds
+      // the live text + a solid amber caret, replacing the readout. The knob arc still
+      // shows the OLD value so the change is visible until committed. The box spans the
+      // readout column (tx -> cell right) so typical entries ("1000", "-18.5") fit.
+      const char* et = k.editText ? k.editText : "";
+      const double boxX = std::max(cell.x, tx - 3.0);          // never spill left of the cell
+      const double boxW = std::max(0.0, cell.x + cell.w - boxX); // ...nor past its right edge
+      const double boxY = vy - 13.0, boxH = 18.0;
+      ctx.fill_round_rect(BLRoundRect(boxX, boxY, boxW, boxH, dynui::kRadiusCtrl),
+                          col(dynui::kSurface3));
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_round_rect(BLRoundRect(boxX + 0.5, boxY + 0.5, boxW - 1.0, boxH - 1.0,
+                                        dynui::kRadiusCtrl), col(dynui::kAmber));
+      // Clip text + caret to the box so an over-long entry can't bleed past the edge.
+      ctx.save();
+      ctx.clip_to_rect(BLRect(boxX, boxY, boxW, boxH));
+      ctx.fill_utf8_text(BLPoint(tx, vy), gfx.fValue, et, SIZE_MAX, col(dynui::kInkPrimary));
+      const double caretX = tx + TextWidth(gfx.fValue, et) + 1.0;
+      ctx.fill_rect(BLRect(caretX, vy - 11.0, 1.6, 14.0), col(dynui::kAmber));
+      ctx.restore();
+    } else {
+      // Value number (16px primary) + unit (11px muted) on its own advance, per the
+      // type spec - keeps long readouts ("1000 ms") inside the content margin and lets
+      // ":1" abut the number. Auto-makeup shows the computed value with a muted "auto".
+      char num[24];
+      std::snprintf(num, sizeof(num), k.precision == 1 ? "%.1f" : "%.0f", k.value);
+      ctx.fill_utf8_text(BLPoint(tx, vy), gfx.fValue, num, SIZE_MAX, col(dynui::kInkPrimary));
+      const char* unit = k.showAuto ? "auto" : (k.unit ? k.unit : "");
+      if (*unit) {
+        const bool abut = (unit[0] == ':');   // ratio ":1" sits flush against the number
+        const double ux = tx + TextWidth(gfx.fValue, num) + (abut ? 1.0 : 4.0);
+        ctx.fill_utf8_text(BLPoint(ux, vy), gfx.fUnit, unit, SIZE_MAX, col(dynui::kInkMuted));
+      }
     }
   }
 }

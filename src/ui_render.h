@@ -50,6 +50,8 @@ struct KnobVM {
   bool   isGate      = false; // violet fill (gate params) vs amber (compressor)
   bool   showAuto    = false; // Makeup in auto mode -> "<n> auto" readout
   bool   hover       = false; // cursor over (or dragging) this knob -> glow + cap tint
+  bool   editing     = false; // inline type-value editor open on this knob (Inc 8)
+  const char* editText = nullptr; // live edit buffer (valid only during the paint)
 };
 
 // View-model handed to UiCanvas::RenderPanel - pure data (no Blend2D, no engine

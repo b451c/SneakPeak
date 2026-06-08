@@ -32,6 +32,18 @@ void SneakPeak::OnDoubleClick(int x, int y)
     return;
   }
 
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  // Double-click on the premium dynamics panel = open the inline type-value editor on
+  // the knob/curve-handle under the cursor. Consume it regardless of whether a control
+  // was hit, so it never falls through to the waveform's select-all behaviour below.
+  // (Premium only - the GDI panel keeps its prior behaviour for an exact OFF-build match.)
+  if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_dynamicsPanel.OnDoubleClick(x, y, m_waveformRect))
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+#endif
+
   // Double-click on waveform area
   if (y >= m_waveformRect.top && y < m_waveformRect.bottom) {
     // Double-click on envelope point = delete it
@@ -93,6 +105,16 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
   // Stop standalone preview on click (allows repositioning cursor)
   if (m_previewActive) StandaloneCleanupPreview();
+
+  // An open inline dynamics value-editor commits on any click anywhere in the window;
+  // the click is then swallowed (it just dismisses the editor). Inert unless editing,
+  // so it's safe in the GDI build too (IsEditingValue() is always false there).
+  if (m_dynamicsPanel.IsEditingValue()) {
+    if (m_dynamicsPanel.CommitValueEdit())
+      ReanalyzeDynamicsAfterEdit();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
 
   if (y >= m_toolbarRect.top && y < m_toolbarRect.bottom) {
     int btn = m_toolbar.HitTest(x, y);
@@ -1635,6 +1657,47 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   }
 
   m_spectral.Invalidate();
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+// Re-run the dynamics analysis after an inline type-value commit, mirroring the
+// wheel-nudge path exactly: re-analyse + refresh the GR meter, and in Live mode wrap
+// the envelope write in a single-shot undo block (suppressing ApplyDynamicsToEnvelope's
+// own inner block + per-apply toast). Clears the panel's ParamsChanged flag.
+void SneakPeak::ReanalyzeDynamicsAfterEdit()
+{
+  m_dynamicsPanel.ClearParamsChanged();
+  m_dynamics.SetParams(m_dynamicsPanel.GetParams());
+  if (m_waveform.GetAudioSampleCount() <= 0) return;
+  double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+  m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                     m_waveform.GetAudioSampleCount(),
+                     m_waveform.GetNumChannels(),
+                     m_waveform.GetSampleRate(),
+                     ivDb, m_dynamicsPanel.GetParams());
+  m_dynamics.ComputeCompression();
+  m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
+  if (m_dynamicsPanel.IsLive()) {
+    bool alreadyOpen = m_dynamicsPanel.LiveUndoOpen();
+    if (!alreadyOpen && g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+    m_dynamicsPanel.SetLiveUndoOpen(true);
+    ApplyDynamicsToEnvelope();
+    if (!alreadyOpen) {
+      m_dynamicsPanel.SetLiveUndoOpen(false);
+      if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
+    }
+  }
+}
+
+// Route one key (from the SWS accelerator) to the open inline value editor. A commit
+// that changes the value re-analyses like a knob change; otherwise we just repaint
+// (the editor text changed, or it closed via ESC/empty commit).
+void SneakPeak::HandleDynamicsEditKey(WPARAM key)
+{
+  if (!m_dynamicsPanel.IsEditingValue()) return;
+  m_dynamicsPanel.OnEditKey((int)key);
+  if (m_dynamicsPanel.ParamsChanged())
+    ReanalyzeDynamicsAfterEdit();
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
