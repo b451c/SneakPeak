@@ -581,12 +581,32 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab)
   const double colGap = (double)dynui::kKnobColGap;
   const double cellW = (gridR - gridX - colGap * (dynui::kKnobCols - 1)) / (double)dynui::kKnobCols;
   const double cellH = plotSide / (double)dynui::kKnobRows;
+  auto cellRect = [&](int ccol, int crow) -> URect {
+    return { gridX + (double)ccol * (cellW + colGap), L.plotWell.y + (double)crow * cellH,
+             cellW, cellH };
+  };
   for (int i = 0; i < 10; ++i) {
     const KnobSlot& s = KNOB_SLOTS[i];
-    L.knob[i] = (s.tab == activeTab)
-      ? URect{ gridX + (double)s.col * (cellW + colGap), L.plotWell.y + (double)s.row * cellH,
-               cellW, cellH }
-      : URect{ 0, 0, 0, 0 };
+    L.knob[i] = (s.tab == activeTab) ? cellRect(s.col, s.row) : URect{ 0, 0, 0, 0 };
+  }
+
+  // Peak/RMS detection switch reuses the reserved Compressor col1-row3 grid cell
+  // (no knob maps there): a centred 2-segment pill. Empty on other tabs.
+  if (activeTab == 0) {
+    const URect c = cellRect(1, 3);
+    const double segH = 24.0, segY = c.y + (c.h - segH) * 0.5, halfW = c.w * 0.5;
+    L.rms[0] = { c.x, segY, halfW, segH };               // Peak
+    L.rms[1] = { c.x + halfW, segY, c.w - halfW, segH };  // RMS
+  }
+  // View-tab state toggles fill the same grid cells as the knobs: col0 rows 0-2 =
+  // Dyn/Env/GR (overlay visibility), col1 rows 0-1 = Live/A-B (monitor state).
+  if (activeTab == 2) {
+    static const int slot[5][2] = { {0,0}, {0,1}, {0,2}, {1,0}, {1,1} };
+    const double tH = 36.0;
+    for (int i = 0; i < 5; ++i) {
+      const URect c = cellRect(slot[i][0], slot[i][1]);
+      L.viewToggle[i] = { c.x, c.y + (c.h - tH) * 0.5, c.w, tH };
+    }
   }
 
   const double fMid = L.footer.y + L.footer.h * 0.5;
@@ -596,6 +616,10 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab)
   const double pillX = w - pad - pillW;
   for (int i = 0; i < 3; ++i)
     L.tabSeg[i] = { pillX + (double)i * (segW + segGap), fMid - 12.0, segW, 24.0 };
+
+  // Free-resize grip: bottom-right corner. Sits in the right pad margin, just past
+  // the tab pill's right edge (w - pad), so it never overlaps the VIEW segment.
+  L.resizeGrip = { w - 16.0, h - 16.0, 16.0, 16.0 };
   return L;
 }
 
@@ -636,8 +660,18 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
     ctx.fill_utf8_text(BLPoint(numX,  baseY), gfx.fGrHero, num,  SIZE_MAX, col(dynui::kGrRed));
     ctx.fill_utf8_text(BLPoint(unitX, baseY), gfx.fUnit,   "dB", SIZE_MAX, col(dynui::kInkMuted));
 
-    FillURound(ctx, L.abBtn, dynui::kRadiusCtrl, dynui::kSurface2);
-    TextCentered(ctx, gfx.fLabel, L.abBtn, "A/B", dynui::kInkSecondary);
+    // A/B bypass: reflects state (amber outline + "BYP" when bypassed) so the
+    // always-visible header control reads the current compare state at a glance.
+    const bool byp = vm.bypassed;
+    FillURound(ctx, L.abBtn, dynui::kRadiusCtrl, byp ? dynui::kSurface3 : dynui::kSurface2);
+    if (byp) {
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_round_rect(BLRoundRect(L.abBtn.x + 0.5, L.abBtn.y + 0.5,
+                                        L.abBtn.w - 1.0, L.abBtn.h - 1.0, dynui::kRadiusCtrl),
+                            col(dynui::kAmber));
+    }
+    TextCentered(ctx, gfx.fLabel, L.abBtn, byp ? "BYP" : "A/B",
+                 byp ? dynui::kAmber : dynui::kInkSecondary);
     TextCentered(ctx, gfx.fValue, L.closeBtn, "x", dynui::kInkMuted);
   }
   ctx.set_stroke_width(1.0);
@@ -657,12 +691,83 @@ static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L, int a
   }
 }
 
-static void DrawFooter(BLContext& ctx, const Gfx& gfx, const DynLayout& L) {
+// Apply is disabled in Live mode (points are written in real-time, so there is
+// nothing to "apply") - matches the GDI panel, which grayed it out under Live. The
+// click is already gated by !m_liveMode in OnMouseDownPremium; this is the visual.
+static void DrawFooter(BLContext& ctx, const Gfx& gfx, const DynLayout& L, bool applyEnabled) {
   ctx.set_stroke_width(1.0);
   ctx.stroke_line(BLLine(0, L.footer.y, L.footer.w, L.footer.y), col(dynui::kHairline));
-  FillURound(ctx, L.apply, dynui::kRadiusCtrl, dynui::kAmber);
+  FillURound(ctx, L.apply, dynui::kRadiusCtrl, applyEnabled ? dynui::kAmber : dynui::kSurface2);
   if (gfx.fontsReady)
-    TextCentered(ctx, gfx.fValue, L.apply, "Apply", dynui::kSurface0);
+    TextCentered(ctx, gfx.fValue, L.apply, "Apply",
+                 applyEnabled ? dynui::kSurface0 : dynui::kInkDisabled);
+}
+
+// --- View-tab toggles + Peak/RMS switch (Inc 5) ----------------------------
+
+// One independent View-tab state toggle: rounded pill + a grayscale-legible LED
+// (filled when on, hollow ring when off - the non-colour redundant cue) + an
+// UPPERCASE label. On => surface3 + the data-layer colour; off => surface2 +
+// secondary ink. `outline` adds an amber edge (A/B bypassed); `glow` adds a static
+// additive halo on the LED (armed Live - the breathing animation is deferred motion).
+static void DrawTogglePill(BLContext& ctx, const Gfx& gfx, const URect& r,
+                           const char* label, bool on, uint32_t onColor,
+                           bool outline, bool glow) {
+  if (r.w < 1.0) return;
+  FillURound(ctx, r, dynui::kRadiusCtrl, on ? dynui::kSurface3 : dynui::kSurface2);
+  if (on && outline) {
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_round_rect(BLRoundRect(r.x + 0.5, r.y + 0.5, r.w - 1.0, r.h - 1.0,
+                                      dynui::kRadiusCtrl), col(onColor));
+  }
+  const double ledR = 4.0, ledX = r.x + 12.0, ledY = r.y + r.h * 0.5;
+  if (on) {
+    if (glow) {
+      ctx.set_comp_op(BL_COMP_OP_PLUS);
+      ctx.fill_circle(BLCircle(ledX, ledY, ledR + 3.0), colA(onColor, 60));
+      ctx.fill_circle(BLCircle(ledX, ledY, ledR + 1.5), colA(onColor, 110));
+      ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+    }
+    ctx.fill_circle(BLCircle(ledX, ledY, ledR), col(onColor));
+  } else {
+    ctx.set_stroke_width(1.5);
+    ctx.stroke_circle(BLCircle(ledX, ledY, ledR), col(dynui::kInkMuted));
+  }
+  if (gfx.fontsReady)
+    ctx.fill_utf8_text(BLPoint(ledX + ledR + 8.0, r.y + r.h * 0.5 + 4.0), gfx.fLabel,
+                       label, SIZE_MAX, col(on ? onColor : dynui::kInkSecondary));
+}
+
+// Peak/RMS detection switch: a 2-segment mutually-exclusive pill. Active half =
+// surface3 + a 2 px amber underline (the grayscale-distinct shape cue) + primary
+// ink; inactive = surface1 + secondary ink. Mirrors the tab-bar's active treatment.
+static void DrawSegmented2(BLContext& ctx, const Gfx& gfx, const URect& a, const URect& b,
+                           const char* la, const char* lb, bool secondActive) {
+  if (a.w < 1.0) return;
+  const URect segs[2]  = { a, b };
+  const char* labels[2] = { la, lb };
+  for (int i = 0; i < 2; ++i) {
+    const bool active = ((i == 1) == secondActive);
+    const URect& s = segs[i];
+    FillURound(ctx, s, dynui::kRadiusCtrl, active ? dynui::kSurface3 : dynui::kSurface1);
+    if (active)
+      ctx.fill_rect(BLRect(s.x + 6.0, s.y + s.h - 2.0, s.w - 12.0, 2.0), col(dynui::kAmber));
+    if (gfx.fontsReady)
+      TextCentered(ctx, gfx.fLabel, s, labels[i],
+                   active ? dynui::kInkPrimary : dynui::kInkSecondary);
+  }
+}
+
+// Bottom-right corner resize grip: 3 short diagonal hairlines, kept inside the
+// panel's rounded corner (radius kRadiusPanel). Drawn in base coords -> scales
+// uniformly with the panel via the context transform.
+static void DrawResizeGrip(BLContext& ctx, const URect& g) {
+  const double cx = g.x + g.w, cy = g.y + g.h;   // panel bottom-right corner
+  ctx.set_stroke_width(1.0);
+  for (int i = 1; i <= 3; ++i) {
+    const double d = 5.0 + (double)i * 4.0;       // 9 / 13 / 17 px bands from the corner
+    ctx.stroke_line(BLLine(cx - d, cy - 5.0, cx - 5.0, cy - d), colA(dynui::kInkMuted, 170));
+  }
 }
 
 // --- the premium panel -----------------------------------------------------
@@ -672,17 +777,25 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
 {
   if (!hdc || w < 8 || h < 8) return;
   if (dpr < 1.0) dpr = 1.0;
-  const int devW = (int)std::lround(w * dpr);
-  const int devH = (int)std::lround(h * dpr);
+  // Uniform UI scale (aspect locked): the panel always lays out in base
+  // kPanelW x kPanelH coords; S folds into the context transform alongside dpr so
+  // fonts/chrome/controls all scale together and stay vector-crisp at any size.
+  const double S = (double)w / (double)dynui::kPanelW;
+  // The device buffer must match the painted content exactly: base content fills
+  // [0..kPanelW]x[0..kPanelH] under ctx.scale(dpr*S). Derive BOTH dims from base*S*dpr
+  // (not h*dpr) - pw/ph in GetRect round independently from m_uiScale, so h*dpr could
+  // exceed kPanelH*S*dpr and leave a sub-px unpainted (black) strip at the bottom.
+  const int devW = (int)std::lround((double)dynui::kPanelW * S * dpr);
+  const int devH = (int)std::lround((double)dynui::kPanelH * S * dpr);
   if (!prepareSurface(hdc, devW, devH)) return;
   {
     BLContext ctx;
     if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
     ctx.clear_all();
-    ctx.scale(dpr);
+    ctx.scale(dpr * S);
     ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
 
-    const double W = w, H = h;
+    const double W = dynui::kPanelW, H = dynui::kPanelH;   // base layout coords
 
     // panel slab: vertical gradient + rounded body + top hairline highlight
     {
@@ -702,12 +815,24 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     const DynLayout L = ComputeDynLayout(W, H, vm.activeTab);
     DrawHeader(ctx, *m_gfx, L, vm);
     DrawTabBar(ctx, *m_gfx, L, vm.activeTab);
-    DrawFooter(ctx, *m_gfx, L);
+    DrawFooter(ctx, *m_gfx, L, /*applyEnabled=*/!vm.liveMode);
     DrawTransferPlot(ctx, *m_gfx, L.plotWell.x, L.plotWell.y, L.plotWell.w, vm.curve);
     DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w,
                 vm.curve, /*withNumber=*/false);
     for (int i = 0; i < 10; ++i)
       DrawKnob(ctx, *m_gfx, L.knob[i], vm.knobs[i]);
+
+    // Peak/RMS switch (Compressor tab) + View-tab state toggles. Each helper
+    // self-skips when its rect is empty, so these are no-ops on the other tabs.
+    DrawSegmented2(ctx, *m_gfx, L.rms[0], L.rms[1], "PEAK", "RMS", vm.rmsMode);
+    DrawTogglePill(ctx, *m_gfx, L.viewToggle[0], "DYN",  vm.showDyn,  dynui::kAmber,   false, false);
+    DrawTogglePill(ctx, *m_gfx, L.viewToggle[1], "ENV",  vm.showEnv,  dynui::kEnvCyan, false, false);
+    DrawTogglePill(ctx, *m_gfx, L.viewToggle[2], "GR",   vm.showGR,   dynui::kGrRed,   false, false);
+    DrawTogglePill(ctx, *m_gfx, L.viewToggle[3], "LIVE", vm.liveMode, dynui::kAmber,   false, true);
+    DrawTogglePill(ctx, *m_gfx, L.viewToggle[4], vm.bypassed ? "BYP" : "A/B",
+                   vm.bypassed, dynui::kAmber, true, false);
+
+    DrawResizeGrip(ctx, L.resizeGrip);
 
     if (ctx.end() != BL_SUCCESS) return;
   }

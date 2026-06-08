@@ -60,6 +60,14 @@ struct DynPanelVM {
   int   activeTab   = 0;            // 0=Compressor, 1=Gate, 2=View
   const char* presetName = nullptr; // null -> "Preset"
   KnobVM knobs[10];                  // all 10 params; only on-tab ones get a rect
+  // Toggle/state (Inc 5): the View-tab pills + header A/B render from these; the
+  // Peak/RMS segmented reads rmsMode. Mirror DynamicsPanel's live members.
+  bool  showDyn  = true;
+  bool  showEnv  = true;
+  bool  showGR   = true;
+  bool  liveMode = false;
+  bool  bypassed = false;
+  bool  rmsMode  = false;
 };
 
 // Plain rectangle (logical px, panel-relative); no Blend2D so it can be shared by
@@ -78,6 +86,9 @@ struct DynLayout {
   URect preset, abBtn, closeBtn, apply;
   URect tabSeg[3];   // Compressor / Gate / View pill segments
   URect knob[10];    // per-param knob cells; empty (w==0) when not on the active tab
+  URect rms[2];      // Peak / RMS segmented halves (Compressor tab; empty otherwise)
+  URect viewToggle[5]; // Dyn / Env / GR / Live / A-B pills (View tab; empty otherwise)
+  URect resizeGrip;  // bottom-right corner drag handle (free resize)
 };
 DynLayout ComputeDynLayout(double w, double h, int activeTab = 0);
 
