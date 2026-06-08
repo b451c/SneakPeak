@@ -673,7 +673,7 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
       L.rms[0] = { c.x, segY, halfW, segH };
       L.rms[1] = { c.x + halfW, segY, c.w - halfW, segH };
     }
-    if (activeTab == 2) {   // View: 4 toggles on row0; A/B + Compact + meter-scale on row1
+    if (activeTab == 2) {   // View: DYN/ENV/GR/LIVE on row0; Compact on row1
       const double tH = 36.0;
       auto pill = [&](int ccol, int crow) -> URect {
         const URect c = ccell(ccol, crow); return { c.x, c.y + (c.h - tH) * 0.5, c.w, tH };
@@ -682,15 +682,9 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
       L.viewToggle[1] = pill(1, 0);  // ENV
       L.viewToggle[2] = pill(2, 0);  // GR
       L.viewToggle[3] = pill(3, 0);  // LIVE
-      L.viewToggle[4] = pill(0, 1);  // A/B
-      L.compactToggle = pill(1, 1);  // COMPACT
-      const URect c2 = ccell(2, 1), c3 = ccell(3, 1);  // meter-scale spans cols 2-3
-      const double segH = 24.0, segGap = 2.0, capW = 44.0;
-      const double segY = c2.y + (c2.h - segH) * 0.5;
-      const double x0 = c2.x + capW, right = c3.x + c3.w;
-      const double segW = (right - x0 - 2.0 * segGap) / 3.0;
-      for (int i = 0; i < 3; ++i)
-        L.meterScale[i] = { x0 + (double)i * (segW + segGap), segY, segW, segH };
+      L.compactToggle = pill(0, 1);  // COMPACT
+      // No A/B (it lives in the header) and no meter-scale (the plot + GR meter it
+      // scales are hidden in compact, so the selector would do nothing).
     }
   } else {
   // Hero transfer plot: square on the LEFT, sized to the body height. The GR meter
@@ -727,15 +721,19 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
     L.rms[0] = { c.x, segY, halfW, segH };               // Peak
     L.rms[1] = { c.x + halfW, segY, c.w - halfW, segH };  // RMS
   }
-  // View-tab state toggles fill the same grid cells as the knobs: col0 rows 0-2 =
-  // Dyn/Env/GR (overlay visibility), col1 rows 0-1 = Live/A-B (monitor state).
+  // View-tab state toggles fill the knob-grid cells: col0 rows 0-2 = Dyn/Env/GR
+  // (overlay visibility), col1 row0 = Live, col1 row1 = Compact. (A/B is NOT here -
+  // it lives in the header.) The meter-scale selector spans the bottom row.
   if (activeTab == 2) {
-    static const int slot[5][2] = { {0,0}, {0,1}, {0,2}, {1,0}, {1,1} };
+    static const int slot[4][2] = { {0,0}, {0,1}, {0,2}, {1,0} };  // DYN/ENV/GR/LIVE
     const double tH = 36.0;
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 4; ++i) {
       const URect c = cellRect(slot[i][0], slot[i][1]);
       L.viewToggle[i] = { c.x, c.y + (c.h - tH) * 0.5, c.w, tH };
     }
+    // Compact-mode toggle: col1 row1 (below Live).
+    const URect cc = cellRect(1, 1);
+    L.compactToggle = { cc.x, cc.y + (cc.h - tH) * 0.5, cc.w, tH };
     // Meter-scale selector: a 3-segment dB-floor control on the bottom grid row,
     // spanning both columns. A "SCALE" caption (render-only) sits in the left gutter.
     const URect c0 = cellRect(0, 3), c1 = cellRect(1, 3);
@@ -745,9 +743,6 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
     const double segW = (right - x0 - 2.0 * segGap) / 3.0;
     for (int i = 0; i < 3; ++i)
       L.meterScale[i] = { x0 + (double)i * (segW + segGap), segY, segW, segH };
-    // Compact-mode toggle: the free col1-row2 cell (between A/B and the meter-scale row).
-    const URect cc = cellRect(1, 2);
-    L.compactToggle = { cc.x, cc.y + (cc.h - tH) * 0.5, cc.w, tH };
   }
   }
 
@@ -1054,8 +1049,7 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[1], "ENV",  vm.showEnv,  dynui::kEnvCyan, false, 0.0);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[2], "GR",   vm.showGR,   dynui::kGrRed,   false, 0.0);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[3], "LIVE", vm.liveMode, dynui::kAmber,   false, vm.livePulse);
-    DrawTogglePill(ctx, *m_gfx, L.viewToggle[4], vm.bypassed ? "BYP" : "A/B",
-                   vm.bypassed, dynui::kAmber, true, 0.0);
+    // A/B is NOT a View-tab pill - it lives in the header (DrawHeader).
 
     // Meter-scale dB-floor selector (View tab) + its left "SCALE" caption. Both
     // self-skip when the rects are empty (off the View tab).

@@ -427,7 +427,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
     m_viewPrefsChanged = true;                   // Live persists across sessions (user request)
     return true;
   }
-  if (L.viewToggle[4].contains(lx, ly)) { m_bypassed = !m_bypassed; return true; }
+  // (A/B is handled by the header abBtn above - no View-tab A/B pill.)
   // Meter-scale dB-floor selector: render-only (rescales plot + GR meter), so persist
   // the pref but do NOT mark params changed (no re-analysis).
   for (int i = 0; i < 3; ++i)
