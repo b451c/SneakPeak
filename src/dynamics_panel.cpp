@@ -872,10 +872,13 @@ bool DynamicsPanel::WantsAnimationFrame() const
   if (!m_visible) return false;
   if (m_editIdx >= 0) return true;                 // caret blink
   if (m_liveMode)     return true;                 // Live breathing pulse
-  const double now = NowSec();
-  if (m_tabSlideStartSec >= 0.0 && now - m_tabSlideStartSec < kTabSlideSec) return true;
+  // Transient animations: DrawPremium clears the start marker on the SAME frame it draws
+  // the settled value, so gate on the marker being set (NOT on elapsed time). Gating on
+  // duration stops the pump one tick BEFORE the final frame, freezing the animation just
+  // short of its target (e.g. the tab-pill not fully reaching the active segment on return).
+  if (m_tabSlideStartSec >= 0.0) return true;      // tab-slide in flight
   for (int i = 0; i < NUM_SLIDERS; ++i)
-    if (m_knobEaseStartSec[i] > 0.0 && now - m_knobEaseStartSec[i] < kValueEaseSec) return true;
+    if (m_knobEaseStartSec[i] > 0.0) return true;  // value-ease in flight
   return false;
 }
 
@@ -1246,7 +1249,8 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.tabFrom = m_tabFrom;
   if (m_tabSlideStartSec >= 0.0) {
     const double t = (now - m_tabSlideStartSec) / kTabSlideSec;
-    vm.tabSlideT = (t >= 1.0) ? 1.0 : 1.0 - std::pow(1.0 - t, 3.0);
+    if (t >= 1.0) { vm.tabSlideT = 1.0; m_tabSlideStartSec = -1.0; }  // draw the settled frame, then stop the pump
+    else vm.tabSlideT = 1.0 - std::pow(1.0 - t, 3.0);
   } else vm.tabSlideT = 1.0;
 
   // Live-pill breathing pulse (~1.5s): glow intensity oscillates [0.45..1] while armed.

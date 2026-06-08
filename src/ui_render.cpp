@@ -194,10 +194,16 @@ bool UiCanvas::ensure(HDC hdc, int devW, int devH)
 // Drawn in logical coordinates; mirrors dynamics_engine ComputeCompression math.
 static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
                              double px0, double py0, double plotSide,
-                             const DynCurveParams& p)
+                             const DynCurveParams& p, int activeTab = 2)
 {
   const double px1 = px0 + plotSide;
   const double py1 = py0 + plotSide;
+  // Per-tab emphasis (design spec sec 6): the Compressor tab dims the gate, the Gate tab
+  // dims the compressor, the View tab (2) lights both. The off-focus processor's coloured
+  // elements (red comp wedge + comp threshold / violet gate cliff) drop to ~30% alpha so
+  // the focused processor stands out; the neutral curve + operating point stay full.
+  const double compA = (activeTab == 1) ? 0.30 : 1.0;   // dim compressor on the Gate tab
+  const double gateA = (activeTab == 0) ? 0.30 : 1.0;   // dim gate on the Compressor tab
   ctx.fill_round_rect(BLRoundRect(px0, py0, plotSide, plotSide, dynui::kRadiusCtrl),
                       col(dynui::kSurface1));
 
@@ -240,19 +246,28 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   // reduction wedge: area between the makeup baseline (x+makeup) and the COMPRESSION
   // curve (x+compGR+makeup; gate excluded so red = compression reduction only). The
   // gap equals -compGR regardless of makeup, so red stays = pure reduction.
+  // Per-column vertical gradient from the makeup baseline (x+makeup, opaque) DOWN to the
+  // compression curve (x+compGR+makeup, transparent) so the red fades to NOTHING exactly
+  // at the curve - a single full-height gradient would be cut with a hard edge wherever
+  // the curve crosses it mid-plot. Each thin strip's gradient is local to its own
+  // baseline->curve span; adjacent strips share an edge (no overlap/seam). Columns with
+  // no visible reduction are skipped. gap = -compGR = compression reduction (gate excluded).
   {
-    BLPath wedge;
-    wedge.move_to(dbToX(inMin), dbToY(inMin + p.makeupDb));
-    wedge.line_to(dbToX(inMax), dbToY(inMax + p.makeupDb));   // along the makeup baseline
-    for (int i = N; i >= 0; --i) {                            // back along the curve
-      const double in = sampleDb(i);
-      wedge.line_to(dbToX(in), dbToY(compOut(in)));
+    const int topAlpha = (int)std::lround(70.0 * compA);
+    for (int i = 0; i < N; ++i) {
+      const double inA = sampleDb(i), inB = sampleDb(i + 1);
+      const double xA = dbToX(inA), xB = dbToX(inB);
+      const double baseA = dbToY(inA + p.makeupDb), baseB = dbToY(inB + p.makeupDb);
+      const double curvA = dbToY(compOut(inA)), curvB = dbToY(compOut(inB));
+      if (curvA - baseA < 0.5 && curvB - baseB < 0.5) continue;   // curve sits on the baseline -> no reduction
+      BLPath strip;
+      strip.move_to(xA, baseA); strip.line_to(xB, baseB);
+      strip.line_to(xB, curvB); strip.line_to(xA, curvA); strip.close();
+      BLGradient g(BLLinearGradientValues(0, 0.5 * (baseA + baseB), 0, 0.5 * (curvA + curvB)));
+      g.add_stop(0.0, colA(dynui::kGrRed, topAlpha));   // opaque at the makeup baseline
+      g.add_stop(1.0, colA(dynui::kGrRed, 0));          // transparent at the curve (soft edge)
+      ctx.fill_path(strip, g);
     }
-    wedge.close();
-    BLGradient g(BLLinearGradientValues(0, py0, 0, py1));
-    g.add_stop(0.0, colA(dynui::kGrRed, 70));
-    g.add_stop(1.0, colA(dynui::kGrRed, 0));
-    ctx.fill_path(wedge, g);
   }
 
   // dotted threshold line (vertical), persists regardless of overlays
@@ -261,7 +276,7 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
     ctx.set_stroke_width(1.0);
     for (double yy = py0; yy < py1; yy += 5.0)
       ctx.stroke_line(BLLine(tx, yy, tx, std::min(yy + 2.5, py1)),
-                      colA(dynui::kInkMuted, 200));
+                      colA(dynui::kInkMuted, (int)std::lround(200.0 * compA)));
   }
 
   // static transfer curve (neutral), full shape including the gate drop
@@ -291,7 +306,7 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
     }
     if (started) {
       ctx.set_stroke_width(2.0);
-      ctx.stroke_path(gate, col(dynui::kGateViolet));
+      ctx.stroke_path(gate, colA(dynui::kGateViolet, (int)std::lround(255.0 * gateA)));
     }
   }
 
@@ -926,7 +941,7 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     DrawHeader(ctx, *m_gfx, L, vm);
     DrawTabBar(ctx, *m_gfx, L, vm.activeTab, vm.tabFrom, vm.tabSlideT);
     DrawFooter(ctx, *m_gfx, L, /*applyEnabled=*/!vm.liveMode);
-    DrawTransferPlot(ctx, *m_gfx, L.plotWell.x, L.plotWell.y, L.plotWell.w, vm.curve);
+    DrawTransferPlot(ctx, *m_gfx, L.plotWell.x, L.plotWell.y, L.plotWell.w, vm.curve, vm.activeTab);
     DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w,
                 vm.curve, /*withNumber=*/false);
     for (int i = 0; i < 10; ++i)
