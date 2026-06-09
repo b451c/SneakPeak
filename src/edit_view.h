@@ -214,6 +214,7 @@ private:
   void   SaveUiScale();                      // persist g_uiScale to ExtState (int x1000, locale-safe)
   double QuerySystemDefaultUiScale() const;  // map the system DPI to a scale, for the first-run auto-seed
   double ComputeFitUiScale() const;          // largest scale at which the fixed chrome fits the client area
+  void   MarkUiScaleUserSet();               // user chose a scale -> WM_DPICHANGED must never stomp it (durable)
 
   // LoadSelectedItem sub-methods
   bool LoadSelectedItemMulti(int count); // returns true if handled
@@ -481,6 +482,11 @@ private:
   // re-blit crisp. -1 = uninitialised (seeded on the first tick). Costs nothing
   // when idle (one cheap comparison per ~33ms tick).
   double m_lastUiDpr = -1.0;
+  // True once the user has manually chosen a UI scale (panel/menu); persisted as
+  // ExtState "ui_scale_user". While false, WM_DPICHANGED (Win) may auto-follow the
+  // monitor's DPI; a manual choice is never stomped. (Read on all platforms; the
+  // only consumer is the Windows WM_DPICHANGED handler.)
+  bool m_uiScaleUserSet = false;
 
   static AudioClipboard s_clipboard;
   static const int TIMER_REFRESH = 100;

@@ -97,6 +97,8 @@ void SneakPeak::Create()
   // once from the system DPI (needs the HWND, so it happens here, not in main.cpp).
   // A persisted value (already seeded in main.cpp) is never overridden. mac -> 1.0.
   if (g_GetExtState) {
+    const char* uu = g_GetExtState("SneakPeak", "ui_scale_user");
+    m_uiScaleUserSet = (uu && uu[0] == '1');
     const char* us = g_GetExtState("SneakPeak", "ui_scale");
     if (!(us && us[0])) {
       double s = QuerySystemDefaultUiScale();
@@ -1337,6 +1339,35 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       if (wParam == TIMER_REFRESH) OnTimer();
       return 0;
 
+#ifdef _WIN32
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
+    case WM_DPICHANGED: {
+      // Per-monitor DPI change (REAPER is per-monitor-aware; our floating WS_POPUP
+      // window receives this when dragged across mixed-DPI monitors). Honor the
+      // system-suggested rect (floating only - docked geometry is REAPER-driven),
+      // and follow the new monitor's DPI ONLY while the user has never manually
+      // chosen a scale; a manual choice (m_uiScaleUserSet, durable) is never stomped.
+      if (!m_isDocked && lParam) {
+        RECT* sug = (RECT*)lParam;
+        SetWindowPos(m_hwnd, nullptr, sug->left, sug->top,
+                     sug->right - sug->left, sug->bottom - sug->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+      }
+      if (!m_uiScaleUserSet) {
+        ApplyUiScale((double)HIWORD(wParam) / 96.0);  // clamps + font flag + relayout
+        SaveUiScale();
+      } else {
+        RECT cr;
+        GetClientRect(m_hwnd, &cr);
+        RecalcLayout(cr.right, cr.bottom);
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+      }
+      return 0;
+    }
+#endif
+
     case WM_SETCURSOR:
       // Let OnMouseMove handle cursor — prevent system from resetting it
       return TRUE;
@@ -1478,6 +1509,13 @@ void SneakPeak::ApplyUiScale(double scale)
     m_spectral.Invalidate();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
+}
+
+void SneakPeak::MarkUiScaleUserSet()
+{
+  if (m_uiScaleUserSet) return;
+  m_uiScaleUserSet = true;
+  if (g_SetExtState) g_SetExtState("SneakPeak", "ui_scale_user", "1", true);
 }
 
 double SneakPeak::ComputeFitUiScale() const

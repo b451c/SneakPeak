@@ -132,10 +132,12 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       if (m_settingsPanel.ScaleChangedByClick()) {   // track jump / density preset
         ApplyUiScale(g_uiScale);                     // clamp + font flag + relayout
         SaveUiScale();
+        MarkUiScaleUserSet();
       }
       if (m_settingsPanel.FitRequested()) {
         ApplyUiScale(ComputeFitUiScale());
         SaveUiScale();
+        MarkUiScaleUserSet();
       }
       // Migrated preference clicks route through the SAME CM_* handlers as the
       // (OFF-build) menu items - one behavior path, no drift.
@@ -894,6 +896,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     if (m_settingsPanel.OnMouseUp()) {
       g_fontsNeedRescale = true;   // deferred from the live drag: one rebuild at the next paint
       SaveUiScale();
+      MarkUiScaleUserSet();
     }
     ReleaseCapture();
     InvalidateRect(m_hwnd, nullptr, FALSE);

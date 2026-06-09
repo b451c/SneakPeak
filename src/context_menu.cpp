@@ -753,13 +753,13 @@ void SneakPeak::OnContextMenuCommand(int id)
       AddUserPreset();   // prompt for a name + store the current panel params globally
       break;
     case CM_UI_SCALE_SMALLER:
-      ApplyUiScale(g_uiScale - 0.1); SaveUiScale();
+      ApplyUiScale(g_uiScale - 0.1); SaveUiScale(); MarkUiScaleUserSet();
       break;
     case CM_UI_SCALE_LARGER:
-      ApplyUiScale(g_uiScale + 0.1); SaveUiScale();
+      ApplyUiScale(g_uiScale + 0.1); SaveUiScale(); MarkUiScaleUserSet();
       break;
     case CM_UI_SCALE_RESET:
-      ApplyUiScale(1.0); SaveUiScale();
+      ApplyUiScale(1.0); SaveUiScale(); MarkUiScaleUserSet();
       break;
     case CM_SETTINGS:
       if (m_settingsPanel.IsVisible()) m_settingsPanel.Hide();
@@ -779,6 +779,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       } else if (id >= CM_UI_SCALE_PRESET_BASE && id < CM_UI_SCALE_PRESET_BASE + kUiScalePresetCount) {
         ApplyUiScale(kUiScalePresets[id - CM_UI_SCALE_PRESET_BASE]);  // relayout + repaint
         SaveUiScale();
+        MarkUiScaleUserSet();
       }
       if (applied) {
         // Same re-analysis + Live path as a knob drag, so the curve/GR update at once.
