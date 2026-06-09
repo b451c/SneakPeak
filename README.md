@@ -6,11 +6,14 @@
 
 **Precision waveform item editor for REAPER** - a native C++ extension that gives you a detailed, dockable waveform view for any media item. Click an item in REAPER's arrange view, and SneakPeak instantly shows you a full-featured waveform editor with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, real-time metering, and full interface scaling (80-200%). Available for macOS (arm64/x86_64), Windows (x64), and Linux (x86_64/aarch64).
 
-![SneakPeak](docs/images/dynamics-gate-overview.png)
+![SneakPeak](docs/images/sneakpeak-hero.png)
 
-> *Select any audio item in REAPER and get an instant, detailed waveform with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, and real-time metering - all in a dockable window. Above: the gate taming breaths between dialogue phrases, with threshold/gate lines, envelope automation and detector curves drawn live on the waveform.*
+> *Select any audio item in REAPER and get an instant, detailed waveform with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, and real-time metering - all in a dockable window.*
 
 ## Screenshots
+
+![Gate processing](docs/images/dynamics-gate-overview.png)
+<p align="center"><i>The gate taming breaths between dialogue phrases (v2.2) - threshold/gate lines, envelope automation and detector curves drawn live on the waveform.</i></p>
 
 <p align="center">
   <img src="docs/images/dynamics-panel.png" width="66%" alt="Dynamics panel - compressor tab with transfer curve, GR meter and parameter knobs">
