@@ -134,12 +134,12 @@ if(SNEAKPEAK_UI_SPIKE_PHASE0)
   target_compile_definitions(reaper_sneakpeak PRIVATE SNEAKPEAK_UI_SPIKE)
 endif()
 
-# PHASE 2: the premium Blend2D Dynamics Panel. When ON, the GDI DynamicsPanel::Draw
-# is replaced by DrawPremium (rendered in OnPaintOverlay on the real window DC).
-# Default OFF until the premium panel reaches feature parity with the GDI panel
-# (then flip ON, and in Phase 3 delete the GDI #else path + this option). Build the
-# premium panel locally with: cmake -B build -DSNEAKPEAK_BLEND2D_PANEL=ON
-option(SNEAKPEAK_BLEND2D_PANEL "Phase 2 premium Blend2D Dynamics Panel (replaces GDI when parity reached)" OFF)
+# PHASE 2: the premium Blend2D UI (Dynamics/Settings/gain/meters/toast). When ON,
+# the GDI panel paths are replaced by the Blend2D renderers (OnPaintOverlay on the
+# real window DC). Default ON since v2.2.0 (parity + global UI scale reached); the
+# GDI fallback stays until Phase 3 deletes the #else paths + this option. Build the
+# GDI fallback locally with: cmake -B build-off -DSNEAKPEAK_BLEND2D_PANEL=OFF
+option(SNEAKPEAK_BLEND2D_PANEL "Premium Blend2D UI (Dynamics/Settings/gain/meters/toast)" ON)
 if(SNEAKPEAK_BLEND2D_PANEL)
   target_compile_definitions(reaper_sneakpeak PRIVATE SNEAKPEAK_BLEND2D_PANEL)
 endif()
