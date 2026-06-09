@@ -2,6 +2,7 @@
 #include "dynamics_panel.h"
 #include "theme.h"
 #include "config.h"
+#include "globals.h"
 #include "ui_theme.h"
 #include <cstdio>
 #include <cstring>
@@ -154,6 +155,17 @@ double DynamicsPanel::PanelBaseH() const
   return m_compactMode ? (double)dynui::kPanelHCompact : (double)dynui::kPanelH;
 }
 
+// Effective on-screen panel scale (v2.2.0 coupling): the global UI scale layered
+// with the panel's own resize grip, soft-capped at EFF_SCALE_MAX so the grip stays
+// useful at high global scales. Every premium geometry/hit-test site uses THIS
+// (never m_uiScale directly), so draw and hit can never disagree.
+double DynamicsPanel::EffScale() const
+{
+  const double g = g_uiScale > 0.0 ? g_uiScale : 1.0;
+  const double m = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  return std::max(UI_SCALE_MIN, std::min(EFF_SCALE_MAX, g * m));
+}
+
 // The current panel layout (single source for render-prep + every hit-test): base
 // coords, current tab, current compact state.
 DynLayout DynamicsPanel::PanelLayout() const
@@ -164,8 +176,8 @@ DynLayout DynamicsPanel::PanelLayout() const
 RECT DynamicsPanel::GetRect(RECT wr) const
 {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
-  const int pw = (int)std::lround((double)dynui::kPanelW * m_uiScale);
-  const int ph = (int)std::lround(PanelBaseH() * m_uiScale);
+  const int pw = (int)std::lround((double)dynui::kPanelW * EffScale());
+  const int ph = (int)std::lround(PanelBaseH() * EffScale());
 #else
   const int pw = PANEL_W, ph = PANEL_H;
 #endif
@@ -246,7 +258,7 @@ RECT DynamicsPanel::GetPresetButtonRect(RECT pr) const
 {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   // Layout is in base coords; scale onto the on-screen (scaled) panel rect.
-  const double S = m_uiScale;
+  const double S = EffScale();
   DynLayout L = PanelLayout();
   return { pr.left + (int)(L.preset.x * S), pr.top + (int)(L.preset.y * S),
            pr.left + (int)((L.preset.x + L.preset.w) * S),
@@ -335,7 +347,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
 {
   // Layout authority is in base coords (RenderPanel scales the whole panel by S);
   // convert the click into base coords so hit-tests match exactly what was drawn.
-  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const double S = EffScale();
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
   const DynLayout L = PanelLayout();
 
@@ -551,20 +563,26 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   if (m_resizing) {
     // Aspect-locked: the cursor's horizontal travel from the grab point drives the
-    // uniform scale (relative so the grabbed pixel stays put - no first-move snap
-    // wherever in the grip you clicked); height follows. Clamp to [min, fit-in-window].
-    double S = m_resizeStartScale + (double)(x - m_resizeStartX) / (double)dynui::kPanelW;
+    // EFFECTIVE scale 1:1 in panel pixels (relative so the grabbed pixel stays put -
+    // no first-move snap wherever in the grip you clicked); height follows. The grip
+    // component is then solved back out under the global scale (eff = g * grip).
+    const double g = g_uiScale > 0.0 ? g_uiScale : 1.0;
+    const double effStart = std::max(UI_SCALE_MIN, std::min(EFF_SCALE_MAX, g * m_resizeStartScale));
+    double eff = effStart + (double)(x - m_resizeStartX) / (double)dynui::kPanelW;
     // Fit is measured from the pinned top-left to the window's right/bottom edges,
     // so the panel never overflows (which would make GetRect re-clamp and break the
-    // anchor). Since the anchor came from a fitting rect, both fits are >= current S.
+    // anchor). Since the anchor came from a fitting rect, both fits are >= current eff.
     const double fitW = (double)(wr.right - m_resizeAnchorL) / (double)dynui::kPanelW;
     const double fitH = (double)(wr.bottom - m_resizeAnchorT) / PanelBaseH();
-    double smax = std::min(UI_SCALE_MAX, std::min(fitW, fitH));
-    if (smax < UI_SCALE_MIN) smax = UI_SCALE_MIN;
-    m_uiScale = std::max(UI_SCALE_MIN, std::min(smax, S));
+    double effMax = std::min(EFF_SCALE_MAX, std::min(fitW, fitH));
+    if (effMax < UI_SCALE_MIN) effMax = UI_SCALE_MIN;
+    eff = std::max(UI_SCALE_MIN, std::min(effMax, eff));
+    m_uiScale = std::max(UI_SCALE_MIN, std::min(UI_SCALE_MAX, eff / g));
     // Pin the top-left corner: solve GetRect's centring offsets for the new size.
-    const int W1 = (int)std::lround((double)dynui::kPanelW * m_uiScale);
-    const int H1 = (int)std::lround(PanelBaseH() * m_uiScale);
+    // EffScale() (not eff) so the pin agrees with GetRect even when the grip clamp
+    // made the requested eff unreachable.
+    const int W1 = (int)std::lround((double)dynui::kPanelW * EffScale());
+    const int H1 = (int)std::lround(PanelBaseH() * EffScale());
     m_offsetX = (m_resizeAnchorL + W1 / 2) - (wr.left + wr.right) / 2;
     m_offsetY = m_resizeAnchorT - (wr.bottom - H1 - 10);
     m_geomChanged = true;            // persist size + position on mouse-up
@@ -619,8 +637,8 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
   }
   else if (m_panelDragging) {
 #ifdef SNEAKPEAK_BLEND2D_PANEL
-    const int pw = (int)std::lround((double)dynui::kPanelW * m_uiScale);
-    const int ph = (int)std::lround(PanelBaseH() * m_uiScale);
+    const int pw = (int)std::lround((double)dynui::kPanelW * EffScale());
+    const int ph = (int)std::lround(PanelBaseH() * EffScale());
 #else
     const int pw = PANEL_W, ph = PANEL_H;
 #endif
@@ -648,7 +666,7 @@ void DynamicsPanel::OnMouseUp()
 // or -1. Shared by hover + wheel. Premium layout; only called from premium paths.
 int DynamicsPanel::HitTestKnob(int x, int y, RECT pr) const
 {
-  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const double S = EffScale();
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
   const DynLayout L = PanelLayout();
   for (int i = 0; i < NUM_SLIDERS; ++i)
@@ -684,7 +702,7 @@ bool DynamicsPanel::OnHover(int x, int y, RECT wr)
   if (m_visible) {
     const RECT pr = GetRect(wr);
     hk = HitTestKnob(x, y, pr);
-    const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+    const double S = EffScale();
     const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
     const DynLayout L = PanelLayout();
     URect handles[2];
@@ -702,7 +720,7 @@ bool DynamicsPanel::IsOverResizeGrip(int x, int y, RECT wr) const
 {
   if (!m_visible) return false;
   RECT pr = GetRect(wr);
-  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const double S = EffScale();
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
   const DynLayout L = PanelLayout();
   return L.resizeGrip.contains(lx, ly);
@@ -740,7 +758,7 @@ DynCurveParams DynamicsPanel::BuildCurveParams() const
 void DynamicsPanel::DragCurveHandle(int x, int y, RECT pr)
 {
   if (m_dragHandle < 0) return;
-  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const double S = EffScale();
   const DynCurveParams cp = BuildCurveParams();
   const DynLayout L = PanelLayout();
   const double span = (cp.inMaxDb - cp.inMinDb) != 0.0 ? (cp.inMaxDb - cp.inMinDb) : 1.0;
@@ -854,7 +872,7 @@ bool DynamicsPanel::OnDoubleClick(int x, int y, RECT wr)
   const RECT pr = GetRect(wr);
   const int k = HitTestKnob(x, y, pr);
   if (k >= 0) { BeginValueEdit(k); return true; }
-  const double S = m_uiScale > 0.0 ? m_uiScale : 1.0;
+  const double S = EffScale();
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
   const DynLayout L = PanelLayout();
   URect handles[2];
