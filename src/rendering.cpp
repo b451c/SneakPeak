@@ -47,6 +47,10 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
   if (!hdc) return;
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   m_dynamicsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
+  // Premium gain knob (above dynamics, below settings/toast per the z-order spec).
+  // Same HasItem gate as the GDI path had in OnPaint.
+  if (m_waveform.HasItem())
+    m_gainPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), m_waveform.HasSelection());
   {
     // Settings panel (above dynamics): hand it the host-owned preference values.
     SettingsPrefs sp;
@@ -144,7 +148,10 @@ void SneakPeak::OnPaint(HDC hdc)
     }
   }
   if (m_markers.GetShowMarkers()) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
+#ifndef SNEAKPEAK_BLEND2D_PANEL
+  // GDI gain panel (OFF build only - the premium build draws it in OnPaintOverlay)
   if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect, m_waveform.HasSelection());
+#endif
   if (m_waveform.HasItem()) DrawSoloButton(hdc);
   if (m_spectralVisible) {
     DrawSplitter(hdc);

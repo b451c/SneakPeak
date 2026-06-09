@@ -1272,3 +1272,88 @@ void UiCanvas::RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double d
   }
   presentSurface(hdc, x, y, w, h, devW, devH);
 }
+
+// --- the premium gain knob overlay (v2.2.0 Inc D) ----------------------------
+
+void UiCanvas::RenderGainPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                               const GainVM& vm)
+{
+  if (!hdc || w < 8 || h < 8) return;
+  if (dpr < 1.0) dpr = 1.0;
+  // Base layout = the GDI panel's 110x32 literal coords (knob zone x<32, readout
+  // 32..96, close 96..110/y<14), so GainPanel's SP()-scaled hit-test matches.
+  const double BW = 110.0, BH = 32.0;
+  const double S = (double)w / BW;
+  const int devW = (int)std::lround(BW * S * dpr);
+  const int devH = (int)std::lround(BH * S * dpr);
+  if (!prepareSurface(hdc, devW, devH)) return;
+  {
+    BLContext ctx;
+    if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
+    ctx.clear_all();
+    ctx.scale(dpr * S);
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+    const Gfx& gfx = *m_gfx;
+
+    // slab (small: control radius, not panel radius)
+    {
+      BLGradient bg(BLLinearGradientValues(0, 0, 0, BH));
+      bg.add_stop(0.0, col(dynui::kSurface1));
+      bg.add_stop(1.0, col(dynui::kSurface0));
+      ctx.fill_round_rect(BLRoundRect(0, 0, BW, BH, dynui::kRadiusCtrl), bg);
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_round_rect(BLRoundRect(0.5, 0.5, BW - 1, BH - 1, dynui::kRadiusCtrl),
+                            col(dynui::kHairline));
+    }
+
+    // knob: same 270deg geometry as the dynamics knobs (screen 135deg + sweep 270)
+    const double cx = 18.0, cy = BH * 0.5, r = 10.0;
+    const double a0 = Deg2Rad(135.0), sweep = Deg2Rad(270.0);
+    const uint32_t accent = vm.boost ? dynui::kGrRed : dynui::kAmber;
+    ctx.set_stroke_width(2.5);
+    { BLPath p; p.arc_to(cx, cy, r, r, a0, sweep, true); ctx.stroke_path(p, col(dynui::kSurface3)); }
+    // active arc: 0 dB notch -> current value
+    {
+      const double nLo = std::min(vm.zeroNorm, vm.valNorm);
+      const double nHi = std::max(vm.zeroNorm, vm.valNorm);
+      if (nHi - nLo > 0.002) {
+        BLPath p;
+        p.arc_to(cx, cy, r, r, a0 + sweep * nLo, sweep * (nHi - nLo), true);
+        ctx.stroke_path(p, col(accent));
+      }
+    }
+    // cap + pointer
+    ctx.fill_circle(BLCircle(cx, cy, r - 3.5), col(dynui::kSurface2));
+    {
+      const double a = a0 + sweep * std::clamp(vm.valNorm, 0.0, 1.0);
+      ctx.set_stroke_width(2.0);
+      ctx.stroke_line(BLLine(cx + std::cos(a) * 2.5, cy + std::sin(a) * 2.5,
+                             cx + std::cos(a) * (r - 1.5), cy + std::sin(a) * (r - 1.5)),
+                      col(accent));
+    }
+    // 0 dB notch tick just outside the ring
+    {
+      const double a = a0 + sweep * std::clamp(vm.zeroNorm, 0.0, 1.0);
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_line(BLLine(cx + std::cos(a) * (r + 1.0), cy + std::sin(a) * (r + 1.0),
+                             cx + std::cos(a) * (r + 4.0), cy + std::sin(a) * (r + 4.0)),
+                      colA(dynui::kInkMuted, 200));
+    }
+
+    // dB readout, centered in [32, 96] (gold tint = batch relative mode)
+    if (gfx.fontsReady && vm.text) {
+      const URect tr{ 32.0, 0.0, 64.0, BH };
+      const uint32_t ink = vm.boost ? dynui::kGrRed
+                         : vm.gold  ? dynui::kAmberGlow : dynui::kInkPrimary;
+      TextCentered(ctx, gfx.fTab, tr, vm.text, ink);
+    }
+    // close x (top-right 14px zone)
+    if (gfx.fontsReady) {
+      const URect xr{ BW - 14.0, 0.0, 14.0, 16.0 };
+      TextCentered(ctx, gfx.fLabel, xr, "x", dynui::kInkMuted);
+    }
+
+    if (ctx.end() != BL_SUCCESS) return;
+  }
+  presentSurface(hdc, x, y, w, h, devW, devH);
+}
