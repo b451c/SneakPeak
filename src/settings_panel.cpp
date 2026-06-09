@@ -18,15 +18,28 @@ double ValueFromX(double lx, const SettingsLayout& L)
 }
 }  // namespace
 
-double SettingsPanel::EffScale() const
+double SettingsPanel::EffScale(RECT wr) const
 {
-  const double s = m_dragging ? m_dragScale : g_uiScale;
-  return s > 0.0 ? s : 1.0;
+  double s = m_dragging ? m_dragScale : g_uiScale;
+  if (s <= 0.0) s = 1.0;
+  // Fit-clamp: never let the panel outgrow the waveform rect (high scales / small
+  // windows). Floored so it can never become microscopic; the same clamp feeds the
+  // hit-test divide, so draw == hit even when clamped.
+  const double availW = (double)(wr.right - wr.left) - 8.0;
+  const double availH = (double)(wr.bottom - wr.top) - 8.0;
+  if (availW > 0.0 && availH > 0.0) {
+    const double fitW = availW / (double)dynui::kSettingsW;
+    const double fitH = availH / (double)dynui::kSettingsH;
+    double cap = fitW < fitH ? fitW : fitH;
+    if (cap < 0.5) cap = 0.5;
+    if (s > cap) s = cap;
+  }
+  return s;
 }
 
 RECT SettingsPanel::GetRect(RECT wr) const
 {
-  const double S = EffScale();
+  const double S = EffScale(wr);
   const int pw = (int)std::lround((double)dynui::kSettingsW * S);
   const int ph = (int)std::lround((double)dynui::kSettingsH * S);
   // Centered horizontally, upper third vertically (clear of the bottom-docked
@@ -56,10 +69,19 @@ int SettingsPanel::HitId(double lx, double ly) const
   for (int i = 0; i < 3; ++i)
     if (L.density[i].contains(lx, ly)) return SET_HIT_DENSITY0 + i;
   if (L.fitBtn.contains(lx, ly))    return SET_HIT_FIT;
+  for (int i = 0; i < 3; ++i)
+    if (L.rulerSeg[i].contains(lx, ly)) return SET_HIT_RULER0 + i;
+  if (L.masterToggle.contains(lx, ly)) return SET_HIT_MASTER;
+  for (int i = 0; i < 3; ++i)
+    if (L.meterSeg[i].contains(lx, ly)) return SET_HIT_METER0 + i;
+  if (L.viewToggle[0].contains(lx, ly)) return SET_HIT_VIEW_METERS;
+  if (L.viewToggle[1].contains(lx, ly)) return SET_HIT_VIEW_RMS;
+  if (L.viewToggle[2].contains(lx, ly)) return SET_HIT_VIEW_SNAP;
+  if (L.viewToggle[3].contains(lx, ly)) return SET_HIT_VIEW_MINIMAP;
   return SET_HIT_NONE;
 }
 
-void SettingsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
+void SettingsPanel::DrawPremium(HDC hdc, RECT wr, double dpr, const SettingsPrefs& prefs)
 {
   if (!m_visible) return;
   const RECT pr = GetRect(wr);
@@ -67,6 +89,7 @@ void SettingsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.uiScale  = g_uiScale;   // live value even while the panel geometry is drag-frozen
   vm.hover    = m_hover;
   vm.dragging = m_dragging;
+  vm.prefs    = prefs;
   m_canvas.RenderSettingsPanel(hdc, pr.left, pr.top, pr.right - pr.left,
                                pr.bottom - pr.top, dpr, vm);
 }
@@ -76,7 +99,7 @@ bool SettingsPanel::OnMouseDown(int x, int y, RECT wr)
   if (!m_visible) return false;
   const RECT pr = GetRect(wr);
   if (x < pr.left || x >= pr.right || y < pr.top || y >= pr.bottom) return false;
-  const double S = EffScale();
+  const double S = EffScale(wr);
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
   const SettingsLayout L =
       ComputeSettingsLayout((double)dynui::kSettingsW, (double)dynui::kSettingsH);
@@ -106,6 +129,14 @@ bool SettingsPanel::OnMouseDown(int x, int y, RECT wr)
     }
   if (L.fitBtn.contains(lx, ly)) { m_fitRequested = true; return true; }
 
+  // Migrated preferences: report the control id; the host runs its CM_* handler
+  // (single behavior path for the panel and the OFF-build menu).
+  const int hit = HitId(lx, ly);
+  if (hit >= SET_HIT_RULER0 && hit <= SET_HIT_VIEW_MINIMAP) {
+    m_prefClicked = hit;
+    return true;
+  }
+
   return true;   // elsewhere on the panel body: consume (it is an overlay)
 }
 
@@ -114,7 +145,7 @@ bool SettingsPanel::OnMouseMove(int x, int y, RECT wr)
   (void)y;
   if (!m_dragging) return false;
   const RECT pr = GetRect(wr);        // stable during the drag (EffScale frozen)
-  const double lx = (double)(x - pr.left) / EffScale() - m_grabDx;
+  const double lx = (double)(x - pr.left) / EffScale(wr) - m_grabDx;
   const SettingsLayout L =
       ComputeSettingsLayout((double)dynui::kSettingsW, (double)dynui::kSettingsH);
   const double v = ValueFromX(lx, L);
@@ -136,7 +167,7 @@ bool SettingsPanel::OnHover(int x, int y, RECT wr)
   int h = SET_HIT_NONE;
   const RECT pr = GetRect(wr);
   if (x >= pr.left && x < pr.right && y >= pr.top && y < pr.bottom) {
-    const double S = EffScale();
+    const double S = EffScale(wr);
     h = HitId((double)(x - pr.left) / S, (double)(y - pr.top) / S);
   }
   if (h == m_hover) return false;

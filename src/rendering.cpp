@@ -47,7 +47,18 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
   if (!hdc) return;
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   m_dynamicsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
-  m_settingsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());  // above dynamics
+  {
+    // Settings panel (above dynamics): hand it the host-owned preference values.
+    SettingsPrefs sp;
+    sp.rulerMode       = (int)m_rulerMode;
+    sp.meterMode       = (int)m_levels.GetMode();
+    sp.meterFromMaster = m_meterFromMaster;
+    sp.showMeters      = m_showMeters;
+    sp.showRMS         = m_waveform.GetShowRMS();
+    sp.snapZero        = m_waveform.GetSnapToZero();
+    sp.minimap         = m_minimapVisible;
+    m_settingsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), sp);
+  }
 #endif
 #ifdef SNEAKPEAK_UI_SPIKE
   DrawUiSpike(hdc);

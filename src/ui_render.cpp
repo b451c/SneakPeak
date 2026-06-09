@@ -1105,6 +1105,36 @@ SettingsLayout ComputeSettingsLayout(double w, double h)
     L.density[i] = { pad + i * (segW + 6.0), y, segW, 28.0 };
   y += 38.0;
   L.fitBtn = { pad, y, w - 2.0 * pad, 28.0 };
+  y += 28.0;
+
+  // Migrated preference sections (A2b): divider (drawn at caption.y - 12), caption,
+  // then the control row(s). Even rhythm: 12 above the divider, 12 to the caption,
+  // 20 from caption top to its control row.
+  y += 24.0;   // 12 gap + (divider) + 12
+  L.rulerCaption = { pad, y, 160.0, 14.0 };
+  y += 20.0;
+  for (int i = 0; i < 3; ++i)
+    L.rulerSeg[i] = { pad + i * (segW + 6.0), y, segW, 26.0 };
+  y += 26.0;
+
+  y += 24.0;
+  L.metersCaption = { pad, y, 160.0, 14.0 };
+  L.masterToggle  = { w - pad - 92.0, y - 4.0, 92.0, 22.0 };  // on the caption row, right
+  y += 20.0;
+  for (int i = 0; i < 3; ++i)
+    L.meterSeg[i] = { pad + i * (segW + 6.0), y, segW, 26.0 };
+  y += 26.0;
+
+  y += 24.0;
+  L.viewCaption = { pad, y, 160.0, 14.0 };
+  y += 20.0;
+  const double pillW = (w - 2.0 * pad - 8.0) / 2.0;
+  L.viewToggle[0] = { pad, y, pillW, 26.0 };                  // METERS
+  L.viewToggle[1] = { pad + pillW + 8.0, y, pillW, 26.0 };    // RMS
+  y += 32.0;
+  L.viewToggle[2] = { pad, y, pillW, 26.0 };                  // SNAP TO ZERO
+  L.viewToggle[3] = { pad + pillW + 8.0, y, pillW, 26.0 };    // MINIMAP
+  // final y + 26 + 16 bottom pad == kSettingsH (440) - keep in sync with ui_theme.h
   return L;
 }
 
@@ -1204,6 +1234,39 @@ void UiCanvas::RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double d
     if (gfx.fontsReady)
       TextCentered(ctx, gfx.fLabel, L.fitBtn, "FIT TO WINDOW",
                    vm.hover == SET_HIT_FIT ? dynui::kInkPrimary : dynui::kInkSecondary);
+
+    // Migrated preference sections (A2b): divider + caption + controls each.
+    auto sectionCaption = [&](const URect& cap, const char* text) {
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_line(BLLine(dynui::kPanelPad, cap.y - 12.0,
+                             W - dynui::kPanelPad, cap.y - 12.0), col(dynui::kHairline));
+      if (gfx.fontsReady)
+        ctx.fill_utf8_text(BLPoint(cap.x, cap.y + 11.0), gfx.fLabel, text, SIZE_MAX,
+                           col(dynui::kInkSecondary));
+    };
+
+    // RULER: time display mode
+    sectionCaption(L.rulerCaption, "RULER");
+    {
+      static const char* const kRulerLabels[3] = { "RELATIVE", "ABSOLUTE", "BARS/BEATS" };
+      DrawSegmented3(ctx, gfx, L.rulerSeg, kRulerLabels, vm.prefs.rulerMode);
+    }
+
+    // METERS: detection mode + master-output source pill on the caption row
+    sectionCaption(L.metersCaption, "METERS");
+    DrawTogglePill(ctx, gfx, L.masterToggle, "MASTER", vm.prefs.meterFromMaster,
+                   dynui::kAmber, false, 0.0);
+    {
+      static const char* const kMeterLabels[3] = { "PEAK", "RMS", "VU" };
+      DrawSegmented3(ctx, gfx, L.meterSeg, kMeterLabels, vm.prefs.meterMode);
+    }
+
+    // VIEW: independent display toggles
+    sectionCaption(L.viewCaption, "VIEW");
+    DrawTogglePill(ctx, gfx, L.viewToggle[0], "METERS",       vm.prefs.showMeters, dynui::kAmber, false, 0.0);
+    DrawTogglePill(ctx, gfx, L.viewToggle[1], "RMS",          vm.prefs.showRMS,    dynui::kAmber, false, 0.0);
+    DrawTogglePill(ctx, gfx, L.viewToggle[2], "SNAP TO ZERO", vm.prefs.snapZero,   dynui::kAmber, false, 0.0);
+    DrawTogglePill(ctx, gfx, L.viewToggle[3], "MINIMAP",      vm.prefs.minimap,    dynui::kAmber, false, 0.0);
 
     if (ctx.end() != BL_SUCCESS) return;
   }

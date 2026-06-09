@@ -127,6 +127,30 @@ enum SettingsHit {
   SET_HIT_DENSITY1 = 3,
   SET_HIT_DENSITY2 = 4,
   SET_HIT_FIT      = 5,
+  // Migrated preferences (A2b). The host maps these 1:1 onto the existing CM_*
+  // commands, so the panel and the (OFF-build) menu share one behavior path.
+  SET_HIT_RULER0       = 6,   // Relative / Absolute / Bars-Beats (RULER0 + i)
+  SET_HIT_RULER1       = 7,
+  SET_HIT_RULER2       = 8,
+  SET_HIT_MASTER       = 9,   // meter source: master output toggle
+  SET_HIT_METER0       = 10,  // Peak / RMS / VU (METER0 + i)
+  SET_HIT_METER1       = 11,
+  SET_HIT_METER2       = 12,
+  SET_HIT_VIEW_METERS  = 13,  // show meters (bottom panel)
+  SET_HIT_VIEW_RMS     = 14,  // show RMS overlay
+  SET_HIT_VIEW_SNAP    = 15,  // snap to zero-crossing
+  SET_HIT_VIEW_MINIMAP = 16,  // minimap
+};
+
+// Current preference values, filled by the host each paint (it owns this state).
+struct SettingsPrefs {
+  int  rulerMode = 0;          // 0=Relative 1=Absolute 2=Bars&Beats
+  int  meterMode = 0;          // 0=Peak 1=RMS 2=VU
+  bool meterFromMaster = false;
+  bool showMeters = true;
+  bool showRMS = true;
+  bool snapZero = false;
+  bool minimap = false;
 };
 
 // View-model for RenderSettingsPanel - pure data, built by SettingsPanel each paint.
@@ -134,6 +158,7 @@ struct SettingsVM {
   double uiScale  = 1.0;   // current global scale [0.8,2.0] -> thumb position + % readout
   int    hover    = SET_HIT_NONE;
   bool   dragging = false; // thumb drag in flight -> active styling on thumb + readout
+  SettingsPrefs prefs;     // migrated preference values (host-owned state)
 };
 
 // Computed geometry in base kSettingsW x kSettingsH coords - the single source for
@@ -144,6 +169,9 @@ struct SettingsLayout {
   URect sliderRow, sliderTrack;  // row = interactive zone; track = the visual rail
   URect density[3];              // Compact / Comfortable / Spacious segments
   URect fitBtn;                  // "Fit to window"
+  URect rulerCaption, rulerSeg[3];               // RULER section
+  URect metersCaption, masterToggle, meterSeg[3]; // METERS section (+ master pill)
+  URect viewCaption, viewToggle[4];              // VIEW: Meters / RMS / Snap / Minimap
 };
 SettingsLayout ComputeSettingsLayout(double w, double h);
 

@@ -25,7 +25,8 @@ public:
 
   RECT GetRect(RECT waveformRect) const;
   bool HitTest(int x, int y, RECT waveformRect) const;
-  void DrawPremium(HDC hdc, RECT waveformRect, double dpr);
+  // prefs = the host-owned preference values shown in the RULER/METERS/VIEW sections.
+  void DrawPremium(HDC hdc, RECT waveformRect, double dpr, const SettingsPrefs& prefs);
 
   bool OnMouseDown(int x, int y, RECT waveformRect);  // true = consumed (click inside the panel)
   bool OnMouseMove(int x, int y, RECT waveformRect);  // true = g_uiScale changed (slider drag)
@@ -36,9 +37,12 @@ public:
   // One-shot flags, polled by the host right after a consumed OnMouseDown.
   bool ScaleChangedByClick() { bool v = m_scaleClicked; m_scaleClicked = false; return v; }
   bool FitRequested()        { bool v = m_fitRequested; m_fitRequested = false; return v; }
+  // Preference control clicked (SET_HIT_RULER0..SET_HIT_VIEW_MINIMAP), or
+  // SET_HIT_NONE. The host maps the id onto its existing CM_* command handler.
+  int  PrefClicked()         { int v = m_prefClicked; m_prefClicked = SET_HIT_NONE; return v; }
 
 private:
-  double EffScale() const;                 // g_uiScale, frozen at grab during a slider drag
+  double EffScale(RECT waveformRect) const;  // g_uiScale (drag-frozen), fit-clamped to the rect
   int    HitId(double lx, double ly) const;  // base-coord point -> SettingsHit id
 
   bool   m_visible = false;
@@ -48,5 +52,6 @@ private:
   int    m_hover = SET_HIT_NONE;
   bool   m_scaleClicked = false; // track jump / density preset clicked -> host applies+persists
   bool   m_fitRequested = false; // "Fit to window" clicked -> host computes+applies
+  int    m_prefClicked = SET_HIT_NONE; // preference control clicked -> host runs its CM_* handler
   UiCanvas m_canvas;
 };

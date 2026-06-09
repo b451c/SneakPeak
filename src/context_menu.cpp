@@ -265,6 +265,9 @@ void SneakPeak::OnRightClick(int x, int y)
   bool canSpectral = hasItem && !m_waveform.IsMultiItemActive();
   MenuAppend(viewMenu, canSpectral ? MF_STRING : MF_GRAYED, CM_TOGGLE_SPECTRAL,
              m_spectralVisible ? "Spectral View  \xE2\x9C\x93" : "Spectral View");
+#ifndef SNEAKPEAK_BLEND2D_PANEL
+  // OFF-build fallback only: these preferences live in the premium Settings panel
+  // (VIEW + RULER sections); the menu copies die with the GDI path in Phase 3.
   MenuAppend(viewMenu, MF_STRING, CM_SNAP_ZERO,
              m_waveform.GetSnapToZero() ? "Snap to Zero-Crossing  \xE2\x9C\x93" : "Snap to Zero-Crossing");
   MenuAppend(viewMenu, MF_STRING, CM_MINIMAP,
@@ -277,6 +280,7 @@ void SneakPeak::OnRightClick(int x, int y)
     MenuAppend(viewMenu, MF_STRING, CM_RULER_BARS_BEATS,
                m_rulerMode == RulerMode::BarsBeats ? "Ruler: Bars & Beats  \xE2\x9C\x93" : "Ruler: Bars & Beats");
   }
+#endif
   if (hasReaperItem) {
     MenuAppend(viewMenu, MF_STRING, CM_SHOW_VOLUME_ENVELOPE,
                m_waveform.GetShowVolumeEnvelope()
@@ -285,10 +289,12 @@ void SneakPeak::OnRightClick(int x, int y)
                m_dynamicsVisible
                    ? "Show Dynamics Curve  \xE2\x9C\x93" : "Show Dynamics Curve");
   }
+#ifndef SNEAKPEAK_BLEND2D_PANEL
   MenuAppend(viewMenu, MF_STRING, CM_SHOW_RMS,
              m_waveform.GetShowRMS() ? "Show RMS  \xE2\x9C\x93" : "Show RMS");
   MenuAppend(viewMenu, MF_STRING, CM_SHOW_METERS,
              m_showMeters ? "Show Meters  \xE2\x9C\x93" : "Show Meters");
+#endif
 #ifndef SNEAKPEAK_BLEND2D_PANEL
   // UI Scale submenu - the OFF-build (GDI) fallback control only. The premium build
   // hosts UI scale in the Settings panel (gear / "Settings...") to keep the context
