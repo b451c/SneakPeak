@@ -302,7 +302,12 @@ private:
   std::vector<double> m_peakMax;
   std::vector<double> m_peakMin;
   std::vector<double> m_peakRMS;  // RMS per column per channel
-  std::vector<int> m_clipColumns;  // column indices where signal clips
+  // Per-(column,channel) clip flags, laid out like the peak arrays (col*nch+ch).
+  // bit0 = over 0 dBFS after item volume (a truthful WARNING in float modes;
+  // in destructive standalone a save WILL clip). bit1 = source flat-top: >=3
+  // sampled values at full scale in the RAW data = clipping that has already
+  // happened in the file (independent of any gain applied on top).
+  std::vector<unsigned char> m_clipFlags;
   bool m_peaksValid = false;
   double m_peaksCachedStart = 0.0;
   double m_peaksCachedDuration = 0.0;

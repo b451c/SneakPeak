@@ -32,18 +32,17 @@ void WaveformView::UpdatePeaks()
     if (w <= 0) { m_peaksValid = false; return; }
     m_multiItem.UpdatePeaks(m_viewStartTime, m_viewDuration, w, m_numChannels,
                             m_peakMax, m_peakMin, m_peakRMS);
-    // Build clip column list
+    // Build clip flags (multi-item = REAPER float context: over-0dB warning only;
+    // the per-sample flat-top scan needs raw buffer access the layers don't expose)
     double vol = m_fadeCache.itemVol;
     if (vol <= 0.0) vol = 1.0;
-    m_clipColumns.clear();
     int nch = m_numChannels;
+    m_clipFlags.assign((size_t)w * (size_t)(nch < 1 ? 1 : nch), 0);
     for (int col = 0; col < w; col++) {
       for (int ch = 0; ch < nch; ch++) {
         size_t idx = (size_t)(col * nch + ch);
-        if (idx < m_peakMax.size() && (fabs(m_peakMax[idx] * vol) >= 1.0 || fabs(m_peakMin[idx] * vol) >= 1.0)) {
-          m_clipColumns.push_back(col);
-          break;
-        }
+        if (idx < m_peakMax.size() && (fabs(m_peakMax[idx] * vol) >= 1.0 || fabs(m_peakMin[idx] * vol) >= 1.0))
+          m_clipFlags[idx] |= 1;
       }
     }
     m_peaksValid = true;
@@ -69,6 +68,13 @@ void WaveformView::UpdatePeaks()
   m_peakMax.resize((size_t)(w * nch));
   m_peakMin.resize((size_t)(w * nch));
   m_peakRMS.resize((size_t)(w * nch));
+  m_clipFlags.assign((size_t)(w * nch), 0);
+
+  // Full-scale epsilon for the source flat-top scan: REAPER converts int16 by
+  // /32768, so the POSITIVE full scale of a clipped 16-bit file is 32767/32768
+  // (~0.99997) - a plain >=1.0 test never sees it. Anything at or above this is
+  // "at full scale" for clip purposes (also catches 24-bit FS and float 1.0).
+  static constexpr double kFsEps = 32766.0 / 32768.0;
 
   double timePerPixel = m_viewDuration / (double)w;
   for (int col = 0; col < w; col++) {
@@ -85,6 +91,7 @@ void WaveformView::UpdatePeaks()
       double minVal = 2.0;
       double sumSq = 0.0;
       int count = 0;
+      int fsHits = 0;   // sampled values at full scale -> source flat-top detector
 
       // For very zoomed out views, subsample to keep it fast
       // Use conservative step to avoid missing peaks
@@ -96,6 +103,7 @@ void WaveformView::UpdatePeaks()
         double v = m_audioData[(size_t)s * nch + ch];
         if (v > maxVal) maxVal = v;
         if (v < minVal) minVal = v;
+        if (v >= kFsEps || v <= -kFsEps) fsHits++;
         sumSq += v * v;
         count++;
       }
@@ -106,20 +114,22 @@ void WaveformView::UpdatePeaks()
       m_peakMax[idx] = maxVal;
       m_peakMin[idx] = minVal;
       m_peakRMS[idx] = (count > 0) ? sqrt(sumSq / (double)count) : 0.0;
+      // >=3 full-scale samples in one column = a flat-top run, i.e. clipping that
+      // already happened in the SOURCE (a legit 0dB-normalized single peak gives 1).
+      // Counted on the raw data, before any item volume - damage does not un-happen
+      // when the item is turned down.
+      if (fsHits >= 3) m_clipFlags[idx] |= 2;
     }
   }
 
-  // Build clip column list — scale peaks by item volume (D_VOL)
+  // bit0: over 0 dBFS after item volume (D_VOL) - the truthful WARNING state
   double vol = m_fadeCache.itemVol;
   if (vol <= 0.0) vol = 1.0;
-  m_clipColumns.clear();
   for (int col = 0; col < w; col++) {
     for (int ch = 0; ch < nch; ch++) {
       size_t idx = (size_t)(col * nch + ch);
-      if (fabs(m_peakMax[idx] * vol) >= 1.0 || fabs(m_peakMin[idx] * vol) >= 1.0) {
-        m_clipColumns.push_back(col);
-        break;
-      }
+      if (fabs(m_peakMax[idx] * vol) >= 1.0 || fabs(m_peakMin[idx] * vol) >= 1.0)
+        m_clipFlags[idx] |= 1;
     }
   }
 
@@ -279,6 +289,7 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   HPEN normalPen = CreatePen(PS_SOLID, 1, normColor);
   HPEN selPen = CreatePen(PS_SOLID, 1, selColor);
   HPEN clipPen = CreatePen(PS_SOLID, 1, clipColor);
+  HPEN overPen = CreatePen(PS_SOLID, 1, g_theme.overIndicator);
   HPEN rmsNormPen = CreatePen(PS_SOLID, 1, rmsNormColor);
   HPEN rmsSelPen = CreatePen(PS_SOLID, 1, rmsSelColor);
 
@@ -345,7 +356,13 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     double vol = itemVol * fadeGain * sgain * envGain;
     double rawMax = m_peakMax[idx] * vol;
     double rawMin = m_peakMin[idx] * vol;
-    bool clipping = (rawMax > 1.0 || rawMin < -1.0);
+    // Two truthful states (forum #72-#79): srcClip = flat-tops in the SOURCE data
+    // (damage that already happened - always red, regardless of gain on top);
+    // over = exceeds 0 dBFS after the full gain chain (red in destructive
+    // standalone where a save WILL clip; amber WARNING in the float REAPER modes
+    // where nothing has clipped yet).
+    bool srcClip = (idx < m_clipFlags.size()) && (m_clipFlags[idx] & 2);
+    bool over = (rawMax > 1.0 || rawMin < -1.0);
 
     // Allow drawing beyond 0dB (don't clamp to 1.0) but clamp to channel bounds
     int yMax = centerY - (int)(rawMax * (double)halfH);
@@ -356,29 +373,30 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
 
     if (yMax > yMin) std::swap(yMax, yMin);
 
-    if (clipping) {
-      // Split column: green for normal range, red for clipping portion
-      // Red = top 30% of peak (proportional to severity)
+    if (over || srcClip) {
+      // Split column: green for normal range, marked top = top 30% of the peak
+      // (proportional to severity)
+      HPEN markPen = (srcClip || m_standaloneMode) ? clipPen : overPen;
       int greenTop = yMax, greenBot = yMin;
 
-      if (rawMax > 1.0) {
+      if (rawMax > 1.0 || (srcClip && rawMax > 0.0)) {
         double redBottom = rawMax * 0.7;
         int yRedBot = centerY - (int)(redBottom * (double)halfH);
         yRedBot = std::max(yTop, std::min(yTop + height - 1, yRedBot));
-        // Red: peak to 70% mark
-        SelectObject(hdc, clipPen);
+        // Marked: peak to 70% mark
+        SelectObject(hdc, markPen);
         MoveToEx(hdc, x, yMax, nullptr);
         LineTo(hdc, x, yRedBot + 1);
-        greenTop = yRedBot + 1; // green starts below red
+        greenTop = yRedBot + 1; // green starts below the mark
       }
-      if (rawMin < -1.0) {
+      if (rawMin < -1.0 || (srcClip && rawMin < 0.0)) {
         double redTop = rawMin * 0.7;
         int yRedTop = centerY - (int)(redTop * (double)halfH);
         yRedTop = std::max(yTop, std::min(yTop + height - 1, yRedTop));
-        SelectObject(hdc, clipPen);
+        SelectObject(hdc, markPen);
         MoveToEx(hdc, x, yRedTop, nullptr);
         LineTo(hdc, x, yMin + 1);
-        greenBot = yRedTop - 1; // green ends above red
+        greenBot = yRedTop - 1; // green ends above the mark
       }
       // Green: remaining middle portion
       bool inSel = hasSel && x >= selX1 && x < selX2;
@@ -447,6 +465,7 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   DeleteObject(normalPen);
   DeleteObject(selPen);
   DeleteObject(clipPen);
+  DeleteObject(overPen);
   DeleteObject(rmsNormPen);
   DeleteObject(rmsSelPen);
 }
@@ -461,28 +480,39 @@ void WaveformView::DrawCenterLine(HDC hdc, int yCenter)
 
 void WaveformView::DrawClipIndicators(HDC hdc)
 {
-  if (m_clipColumns.empty()) return;
+  if (m_clipFlags.empty()) return;
 
-  HPEN pen = CreatePen(PS_SOLID, 1, g_theme.clipIndicator);
-  HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+  // Red tick = real clipping (source flat-top, or over 0 dB in destructive
+  // standalone where a save WILL clip). Amber tick = over-0dB WARNING in the
+  // float REAPER modes (truthful: nothing has clipped yet).
+  HPEN clipPen = CreatePen(PS_SOLID, 1, g_theme.clipIndicator);
+  HPEN overPen = CreatePen(PS_SOLID, 1, m_standaloneMode ? g_theme.clipIndicator
+                                                         : g_theme.overIndicator);
+  HPEN oldPen = (HPEN)SelectObject(hdc, clipPen);
 
+  int nch = m_numChannels < 1 ? 1 : m_numChannels;
+  int cols = (int)(m_clipFlags.size() / (size_t)nch);
   for (int ch = 0; ch < m_numChannels; ch++) {
     int chTop = GetChannelTop(ch);
     int chH = GetChannelHeight();
 
-    for (int col : m_clipColumns) {
+    for (int col = 0; col < cols; col++) {
+      unsigned char f = m_clipFlags[(size_t)col * nch + ch];
+      if (!f) continue;
+      SelectObject(hdc, (f & 2) ? clipPen : overPen);
       int x = m_rect.left + col;
-      // 3px red tick at top
+      // 3px tick at top
       MoveToEx(hdc, x, chTop, nullptr);
       LineTo(hdc, x, chTop + 3);
-      // 3px red tick at bottom
+      // 3px tick at bottom
       MoveToEx(hdc, x, chTop + chH - 3, nullptr);
       LineTo(hdc, x, chTop + chH);
     }
   }
 
   SelectObject(hdc, oldPen);
-  DeleteObject(pen);
+  DeleteObject(clipPen);
+  DeleteObject(overPen);
 }
 
 void WaveformView::DrawItemBoundaries(HDC hdc)
@@ -650,6 +680,26 @@ void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
 
     int y1 = centerY - yOff;
     int y2 = centerY + yOff;
+
+    // 0 dBFS: a dedicated dark-red reference line (not a grid line), drawn
+    // whenever full scale sits meaningfully inside the channel (vertical zoom
+    // < 1, i.e. headroom is visible) so the clip boundary reads at a glance
+    // (forum #76 ask). Skips the spacing rule - a reference must never be
+    // dropped for density. At zoom >= 1 it falls through to the normal grid
+    // path (unchanged default rendering).
+    if (db == 0.0 && yOff < (height / 2) - 1) {
+      HPEN zeroPen = CreatePen(PS_SOLID, 1, RGB(150, 50, 50));
+      HPEN prev = (HPEN)SelectObject(hdc, zeroPen);
+      MoveToEx(hdc, m_rect.left, y1, nullptr);
+      LineTo(hdc, waveRight, y1);
+      MoveToEx(hdc, m_rect.left, y2, nullptr);
+      LineTo(hdc, waveRight, y2);
+      SelectObject(hdc, prev);
+      DeleteObject(zeroPen);
+      lastY_top = y1;
+      lastY_bot = y2;
+      continue;
+    }
 
     // Top half — min 30px spacing
     if (y1 >= yTop && y1 < yTop + height && lastY_top - y1 >= SP(DB_GRID_MIN_SPACING)) {

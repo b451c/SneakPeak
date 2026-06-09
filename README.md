@@ -121,7 +121,7 @@ Select items on one track, press T to enter. Gaps collapse into a continuous wav
 - **Ripple edit** - Delete in SET mode automatically pulls subsequent items left to close gaps.
 - **Selection-aware gain** - Gain knob with selection splits at edges and applies D_VOL only to the fragment (with 10ms crossfade overlap).
 - **Group Set Items** - Group all items in the set (or selected range) for easy timeline manipulation. Visual colored bar below ruler.
-- **Clipping visualization** - Peaks above 0dB draw in red, proportional to severity.
+- **Truthful clip display** - Red marks real clipping (source flat-tops, or over-0dB in destructive Standalone mode); amber marks over-0dB warnings in REAPER's float modes where nothing has clipped yet. A dark-red 0dB reference line appears when zoomed out vertically.
 - **Absolute time ruler** - Toggle between relative and REAPER timeline time (context menu).
 - **Bidirectional cursor sync** - Click in SneakPeak scrolls REAPER arrange, click on REAPER timeline updates SneakPeak playhead.
 

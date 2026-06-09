@@ -203,7 +203,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <a href="#markers" class="nav-link">Markers</a>
     <a href="#master" class="nav-link">Master Mode</a>
     <a href="#ruler" class="nav-link">Ruler & Time</a>
-    <a href="#clipping" class="nav-link">Clipping Display</a>
+    <a href="#clipping" class="nav-link">Over 0 dB &amp; Clipping</a>
   </div>
 
   <div class="nav-group">
@@ -336,7 +336,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <ul>
   <li><strong>Green waveform</strong> - normal audio levels</li>
-  <li><strong>Red peaks</strong> - signal exceeding 0 dB (clipping). The red covers the top portion of the peak proportionally to severity, so you can see how far the signal clips even when zoomed out.</li>
+  <li><strong>Red peaks</strong> - real clipping: flat-topped audio already clipped in the source file, or signal over 0 dB in Standalone mode (where saving will clip). The colored top covers ~30% of the peak, proportional to severity.</li>
+  <li><strong>Amber peaks</strong> - signal over 0 dB (full scale) in ITEM/SET/Timeline modes. A warning, not clipping: REAPER's floating-point engine has headroom, so nothing distorts unless the level still exceeds 0 dB at render or playback output.</li>
   <li><strong>Center line</strong> - zero amplitude reference</li>
   <li><strong>Grid lines</strong> - time grid (vertical) and dB grid (horizontal)</li>
   <li><strong>Red vertical line</strong> - edit cursor position, synced with REAPER's cursor</li>
@@ -893,12 +894,19 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>The bottom info panel shows cursor position, selection range, view range, sample rate, bit depth, channels, and file size.</p>
 
-<h2 id="clipping">Clipping Display</h2>
+<h2 id="clipping">Over 0 dB &amp; Clipping</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
 
-<p>When audio peaks exceed 0 dB (digital full scale), the clipping portion draws in red. The red covers the top ~30% of the peak height, proportional to the severity of clipping. This makes clipping visible even when zoomed out, without flooding the entire waveform with red.</p>
+<p>SneakPeak distinguishes two different things that often get lumped together as "clipping":</p>
 
-<p>Small red tick marks also appear at the top and bottom of the waveform area on columns where clipping is detected.</p>
+<ul>
+  <li><strong>Red - real clipping.</strong> Flat-topped runs of samples at digital full scale in the source audio: distortion that has already happened in the file. This is detected on the raw data, so it stays red even if you turn the item down. In Standalone (destructive) mode, signal over 0 dB also shows red, because saving to a fixed-point WAV will clip it.</li>
+  <li><strong>Amber - over 0 dB (warning).</strong> In ITEM, SET and Timeline modes the signal lives in REAPER's floating-point engine, which has effectively unlimited headroom. Levels above 0 dB are not distorted and will not distort as long as something later in the chain (item volume, track fader, master) brings them back under full scale before render or playback output. Amber marks where that attention is needed.</li>
+</ul>
+
+<p>The colored portion covers the top ~30% of the peak height, proportional to severity, so it stays visible even when zoomed out. Small tick marks in the matching color also appear at the top and bottom of the waveform area on affected columns.</p>
+
+<p><strong>0 dB reference line:</strong> when you zoom out vertically (scroll on the dB scale), full scale moves inside the view and a dark red line marks 0 dB, with the dB scale showing positive values above it - so you can inspect and edit material above full scale with a clear view of the clip boundary.</p>
 
 <hr>
 
