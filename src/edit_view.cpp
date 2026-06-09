@@ -857,6 +857,13 @@ void SneakPeak::UpdatePlaybackFollow()
     InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
   }
 
+  // Keep repainting while a toast is alive so its 2s lifetime + 500ms fade
+  // actually progress (previously the fade only advanced when something else
+  // happened to repaint - an idle window froze the toast mid-air).
+  if (m_toastStartTick) {
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+
   // Keep repainting while spectral is computing (progress bar update)
   if (m_spectralVisible && (m_spectral.IsLoading() || (m_spectral.IsReady() && !m_spectralPainted))) {
     InvalidateRect(m_hwnd, &m_spectralRect, FALSE);
@@ -1068,11 +1075,13 @@ void SneakPeak::UpdateItemState()
         const bool preview = m_previewActive && m_previewReg && m_waveform.IsStandaloneMode();
         if (preview) playing = true;
         int startFrame, endFrame;
+        double playPos = 0.0;
         if (playing) {
-          double playPos;
           if (preview) {
             playPos = ((preview_register_t*)m_previewReg)->curpos;
           } else {
+            // GetPlayPosition is the LATENCY-COMPENSATED position (the audio being
+            // HEARD right now) - the right anchor for a meter; Position2 runs ahead.
             double absPos = g_GetPlayPosition ? g_GetPlayPosition()
                           : (g_GetPlayPosition2 ? g_GetPlayPosition2() : 0.0);
             playPos = m_waveform.AbsTimeToRelTime(absPos);
@@ -1094,6 +1103,31 @@ void SneakPeak::UpdateItemState()
           if (g_GetSetMediaItemTakeInfo && m_waveform.GetTake()) {
             double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "D_VOL", nullptr);
             if (pTakeVol) itemVol *= *pTakeVol;
+          }
+        }
+        // What-you-hear gain (meter truth): the engine applies item FADES and the
+        // take VOLUME ENVELOPE to the audible signal whether or not the overlays
+        // are shown - fold the gain at the playback position into the meter feed
+        // so the bars track the heard level (notably: Live dynamics writing the
+        // envelope now meters as it sounds; standalone previews play a temp WAV
+        // WITH pending fades applied). The gain changes negligibly across the
+        // 10-300ms integration window, so the window-center value is enough.
+        // A/B envelope bypass is audible -> mirrored here like in the waveform draw.
+        if (playing && !m_waveform.IsMultiItemActive()) {
+          auto fp = m_waveform.GetActiveFadeParams();
+          double dur = m_waveform.GetItemDuration();
+          if (fp.fadeInLen > 0.0 && playPos < fp.fadeInLen)
+            itemVol *= ApplyFadeShape(playPos / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
+          if (fp.fadeOutLen > 0.0 && playPos > dur - fp.fadeOutLen)
+            itemVol *= ApplyFadeShape((dur - playPos) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
+          if (!m_waveform.IsStandaloneMode() && !m_waveform.GetEnvBypassed() &&
+              g_Envelope_Evaluate && g_ScaleFromEnvelopeMode) {
+            auto ei = m_waveform.GetEnvelopeAtTime(playPos);
+            if (ei.env) {
+              double rawVal = 0.0, d1 = 0.0, d2 = 0.0, d3 = 0.0;
+              g_Envelope_Evaluate(ei.env, ei.envTime, (double)sr, 0, &rawVal, &d1, &d2, &d3);
+              itemVol *= g_ScaleFromEnvelopeMode(ei.scalingMode, rawVal);
+            }
           }
         }
         const bool chActive[2] = { m_waveform.IsChannelActive(0), m_waveform.IsChannelActive(1) };
