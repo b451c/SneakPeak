@@ -51,6 +51,12 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
   // Same HasItem gate as the GDI path had in OnPaint.
   if (m_waveform.HasItem())
     m_gainPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), m_waveform.HasSelection());
+  // Premium L/R meters into the bottom-panel meters rect (computed by
+  // DrawBottomPanel earlier in this same paint; bg/divider/info stay GDI).
+  if (m_showMeters && m_metersRect.right > m_metersRect.left) {
+    int meterCh = (m_masterMode || m_meterFromMaster) ? 2 : m_waveform.GetNumChannels();
+    m_levels.DrawPremium(hdc, m_metersRect, meterCh, GetUiDpr());
+  }
   {
     // Settings panel (above dynamics): hand it the host-owned preference values.
     SettingsPrefs sp;
@@ -1211,8 +1217,12 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
   RECT metersRect = { m_bottomPanelRect.left, m_bottomPanelRect.top + 1,
                       dividerX - 1, m_bottomPanelRect.bottom };
   m_metersRect = metersRect;
+#ifndef SNEAKPEAK_BLEND2D_PANEL
+  // GDI meter bars (OFF build only - the premium build draws them in OnPaintOverlay
+  // at device resolution; this GDI panel still owns the bg/divider/info text)
   int meterCh = (m_masterMode || m_meterFromMaster) ? 2 : m_waveform.GetNumChannels();
   m_levels.Draw(hdc, metersRect, meterCh);
+#endif
 
   if (!m_waveform.HasItem() && !m_masterMode) return;
 

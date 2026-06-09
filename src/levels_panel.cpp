@@ -1,5 +1,6 @@
 // levels_panel.cpp — Peak/RMS/VU level meter
 #include "levels_panel.h"
+#include "globals.h"
 #include "theme.h"
 #include <cmath>
 #include <algorithm>
@@ -279,14 +280,14 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
   if (!m_gdi.valid || m_gdi.mode != m_mode) CreateGdiCache();
 
   int numCh = (nch >= 2) ? 2 : 1;
-  int scaleH = 12; // height for dB scale labels
+  int scaleH = SP(12); // height for dB scale labels
   int barsH = rect.bottom - rect.top - scaleH;
-  int gap = 2;
+  int gap = SP(2);
   int barH = (numCh == 2) ? (barsH - gap) / 2 : barsH;
 
-  int labelW = 14;
+  int labelW = SP(14);
   int barLeft = rect.left + labelW;
-  int barRight = rect.right - 2;
+  int barRight = rect.right - SP(2);
   int barWidth = barRight - barLeft;
   if (barWidth < 10) return;
 
@@ -374,10 +375,31 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
     char buf[8];
     snprintf(buf, sizeof(buf), "%.0f", db);
     MoveToEx(hdc, x, scaleY, nullptr);
-    LineTo(hdc, x, scaleY + 3);
+    LineTo(hdc, x, scaleY + SP(3));
 
-    RECT tr = { x - 14, scaleY + 2, x + 14, rect.bottom };
+    RECT tr = { x - SP(14), scaleY + SP(2), x + SP(14), rect.bottom };
     DrawText(hdc, buf, -1, &tr, DT_CENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
   SelectObject(hdc, prevScale);
+}
+
+void LevelsPanel::DrawPremium(HDC hdc, RECT rect, int nch, double dpr)
+{
+  const int w = rect.right - rect.left, h = rect.bottom - rect.top;
+  if (w < 16 || h < 16) return;
+
+  auto norm = [](double db) {
+    double f = (db + 60.0) / 60.0;
+    return f < 0.0 ? 0.0 : (f > 1.0 ? 1.0 : f);
+  };
+  MetersVM vm;
+  vm.numCh       = (nch >= 2) ? 2 : 1;
+  vm.barNorm[0]  = norm(m_barL);
+  vm.barNorm[1]  = norm(m_barR);
+  vm.peakNorm[0] = norm(m_peakHoldL);
+  vm.peakNorm[1] = norm(m_peakHoldR);
+  vm.mode        = (int)m_mode;
+  vm.modeLabel   = GetModeLabel();
+  vm.uiScale     = g_uiScale;
+  m_canvas.RenderMeters(hdc, rect.left, rect.top, w, h, dpr, vm);
 }
