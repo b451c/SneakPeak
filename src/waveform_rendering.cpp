@@ -156,7 +156,7 @@ void WaveformView::Paint(HDC hdc)
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, g_theme.emptyText);
     RECT textRect = m_rect;
-    DrawText(hdc, "Select a media item to edit", -1, &textRect,
+    DrawTextUTF8(hdc, "Select a media item to edit", -1, &textRect,
              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     return;
   }
@@ -749,7 +749,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
   // "dB" header
   SetTextColor(hdc, g_theme.dbScaleText);
   RECT hdrRect = { scaleLeft + SP(2), yTop + 1, m_rect.right - SP(2), yTop + SP(13) };
-  DrawText(hdc, "dB", -1, &hdrRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, "dB", -1, &hdrRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   // Dynamic dB labels — Audition-style, adapts to vertical zoom
   // Center = -∞ (silence), edges = 0 dB at zoom 1.0
@@ -777,7 +777,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
 
     SetTextColor(hdc, g_theme.dbScaleText);
     RECT tr = { scaleLeft + SP(5), centerY - SP(6), m_rect.right - SP(2), centerY + SP(6) };
-    DrawText(hdc, "-\xE2\x88\x9E", -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "-\xE2\x88\x9E", -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
   // Top half: iterate from center outward (y decreasing upward)
@@ -800,7 +800,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     snprintf(label, sizeof(label), "%d", (int)db);
     SetTextColor(hdc, g_theme.dbScaleText);
     RECT tr = { scaleLeft + SP(5), y - SP(6), m_rect.right - SP(2), y + SP(6) };
-    DrawText(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     lastY_top = y;
   }
 
@@ -824,7 +824,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     snprintf(label, sizeof(label), "%d", (int)db);
     SetTextColor(hdc, g_theme.dbScaleText);
     RECT tr = { scaleLeft + SP(5), y - SP(6), m_rect.right - SP(2), y + SP(6) };
-    DrawText(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     lastY_bot = y;
   }
 
@@ -860,7 +860,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     // Label
     HFONT prevFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
     SetTextColor(hdc, active ? RGB(255, 255, 255) : RGB(100, 100, 100));
-    DrawText(hdc, chLabel, -1, &btnRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, chLabel, -1, &btnRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, prevFont);
   }
 
@@ -1190,7 +1190,7 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
     SetBkColor(hdc, RGB(30, 30, 30));
     SetTextColor(hdc, envColor);
     RECT labelRect = { labelX, labelY, labelX + 150, labelY + 16 };
-    DrawText(hdc, label, -1, &labelRect, DT_LEFT | DT_SINGLELINE | DT_NOCLIP);
+    DrawTextUTF8(hdc, label, -1, &labelRect, DT_LEFT | DT_SINGLELINE | DT_NOCLIP);
     SetBkMode(hdc, TRANSPARENT);
     SelectObject(hdc, oldFont);
   }

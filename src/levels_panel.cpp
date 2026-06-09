@@ -308,7 +308,7 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
     // Channel label
     SetTextColor(hdc, RGB(140, 140, 140));
     RECT lblRect = { rect.left, yTop, barLeft - 1, yBot };
-    DrawText(hdc, labels[ch], -1, &lblRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, labels[ch], -1, &lblRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Bar background
     RECT barBg = { barLeft, yTop, barRight, yBot };
@@ -366,7 +366,7 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
 
   // Mode label instead of "dB"
   RECT dbLbl = { rect.left, scaleY, barLeft - 1, rect.bottom };
-  DrawText(hdc, GetModeLabel(), -1, &dbLbl, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, GetModeLabel(), -1, &dbLbl, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   static const double scaleMarks[] = { -54, -48, -42, -36, -30, -24, -18, -12, -6, -3, 0 };
   HPEN prevScale = (HPEN)SelectObject(hdc, m_gdi.scalePen);
@@ -378,7 +378,7 @@ void LevelsPanel::Draw(HDC hdc, RECT rect, int nch)
     LineTo(hdc, x, scaleY + SP(3));
 
     RECT tr = { x - SP(14), scaleY + SP(2), x + SP(14), rect.bottom };
-    DrawText(hdc, buf, -1, &tr, DT_CENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, buf, -1, &tr, DT_CENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
   SelectObject(hdc, prevScale);
 }

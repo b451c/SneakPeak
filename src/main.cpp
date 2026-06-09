@@ -144,6 +144,7 @@ static std::unique_ptr<SneakPeak> g_sneakPeak;
 static int g_cmdToggle = 0;
 static int g_cmdLoadItem = 0;
 static int g_cmdTrackView = 0;
+static int g_cmdMasterView = 0;
 static MediaItem* g_lastSelectedItem = nullptr;
 static int g_lastSelectedCount = 0;
 
@@ -189,7 +190,7 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
     else if (k == VK_DELETE || k == VK_BACK) handled = true;
     else if (k == VK_UP || k == VK_DOWN || k == VK_LEFT || k == VK_RIGHT) handled = true;
     else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A' || k == 'S')) handled = true;
-    else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S' || k == 'T')) handled = true;
+    else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S' || k == 'T' || k == 'D')) handled = true;
     if (handled) {
       g_sneakPeak->OnKeyDown(msg->wParam);
       return 1; // we ate this key
@@ -256,6 +257,10 @@ static bool hookCommandProc(int command, int flag)
   }
   if (command == g_cmdTrackView) {
     if (g_sneakPeak && g_sneakPeak->GetHwnd()) g_sneakPeak->ToggleTrackView();
+    return true;
+  }
+  if (command == g_cmdMasterView) {
+    if (g_sneakPeak && g_sneakPeak->GetHwnd()) g_sneakPeak->ToggleMasterView();
     return true;
   }
   return false;
@@ -460,6 +465,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
 
   g_cmdLoadItem = rec->Register("command_id", (void*)"SneakPeak_LoadSelectedItem");
   g_cmdTrackView = rec->Register("command_id", (void*)"SneakPeak_ToggleTrackView");
+  g_cmdMasterView = rec->Register("command_id", (void*)"SneakPeak_ToggleMasterView");
 
   static gaccel_register_t accelToggle = {{0, 0, 0}, "SneakPeak: Open/Close SneakPeak"};
   accelToggle.accel.cmd = static_cast<unsigned short>(g_cmdToggle);
@@ -472,6 +478,11 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   static gaccel_register_t accelTrackView = {{0, 0, 0}, "SneakPeak: Toggle Track View"};
   accelTrackView.accel.cmd = static_cast<unsigned short>(g_cmdTrackView);
   rec->Register("gaccel", &accelTrackView);
+
+  // #63 (X-Raym): a bindable action for the MASTER output view (the mode-bar tab).
+  static gaccel_register_t accelMasterView = {{0, 0, 0}, "SneakPeak: Toggle Master Track View"};
+  accelMasterView.accel.cmd = static_cast<unsigned short>(g_cmdMasterView);
+  rec->Register("gaccel", &accelMasterView);
 
   rec->Register("hookcommand", (void*)hookCommandProc);
   rec->Register("toggleaction", (void*)toggleActionCallback);

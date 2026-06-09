@@ -365,7 +365,7 @@ void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
     else if (yTop + height - y < SP(5)) { labelTop = yTop + height - SP(11); labelBot = yTop + height; }
 
     RECT tr = { scaleLeft + SP(6), labelTop, scaleRight - SP(2), labelBot };
-    DrawText(hdc, lab.text, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, lab.text, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     lastDrawnY = y;
   }
 
@@ -587,7 +587,7 @@ void SpectralView::DrawLoadingOverlay(HDC hdc)
   snprintf(text, sizeof(text), "Computing spectrum... %d%%", (int)(pct * 100.0f));
   SetTextColor(hdc, RGB(140, 160, 200));
   RECT tr = { m_rect.left, cy - 10, m_rect.right, cy + 8 };
-  DrawText(hdc, text, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, text, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   SelectObject(hdc, oldFont);
 }

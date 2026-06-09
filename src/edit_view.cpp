@@ -155,6 +155,19 @@ bool SneakPeak::IsVisible() const
   return m_hwnd && IsWindowVisible(m_hwnd);
 }
 
+// REAPER action "SneakPeak: Toggle Master Track View" (#63 X-Raym): toggle the
+// MASTER output view - identical to clicking the mode-bar MASTER tab.
+void SneakPeak::ToggleMasterView()
+{
+  m_masterMode = !m_masterMode;
+  if (m_masterMode) {
+    // Clear the rolling buffer on activation (same as the tab click)
+    m_masterPeakHead = 0;
+    m_masterPeakCount = 0;
+  }
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
 void SneakPeak::ToggleTrackView()
 {
   if (m_waveform.IsStandaloneMode()) return;

@@ -390,26 +390,8 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       if (wasBypassed && !m_dynamicsPanel.IsVisible())
         isBypassed = false; // panel closed, restore envelope
       // A/B bypass: toggle envelope ACTIVE state on all segments' envelopes
-      if (isBypassed != wasBypassed) {
-        m_waveform.SetEnvBypassed(isBypassed);
-        if (g_GetTakeEnvelopeByName && g_GetSetEnvelopeInfo_String) {
-          char val[4];
-          snprintf(val, sizeof(val), "%d", isBypassed ? 0 : 1);
-          auto& segs = m_waveform.GetSegments();
-          bool isMultiSeg = (m_waveform.IsTimelineView() || m_waveform.IsTrackView()) && segs.size() > 1;
-          if (isMultiSeg) {
-            for (const auto& seg : segs) {
-              if (!seg.take) continue;
-              TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
-              if (env) g_GetSetEnvelopeInfo_String(env, "ACTIVE", val, true);
-            }
-          } else if (m_waveform.GetTake()) {
-            TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
-            if (env) g_GetSetEnvelopeInfo_String(env, "ACTIVE", val, true);
-          }
-          if (g_UpdateArrange) g_UpdateArrange();
-        }
-      }
+      if (isBypassed != wasBypassed)
+        ApplyEnvelopeBypass(isBypassed);
       // Re-analyze on toggle clicks (Peak/RMS) that set ParamsChanged
       if (m_dynamicsPanel.ParamsChanged()) {
         m_dynamicsPanel.ClearParamsChanged();
@@ -1803,6 +1785,52 @@ void SneakPeak::HandleDynamicsEditKey(WPARAM key)
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
+// A/B bypass: write the envelope ACTIVE state on all segments' envelopes. Shared
+// by the panel mouse path (A/B click, close button) and CloseDynamicsPanel (ESC/D).
+void SneakPeak::ApplyEnvelopeBypass(bool bypassed)
+{
+  m_waveform.SetEnvBypassed(bypassed);
+  if (g_GetTakeEnvelopeByName && g_GetSetEnvelopeInfo_String) {
+    char val[4];
+    snprintf(val, sizeof(val), "%d", bypassed ? 0 : 1);
+    auto& segs = m_waveform.GetSegments();
+    bool isMultiSeg = (m_waveform.IsTimelineView() || m_waveform.IsTrackView()) && segs.size() > 1;
+    if (isMultiSeg) {
+      for (const auto& seg : segs) {
+        if (!seg.take) continue;
+        TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
+        if (env) g_GetSetEnvelopeInfo_String(env, "ACTIVE", val, true);
+      }
+    } else if (m_waveform.GetTake()) {
+      TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
+      if (env) g_GetSetEnvelopeInfo_String(env, "ACTIVE", val, true);
+    }
+    if (g_UpdateArrange) g_UpdateArrange();
+  }
+}
+
+// Close the dynamics panel from a non-mouse path (ESC / the D hotkey, forum #77),
+// mirroring the close-button side effects the OnMouseDown block performs: restore
+// the A/B-bypassed envelope and end an open Live undo block.
+void SneakPeak::CloseDynamicsPanel()
+{
+  if (!m_dynamicsPanel.IsVisible()) return;
+  const bool wasBypassed = m_dynamicsPanel.GetBypassed();
+  const bool wasLiveUndo = m_dynamicsPanel.LiveUndoOpen();
+  if (m_dynamicsPanel.IsDragging()) {   // ESC mid-drag: don't leave capture dangling
+    m_dynamicsPanel.OnMouseUp();
+    ReleaseCapture();
+  }
+  m_dynamicsPanel.Hide();
+  if (wasBypassed)
+    ApplyEnvelopeBypass(false);
+  if (wasLiveUndo) {
+    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
+    m_dynamicsPanel.SetLiveUndoOpen(false);
+  }
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
 void SneakPeak::OnKeyDown(WPARAM key)
 {
   bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -1857,9 +1885,16 @@ void SneakPeak::OnKeyDown(WPARAM key)
       break;
     }
     case VK_ESCAPE:
-      if (m_settingsPanel.IsVisible()) {
+      if (m_dynamicsPanel.IsEditingValue()) {
+        // Inline editor open (fallback WM_KEYDOWN path; the accelerator normally
+        // consumes this) - ESC cancels the edit, never closes the panel.
+        m_dynamicsPanel.OnEditKey(VK_ESCAPE);
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+      } else if (m_settingsPanel.IsVisible()) {
         m_settingsPanel.Hide();
         InvalidateRect(m_hwnd, nullptr, FALSE);
+      } else if (m_dynamicsPanel.IsVisible()) {
+        CloseDynamicsPanel();   // #77: ESC closes the dynamics panel
       } else if (m_workingSet.active) {
         ExitWorkingSet();
       } else if (m_waveform.HasSelection()) {
@@ -2081,6 +2116,15 @@ void SneakPeak::OnKeyDown(WPARAM key)
       break;
     case 'T':
       if (!ctrl) ToggleTrackView();
+      break;
+    case 'D':
+    case 'd':
+      // #77: toggle the dynamics panel. Open = the same path as the context-menu
+      // command (envelope ensure + analysis + P_EXT load); close = full side effects.
+      if (!ctrl) {
+        if (m_dynamicsPanel.IsVisible()) CloseDynamicsPanel();
+        else OnContextMenuCommand(CM_APPLY_DYNAMICS);
+      }
       break;
 
     case VK_UP:

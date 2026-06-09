@@ -229,7 +229,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     // Empty state
     SetTextColor(hdc, g_theme.emptyText);
     RECT textR = { xPos, m_modeBarRect.top, m_modeBarRect.right - SP(80), m_modeBarRect.bottom };
-    DrawText(hdc, "SneakPeak v" SNEAKPEAK_VERSION " - Drop audio file or select item", -1, &textR,
+    DrawTextUTF8(hdc, "SneakPeak v" SNEAKPEAK_VERSION " - Drop audio file or select item", -1, &textR,
              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   } else if (isEmpty && m_masterMode) {
     // Master mode active — show indicator
@@ -241,7 +241,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     xPos += SP(12);
     SetTextColor(hdc, accent);
     RECT labelR = { xPos, m_modeBarRect.top, xPos + SP(80), m_modeBarRect.bottom };
-    DrawText(hdc, "MASTER", -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "MASTER", -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   } else {
     // Mode indicator
     COLORREF accent;
@@ -287,9 +287,9 @@ void SneakPeak::DrawModeBar(HDC hdc)
     // Mode label
     SetTextColor(hdc, accent);
     RECT labelR = { xPos, m_modeBarRect.top, xPos + SP(80), m_modeBarRect.bottom };
-    DrawText(hdc, modeLabel, -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, modeLabel, -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     RECT labelMeasure = { 0, 0, 200, 20 };
-    DrawText(hdc, modeLabel, -1, &labelMeasure, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, modeLabel, -1, &labelMeasure, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
     int labelW = labelMeasure.right - labelMeasure.left;
     m_modeLabelRect = { xPos - SP(12), m_modeBarRect.top, xPos + labelW + SP(4), m_modeBarRect.bottom };
     xPos += labelW + SP(8);
@@ -324,7 +324,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
         }
       }
       RECT tsR = { 0, 0, 300, 20 };
-      DrawText(hdc, reaperLabel, -1, &tsR, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+      DrawTextUTF8(hdc, reaperLabel, -1, &tsR, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
       int tw = std::min((int)(tsR.right - tsR.left) + SP(12), SP(MODE_TAB_MAX_W));
 
       RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
@@ -342,7 +342,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
 
       SetTextColor(hdc, RGB(220, 220, 220));
       RECT textR = { tabR.left + SP(6), tabR.top, tabR.right - SP(6), tabR.bottom };
-      DrawText(hdc, reaperLabel, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+      DrawTextUTF8(hdc, reaperLabel, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 
       ModeBarTab mbt;
       mbt.rect = tabR;
@@ -365,7 +365,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
         snprintf(label, sizeof(label), "%s", fname);
 
       RECT tsR2 = { 0, 0, 300, 20 };
-      DrawText(hdc, label, -1, &tsR2, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+      DrawTextUTF8(hdc, label, -1, &tsR2, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
       bool isActive = (m_waveform.IsStandaloneMode() && i == m_activeFileIdx);
       int closeW = isActive ? SP(MODE_TAB_CLOSE_SIZE) : 0;
       int tw = std::min((int)(tsR2.right - tsR2.left) + SP(12) + closeW, SP(MODE_TAB_MAX_W));
@@ -390,7 +390,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
       SetTextColor(hdc, isActive ? RGB(220, 220, 220) : g_theme.modeBarText);
       int textRight = tabR.right - SP(4) - closeW;
       RECT textR = { tabR.left + SP(6), tabR.top, textRight, tabR.bottom };
-      DrawText(hdc, label, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+      DrawTextUTF8(hdc, label, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 
       // Close button on active tab
       RECT closeR = {};
@@ -400,7 +400,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
         int cy = yMid - csz / 2;
         closeR = { cx, cy, cx + csz, cy + csz };
         SetTextColor(hdc, g_theme.modeBarText);
-        DrawText(hdc, "x", -1, &closeR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        DrawTextUTF8(hdc, "x", -1, &closeR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
       }
 
       ModeBarTab mbt;
@@ -419,7 +419,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
       if (g_CountSelectedMediaItems && g_CountSelectedMediaItems(nullptr) > 0) {
         const char* rl = "ITEM";
         RECT tsR3 = { 0, 0, 300, 20 };
-        DrawText(hdc, rl, -1, &tsR3, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+        DrawTextUTF8(hdc, rl, -1, &tsR3, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
         int tw = std::min((int)(tsR3.right - tsR3.left) + SP(12), SP(MODE_TAB_MAX_W));
         if (xPos + tw <= tabAreaRight) {
           RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
@@ -429,7 +429,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
 
           SetTextColor(hdc, g_theme.modeBarReaperAccent);
           RECT textR = { tabR.left + SP(6), tabR.top, tabR.right - SP(4), tabR.bottom };
-          DrawText(hdc, rl, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+          DrawTextUTF8(hdc, rl, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
           ModeBarTab mbt;
           mbt.rect = tabR;
@@ -451,16 +451,16 @@ void SneakPeak::DrawModeBar(HDC hdc)
     // text glyph like the Support heart (font fallback supplies the symbol).
     SetTextColor(hdc, RGB(120, 120, 120));
     m_gearRect = { verRight - SP(152), m_modeBarRect.top, verRight - SP(134), m_modeBarRect.bottom };
-    DrawText(hdc, "\xE2\x9A\x99", -1, &m_gearRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "\xE2\x9A\x99", -1, &m_gearRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 #endif
     SetTextColor(hdc, RGB(90, 90, 90));
     RECT verR = { verRight - SP(130), m_modeBarRect.top, verRight - SP(50), m_modeBarRect.bottom };
-    DrawText(hdc, "v" SNEAKPEAK_VERSION, -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "v" SNEAKPEAK_VERSION, -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     m_versionRect = verR;
     // Support button (heart + text)
     SetTextColor(hdc, RGB(160, 80, 80));
     m_supportRect = { verRight - SP(46), m_modeBarRect.top, verRight, m_modeBarRect.bottom };
-    DrawText(hdc, "\xe2\x99\xa5 Support", -1, &m_supportRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "\xe2\x99\xa5 Support", -1, &m_supportRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
   // MASTER tab — right-aligned, always visible
@@ -468,7 +468,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     SelectObject(hdc, g_fonts.normal11);
     const char* ml = "MASTER";
     RECT tsM = { 0, 0, 200, 20 };
-    DrawText(hdc, ml, -1, &tsM, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, ml, -1, &tsM, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
     int tw = (int)(tsM.right - tsM.left) + SP(14);
     int tabRight = m_modeBarRect.right - SP(6);
     int tabLeft = tabRight - tw;
@@ -489,7 +489,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
 
     SetTextColor(hdc, m_masterMode ? RGB(220, 220, 220) : RGB(200, 80, 80));
     RECT textR = { tabR.left + SP(7), tabR.top, tabR.right - SP(7), tabR.bottom };
-    DrawText(hdc, ml, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, ml, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     ModeBarTab mbt;
     mbt.rect = tabR;
@@ -579,7 +579,7 @@ void SneakPeak::DrawRuler(HDC hdc)
       }
     }
     RECT textRect = { tx + SP(3), y + SP(2), tx + SP(80), y + h - SP(8) };
-    DrawText(hdc, label, -1, &textRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, label, -1, &textRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
 
     double minorIv = tickInterval / 5.0;
     for (int mi = 1; mi < 5; mi++) {
@@ -709,7 +709,7 @@ void SneakPeak::DrawSoloButton(HDC hdc)
   HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
   SetBkMode(hdc, TRANSPARENT);
   SetTextColor(hdc, m_trackSoloed ? RGB(0, 0, 0) : RGB(140, 140, 140));
-  DrawText(hdc, "S", 1, &m_soloBtnRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, "S", 1, &m_soloBtnRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   SelectObject(hdc, oldFont);
 }
 
@@ -989,7 +989,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     char label[32];
     snprintf(label, sizeof(label), "Thresh %.0f dB", thresh);
     RECT lr = { waveL + SP(4), targetY - SP(13), waveL + SP(120), targetY - 1 };
-    DrawText(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }
 
@@ -1008,7 +1008,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     char label[32];
     snprintf(label, sizeof(label), "Gate %.0f dB", params.gateThreshDb);
     RECT lr = { waveL + SP(4), gateY + SP(2), waveL + SP(120), gateY + SP(14) };
-    DrawText(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }
 }
@@ -1043,7 +1043,7 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, g_theme.emptyText);
     RECT textRect = r;
-    DrawText(hdc, "Master Output — play to see waveform", -1, &textRect,
+    DrawTextUTF8(hdc, "Master Output — play to see waveform", -1, &textRect,
              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     return;
   }
@@ -1131,7 +1131,7 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
   SetBkMode(hdc, TRANSPARENT);
   SetTextColor(hdc, RGB(100, 100, 100));
   RECT lblRect = { r.left + SP(6), r.top + SP(4), r.left + SP(120), r.top + SP(20) };
-  DrawText(hdc, "MASTER", -1, &lblRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, "MASTER", -1, &lblRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
 
   // dB scale (right column)
   RECT colRect = { scaleLeft, r.top, r.right, r.bottom };
@@ -1150,7 +1150,7 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
   HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
 
   RECT hdrRect = { scaleLeft + SP(2), r.top + 1, r.right - SP(2), r.top + SP(13) };
-  DrawText(hdc, "dB", -1, &hdrRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, "dB", -1, &hdrRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   // -∞ at center
   HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
@@ -1159,7 +1159,7 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
   LineTo(hdc, scaleLeft + SP(5), centerY);
   SelectObject(hdc, tpOld);
   RECT infR = { scaleLeft + SP(5), centerY - SP(6), r.right - SP(2), centerY + SP(6) };
-  DrawText(hdc, "-\xE2\x88\x9E", -1, &infR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, "-\xE2\x88\x9E", -1, &infR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   static const double dbVals[] = { -48, -36, -24, -18, -12, -6, -3, 0 };
   int lastYTop = centerY, lastYBot = centerY;
@@ -1177,7 +1177,7 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
       SelectObject(hdc, tpOld);
       char lbl[8]; snprintf(lbl, sizeof(lbl), "%d", (int)db);
       RECT tr = { scaleLeft + SP(5), yt - SP(6), r.right - SP(2), yt + SP(6) };
-      DrawText(hdc, lbl, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      DrawTextUTF8(hdc, lbl, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
       lastYTop = yt;
     }
     // Bottom half
@@ -1189,7 +1189,7 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
       SelectObject(hdc, tpOld);
       char lbl[8]; snprintf(lbl, sizeof(lbl), "%d", (int)db);
       RECT tr = { scaleLeft + SP(5), yb - SP(6), r.right - SP(2), yb + SP(6) };
-      DrawText(hdc, lbl, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      DrawTextUTF8(hdc, lbl, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
       lastYBot = yb;
     }
   }
@@ -1270,7 +1270,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
       snprintf(line, sizeof(line), "Cursor: %s", sCur);
       SetTextColor(hdc, RGB(170, 170, 170));
     }
-    DrawText(hdc, line, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, line, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
   // Row 2: View range
@@ -1285,7 +1285,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
     char line[256];
     snprintf(line, sizeof(line), "View: %s - %s  Dur: %s", vStart, vEnd, vDur);
     SetTextColor(hdc, RGB(140, 140, 140));
-    DrawText(hdc, line, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, line, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
   // Row 3: Format info
@@ -1303,7 +1303,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
              m_waveform.GetSampleRate(), fmtName, m_wavBitsPerSample,
              m_waveform.GetNumChannels(), fileSizeMB, tTotal);
     SetTextColor(hdc, RGB(110, 110, 110));
-    DrawText(hdc, line, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, line, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
 }
@@ -1385,7 +1385,7 @@ void SneakPeak::DrawToast(HDC hdc)
   SetBkMode(hdc, TRANSPARENT);
   int g = (alpha * 230) / 255;
   SetTextColor(hdc, RGB(g, g, g));
-  DrawText(hdc, m_toastText, -1, &pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, m_toastText, -1, &pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 }
 
 // --- Bars & Beats ruler ---
@@ -1444,7 +1444,7 @@ void SneakPeak::DrawRulerBarsBeats(HDC hdc)
       char label[32];
       snprintf(label, sizeof(label), "%d", m + 1); // 1-based measure number
       RECT lr = { mx + SP(3), y + 1, mx + SP(60), y + h - SP(2) };
-      DrawText(hdc, label, -1, &lr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      DrawTextUTF8(hdc, label, -1, &lr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
 
     // Draw beat subdivisions within this measure
@@ -1469,7 +1469,7 @@ void SneakPeak::DrawRulerBarsBeats(HDC hdc)
           char bl[16];
           snprintf(bl, sizeof(bl), "%d:%d", m + 1, b + 1);
           RECT br = { bx + SP(2), y + 1, bx + SP(50), y + h - SP(2) };
-          DrawText(hdc, bl, -1, &br, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+          DrawTextUTF8(hdc, bl, -1, &br, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         }
       }
     }
