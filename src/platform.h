@@ -50,6 +50,14 @@
   #endif
 #endif
 
+// UTF-8 on Win32 (forum #63): REAPER hands us UTF-8 strings everywhere; the Win32
+// ANSI APIs would garble them (take/file names, our UTF-8 glyph literals). WDL's
+// win32_utf8 remaps the text/file/menu/dialog APIs to UTF-8-aware wrappers on
+// Windows (SetWindowText, MessageBox, DragQueryFile, fopen, GetOpen/SaveFileName,
+// menus, ...). DrawText is NOT remapped - call DrawTextUTF8 explicitly; on SWELL
+// platforms (already UTF-8 native) it maps straight back to DrawText.
+#include "win32_utf8.h"
+
 // Portable dialog creation
 #ifdef _WIN32
 inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param, bool docked = false) {

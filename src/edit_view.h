@@ -162,6 +162,7 @@ public:
 
   void LoadSelectedItem();
   void ToggleTrackView();
+  void ToggleMasterView();  // REAPER action (#63 X-Raym): toggle the MASTER output view (same as the mode-bar tab)
   void OnTimer();
 
   // Mode bar / standalone tab management
@@ -467,6 +468,8 @@ private:
   bool LoadDynamicsFromItem();
   void RefreshDynamicsAvgGr();   // push real avg GR into the panel after open (no makeup leap on first drag)
   void ReanalyzeDynamicsAfterEdit(); // re-run Analyze/ComputeCompression after a type-value commit (mirrors wheel)
+  void ApplyEnvelopeBypass(bool bypassed); // A/B: write envelope ACTIVE state on all segments (shared mouse + ESC paths)
+  void CloseDynamicsPanel();       // close from a non-mouse path (ESC / D hotkey, #77): un-bypass A/B + end Live undo
   void RestoreDynamicsViewPrefs(); // apply persisted Dyn/Env/GR overlay prefs (+ panel size/pos) after the panel opens
   void SaveDynamicsViewPrefs();    // persist Dyn/Env/GR overlay toggles as global user prefs (ExtState)
   void SaveDynamicsGeom();         // persist the premium panel size (free-resize scale) + position (ExtState)

@@ -968,7 +968,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
     SetTextColor(hdc, RGB(255, 160, 40));
     RECT titleR = { pr.left + MARGIN + 2, pr.top + 4, pr.left + 90, pr.top + TITLE_H };
-    DrawText(hdc, "DYNAMICS", -1, &titleR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "DYNAMICS", -1, &titleR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Preset button (right of title)
     {
@@ -987,7 +987,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
         snprintf(presetLabel, sizeof(presetLabel), "%s \xE2\x96\xBE", g_dynamicsPresets[m_presetIdx].name);
       else
         snprintf(presetLabel, sizeof(presetLabel), "Preset \xE2\x96\xBE");
-      DrawText(hdc, presetLabel, -1, &presetR,
+      DrawTextUTF8(hdc, presetLabel, -1, &presetR,
                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
 
@@ -1009,7 +1009,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       snprintf(grText, sizeof(grText), "%.1f dB", m_avgGR);
       RECT grLabelR = { meterX + meterW + 3, pr.top + 4, pr.right - 18, pr.top + TITLE_H };
       SelectObject(hdc, g_fonts.normal11);
-      DrawText(hdc, grText, -1, &grLabelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      DrawTextUTF8(hdc, grText, -1, &grLabelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
     SelectObject(hdc, oldFont);
   }
@@ -1019,7 +1019,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
     SetTextColor(hdc, RGB(140, 140, 140));
     RECT closeR = GetCloseButtonRect(pr);
-    DrawText(hdc, "x", -1, &closeR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "x", -1, &closeR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }
 
@@ -1038,7 +1038,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       SetTextColor(hdc, RGB(160, 160, 160));
       int labelX = pr.left + ((col == 0) ? MARGIN : R_LABEL_X);
       RECT lr = { labelX, tr.top - 7, labelX + LABEL_W, tr.bottom + 7 };
-      DrawText(hdc, def.label, -1, &lr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      DrawTextUTF8(hdc, def.label, -1, &lr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
       SelectObject(hdc, oldFont);
     }
 
@@ -1087,7 +1087,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       SetTextColor(hdc, RGB(220, 220, 220));
       int valX = pr.left + ((col == 0) ? L_VALUE_X : R_VALUE_X);
       RECT vr = { valX, tr.top - 7, pr.right - MARGIN, tr.bottom + 7 };
-      DrawText(hdc, text, -1, &vr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+      DrawTextUTF8(hdc, text, -1, &vr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
       SelectObject(hdc, oldFont);
     }
   }
@@ -1107,7 +1107,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     }
     HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
     SetTextColor(hdc, m_params.rmsMode ? RGB(255, 160, 40) : RGB(160, 160, 160));
-    DrawText(hdc, m_params.rmsMode ? "RMS" : "Peak", -1, &rmsR,
+    DrawTextUTF8(hdc, m_params.rmsMode ? "RMS" : "Peak", -1, &rmsR,
              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Dyn toggle
@@ -1123,7 +1123,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       LineTo(hdc, dynR.left, dynR.top);
     }
     SetTextColor(hdc, m_showDyn ? RGB(200, 130, 50) : RGB(80, 80, 80));
-    DrawText(hdc, "Dyn", -1, &dynR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "Dyn", -1, &dynR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Env toggle
     RECT envR = GetEnvToggleRect(pr);
@@ -1138,7 +1138,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       LineTo(hdc, envR.left, envR.top);
     }
     SetTextColor(hdc, m_showEnv ? RGB(0, 180, 220) : RGB(80, 80, 80));
-    DrawText(hdc, "Env", -1, &envR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "Env", -1, &envR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Live toggle
     RECT liveR = GetLiveToggleRect(pr);
@@ -1153,7 +1153,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       LineTo(hdc, liveR.left, liveR.top);
     }
     SetTextColor(hdc, m_liveMode ? RGB(100, 220, 100) : RGB(80, 80, 80));
-    DrawText(hdc, "Live", -1, &liveR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "Live", -1, &liveR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // GR shading toggle
     RECT grR = GetGRToggleRect(pr);
@@ -1168,7 +1168,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       LineTo(hdc, grR.left, grR.top);
     }
     SetTextColor(hdc, m_showGR ? RGB(180, 60, 40) : RGB(80, 80, 80));
-    DrawText(hdc, "GR", -1, &grR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "GR", -1, &grR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // A/B bypass toggle
     RECT abR = GetABToggleRect(pr);
@@ -1183,7 +1183,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       LineTo(hdc, abR.left, abR.top);
     }
     SetTextColor(hdc, m_bypassed ? RGB(220, 180, 50) : RGB(80, 80, 80));
-    DrawText(hdc, "A/B", -1, &abR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "A/B", -1, &abR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Apply button (grayed out during Live - points already written in real-time)
     RECT ar = GetApplyButtonRect(pr);
@@ -1198,7 +1198,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       LineTo(hdc, ar.left, ar.top);
     }
     SetTextColor(hdc, m_liveMode ? RGB(70, 70, 70) : RGB(255, 160, 40));
-    DrawText(hdc, "Apply", -1, &ar, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, "Apply", -1, &ar, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }
 }

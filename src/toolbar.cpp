@@ -104,7 +104,7 @@ void Toolbar::Paint(HDC hdc)
 
     if (m_items[i].label) {
       SetTextColor(hdc, m_items[i].enabled ? g_theme.toolbarText : g_theme.toolbarDisabled);
-      DrawText(hdc, m_items[i].label, -1, &r,
+      DrawTextUTF8(hdc, m_items[i].label, -1, &r,
                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
   }

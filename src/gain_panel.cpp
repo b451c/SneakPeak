@@ -341,12 +341,12 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect, bool hasSelection)
   bool useGold = IsBatch() && !hasSelection;
   SetTextColor(hdc, useGold ? RGB(255, 200, 80) : RGB(100, 200, 255));
   RECT dbRect = { r.left + SP(32), r.top + SP(2), r.right - SP(14), r.bottom - SP(2) };
-  DrawText(hdc, dbText, -1, &dbRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, dbText, -1, &dbRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   // Close "x" button
   SetTextColor(hdc, RGB(140, 140, 140));
   RECT xRect = { r.right - SP(14), r.top + 1, r.right - 1, r.top + SP(14) };
-  DrawText(hdc, "x", -1, &xRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextUTF8(hdc, "x", -1, &xRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   SelectObject(hdc, oldFont);
 }

@@ -68,7 +68,7 @@ void MarkerManager::DrawMarkers(HDC hdc, const RECT& waveformRect, const RECT& r
 
         SetTextColor(hdc, rgnColor);
         RECT nameRect = { x1 + SP(3), rulerRect.top + 1, x1 + textW - SP(2), rulerRect.top + SP(13) };
-        DrawText(hdc, name, -1, &nameRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+        DrawTextUTF8(hdc, name, -1, &nameRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
       }
       continue;
     }
@@ -104,7 +104,7 @@ void MarkerManager::DrawMarkers(HDC hdc, const RECT& waveformRect, const RECT& r
 
     SetTextColor(hdc, lineColor);
     RECT nameRect = { mx + SP(4), waveformRect.top + 1, mx + SP(68), waveformRect.top + SP(14) };
-    DrawText(hdc, label, -1, &nameRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+    DrawTextUTF8(hdc, label, -1, &nameRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
   }
 
   SelectObject(hdc, oldFont);
