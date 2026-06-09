@@ -7,7 +7,7 @@ Thanks for your interest in contributing to SneakPeak!
 ### Prerequisites
 
 - C++17 compiler (Clang on macOS, GCC on Linux, MSVC on Windows)
-- CMake 3.15+
+- CMake 3.24+
 - REAPER 7.0+ for testing
 
 ### Building
@@ -23,7 +23,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Debug
 make -j$(sysctl -n hw.ncpu)
 
 # Install
-cp reaper_sneakpeak.dylib ~/Library/Application\ Support/REAPER/UserPlugins/
+rm -f ~/Library/Application\ Support/REAPER/UserPlugins/reaper_sneakpeak.dylib && cp reaper_sneakpeak.dylib ~/Library/Application\ Support/REAPER/UserPlugins/
 ```
 
 Debug builds log to `/tmp/sneakpeak_debug.log`.

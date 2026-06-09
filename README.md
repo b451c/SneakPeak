@@ -4,7 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/b451c/SneakPeak)](https://github.com/b451c/SneakPeak/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-brightgreen.svg)](#requirements)
 
-**Precision waveform item editor for REAPER** - a native C++ extension that gives you a detailed, dockable waveform view for any media item. Click an item in REAPER's arrange view, and SneakPeak instantly shows you a full-featured waveform editor with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, and real-time metering. Available for macOS (arm64/x86_64), Windows (x64), and Linux (x86_64/aarch64).
+**Precision waveform item editor for REAPER** - a native C++ extension that gives you a detailed, dockable waveform view for any media item. Click an item in REAPER's arrange view, and SneakPeak instantly shows you a full-featured waveform editor with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, real-time metering, and full interface scaling (80-200%). Available for macOS (arm64/x86_64), Windows (x64), and Linux (x86_64/aarch64).
 
 ![SneakPeak](docs/images/sneakpeak-hero.png)
 
@@ -28,9 +28,13 @@
 |:---:|:---:|
 | ![Dynamics](docs/images/dynamics-gr-shading.png) | ![Live](docs/images/dynamics-live-mode.png) |
 
-| Dynamics panel |
+| Dynamics panel (v2.2) | Settings panel (v2.2) |
+|:---:|:---:|
+| ![Panel](docs/images/dynamics-panel.png) | ![Settings](docs/images/settings-panel.png) |
+
+| Gate taming breaths between dialogue phrases - threshold/gate lines, envelope automation and detector curves drawn live on the waveform |
 |:---:|
-| ![Panel](docs/images/dynamics-panel.png) |
+| ![Gate](docs/images/dynamics-gate-overview.png) |
 
 ---
 
@@ -48,12 +52,18 @@ If you find SneakPeak valuable, please consider [supporting its development](#su
 
 SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timeline View** (after cutting), **Multi-Item** (select 2+ items), **SET** (working set, press T), and **Standalone** (drag & drop files). All non-destructive editing goes through the REAPER API with full undo.
 
+### Interface & Scaling (new in v2.2)
+- **Global UI scale (80-200%)** - the entire interface scales from one slider: fonts, toolbar, ruler, meters, panels, and every click target. First run auto-detects your system DPI (Windows display scaling, Linux GDK scale).
+- **Settings panel** - gear icon in the mode bar: UI scale with live preview, density presets (Compact / Comfortable / Spacious), Fit to Window, and the Ruler / Meters / View preferences.
+- **Premium rendering** - anti-aliased, DPI-crisp Dynamics panel, Settings panel, gain knob, L/R meters and toasts.
+
 ### Waveform Display
-- **Precision waveform rendering** - Peak + RMS display with dB scale, clip indicators, and zero-crossing line.
-- **Deep zoom** - Horizontal and vertical zoom with scroll wheel, toolbar buttons, and keyboard. Zoom to fit, zoom to selection.
+- **Precision waveform rendering** - Peak + RMS display with dB scale and zero-crossing line.
+- **Truthful clip display** - red marks real clipping (source flat-tops, or over-0dB in destructive Standalone mode); amber marks over-0dB warnings in REAPER's float contexts where nothing has clipped yet. A dark-red 0dB reference line appears when zoomed out vertically.
+- **Deep zoom** - Horizontal and vertical zoom with scroll wheel, toolbar buttons, and keyboard. Zoom to fit, zoom to selection. Zoom anchors on the mouse position or the edit cursor (Settings > View).
 - **Minimap** - Resizable overview bar showing the full item waveform. Click to navigate, drag to scroll.
 - **Time ruler** - Dynamic tick intervals from milliseconds to minutes with position readout.
-- **Channel controls** - Per-channel visibility (L/R mute buttons), mono downmix toggle.
+- **Channel solo (L/R)** - per-channel monitoring that keeps the soloed channel on its own side (take pan balance under the hood; your pan is saved and restored).
 
 ### Audio Editing
 - **Precision selection** - Click and drag to select audio regions. Shift+click to extend. Double-click to select all.
@@ -121,7 +131,6 @@ Select items on one track, press T to enter. Gaps collapse into a continuous wav
 - **Ripple edit** - Delete in SET mode automatically pulls subsequent items left to close gaps.
 - **Selection-aware gain** - Gain knob with selection splits at edges and applies D_VOL only to the fragment (with 10ms crossfade overlap).
 - **Group Set Items** - Group all items in the set (or selected range) for easy timeline manipulation. Visual colored bar below ruler.
-- **Truthful clip display** - Red marks real clipping (source flat-tops, or over-0dB in destructive Standalone mode); amber marks over-0dB warnings in REAPER's float modes where nothing has clipped yet. A dark-red 0dB reference line appears when zoomed out vertically.
 - **Absolute time ruler** - Toggle between relative and REAPER timeline time (context menu).
 - **Bidirectional cursor sync** - Click in SneakPeak scrolls REAPER arrange, click on REAPER timeline updates SneakPeak playhead.
 
@@ -183,6 +192,8 @@ Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully d
 | Silence / Insert silence | `Ctrl/Cmd+Delete` |
 | Normalize | `Ctrl/Cmd+N` |
 | Toggle gain panel | `G` |
+| Toggle Dynamics panel | `D` |
+| Toggle Working Set | `T` |
 | Add marker | `M` |
 | Add region | `Shift+M` |
 | Save (standalone) | `Ctrl/Cmd+S` |
@@ -191,9 +202,9 @@ Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully d
 | Ripple Delete | `Shift+Delete` or `Shift+E` |
 | Gain +/-1 dB | `Up` / `Down` |
 | Next/Previous segment | `Alt/Option+Right/Left` |
-| Zoom | `Scroll wheel` |
+| Zoom | `Scroll wheel` (anchor: mouse or edit cursor, see Settings) |
 | Vertical zoom | `Shift+Scroll` or `Alt+Scroll` |
-| Pan | `Ctrl/Cmd+Scroll` |
+| Pan | `Ctrl/Cmd+Scroll` or `Middle-mouse drag` |
 | Fine-adjust gain | `Ctrl/Cmd+drag` on knob |
 
 ---
@@ -261,7 +272,7 @@ See [Building](#building) below.
 
 ### Prerequisites
 
-- **CMake** 3.15+
+- **CMake** 3.24+
 - **C++17** compiler (Clang on macOS)
 - **REAPER SDK** - clone into `sdk/`:
   ```bash
@@ -278,6 +289,9 @@ See [Building](#building) below.
 mkdir -p build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(sysctl -n hw.ncpu)
+# install via a FRESH file (rm first): overwriting a dylib in place while REAPER
+# has it mapped can trigger a codesigning crash on Apple Silicon
+rm -f ~/Library/Application\ Support/REAPER/UserPlugins/reaper_sneakpeak.dylib
 cp reaper_sneakpeak.dylib ~/Library/Application\ Support/REAPER/UserPlugins/
 ```
 
@@ -306,7 +320,7 @@ make -j$(sysctl -n hw.ncpu)
 | **Linux** | x86_64 | Stable |
 | **Linux** | aarch64 | Stable |
 
-All platforms built via GitHub Actions CI on every tagged release. The codebase is pure C++ with WDL/SWELL - zero external dependencies.
+All platforms built via GitHub Actions CI on every tagged release. The codebase is pure C++ on WDL/SWELL; the premium panel renderer (Blend2D, Zlib license) is fetched and statically linked at build time - the shipped binary remains a single self-contained file.
 
 ---
 
@@ -325,7 +339,11 @@ src/
   waveform_view.h/cpp     Waveform data, zoom, selection, envelope helpers, coordinates
   waveform_rendering.cpp  Peak computation, waveform + envelope drawing, dB scale, fades
   dynamics_engine.h/cpp   Compressor + gate computation (peak/RMS, attack/release, lookahead)
-  dynamics_panel.h/cpp    Inline dynamics control panel (10 sliders, presets, Live mode)
+  dynamics_panel.h/cpp    Inline dynamics control panel (knobs, tabs, presets, Live mode)
+  settings_panel.h/cpp    Settings overlay (UI scale, density presets, view preferences)
+  ui_render.h/cpp         Blend2D premium renderers (panels, knobs, meters, toast)
+  ui_theme.h              Premium UI design tokens (colors, type scale, layout constants)
+  win32_utf8_unit.c       Windows-only TU wrapping WDL's UTF-8 Win32 API layer
   item_split_ops.h/cpp    SplitAndApplyGain helper for consistent gain across all modes
   toolbar.h/cpp           Button bar with zoom, transport, and editing actions
   audio_engine.h/cpp      WAV file I/O (16/24/32-bit float), REAPER source refresh
@@ -342,7 +360,7 @@ src/
   globals.h/cpp           REAPER API function pointers and helpers
 ```
 
-The extension loads full audio data via REAPER's AudioAccessor API for accurate waveform display and editing. Double-buffered GDI rendering ensures smooth, flicker-free display.
+The extension loads full audio data via REAPER's AudioAccessor API for accurate waveform display and editing. The waveform uses double-buffered GDI rendering (smooth and flicker-free); the control panels, meters and toasts render through Blend2D for anti-aliased, DPI-crisp output at any UI scale.
 
 ---
 
