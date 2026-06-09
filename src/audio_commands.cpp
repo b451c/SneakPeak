@@ -1517,6 +1517,13 @@ void SneakPeak::RestoreDynamicsViewPrefs()
   // GetRect clamps to the window on use, so a stale offset can never go off-screen.
   const char* us = g_GetExtState("SneakPeak", "dyn_ui_scale");
   if (us && us[0]) m_dynamicsPanel.SetUiScale(atoi(us) / 1000.0);
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  // Reload coherence (v2.2.0): the panel draws at g_uiScale * grip, capped at
+  // EFF_SCALE_MAX. If the persisted grip would pin the panel at the cap under the
+  // current global scale, shrink the grip so resize travel stays live immediately.
+  if (g_uiScale > 0.0 && g_uiScale * m_dynamicsPanel.GetUiScale() > DynamicsPanel::EFF_SCALE_MAX)
+    m_dynamicsPanel.SetUiScale(DynamicsPanel::EFF_SCALE_MAX / g_uiScale);
+#endif
   const char* ox = g_GetExtState("SneakPeak", "dyn_off_x");
   const char* oy = g_GetExtState("SneakPeak", "dyn_off_y");
   m_dynamicsPanel.SetPanelOffset(ox && ox[0] ? atoi(ox) : 0, oy && oy[0] ? atoi(oy) : 0);

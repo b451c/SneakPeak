@@ -74,6 +74,9 @@ public:
   void ClearGeomChanged() { m_geomChanged = false; }
   double GetUiScale() const { return m_uiScale; }
   void SetUiScale(double s) { m_uiScale = s < 0.8 ? 0.8 : (s > 2.0 ? 2.0 : s); }  // [UI_SCALE_MIN, UI_SCALE_MAX]
+  // Cap on the EFFECTIVE panel scale (g_uiScale * m_uiScale): soft, so the resize
+  // grip stays useful at high global scales. Hosts use it for reload coherence.
+  static constexpr double EFF_SCALE_MAX = 2.4;
   int  GetPanelOffsetX() const { return m_offsetX; }
   int  GetPanelOffsetY() const { return m_offsetY; }
   void SetPanelOffset(int x, int y) { m_offsetX = x; m_offsetY = y; }
@@ -129,6 +132,7 @@ private:
   int HitTestKnob(int x, int y, RECT panelRect) const;    // knob under cursor in base coords, or -1 (premium)
   DynCurveParams BuildCurveParams() const;                // VM curve params from live state (render + handles)
   double PanelBaseH() const;                              // premium base height (kPanelHCompact in Compact, else kPanelH)
+  double EffScale() const;                                // clamp(g_uiScale * m_uiScale, UI_SCALE_MIN, EFF_SCALE_MAX)
   DynLayout PanelLayout() const;                          // ComputeDynLayout for the current tab + compact state
   void DragCurveHandle(int x, int y, RECT panelRect);     // apply a curve-handle drag to params (premium)
   void BeginValueEdit(int idx);                           // open the inline editor on param idx (seed buffer)
@@ -194,7 +198,7 @@ private:
 
   // Premium panel free-resize (aspect-locked uniform scale; bottom-right grip).
   // [[maybe_unused]]: only the premium build references these (OFF build = GDI).
-  [[maybe_unused]] double m_uiScale = 1.0;       // 1.0 = default 480x300; clamped [0.8, 2.0]
+  [[maybe_unused]] double m_uiScale = 1.0;       // grip component; on-screen = EffScale() (x g_uiScale); clamped [0.8, 2.0]
   [[maybe_unused]] bool m_resizing = false;
   [[maybe_unused]] int m_resizeAnchorL = 0;      // fixed top-left during a resize drag
   [[maybe_unused]] int m_resizeAnchorT = 0;
