@@ -811,6 +811,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         DestroyWindow(m_hwnd);
 #ifdef _WIN32
         m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this, false);
+        DragAcceptFiles(m_hwnd, TRUE);   // #83: re-register after window recreation
 #else
         m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this);
 #endif
@@ -832,6 +833,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         KillTimer(m_hwnd, TIMER_REFRESH);
         DestroyWindow(m_hwnd);
         m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this, true);
+        DragAcceptFiles(m_hwnd, TRUE);   // #83: re-register after window recreation
         SetTimer(m_hwnd, TIMER_REFRESH, TIMER_INTERVAL_MS, nullptr);
 #endif
         if (g_DockWindowAddEx)
