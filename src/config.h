@@ -45,7 +45,7 @@ inline constexpr double GAIN_EDGE_EPS = 0.001;     // edge alignment epsilon for
 // Rendering
 inline constexpr double CLIP_RED_RATIO = 0.7;      // fraction of peak height before red clip starts
 inline constexpr int DB_GRID_MIN_SPACING = 30;      // min pixels between dB grid lines
-inline constexpr int DB_LABEL_MIN_SPACING = 13;     // min pixels between dB scale labels
+inline constexpr int DB_LABEL_MIN_SPACING = 18;     // min pixels between dB scale labels (>= label font height + air)
 inline constexpr double RULER_TICK_MIN_PX = 150.0;  // min pixels per ruler tick interval
 inline constexpr int CHAN_BTN_WIDTH = 18;            // channel button width
 inline constexpr int CHAN_BTN_HEIGHT = 16;           // channel button height

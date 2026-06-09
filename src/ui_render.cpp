@@ -1143,7 +1143,10 @@ SettingsLayout ComputeSettingsLayout(double w, double h)
   y += 32.0;
   L.viewToggle[2] = { pad, y, pillW, 26.0 };                  // SNAP TO ZERO
   L.viewToggle[3] = { pad + pillW + 8.0, y, pillW, 26.0 };    // MINIMAP
-  // final y + 26 + 16 bottom pad == kSettingsH (440) - keep in sync with ui_theme.h
+  y += 32.0;
+  L.zoomSeg[0] = { pad, y, pillW, 26.0 };                     // ZOOM: MOUSE
+  L.zoomSeg[1] = { pad + pillW + 8.0, y, pillW, 26.0 };       // ZOOM: CURSOR
+  // final y + 26 + 16 bottom pad == kSettingsH (474) - keep in sync with ui_theme.h
   return L;
 }
 
@@ -1276,6 +1279,11 @@ void UiCanvas::RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double d
     DrawTogglePill(ctx, gfx, L.viewToggle[1], "RMS",          vm.prefs.showRMS,    dynui::kAmber, false, 0.0);
     DrawTogglePill(ctx, gfx, L.viewToggle[2], "SNAP TO ZERO", vm.prefs.snapZero,   dynui::kAmber, false, 0.0);
     DrawTogglePill(ctx, gfx, L.viewToggle[3], "MINIMAP",      vm.prefs.minimap,    dynui::kAmber, false, 0.0);
+    // Wheel-zoom center (#83): a 2-way selector, mouse position vs edit cursor.
+    // "EDIT CURSOR" spelled out (REAPER's own term) - bare "CURSOR" reads as the
+    // mouse pointer, the exact ambiguity this option exists to resolve.
+    DrawSegmented2(ctx, gfx, L.zoomSeg[0], L.zoomSeg[1], "ZOOM: MOUSE", "ZOOM: EDIT CURSOR",
+                   vm.prefs.zoomOnCursor);
 
     if (ctx.end() != BL_SUCCESS) return;
   }

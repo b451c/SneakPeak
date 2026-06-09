@@ -272,6 +272,8 @@ void SneakPeak::OnRightClick(int x, int y)
              m_waveform.GetSnapToZero() ? "Snap to Zero-Crossing  \xE2\x9C\x93" : "Snap to Zero-Crossing");
   MenuAppend(viewMenu, MF_STRING, CM_MINIMAP,
              m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
+  MenuAppend(viewMenu, MF_STRING, CM_ZOOM_CENTER,
+             m_zoomOnEditCursor ? "Zoom at Edit Cursor  \xE2\x9C\x93" : "Zoom at Edit Cursor");
   if (hasItem) {
     MenuAppend(viewMenu, MF_STRING, CM_RULER_RELATIVE,
                m_rulerMode == RulerMode::Relative ? "Ruler: Relative Time  \xE2\x9C\x93" : "Ruler: Relative Time");
@@ -482,6 +484,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_waveform.SetSnapToZero(!m_waveform.GetSnapToZero());
       if (g_SetExtState)
         g_SetExtState("SneakPeak", "snap_zero", m_waveform.GetSnapToZero() ? "1" : "0", true);
+      break;
+    case CM_ZOOM_CENTER:
+      // #83: wheel-zoom anchor - mouse position (default) vs the edit cursor.
+      m_zoomOnEditCursor = !m_zoomOnEditCursor;
+      if (g_SetExtState)
+        g_SetExtState("SneakPeak", "zoom_center", m_zoomOnEditCursor ? "1" : "0", true);
       break;
     case CM_MINIMAP:
       m_minimapVisible = !m_minimapVisible;

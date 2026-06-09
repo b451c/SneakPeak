@@ -37,7 +37,7 @@ public:
   // One-shot flags, polled by the host right after a consumed OnMouseDown.
   bool ScaleChangedByClick() { bool v = m_scaleClicked; m_scaleClicked = false; return v; }
   bool FitRequested()        { bool v = m_fitRequested; m_fitRequested = false; return v; }
-  // Preference control clicked (SET_HIT_RULER0..SET_HIT_VIEW_MINIMAP), or
+  // Preference control clicked (SET_HIT_RULER0..SET_HIT_VIEW_ZOOM1), or
   // SET_HIT_NONE. The host maps the id onto its existing CM_* command handler.
   int  PrefClicked()         { int v = m_prefClicked; m_prefClicked = SET_HIT_NONE; return v; }
 

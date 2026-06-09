@@ -137,6 +137,7 @@ enum ContextMenuID {
   CM_UI_SCALE_RESET,                                   // reset the UI scale to 100%
   CM_UI_SCALE_PRESET_BASE,                             // + absolute % presets (see context_menu.cpp)
   CM_UI_SCALE_PRESET_LAST = CM_UI_SCALE_PRESET_BASE + 16,
+  CM_ZOOM_CENTER,                                      // toggle wheel-zoom center: mouse <-> edit cursor (#83)
   CM_SETTINGS,                                         // open the premium Settings panel
   CM_LAST // sentinel -- keep last
 };
@@ -188,6 +189,8 @@ private:
   double GetUiDpr() const;        // device-pixel ratio for crisp HiDPI Blend2D rendering
   void OnMouseDown(int x, int y, WPARAM wParam);
   void OnMouseDownWaveform(int x, int y, WPARAM wParam);
+  void OnMiddleDown(int x, int y);   // middle-mouse pan start (#61)
+  int  HitSelectionEdge(int x, int y);  // selection edge under cursor: 0 none, 1 start, 2 end (#64)
   void OnMouseUp(int x, int y);
   void OnMouseMove(int x, int y, WPARAM wParam);
   void OnMouseWheel(int x, int y, int delta, WPARAM wParam);
@@ -300,6 +303,8 @@ private:
   WaveformSelection m_pendingSelRestore = {}; // selection to restore after guarded reload
   bool m_dragging = false;
   bool m_scrollbarDragging = false;
+  bool m_mmbPanning = false;   // middle-mouse horizontal pan (#61)
+  int m_mmbLastX = 0;          // last cursor X during the MMB pan
   int m_lastMouseX = 0;
   int m_lastMouseY = 0;
 
@@ -427,6 +432,16 @@ private:
   int m_lastChanMode = -1;  // tracks I_CHANMODE for change detection
   int m_audioChangeCheckCounter = 0;  // poll counter for external audio changes
 
+  // Channel solo via take pan balance (badges [1]/[2]): the user's pan is saved
+  // on first solo and restored on un-solo / item switch. Take-scoped state.
+  MediaItem_Take* m_chanSoloTake = nullptr;
+  double m_chanSoloPrevPan = 0.0;
+
+  // Mode bar hover target (visual feedback; rects cached by DrawModeBar).
+  // >= 0 -> index into m_modeBarTabs; negatives = the fixed elements.
+  enum { MB_HOVER_NONE = -1, MB_HOVER_GEAR = -2, MB_HOVER_SUPPORT = -3, MB_HOVER_VERSION = -4 };
+  int m_modeBarHover = MB_HOVER_NONE;
+
   // Standalone preview playback
   bool m_previewActive = false;
   bool m_previewCacheDirty = true; // true when temp WAV needs rewrite
@@ -455,6 +470,7 @@ private:
   // Master meter mode (when no item selected)
   bool m_masterMode = false;
   bool m_meterFromMaster = false; // meter reads master track instead of item
+  bool m_zoomOnEditCursor = false; // wheel zoom centers on the edit cursor instead of the mouse (#83)
   static const int MASTER_ROLLING_SIZE = 4096;
   float m_masterPeakBufL[MASTER_ROLLING_SIZE] = {};
   float m_masterPeakBufR[MASTER_ROLLING_SIZE] = {};
