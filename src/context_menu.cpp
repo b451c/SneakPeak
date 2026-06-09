@@ -59,6 +59,11 @@ static void MenuAppendSubmenu(HMENU menu, HMENU submenu, const char* str)
 #endif
 }
 
+// UI-scale absolute presets shown in View > UI Scale (v2.2.0). The handler maps
+// CM_UI_SCALE_PRESET_BASE + i back to this array, so build + dispatch share one source.
+static const double kUiScalePresets[] = { 0.80, 0.90, 1.00, 1.10, 1.25, 1.50, 1.75, 2.00 };
+static const int    kUiScalePresetCount = (int)(sizeof(kUiScalePresets) / sizeof(kUiScalePresets[0]));
+
 // Dynamics Preset dropdown: factory presets, then the user's saved presets, then
 // "Save preset as..." and a "Delete preset" submenu. User presets live globally in
 // ExtState (see LoadUserPresets/AddUserPreset). The parent menu owns its submenu, so
@@ -284,6 +289,26 @@ void SneakPeak::OnRightClick(int x, int y)
              m_waveform.GetShowRMS() ? "Show RMS  \xE2\x9C\x93" : "Show RMS");
   MenuAppend(viewMenu, MF_STRING, CM_SHOW_METERS,
              m_showMeters ? "Show Meters  \xE2\x9C\x93" : "Show Meters");
+  // UI Scale submenu (v2.2.0): global legibility scale for the whole UI (fonts +
+  // layout), persisted per machine. Independent of waveform zoom.
+  {
+    HMENU scaleMenu = CreatePopupMenu();
+    char buf[32];
+    snprintf(buf, sizeof(buf), "Current: %d%%", (int)lround(g_uiScale * 100.0));
+    MenuAppend(scaleMenu, MF_STRING | MF_GRAYED, 0, buf);
+    MenuAppendSeparator(scaleMenu);
+    MenuAppend(scaleMenu, MF_STRING, CM_UI_SCALE_SMALLER, "Smaller  (-)");
+    MenuAppend(scaleMenu, MF_STRING, CM_UI_SCALE_LARGER,  "Larger  (+)");
+    MenuAppend(scaleMenu, MF_STRING, CM_UI_SCALE_RESET,   "Reset (100%)");
+    MenuAppendSeparator(scaleMenu);
+    for (int i = 0; i < kUiScalePresetCount; i++) {
+      snprintf(buf, sizeof(buf), "%d%%", (int)lround(kUiScalePresets[i] * 100.0));
+      bool on = fabs(g_uiScale - kUiScalePresets[i]) < 0.005;
+      MenuAppend(scaleMenu, MF_STRING | (on ? MF_CHECKED : 0),
+                 CM_UI_SCALE_PRESET_BASE + (unsigned)i, buf);
+    }
+    MenuAppendSubmenu(viewMenu, scaleMenu, "UI Scale");
+  }
   if (!m_waveform.IsStandaloneMode() && hasItem) {
     MenuAppend(viewMenu, MF_STRING, CM_TRACK_VIEW,
                (m_workingSet.active || m_workingSet.dormant)
@@ -713,6 +738,15 @@ void SneakPeak::OnContextMenuCommand(int id)
     case CM_DYN_SAVE_PRESET:
       AddUserPreset();   // prompt for a name + store the current panel params globally
       break;
+    case CM_UI_SCALE_SMALLER:
+      ApplyUiScale(g_uiScale - 0.1); SaveUiScale();
+      break;
+    case CM_UI_SCALE_LARGER:
+      ApplyUiScale(g_uiScale + 0.1); SaveUiScale();
+      break;
+    case CM_UI_SCALE_RESET:
+      ApplyUiScale(1.0); SaveUiScale();
+      break;
     default: {
       // Preset selection: factory (CM_PRESET_BASE+i), a user preset
       // (CM_DYN_USER_PRESET_BASE+i), or a user-preset delete (CM_DYN_DEL_PRESET_BASE+i).
@@ -724,6 +758,9 @@ void SneakPeak::OnContextMenuCommand(int id)
         applied = ApplyUserPreset(id - CM_DYN_USER_PRESET_BASE);
       } else if (id >= CM_DYN_DEL_PRESET_BASE && id < CM_DYN_DEL_PRESET_BASE + MAX_USER_PRESETS) {
         DeleteUserPreset(id - CM_DYN_DEL_PRESET_BASE);
+      } else if (id >= CM_UI_SCALE_PRESET_BASE && id < CM_UI_SCALE_PRESET_BASE + kUiScalePresetCount) {
+        ApplyUiScale(kUiScalePresets[id - CM_UI_SCALE_PRESET_BASE]);  // relayout + repaint
+        SaveUiScale();
       }
       if (applied) {
         // Same re-analysis + Live path as a knob drag, so the curve/GR update at once.

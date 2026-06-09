@@ -1,6 +1,10 @@
 // globals.cpp — REAPER API function pointer definitions
 #include "globals.h"
 
+// Global UI scale (v2.2.0 B-1) — see globals.h. Default 1.0 = unscaled.
+double g_uiScale = 1.0;
+bool   g_fontsNeedRescale = false;
+
 // Core API
 void (*g_DockWindowAddEx)(HWND, const char*, const char*, bool) = nullptr;
 void (*g_DockWindowRemove)(HWND) = nullptr;

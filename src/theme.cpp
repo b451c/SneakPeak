@@ -144,23 +144,34 @@ void Theme_Refresh()
       g_theme.waveformBg, g_theme.waveform, g_theme.editCursor);
 }
 
+// Scale a base font height by the global UI scale (v2.2.0). KEEP positive lfHeight
+// (CreateFont treats it as a cell height; this is byte-identical at g_uiScale==1.0
+// where SPmin(N)==N). Clamp to a readable [6,32] floor/ceiling so extreme scales
+// never produce an unreadable or absurd font.
+static int ScaledFontH(int base) {
+  int h = SPmin(base);
+  if (h < 6)  h = 6;
+  if (h > 32) h = 32;
+  return h;
+}
+
 void Theme_CreateFonts() {
   Theme_DestroyFonts();
-  g_fonts.normal11 = CreateFont(11,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+  g_fonts.normal11 = CreateFont(ScaledFontH(11),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
-  g_fonts.bold12   = CreateFont(12,0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
+  g_fonts.bold12   = CreateFont(ScaledFontH(12),0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
-  g_fonts.normal10 = CreateFont(10,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+  g_fonts.normal10 = CreateFont(ScaledFontH(10),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
-  g_fonts.bold10   = CreateFont(10,0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
+  g_fonts.bold10   = CreateFont(ScaledFontH(10),0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
-  g_fonts.bold14   = CreateFont(14,0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
+  g_fonts.bold14   = CreateFont(ScaledFontH(14),0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
-  g_fonts.bold11   = CreateFont(11,0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
+  g_fonts.bold11   = CreateFont(ScaledFontH(11),0,0,0,FW_BOLD,FALSE,FALSE,FALSE,
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
-  g_fonts.normal13 = CreateFont(13,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+  g_fonts.normal13 = CreateFont(ScaledFontH(13),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
-  g_fonts.toolbar  = CreateFont(13,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
+  g_fonts.toolbar  = CreateFont(ScaledFontH(13),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
                      DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,DEFAULT_PITCH,"Arial");
 }
 

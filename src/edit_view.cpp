@@ -93,6 +93,21 @@ void SneakPeak::Create()
     if (showMeters && showMeters[0] == '0') m_showMeters = false;
   }
 
+  // First-run DPI auto-seed (v2.2.0): if the user has never set a UI scale, seed it
+  // once from the system DPI (needs the HWND, so it happens here, not in main.cpp).
+  // A persisted value (already seeded in main.cpp) is never overridden. mac -> 1.0.
+  if (g_GetExtState) {
+    const char* us = g_GetExtState("SneakPeak", "ui_scale");
+    if (!(us && us[0])) {
+      double s = QuerySystemDefaultUiScale();
+      if (s < 0.8) s = 0.8;
+      if (s > 2.0) s = 2.0;
+      g_uiScale = s;
+      if (g_uiScale != 1.0) g_fontsNeedRescale = true;  // first OnPaint recreates fonts atomically
+      SaveUiScale();
+    }
+  }
+
   // Recalc layout after restoring settings (minimap visibility etc.)
   {
     RECT cr;
@@ -677,6 +692,16 @@ void SneakPeak::OnTimer()
   if (HandlePendingClose()) return;
   if (!m_hwnd || !IsVisible()) return;
   if (m_timelineEditGuard > 0) m_timelineEditGuard--;
+
+  // dpr-watchdog (v2.2.0): a monitor drag / OS-scale change can change the device-
+  // pixel ratio with no paint message (notably macOS does NOT repaint on a Retina<->
+  // non-Retina move). On a change, force a full repaint so premium surfaces re-blit
+  // crisp at the new dpr. GetUiDpr() is exactly 1.0/2.0 -> exact compare is safe.
+  double dpr = GetUiDpr();
+  if (dpr != m_lastUiDpr) {
+    m_lastUiDpr = dpr;
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
 
   ValidateItemPointers();
   UpdateAutoScroll();
@@ -1428,28 +1453,99 @@ void SneakPeak::DoCheckForUpdate()
   ShowToast(msg);
 }
 
+// --- Global UI scale (v2.2.0 B-1) ---
+
+void SneakPeak::SaveUiScale()
+{
+  if (!g_SetExtState) return;
+  char b[16];
+  // int x1000, formatted with %d -> locale-independent (no decimal separator).
+  snprintf(b, sizeof(b), "%d", (int)lround(g_uiScale * 1000.0));
+  g_SetExtState("SneakPeak", "ui_scale", b, true);  // install-global (per-machine legibility pref)
+}
+
+void SneakPeak::ApplyUiScale(double scale)
+{
+  if (scale < 0.8) scale = 0.8;
+  if (scale > 2.0) scale = 2.0;
+  g_uiScale = scale;
+  g_fontsNeedRescale = true;  // fonts recreated at the top of the next OnPaint (never mid-paint)
+  if (m_hwnd) {
+    RECT cr;
+    GetClientRect(m_hwnd, &cr);
+    RecalcLayout(cr.right, cr.bottom);
+    m_waveform.Invalidate();
+    m_spectral.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+}
+
+double SneakPeak::QuerySystemDefaultUiScale() const
+{
+#ifdef _WIN32
+  // Per-monitor DPI for our window (GetDpiForWindow, Win10+), else system DPI.
+  UINT dpi = 0;
+  typedef UINT (WINAPI *GetDpiForWindow_t)(HWND);
+  static GetDpiForWindow_t p =
+      (GetDpiForWindow_t)GetProcAddress(GetModuleHandleA("user32.dll"), "GetDpiForWindow");
+  if (p && m_hwnd) dpi = p(m_hwnd);
+  if (!dpi) {
+    HDC dc = GetDC(NULL);
+    if (dc) { dpi = (UINT)GetDeviceCaps(dc, LOGPIXELSX); ReleaseDC(NULL, dc); }
+  }
+  return dpi ? dpi / 96.0 : 1.0;  // 96=1.0, 120=1.25, 144=1.5, 192=2.0
+#elif defined(__APPLE__)
+  return 1.0;  // SWELL renders Retina crisp + correctly sized at logical 1x; g_uiScale is orthogonal
+#else  // Linux/GDK
+  // Primary-monitor, integer-only auto-detect (256 = 1.0); fractional only if the
+  // user set reaper.ini ui_scale. Fractional Wayland desktops report 256 here ->
+  // the manual control is the fallback.
+  int s = SWELL_GetScaling256();
+  return s >= 128 ? s / 256.0 : 1.0;
+#endif
+}
+
 // --- Layout ---
 
 void SneakPeak::RecalcLayout(int w, int h)
 {
-  m_toolbarRect      = { 0, 0, w, TOOLBAR_HEIGHT };
-  m_modeBarRect      = { 0, TOOLBAR_HEIGHT, w, TOOLBAR_HEIGHT + MODE_BAR_HEIGHT };
-  m_rulerRect        = { 0, TOOLBAR_HEIGHT + MODE_BAR_HEIGHT, w, TOOLBAR_HEIGHT + MODE_BAR_HEIGHT + RULER_HEIGHT };
-  int bottomH = m_showMeters ? BOTTOM_PANEL_HEIGHT : 0;
-  m_bottomPanelRect  = { 0, h - bottomH, w, h };
-  int minimapH = m_minimapVisible ? m_minimapHeight : 0;
-  m_scrollbarRect    = { 0, h - bottomH - SCROLLBAR_HEIGHT, w, h - bottomH };
-  m_minimapRect      = { 0, m_scrollbarRect.top - minimapH, w, m_scrollbarRect.top };
+  // Chained-edge layout (v2.2.0): each top edge == the previous bottom edge, derived
+  // from a running offset, so SP()-rounded heights never leave a 1px gap/overlap at a
+  // fractional UI scale. At g_uiScale==1.0 every SP(N)==N -> byte-identical to before.
+  int y = SP(TOOLBAR_HEIGHT);
+  m_toolbarRect = { 0, 0, w, y };
 
-  int contentTop = TOOLBAR_HEIGHT + MODE_BAR_HEIGHT + RULER_HEIGHT;
+  int modeH = SP(MODE_BAR_HEIGHT);
+  m_modeBarRect = { 0, y, w, y + modeH };
+  y += modeH;
+
+  int rulerH = SP(RULER_HEIGHT);
+  m_rulerRect = { 0, y, w, y + rulerH };
+  y += rulerH;
+
+  int contentTop = y;
+
+  // Bottom-up chain from h: bottom panel, then scrollbar, then minimap.
+  int bottomH = m_showMeters ? SP(BOTTOM_PANEL_HEIGHT) : 0;
+  m_bottomPanelRect = { 0, h - bottomH, w, h };
+  int scrollH = SP(SCROLLBAR_HEIGHT);
+  m_scrollbarRect = { 0, h - bottomH - scrollH, w, h - bottomH };
+  // m_minimapHeight is a user-dragged screen dimension (like the window size), so it
+  // is NOT scaled here - its resize hit-test scales in Inc C alongside the drag edge.
+  int minimapH = m_minimapVisible ? m_minimapHeight : 0;
+  m_minimapRect = { 0, m_scrollbarRect.top - minimapH, w, m_scrollbarRect.top };
+
   int contentBot = m_minimapRect.top;
   int contentH = contentBot - contentTop;
 
-  if (m_spectralVisible && contentH > MIN_WAVEFORM_HEIGHT + MIN_SPECTRAL_HEIGHT + SPLITTER_HEIGHT) {
-    int waveH = (int)((float)contentH * m_splitterRatio) - SPLITTER_HEIGHT / 2;
-    waveH = std::max(MIN_WAVEFORM_HEIGHT, std::min(contentH - MIN_SPECTRAL_HEIGHT - SPLITTER_HEIGHT, waveH));
+  int minWave = SP(MIN_WAVEFORM_HEIGHT);
+  int minSpec = SP(MIN_SPECTRAL_HEIGHT);
+  int splitH  = SP(SPLITTER_HEIGHT);
+  if (m_spectralVisible && contentH > minWave + minSpec + splitH) {
+    int waveH = (int)((float)contentH * m_splitterRatio) - splitH / 2;
+    waveH = std::max(minWave, std::min(contentH - minSpec - splitH, waveH));
     int splitterTop = contentTop + waveH;
-    int spectralTop = splitterTop + SPLITTER_HEIGHT;
+    int spectralTop = splitterTop + splitH;
 
     m_waveformRect = { 0, contentTop, w, splitterTop };
     m_splitterRect = { 0, splitterTop, w, spectralTop };
@@ -1460,7 +1556,7 @@ void SneakPeak::RecalcLayout(int w, int h)
     m_spectralRect = {};
   }
 
-  m_toolbar.SetRect(0, 0, w, TOOLBAR_HEIGHT);
+  m_toolbar.SetRect(0, 0, w, m_toolbarRect.bottom);  // scaled toolbar height (SP(TOOLBAR_HEIGHT))
   m_waveform.SetRect(m_waveformRect.left, m_waveformRect.top,
                      m_waveformRect.right - m_waveformRect.left,
                      m_waveformRect.bottom - m_waveformRect.top);

@@ -436,6 +436,19 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_SetEnvelopeStateChunk = SetEnvelopeStateChunk;
   g_GetSetEnvelopeInfo_String = GetSetEnvelopeInfo_String;
 
+  // Seed the global UI scale from ExtState BEFORE creating fonts so the initial
+  // fonts are built at the persisted scale (no flash-then-resize). Validated parse
+  // (locale-safe int x1000); ignore anything out of [800,2000]. If unset, the
+  // DPI-auto first-run seed happens later in SneakPeak::Create() (needs an HWND).
+  if (g_GetExtState) {
+    const char* us = g_GetExtState("SneakPeak", "ui_scale");
+    if (us && us[0]) {
+      char* e = nullptr;
+      long v = strtol(us, &e, 10);
+      if (e != us && v >= 800 && v <= 2000) g_uiScale = v / 1000.0;
+    }
+  }
+
   // Theme colors
   Theme_SetGetThemeColor((void*)GetThemeColor);
   Theme_Init();
