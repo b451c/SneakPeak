@@ -2,6 +2,7 @@
 #pragma once
 
 #include "platform.h"
+#include "ui_render.h"
 #include <vector>
 
 class MediaItem;
@@ -9,6 +10,9 @@ class MediaItem;
 class GainPanel {
 public:
   void Draw(HDC hdc, RECT waveformRect, bool hasSelection = false);
+  // Premium Blend2D render (v2.2.0 Inc D), drawn in OnPaintOverlay - crisp on
+  // HiDPI. Same base-coord layout as the GDI Draw, so hit-testing is shared.
+  void DrawPremium(HDC hdc, RECT waveformRect, double dpr, bool hasSelection = false);
   bool HitTest(int x, int y, RECT waveformRect) const;
   RECT GetRect(RECT waveformRect) const;
 
@@ -69,6 +73,8 @@ private:
   // Panel position offset from default center position
   int m_offsetX = 0;
   int m_offsetY = 0;
+
+  UiCanvas m_canvas;   // Blend2D renderer for the premium panel (Inc D)
 
   static constexpr double MIN_DB = -60.0;
   static constexpr double MAX_DB = 24.0;

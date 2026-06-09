@@ -161,6 +161,18 @@ struct SettingsVM {
   SettingsPrefs prefs;     // migrated preference values (host-owned state)
 };
 
+// --- Gain panel (premium port, v2.2.0 Inc D) ---------------------------------
+// View-model for RenderGainPanel. The premium panel lays out in the SAME base
+// 110x32 coords as the GDI panel's literals (knob zone x<32, close x>96), so
+// GainPanel's existing SP()-scaled hit-test serves both builds unchanged.
+struct GainVM {
+  double valNorm  = 0.0;     // current dB position 0..1 along the 270deg arc
+  double zeroNorm = 0.0;     // 0 dB position 0..1 (active arc runs zero->value)
+  const char* text = nullptr; // formatted readout ("+3.2 dB", "-inf", "... rel")
+  bool boost = false;        // db > 0 -> red arc/readout (over-unity warning)
+  bool gold  = false;        // batch-without-selection (relative mode) readout tint
+};
+
 // Computed geometry in base kSettingsW x kSettingsH coords - the single source for
 // BOTH the renderer and SettingsPanel hit-testing (draw == hit by construction).
 struct SettingsLayout {
@@ -197,6 +209,11 @@ public:
   // density presets + fit-to-window. Same surface/blit flow as RenderPanel.
   void RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                            const SettingsVM& vm);
+
+  // Render the premium gain knob overlay (v2.2.0 Inc D): 110x32 base, knob +
+  // active arc + dB readout + close. Crisp on HiDPI like the other panels.
+  void RenderGainPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                       const GainVM& vm);
 
 private:
   bool ensure(HDC hdc, int devW, int devH);   // (re)create offscreen surface

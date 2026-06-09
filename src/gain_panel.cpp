@@ -141,15 +141,16 @@ double GainPanel::AngleToDb(double angle) const
 
 RECT GainPanel::GetRect(RECT waveformRect) const
 {
+  const int pw = SP(PANEL_W), ph = SP(PANEL_H);
   int cx = (waveformRect.left + waveformRect.right) / 2 + m_offsetX;
-  int cy = waveformRect.top + 30 + m_offsetY;
-  int left = cx - PANEL_W / 2;
+  int cy = waveformRect.top + SP(30) + m_offsetY;
+  int left = cx - pw / 2;
   int top = cy;
   if (left < waveformRect.left) left = waveformRect.left;
-  if (left + PANEL_W > waveformRect.right) left = waveformRect.right - PANEL_W;
+  if (left + pw > waveformRect.right) left = waveformRect.right - pw;
   if (top < waveformRect.top) top = waveformRect.top;
-  if (top + PANEL_H > waveformRect.bottom) top = waveformRect.bottom - PANEL_H;
-  return { left, top, left + PANEL_W, top + PANEL_H };
+  if (top + ph > waveformRect.bottom) top = waveformRect.bottom - ph;
+  return { left, top, left + pw, top + ph };
 }
 
 bool GainPanel::HitTest(int x, int y, RECT waveformRect) const
@@ -180,13 +181,13 @@ bool GainPanel::OnMouseDown(int x, int y, RECT waveformRect)
   RECT r = GetRect(waveformRect);
 
   // Close button (top-right 14px)
-  if (x >= r.right - 14 && y < r.top + 14) {
+  if (x >= r.right - SP(14) && y < r.top + SP(14)) {
     Hide();
     return true;
   }
 
   // Knob area: left 32px of panel
-  if (x < r.left + 32) {
+  if (x < r.left + SP(32)) {
     m_knobDragging = true;
     m_dragAnchorY = y;
     m_dragAnchorDb = m_db;
@@ -212,10 +213,10 @@ void GainPanel::OnMouseMove(int x, int y, RECT waveformRect)
   }
   else if (m_panelDragging) {
     int defaultCX = (waveformRect.left + waveformRect.right) / 2;
-    int defaultCY = waveformRect.top + 30;
+    int defaultCY = waveformRect.top + SP(30);
     int newLeft = x - m_dragOffsetX;
     int newTop = y - m_dragOffsetY;
-    m_offsetX = (newLeft + PANEL_W / 2) - defaultCX;
+    m_offsetX = (newLeft + SP(PANEL_W) / 2) - defaultCX;
     m_offsetY = newTop - defaultCY;
   }
 }
@@ -253,9 +254,9 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect, bool hasSelection)
   SetBkMode(hdc, TRANSPARENT);
 
   // --- Knob ---
-  int knobCX = r.left + 18;
+  int knobCX = r.left + SP(18);
   int knobCY = (r.top + r.bottom) / 2;
-  int kr = KNOB_RADIUS;
+  int kr = SP(KNOB_RADIUS);
 
   // Knob background circle
   HBRUSH knobBg = CreateSolidBrush(RGB(55, 55, 55));
@@ -269,7 +270,7 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect, bool hasSelection)
   DeleteObject(knobOutline);
 
   // Arc track (gray) — draw as series of small segments
-  HPEN arcTrack = CreatePen(PS_SOLID, 2, RGB(80, 80, 80));
+  HPEN arcTrack = CreatePen(PS_SOLID, SPmin(2), RGB(80, 80, 80));
   oldPen = (HPEN)SelectObject(hdc, arcTrack);
   {
     int arcR = kr - 2;
@@ -288,7 +289,7 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect, bool hasSelection)
 
   // Active arc (colored)
   COLORREF activeColor = (m_db >= 0) ? RGB(220, 80, 60) : RGB(60, 180, 120);
-  HPEN arcActive = CreatePen(PS_SOLID, 2, activeColor);
+  HPEN arcActive = CreatePen(PS_SOLID, SPmin(2), activeColor);
   oldPen = (HPEN)SelectObject(hdc, arcActive);
   {
     int arcR = kr - 2;
@@ -313,9 +314,9 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect, bool hasSelection)
   // Pointer line
   double ptrAngleDeg = DbToAngle(m_db);
   double ptrAngleRad = ptrAngleDeg * M_PI / 180.0;
-  int ptrInner = 3;
+  int ptrInner = SP(3);
   int ptrOuter = kr - 1;
-  HPEN ptrPen = CreatePen(PS_SOLID, 2, RGB(220, 220, 220));
+  HPEN ptrPen = CreatePen(PS_SOLID, SPmin(2), RGB(220, 220, 220));
   oldPen = (HPEN)SelectObject(hdc, ptrPen);
   MoveToEx(hdc, knobCX + (int)(cos(ptrAngleRad) * ptrInner),
                 knobCY - (int)(sin(ptrAngleRad) * ptrInner), nullptr);
@@ -339,13 +340,40 @@ void GainPanel::Draw(HDC hdc, RECT waveformRect, bool hasSelection)
   // Gold: batch mode without selection (relative adjustment across segments)
   bool useGold = IsBatch() && !hasSelection;
   SetTextColor(hdc, useGold ? RGB(255, 200, 80) : RGB(100, 200, 255));
-  RECT dbRect = { r.left + 32, r.top + 2, r.right - 14, r.bottom - 2 };
+  RECT dbRect = { r.left + SP(32), r.top + SP(2), r.right - SP(14), r.bottom - SP(2) };
   DrawText(hdc, dbText, -1, &dbRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   // Close "x" button
   SetTextColor(hdc, RGB(140, 140, 140));
-  RECT xRect = { r.right - 14, r.top + 1, r.right - 1, r.top + 14 };
+  RECT xRect = { r.right - SP(14), r.top + 1, r.right - 1, r.top + SP(14) };
   DrawText(hdc, "x", -1, &xRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   SelectObject(hdc, oldFont);
+}
+
+void GainPanel::DrawPremium(HDC hdc, RECT waveformRect, double dpr, bool hasSelection)
+{
+  if (!m_visible) return;
+  if (m_item && !m_knobDragging) ReadFromItem();   // mirror the GDI Draw refresh
+
+  RECT r = GetRect(waveformRect);
+
+  GainVM vm;
+  const double range = MAX_DB - MIN_DB;
+  vm.valNorm  = std::max(0.0, std::min(1.0, (m_db - MIN_DB) / range));
+  vm.zeroNorm = (0.0 - MIN_DB) / range;
+  vm.boost    = (m_db > 0.0);
+  vm.gold     = IsBatch() && !hasSelection;
+
+  char dbText[24];
+  if (m_db <= MIN_DB + 0.5)
+    snprintf(dbText, sizeof(dbText), "-inf");
+  else if (IsBatch())
+    snprintf(dbText, sizeof(dbText), "%+.1f dB rel", m_db);
+  else
+    snprintf(dbText, sizeof(dbText), "%+.1f dB", m_db);
+  vm.text = dbText;
+
+  m_canvas.RenderGainPanel(hdc, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                           dpr, vm);
 }
