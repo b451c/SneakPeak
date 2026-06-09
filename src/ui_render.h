@@ -115,6 +115,38 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab = 0, bool compact =
 void ComputeCurveHandles(const URect& plotWell, const DynCurveParams& p, int activeTab,
                          URect out[2]);
 
+// --- Settings panel (premium Settings overlay, v2.2.0) -----------------------
+
+// Hit ids shared by the panel's hit-testing and the renderer's hover styling, so
+// the highlighted control is always the one a click would land on.
+enum SettingsHit {
+  SET_HIT_NONE     = -1,
+  SET_HIT_CLOSE    = 0,
+  SET_HIT_SLIDER   = 1,   // the UI-scale slider row (thumb or track)
+  SET_HIT_DENSITY0 = 2,   // Compact / Comfortable / Spacious (DENSITY0 + i)
+  SET_HIT_DENSITY1 = 3,
+  SET_HIT_DENSITY2 = 4,
+  SET_HIT_FIT      = 5,
+};
+
+// View-model for RenderSettingsPanel - pure data, built by SettingsPanel each paint.
+struct SettingsVM {
+  double uiScale  = 1.0;   // current global scale [0.8,2.0] -> thumb position + % readout
+  int    hover    = SET_HIT_NONE;
+  bool   dragging = false; // thumb drag in flight -> active styling on thumb + readout
+};
+
+// Computed geometry in base kSettingsW x kSettingsH coords - the single source for
+// BOTH the renderer and SettingsPanel hit-testing (draw == hit by construction).
+struct SettingsLayout {
+  URect header, closeBtn;
+  URect scaleLabel, scaleValue;  // "UI SCALE" caption + right-aligned % readout
+  URect sliderRow, sliderTrack;  // row = interactive zone; track = the visual rail
+  URect density[3];              // Compact / Comfortable / Spacious segments
+  URect fitBtn;                  // "Fit to window"
+};
+SettingsLayout ComputeSettingsLayout(double w, double h);
+
 class UiCanvas {
 public:
   UiCanvas();                 // defined in .cpp (Gfx must be complete - pimpl)
@@ -132,6 +164,11 @@ public:
   // scaled-blit to hdc at (x,y), sized w x h logical px (crisp on HiDPI).
   void RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                    const DynPanelVM& vm);
+
+  // Render the premium Settings panel (v2.2.0): header + UI-scale slider +
+  // density presets + fit-to-window. Same surface/blit flow as RenderPanel.
+  void RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                           const SettingsVM& vm);
 
 private:
   bool ensure(HDC hdc, int devW, int devH);   // (re)create offscreen surface

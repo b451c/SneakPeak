@@ -80,6 +80,13 @@ constexpr int    kKnobTextGap   = 8;      // gap from knob edge to label/value c
 constexpr int    kKnobGridGap   = 18;     // gap from the GR meter to the knob grid
 constexpr int    kDefaultTickLen = 5;     // default-value notch length on the ring
 
+// --- Settings panel (premium Settings overlay, v2.2.0) ---
+constexpr int    kSettingsW = 320;   // base size, logical px (scales with g_uiScale)
+constexpr int    kSettingsH = 200;
+// Density presets: friendly absolute UI scales (Compact / Comfortable / Spacious).
+// Shared by the renderer (active-segment detection) and the panel (click apply).
+constexpr double kDensityScale[3] = { 0.9, 1.0, 1.25 };
+
 // --- Type scale (logical px) ---
 constexpr float kFsValue     = 16.0f;  // value readouts (tabular)
 constexpr float kFsGrHero    = 20.0f;  // big GR readout

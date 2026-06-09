@@ -47,6 +47,7 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
   if (!hdc) return;
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   m_dynamicsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
+  m_settingsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());  // above dynamics
 #endif
 #ifdef SNEAKPEAK_UI_SPIKE
   DrawUiSpike(hdc);
@@ -416,8 +417,15 @@ void SneakPeak::DrawModeBar(HDC hdc)
   // Version + Support link — subtle, right of content, left of MASTER
   {
     SelectObject(hdc, g_fonts.normal11);
-    SetTextColor(hdc, RGB(90, 90, 90));
     int verRight = m_modeBarRect.right - 70;
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+    // Settings gear (premium): opens the Settings panel (UI scale etc.). Drawn as a
+    // text glyph like the Support heart (font fallback supplies the symbol).
+    SetTextColor(hdc, RGB(120, 120, 120));
+    m_gearRect = { verRight - 152, m_modeBarRect.top, verRight - 134, m_modeBarRect.bottom };
+    DrawText(hdc, "\xE2\x9A\x99", -1, &m_gearRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+#endif
+    SetTextColor(hdc, RGB(90, 90, 90));
     RECT verR = { verRight - 130, m_modeBarRect.top, verRight - 50, m_modeBarRect.bottom };
     DrawText(hdc, "v" SNEAKPEAK_VERSION, -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     m_versionRect = verR;

@@ -13,6 +13,7 @@
 #include "minimap_view.h"
 #include "dynamics_engine.h"
 #include "dynamics_panel.h"
+#include "settings_panel.h"
 #include "ui_render.h"
 #include <vector>
 #include <string>
@@ -129,12 +130,14 @@ enum ContextMenuID {
   CM_DYN_USER_PRESET_LAST = CM_DYN_USER_PRESET_BASE + 32,
   CM_DYN_DEL_PRESET_BASE,                              // + MAX_USER_PRESETS delete entries
   CM_DYN_DEL_PRESET_LAST = CM_DYN_DEL_PRESET_BASE + 32,
-  // Global UI scale (v2.2.0 B-1)
+  // Global UI scale (v2.2.0 B-1). The CM_UI_SCALE_* items are the OFF-build (GDI)
+  // fallback control; the premium build uses the Settings panel (CM_SETTINGS).
   CM_UI_SCALE_SMALLER,                                 // step the UI scale down
   CM_UI_SCALE_LARGER,                                  // step the UI scale up
   CM_UI_SCALE_RESET,                                   // reset the UI scale to 100%
   CM_UI_SCALE_PRESET_BASE,                             // + absolute % presets (see context_menu.cpp)
   CM_UI_SCALE_PRESET_LAST = CM_UI_SCALE_PRESET_BASE + 16,
+  CM_SETTINGS,                                         // open the premium Settings panel
   CM_LAST // sentinel -- keep last
 };
 
@@ -210,6 +213,7 @@ private:
   void   ApplyUiScale(double scale);         // the single scale-change entry point: clamp + relayout + repaint
   void   SaveUiScale();                      // persist g_uiScale to ExtState (int x1000, locale-safe)
   double QuerySystemDefaultUiScale() const;  // map the system DPI to a scale, for the first-run auto-seed
+  double ComputeFitUiScale() const;          // largest scale at which the fixed chrome fits the client area
 
   // LoadSelectedItem sub-methods
   bool LoadSelectedItemMulti(int count); // returns true if handled
@@ -332,6 +336,8 @@ private:
   MinimapView m_minimap;
   DynamicsEngine m_dynamics;
   DynamicsPanel m_dynamicsPanel;
+  SettingsPanel m_settingsPanel;  // premium Settings overlay (UI scale; migrated prefs next)
+  RECT m_gearRect = {};           // settings gear in the mode bar (premium build only)
   UiCanvas m_uiSpikeCanvas;   // PHASE 0: Blend2D renderer de-risk spike
   bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;
