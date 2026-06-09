@@ -60,14 +60,14 @@ void MarkerManager::DrawMarkers(HDC hdc, const RECT& waveformRect, const RECT& r
       // Region name at top
       if (name && name[0]) {
         // Small colored tab background
-        int textW = std::min(x2 - x1, 120);
-        RECT tabRect = { x1, rulerRect.top, x1 + textW, rulerRect.top + 14 };
+        int textW = std::min(x2 - x1, SP(120));
+        RECT tabRect = { x1, rulerRect.top, x1 + textW, rulerRect.top + SP(14) };
         HBRUSH tabBrush = CreateSolidBrush(dimColor);
         FillRect(hdc, &tabRect, tabBrush);
         DeleteObject(tabBrush);
 
         SetTextColor(hdc, rgnColor);
-        RECT nameRect = { x1 + 3, rulerRect.top + 1, x1 + textW - 2, rulerRect.top + 13 };
+        RECT nameRect = { x1 + SP(3), rulerRect.top + 1, x1 + textW - SP(2), rulerRect.top + SP(13) };
         DrawText(hdc, name, -1, &nameRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
       }
       continue;
@@ -97,13 +97,13 @@ void MarkerManager::DrawMarkers(HDC hdc, const RECT& waveformRect, const RECT& r
     if (!label[0]) { snprintf(idLabel, sizeof(idLabel), "M%d", markrgnidx); label = idLabel; }
 
     // Dark background tab
-    RECT tabRect = { mx + 1, waveformRect.top, mx + 70, waveformRect.top + 15 };
+    RECT tabRect = { mx + 1, waveformRect.top, mx + SP(70), waveformRect.top + SP(15) };
     HBRUSH tabBrush = CreateSolidBrush(RGB(30, 30, 30));
     FillRect(hdc, &tabRect, tabBrush);
     DeleteObject(tabBrush);
 
     SetTextColor(hdc, lineColor);
-    RECT nameRect = { mx + 4, waveformRect.top + 1, mx + 68, waveformRect.top + 14 };
+    RECT nameRect = { mx + SP(4), waveformRect.top + 1, mx + SP(68), waveformRect.top + SP(14) };
     DrawText(hdc, label, -1, &nameRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
   }
 

@@ -54,7 +54,7 @@ void SneakPeak::OnDoubleClick(int x, int y)
     // Double-click on envelope point = delete it
     if (m_waveform.GetShowVolumeEnvelope() && !m_waveform.IsStandaloneMode() &&
         g_GetTakeEnvelopeByName && g_DeleteEnvelopePointEx && g_Envelope_SortPoints) {
-      int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 8);
+      int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, SPmin(8));
       if (hitIdx >= 0) {
         double dblClickTime = m_waveform.XToTime(x);
         auto dblEi = m_waveform.GetEnvelopeAtTime(dblClickTime);
@@ -72,7 +72,7 @@ void SneakPeak::OnDoubleClick(int x, int y)
       }
     }
     // Check if clicking on a marker first
-    int markerIdx = m_markers.HitTestMarker(x, m_waveform);
+    int markerIdx = m_markers.HitTestMarker(x, m_waveform, SPmin(5));
     if (markerIdx >= 0) {
       m_markers.EditMarkerDialog(markerIdx);
       InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -94,7 +94,7 @@ void SneakPeak::OnDoubleClick(int x, int y)
 
   // Double-click on marker in ruler = edit marker
   if (y >= m_rulerRect.top && y < m_rulerRect.bottom) {
-    int markerIdx = m_markers.HitTestMarker(x, m_waveform);
+    int markerIdx = m_markers.HitTestMarker(x, m_waveform, SPmin(5));
     if (markerIdx >= 0) {
       m_markers.EditMarkerDialog(markerIdx);
       InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -301,7 +301,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   if (y >= m_rulerRect.top && y < m_rulerRect.bottom) {
     if (m_waveform.HasItem()) {
       // Check if clicking on a marker — start drag
-      int markerIdx = m_markers.HitTestMarker(x, m_waveform);
+      int markerIdx = m_markers.HitTestMarker(x, m_waveform, SPmin(5));
       if (markerIdx >= 0) {
         m_markers.StartDrag(markerIdx);
         SetCapture(m_hwnd);
@@ -318,7 +318,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   }
 
   // Minimap resize — drag top edge
-  if (m_minimapVisible && y >= m_minimapRect.top - 3 && y < m_minimapRect.top + 3) {
+  if (m_minimapVisible && y >= m_minimapRect.top - SP(3) && y < m_minimapRect.top + SP(3)) {
     m_minimapDragging = true;
     SetCapture(m_hwnd);
     return;
@@ -443,7 +443,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
     if (m_waveform.HasItem()) {
       int specH = m_spectralRect.bottom - m_spectralRect.top;
       int nch = m_waveform.GetNumChannels();
-      int chSep = (nch > 1) ? CHANNEL_SEPARATOR_HEIGHT : 0;
+      int chSep = (nch > 1) ? SP(CHANNEL_SEPARATOR_HEIGHT) : 0;
       int chH = (nch > 1) ? (specH - chSep) / 2 : specH;
       // Determine which channel was clicked
       int chTop = m_spectralRect.top;
@@ -511,11 +511,11 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
       // Standalone fade handles — always visible at top corners (16px hit zone)
       if (m_waveform.IsStandaloneMode()) {
         int waveL = m_waveformRect.left;
-        int waveR = m_waveformRect.right - DB_SCALE_WIDTH;
+        int waveR = m_waveformRect.right - SP(DB_SCALE_WIDTH);
         auto sf = m_waveform.GetStandaloneFade();
         int fiX = (sf.fadeInLen >= 0.001) ? m_waveform.TimeToX(sf.fadeInLen) : waveL;
         int foX = (sf.fadeOutLen >= 0.001) ? m_waveform.TimeToX(m_waveform.GetItemDuration() - sf.fadeOutLen) : waveR;
-        if (abs(x - fiX) <= FADE_HANDLE_HIT_ZONE && y < m_waveformRect.top + FADE_HANDLE_TOP_ZONE) {
+        if (abs(x - fiX) <= SP(FADE_HANDLE_HIT_ZONE) && y < m_waveformRect.top + SP(FADE_HANDLE_TOP_ZONE)) {
           m_fadeDragging = FADE_IN;
           m_standaloneFadeDrag = true;
           m_fadeDragStartY = y;
@@ -523,7 +523,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           SetCapture(m_hwnd);
           return;
         }
-        if (abs(x - foX) <= FADE_HANDLE_HIT_ZONE && y < m_waveformRect.top + FADE_HANDLE_TOP_ZONE) {
+        if (abs(x - foX) <= SP(FADE_HANDLE_HIT_ZONE) && y < m_waveformRect.top + SP(FADE_HANDLE_TOP_ZONE)) {
           m_fadeDragging = FADE_OUT;
           m_standaloneFadeDrag = true;
           m_fadeDragStartY = y;
@@ -565,7 +565,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             segDuration = seg.duration;
           }
 
-          int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, 8);
+          int hitIdx = m_waveform.HitTestEnvelopePoint(x, y, SPmin(8));
           if (hitIdx >= 0) {
             bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
             // Select/toggle point selection
@@ -631,7 +631,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             int scalingMode = ei.scalingMode;
             double lineGain = g_ScaleFromEnvelopeMode(scalingMode, rawVal);
             int lineY = m_waveform.EnvYToGainY(lineGain, scalingMode);
-            if (abs(y - lineY) <= 20) {
+            if (abs(y - lineY) <= SP(20)) {
               // Use evaluated envelope value (not pixel-derived) to avoid precision loss
               double newRawVal = rawVal;
               bool cmdDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -703,7 +703,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
         double fadeOutLen = fadeOutItem ? g_GetMediaItemInfo_Value(fadeOutItem, "D_FADEOUTLEN") : 0.0;
         int fiX = m_waveform.TimeToX(fadeInLen);
         int foX = m_waveform.TimeToX(m_waveform.GetItemDuration() - fadeOutLen);
-        if (abs(x - fiX) <= FADE_HANDLE_HIT_ZONE && y < m_waveformRect.top + FADE_HANDLE_TOP_ZONE) {
+        if (abs(x - fiX) <= SP(FADE_HANDLE_HIT_ZONE) && y < m_waveformRect.top + SP(FADE_HANDLE_TOP_ZONE)) {
           m_fadeDragging = FADE_IN;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = fadeInItem ? g_GetMediaItemInfo_Value(fadeInItem, "D_FADEINDIR") : 0.0;
@@ -711,7 +711,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
         }
-        if (abs(x - foX) <= FADE_HANDLE_HIT_ZONE && y < m_waveformRect.top + FADE_HANDLE_TOP_ZONE) {
+        if (abs(x - foX) <= SP(FADE_HANDLE_HIT_ZONE) && y < m_waveformRect.top + SP(FADE_HANDLE_TOP_ZONE)) {
           m_fadeDragging = FADE_OUT;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = fadeOutItem ? g_GetMediaItemInfo_Value(fadeOutItem, "D_FADEOUTDIR") : 0.0;
@@ -1367,7 +1367,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
   if (m_minimapDragging) {
     int scrollTop = m_scrollbarRect.top;
     int newH = scrollTop - y;
-    newH = std::max(MINIMAP_HEIGHT, std::min(120, newH));
+    newH = std::max(SPmin(MINIMAP_HEIGHT), std::min(SP(120), newH));
     if (newH != m_minimapHeight) {
       m_minimapHeight = newH;
       RECT cr;
@@ -1580,7 +1580,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 
   if (m_dragging && m_waveform.HasItem()) {
     // Clamp x to waveform area (exclude dB scale)
-    int waveRight = m_waveform.GetRect().right - DB_SCALE_WIDTH;
+    int waveRight = m_waveform.GetRect().right - SP(DB_SCALE_WIDTH);
     int clampedX = std::max((int)m_waveform.GetRect().left, std::min(waveRight, x));
     m_waveform.UpdateSelection(m_waveform.XToTime(clampedX));
     InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -1605,7 +1605,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     HCURSOR cur = LoadCursor(nullptr, IDC_ARROW);
 
     // Minimap resize edge
-    if (m_minimapVisible && y >= m_minimapRect.top - 3 && y < m_minimapRect.top + 3) {
+    if (m_minimapVisible && y >= m_minimapRect.top - SP(3) && y < m_minimapRect.top + SP(3)) {
       cur = LoadCursor(nullptr, IDC_SIZENS);
     }
     // Splitter
@@ -1621,7 +1621,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       }
       // Channel buttons (dB scale area, stereo only)
       else if (m_waveform.GetNumChannels() > 1 &&
-               x >= m_waveformRect.right - DB_SCALE_WIDTH) {
+               x >= m_waveformRect.right - SP(DB_SCALE_WIDTH)) {
         cur = LoadCursor(nullptr, IDC_HAND);
       }
       // Gain panel
@@ -1646,7 +1646,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     }
     // Markers in ruler
     else if (y >= m_rulerRect.top && y < m_rulerRect.bottom && m_waveform.HasItem()) {
-      if (m_markers.HitTestMarker(x, m_waveform) >= 0) {
+      if (m_markers.HitTestMarker(x, m_waveform, SPmin(5)) >= 0) {
         cur = LoadCursor(nullptr, IDC_SIZEWE);
       }
     }
@@ -1739,7 +1739,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   }
 
   // Scroll on dB scale column = vertical zoom
-  int dbScaleLeft = m_waveformRect.right - DB_SCALE_WIDTH;
+  int dbScaleLeft = m_waveformRect.right - SP(DB_SCALE_WIDTH);
   if (x >= dbScaleLeft && x <= m_waveformRect.right &&
       y >= m_waveformRect.top && y < m_waveformRect.bottom) {
     m_waveform.ZoomVertical((float)pow(1.15, steps));

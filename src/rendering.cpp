@@ -789,7 +789,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
 
   RECT wr = m_waveform.GetRect();
   int waveL = wr.left;
-  int waveR = wr.right - DB_SCALE_WIDTH;
+  int waveR = wr.right - SP(DB_SCALE_WIDTH);
   int waveW = waveR - waveL;
   if (waveW <= 0) return;
 
@@ -971,7 +971,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     SetTextColor(hdc, RGB(180, 160, 50));
     char label[32];
     snprintf(label, sizeof(label), "Thresh %.0f dB", thresh);
-    RECT lr = { waveL + 4, targetY - 13, waveL + 120, targetY - 1 };
+    RECT lr = { waveL + SP(4), targetY - SP(13), waveL + SP(120), targetY - 1 };
     DrawText(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }
@@ -990,7 +990,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     SetTextColor(hdc, RGB(140, 70, 70));
     char label[32];
     snprintf(label, sizeof(label), "Gate %.0f dB", params.gateThreshDb);
-    RECT lr = { waveL + 4, gateY + 2, waveL + 120, gateY + 14 };
+    RECT lr = { waveL + SP(4), gateY + SP(2), waveL + SP(120), gateY + SP(14) };
     DrawText(hdc, label, -1, &lr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(hdc, oldFont);
   }

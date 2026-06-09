@@ -755,9 +755,9 @@ void SneakPeak::UpdateAutoScroll()
       m_waveform.UpdateSelection(m_waveform.XToTime(mx));
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
-    else if (mx > m_waveformRect.right - DB_SCALE_WIDTH - edgeZone) {
+    else if (mx > m_waveformRect.right - SP(DB_SCALE_WIDTH) - edgeZone) {
       // Scroll right
-      int rightEdge = m_waveformRect.right - DB_SCALE_WIDTH;
+      int rightEdge = m_waveformRect.right - SP(DB_SCALE_WIDTH);
       double factor = 1.0 - (double)(rightEdge - mx) / (double)edgeZone;
       if (factor < 0.0) factor = 1.0;
       m_waveform.ScrollH(scrollSpeed * factor);
