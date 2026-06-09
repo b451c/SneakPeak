@@ -375,3 +375,8 @@ SneakPeak is free and open source. If you find it useful in your workflow, pleas
 - **ReaPack** - https://reapack.com
 - **REAPER SDK** - https://github.com/justinfrankel/reaper-sdk
 - **WDL/SWELL** - https://github.com/justinfrankel/WDL
+
+
+---
+
+Made by [falami.studio](https://falami.studio/lab/sneakpeak/) — audio production & engineering studio.
