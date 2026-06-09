@@ -137,6 +137,26 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         ApplyUiScale(ComputeFitUiScale());
         SaveUiScale();
       }
+      // Migrated preference clicks route through the SAME CM_* handlers as the
+      // (OFF-build) menu items - one behavior path, no drift.
+      const int pref = m_settingsPanel.PrefClicked();
+      if (pref != SET_HIT_NONE) {
+        int cmd = 0;
+        switch (pref) {
+          case SET_HIT_RULER0:       cmd = CM_RULER_RELATIVE;       break;
+          case SET_HIT_RULER1:       cmd = CM_RULER_ABSOLUTE;       break;
+          case SET_HIT_RULER2:       cmd = CM_RULER_BARS_BEATS;     break;
+          case SET_HIT_MASTER:       cmd = CM_METER_SOURCE_MASTER;  break;
+          case SET_HIT_METER0:       cmd = CM_METER_PEAK;           break;
+          case SET_HIT_METER1:       cmd = CM_METER_RMS;            break;
+          case SET_HIT_METER2:       cmd = CM_METER_VU;             break;
+          case SET_HIT_VIEW_METERS:  cmd = CM_SHOW_METERS;          break;
+          case SET_HIT_VIEW_RMS:     cmd = CM_SHOW_RMS;             break;
+          case SET_HIT_VIEW_SNAP:    cmd = CM_SNAP_ZERO;            break;
+          case SET_HIT_VIEW_MINIMAP: cmd = CM_MINIMAP;              break;
+        }
+        if (cmd) OnContextMenuCommand(cmd);
+      }
     } else {
       m_settingsPanel.Hide();
     }
