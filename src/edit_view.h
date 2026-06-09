@@ -129,6 +129,12 @@ enum ContextMenuID {
   CM_DYN_USER_PRESET_LAST = CM_DYN_USER_PRESET_BASE + 32,
   CM_DYN_DEL_PRESET_BASE,                              // + MAX_USER_PRESETS delete entries
   CM_DYN_DEL_PRESET_LAST = CM_DYN_DEL_PRESET_BASE + 32,
+  // Global UI scale (v2.2.0 B-1)
+  CM_UI_SCALE_SMALLER,                                 // step the UI scale down
+  CM_UI_SCALE_LARGER,                                  // step the UI scale up
+  CM_UI_SCALE_RESET,                                   // reset the UI scale to 100%
+  CM_UI_SCALE_PRESET_BASE,                             // + absolute % presets (see context_menu.cpp)
+  CM_UI_SCALE_PRESET_LAST = CM_UI_SCALE_PRESET_BASE + 16,
   CM_LAST // sentinel -- keep last
 };
 
@@ -199,6 +205,11 @@ private:
   void DrawSplitter(HDC hdc);
   void GetItemTitle(char* buf, int bufSize);
   void RecalcLayout(int w, int h);
+
+  // --- Global UI scale (v2.2.0 B-1) ---
+  void   ApplyUiScale(double scale);         // the single scale-change entry point: clamp + relayout + repaint
+  void   SaveUiScale();                      // persist g_uiScale to ExtState (int x1000, locale-safe)
+  double QuerySystemDefaultUiScale() const;  // map the system DPI to a scale, for the first-run auto-seed
 
   // LoadSelectedItem sub-methods
   bool LoadSelectedItemMulti(int count); // returns true if handled
@@ -458,6 +469,12 @@ private:
   void AddUserPreset();                          // prompt for a name, save current panel params
   bool ApplyUserPreset(int idx);                 // load preset idx into the panel; false if out of range
   void DeleteUserPreset(int idx);
+
+  // dpr-watchdog (v2.2.0): cache the last GetUiDpr() seen in OnTimer; on a change
+  // (monitor drag / OS scale change), force a full repaint so premium surfaces
+  // re-blit crisp. -1 = uninitialised (seeded on the first tick). Costs nothing
+  // when idle (one cheap comparison per ~33ms tick).
+  double m_lastUiDpr = -1.0;
 
   static AudioClipboard s_clipboard;
   static const int TIMER_REFRESH = 100;

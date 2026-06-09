@@ -28,10 +28,13 @@
 // backing crisply. (See .harness/design_phase2_architecture.md - DPI section.)
 double SneakPeak::GetUiDpr() const
 {
-#ifdef _WIN32
-  return 1.0;
-#else
+  // SWELL_IsRetinaHWND is macOS-only (guarded by SWELL_TARGET_OSX inside SWELL),
+  // so it must NOT be referenced on Linux/GDK or the premium build fails to link.
+  // Windows + Linux have no per-window Retina backing here -> dpr is 1.0.
+#ifdef SWELL_TARGET_OSX
   return (m_hwnd && SWELL_IsRetinaHWND(m_hwnd)) ? 2.0 : 1.0;
+#else
+  return 1.0;
 #endif
 }
 
@@ -74,6 +77,11 @@ void SneakPeak::DrawUiSpike(HDC hdc)
 void SneakPeak::OnPaint(HDC hdc)
 {
   if (!hdc) return;
+
+  // Recreate the GDI fonts at the current g_uiScale if the scale changed. This is
+  // the ONLY place fonts are rebuilt - done here, before any SelectObject, so a
+  // mid-paint scale change can never leave a dangling HFONT selected into a DC.
+  if (g_fontsNeedRescale) { Theme_CreateFonts(); g_fontsNeedRescale = false; }
 
   DrawModeBar(hdc);
   DrawRuler(hdc);

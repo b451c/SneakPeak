@@ -7,6 +7,24 @@
 #include <cstdio>
 #include <climits>
 
+// --- Global UI scale (v2.2.0 B-1) ---------------------------------------------
+// One logical multiplier that scales the WHOLE legacy GDI UI (fonts + layout
+// dims + hit-rects) and the premium-panel base size. It is a pure LEGIBILITY
+// preference, ORTHOGONAL to GetUiDpr() (the device-pixel ratio used only for
+// premium crispness): legacy GDI is NEVER multiplied by GetUiDpr() - it uses
+// g_uiScale only. Persisted as ExtState "SneakPeak"/"ui_scale" (int x1000),
+// clamped to [0.8, 2.0]. Default 1.0 = byte-identical to the pre-scale UI.
+extern double g_uiScale;
+// Set on a scale change; consumed (and cleared) at the top of OnPaint, which is
+// the ONLY place fonts are recreated (avoids a dangling HFONT mid-paint).
+extern bool   g_fontsNeedRescale;
+// Scale a logical pixel value (rounded). Both draw and hit-test call this inline
+// at the use-site -> draw == hit by construction (keep ZERO cached scaled state).
+inline int SP(int px)    { return (int)(px * g_uiScale + 0.5); }
+// Like SP() but never returns 0 (1px floor) - for hairlines / min hit radii.
+// Ternary floor instead of std::max to avoid an <algorithm> dependency here.
+inline int SPmin(int px) { int v = (int)(px * g_uiScale + 0.5); return v < 1 ? 1 : v; }
+
 // Forward declarations
 class AudioAccessor;
 class ReaProject;
