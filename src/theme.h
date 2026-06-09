@@ -48,8 +48,11 @@ struct ThemeColors {
   COLORREF markerLine;
   COLORREF markerText;
 
-  // Clip indicators
+  // Clip indicators: clipIndicator = REAL clipping (source flat-tops, or over
+  // 0 dB in destructive standalone where a save WILL clip); overIndicator =
+  // over-0-dB warning in the float REAPER modes (nothing has clipped yet).
   COLORREF clipIndicator;
+  COLORREF overIndicator;
 
   // Volume envelope overlay
   COLORREF volumeEnvelope;

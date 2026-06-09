@@ -124,6 +124,7 @@ void Theme_Refresh()
 
   // Clip indicators
   g_theme.clipIndicator = RGB(255, 50, 50);
+  g_theme.overIndicator = RGB(255, 170, 40);
 
   // Volume envelope overlay (cyan - distinct from green waveform and orange fades)
   g_theme.volumeEnvelope = RGB(0, 180, 220);
