@@ -148,6 +148,110 @@ static int g_cmdMasterView = 0;
 static MediaItem* g_lastSelectedItem = nullptr;
 static int g_lastSelectedCount = 0;
 
+// --- #83: never swallow keys the user bound to OUR OWN actions ---------------
+// The "<accelerator" consume list (bare letters/Space/...) runs ahead of REAPER's
+// shortcut processing whenever our window has focus (or the docked cursor-hover
+// fallback engages). If the user bound e.g. "SneakPeak: Open/Close SneakPeak" to
+// a bare letter, we would eat the very key meant to toggle us ("launch shortcut
+// dead when docked"). Before consuming, match the pressed key+modifiers against
+// the main-section shortcuts of our registered commands; on a match, return -666
+// so the main window runs the binding. Fail-open: a null API or an unrecognized
+// shortcut description keeps today's behavior (we consume).
+static KbdSectionInfo* (*g_SectionFromUniqueID)(int) = nullptr;
+static int (*g_CountActionShortcuts)(KbdSectionInfo*, int) = nullptr;
+static bool (*g_GetActionShortcutDesc)(KbdSectionInfo*, int, int, char*, int) = nullptr;
+
+static bool ieqToken(const char* a, const char* b)
+{
+  while (*a && *b) {
+    char ca = *a, cb = *b;
+    if (ca >= 'a' && ca <= 'z') ca = (char)(ca - 32);
+    if (cb >= 'a' && cb <= 'z') cb = (char)(cb - 32);
+    if (ca != cb) return false;
+    ++a; ++b;
+  }
+  return !*a && !*b;
+}
+
+// Key-name token from a REAPER shortcut description -> VK code. Only the keys our
+// consume list can eat need recognizing; anything else returns 0 (= no match).
+static int descTokenToVk(const char* t)
+{
+  if (t[0] && !t[1]) {
+    char c = t[0];
+    if (c >= 'a' && c <= 'z') c = (char)(c - 32);
+    if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) return (int)c;
+    return 0;
+  }
+  if (ieqToken(t, "Space")) return VK_SPACE;
+  if (ieqToken(t, "Tab")) return VK_TAB;
+  if (ieqToken(t, "Esc") || ieqToken(t, "Escape")) return VK_ESCAPE;
+  if (ieqToken(t, "Backspace")) return VK_BACK;
+  if (ieqToken(t, "Delete") || ieqToken(t, "Del")) return VK_DELETE;
+  if (ieqToken(t, "Home")) return VK_HOME;
+  if (ieqToken(t, "End")) return VK_END;
+  if (ieqToken(t, "Left")) return VK_LEFT;
+  if (ieqToken(t, "Right")) return VK_RIGHT;
+  if (ieqToken(t, "Up")) return VK_UP;
+  if (ieqToken(t, "Down")) return VK_DOWN;
+  return 0;
+}
+
+static bool keyMatchesOurBinding(WPARAM key)
+{
+  if (!g_SectionFromUniqueID || !g_CountActionShortcuts || !g_GetActionShortcutDesc)
+    return false;
+  KbdSectionInfo* sec = g_SectionFromUniqueID(0);   // main section
+  if (!sec) return false;
+
+  // Current modifier state. SWELL key mapping (mac): physical Cmd = VK_CONTROL,
+  // Option = VK_MENU, physical Ctrl = VK_LWIN - matched against the desc tokens.
+  const bool mShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+  const bool mCtrl  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+  const bool mAlt   = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+  const bool mWin   = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0;
+
+  const int cmds[4] = { g_cmdToggle, g_cmdLoadItem, g_cmdTrackView, g_cmdMasterView };
+  for (int c = 0; c < 4; ++c) {
+    if (!cmds[c]) continue;
+    const int n = g_CountActionShortcuts(sec, cmds[c]);
+    for (int i = 0; i < n; ++i) {
+      char desc[128] = {};
+      if (!g_GetActionShortcutDesc(sec, cmds[c], i, desc, sizeof(desc)) || !desc[0])
+        continue;
+      bool dShift = false, dCtrl = false, dAlt = false, dWin = false;
+      int vk = 0;
+      char tok[64];
+      int ti = 0;
+      for (const char* p = desc;; ++p) {
+        if (*p && *p != '+') { if (ti < 63) tok[ti++] = *p; continue; }
+        tok[ti] = '\0';
+        ti = 0;
+        if (*p && tok[0] == '\0') continue;     // leading '+' or "++" - skip empty
+        bool isMod = true;
+#ifdef __APPLE__
+        if      (ieqToken(tok, "Cmd"))                              dCtrl = true;
+        else if (ieqToken(tok, "Ctrl") || ieqToken(tok, "Control")) dWin  = true;
+        else if (ieqToken(tok, "Opt") || ieqToken(tok, "Option") ||
+                 ieqToken(tok, "Alt"))                              dAlt  = true;
+#else
+        if      (ieqToken(tok, "Ctrl") || ieqToken(tok, "Control")) dCtrl = true;
+        else if (ieqToken(tok, "Alt"))                              dAlt  = true;
+        else if (ieqToken(tok, "Win") || ieqToken(tok, "Super"))    dWin  = true;
+#endif
+        else if (ieqToken(tok, "Shift"))                            dShift = true;
+        else isMod = false;
+        if (!isMod) vk = descTokenToVk(tok);    // last non-modifier token = the key
+        if (!*p) break;
+      }
+      if (vk && vk == (int)key &&
+          dShift == mShift && dCtrl == mCtrl && dAlt == mAlt && dWin == mWin)
+        return true;
+    }
+  }
+  return false;
+}
+
 // Keyboard accelerator — SWS pattern: call OnKeyDown directly, never SendMessage.
 // Return 1 = consumed, -666 = our window has focus but pass to REAPER main, 0 = not ours.
 static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
@@ -192,6 +296,9 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
     else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A' || k == 'S')) handled = true;
     else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S' || k == 'T' || k == 'D')) handled = true;
     if (handled) {
+      // #83: the user's own SneakPeak action binding always wins over our
+      // internal editor keys - force it to the main window so it fires.
+      if (keyMatchesOurBinding(k)) return -666;
       g_sneakPeak->OnKeyDown(msg->wParam);
       return 1; // we ate this key
     }
@@ -357,6 +464,11 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_GetAudioAccessorSamples = GetAudioAccessorSamples;
   g_AudioAccessorStateChanged = (bool(*)(AudioAccessor*))rec->GetFunc("AudioAccessorStateChanged");
   g_AudioAccessorValidateState = (bool(*)(AudioAccessor*))rec->GetFunc("AudioAccessorValidateState");
+
+  // #83: shortcut introspection for keyMatchesOurBinding (optional - fail-open)
+  g_SectionFromUniqueID = (KbdSectionInfo*(*)(int))rec->GetFunc("SectionFromUniqueID");
+  g_CountActionShortcuts = (int(*)(KbdSectionInfo*, int))rec->GetFunc("CountActionShortcuts");
+  g_GetActionShortcutDesc = (bool(*)(KbdSectionInfo*, int, int, char*, int))rec->GetFunc("GetActionShortcutDesc");
 
   g_GetPlayState = GetPlayState;
   g_GetPlayPosition = GetPlayPosition;

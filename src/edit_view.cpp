@@ -40,6 +40,13 @@ void SneakPeak::Create()
 #endif
   if (!m_hwnd) return;
 
+#ifdef _WIN32
+  // Forum #83: Windows delivers WM_DROPFILES only after explicit registration
+  // (SWELL does it via SWELL_DLG_WS_DROPTARGET on mac/Linux). Without this the
+  // drop fell through to REAPER's timeline and Standalone mode never engaged.
+  DragAcceptFiles(m_hwnd, TRUE);
+#endif
+
   if (wantDocked && g_DockWindowAddEx) {
     g_DockWindowAddEx(m_hwnd, "SneakPeak", "SneakPeak_main", true);
     m_isDocked = true;
