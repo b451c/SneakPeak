@@ -1480,6 +1480,29 @@ void SneakPeak::ApplyUiScale(double scale)
   }
 }
 
+double SneakPeak::ComputeFitUiScale() const
+{
+  // Largest scale in [0.8, 2.0] at which the fixed chrome (bars + minimum waveform)
+  // still fits the current client area. Evaluates the same components RecalcLayout
+  // stacks, with the same SP() rounding, from the top down (need is monotonic in s).
+  RECT cr;
+  GetClientRect(m_hwnd, &cr);
+  const int cw = cr.right, ch = cr.bottom;
+  auto fits = [&](double s) {
+    auto sp = [&](int px) { return (int)(px * s + 0.5); };
+    int need = sp(TOOLBAR_HEIGHT) + sp(MODE_BAR_HEIGHT) + sp(RULER_HEIGHT)
+             + sp(MIN_WAVEFORM_HEIGHT)
+             + (m_spectralVisible ? sp(SPLITTER_HEIGHT) + sp(MIN_SPECTRAL_HEIGHT) : 0)
+             + (m_minimapVisible ? m_minimapHeight : 0)
+             + sp(SCROLLBAR_HEIGHT)
+             + (m_showMeters ? sp(BOTTOM_PANEL_HEIGHT) : 0);
+    return need <= ch && sp(MIN_WINDOW_WIDTH) <= cw;
+  };
+  for (double s = 2.0; s > 0.8; s -= 0.01)
+    if (fits(s)) return s;
+  return 0.8;
+}
+
 double SneakPeak::QuerySystemDefaultUiScale() const
 {
 #ifdef _WIN32

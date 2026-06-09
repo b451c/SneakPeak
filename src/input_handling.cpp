@@ -26,6 +26,11 @@
 
 void SneakPeak::OnDoubleClick(int x, int y)
 {
+  // Settings panel: swallow double-clicks over it (a fast second click on the
+  // slider/buttons must never reach the waveform below, e.g. as an envelope edit).
+  if (m_settingsPanel.IsVisible() && m_settingsPanel.HitTest(x, y, m_waveformRect))
+    return;
+
   // Double-click on gain panel = reset to 0 dB
   if (m_gainPanel.OnDoubleClick(x, y, m_waveformRect)) {
     InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -116,6 +121,29 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
     return;
   }
 
+  // Settings panel (premium): the topmost overlay. A click inside is handled by the
+  // panel; a click anywhere else closes it AND is swallowed (one click = dismiss, so
+  // closing can never accidentally edit the waveform underneath). Inert in the GDI
+  // build (the panel can never become visible there).
+  if (m_settingsPanel.IsVisible()) {
+    if (m_settingsPanel.OnMouseDown(x, y, m_waveformRect)) {
+      if (m_settingsPanel.IsDragging())
+        SetCapture(m_hwnd);
+      if (m_settingsPanel.ScaleChangedByClick()) {   // track jump / density preset
+        ApplyUiScale(g_uiScale);                     // clamp + font flag + relayout
+        SaveUiScale();
+      }
+      if (m_settingsPanel.FitRequested()) {
+        ApplyUiScale(ComputeFitUiScale());
+        SaveUiScale();
+      }
+    } else {
+      m_settingsPanel.Hide();
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
   if (y >= m_toolbarRect.top && y < m_toolbarRect.bottom) {
     int btn = m_toolbar.HitTest(x, y);
     if (btn >= 0) OnToolbarClick(btn);
@@ -124,6 +152,16 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
   // Mode bar click
   if (y >= m_modeBarRect.top && y < m_modeBarRect.bottom) {
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+    // Settings gear: open the premium Settings panel. (When the panel is already
+    // open, the swallow-outside-click block above closed it before reaching here.)
+    if (x >= m_gearRect.left && x < m_gearRect.right &&
+        y >= m_gearRect.top && y < m_gearRect.bottom) {
+      m_settingsPanel.Show();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      return;
+    }
+#endif
     // Click on version label: check for updates
     if (x >= m_versionRect.left && x < m_versionRect.right &&
         y >= m_versionRect.top && y < m_versionRect.bottom) {
@@ -832,6 +870,15 @@ void SneakPeak::OnMouseUp(int x, int y)
     ReleaseCapture();
     return;
   }
+  if (m_settingsPanel.IsDragging()) {
+    if (m_settingsPanel.OnMouseUp()) {
+      g_fontsNeedRescale = true;   // deferred from the live drag: one rebuild at the next paint
+      SaveUiScale();
+    }
+    ReleaseCapture();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
   if (m_dynamicsPanel.IsDragging()) {
     m_dynamicsPanel.OnMouseUp();
     // Persist panel size/position if a resize or panel-drag changed it.
@@ -1222,6 +1269,23 @@ void SneakPeak::OnMouseUp(int x, int y)
 
 void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 {
+  // Settings-panel UI-scale slider drag: live structural preview. The whole GDI
+  // layout re-flows at the new scale on every move; the FONT rebuild is deferred
+  // to mouse-up (one rebuild at the next paint - no per-move HFONT churn).
+  if (m_settingsPanel.IsDragging()) {
+    if (m_settingsPanel.OnMouseMove(x, y, m_waveformRect)) {
+      RECT cr;
+      GetClientRect(m_hwnd, &cr);
+      RecalcLayout(cr.right, cr.bottom);
+      m_waveform.Invalidate();
+      m_spectral.Invalidate();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    m_lastMouseX = x;
+    m_lastMouseY = y;
+    return;
+  }
+
   // Envelope selection rectangle (Cmd+left-drag)
   if (m_envRectStartX != 0 || m_envRectStartY != 0) {
     int dx = x - m_envRectStartX;
@@ -1542,6 +1606,10 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         cur = LoadCursor(nullptr, IDC_HAND);
       }
 #ifdef SNEAKPEAK_BLEND2D_PANEL
+      // Settings panel (topmost): hand over the body.
+      else if (m_settingsPanel.IsVisible() && m_settingsPanel.HitTest(x, y, m_waveformRect)) {
+        cur = LoadCursor(nullptr, IDC_HAND);
+      }
       // Dynamics panel: hand over the body, diagonal-resize over the corner grip.
       else if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
         cur = m_dynamicsPanel.IsOverResizeGrip(x, y, m_waveformRect)
@@ -1576,6 +1644,8 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
   // redraw). Drag paths already repaint, so this just covers free hover.
   if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.OnHover(x, y, m_waveformRect))
     InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_settingsPanel.IsVisible() && m_settingsPanel.OnHover(x, y, m_waveformRect))
+    InvalidateRect(m_hwnd, nullptr, FALSE);
 #endif
 
   m_lastMouseX = x;
@@ -1593,6 +1663,10 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   double steps = (double)delta / 120.0;
 
 #ifdef SNEAKPEAK_BLEND2D_PANEL
+  // Settings panel: consume the wheel over it so the waveform underneath does not
+  // zoom/pan while the user aims at the panel's controls.
+  if (m_settingsPanel.IsVisible() && m_settingsPanel.HitTest(x, y, m_waveformRect))
+    return;
   // Scroll over a dynamics knob = nudge its value (no need to grab tiny targets;
   // directly mitigates the DPI/scaling complaint). Consume the wheel whenever the
   // cursor is over the panel so the waveform underneath does not zoom/pan.
@@ -1760,7 +1834,10 @@ void SneakPeak::OnKeyDown(WPARAM key)
       break;
     }
     case VK_ESCAPE:
-      if (m_workingSet.active) {
+      if (m_settingsPanel.IsVisible()) {
+        m_settingsPanel.Hide();
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+      } else if (m_workingSet.active) {
         ExitWorkingSet();
       } else if (m_waveform.HasSelection()) {
         m_waveform.ClearSelection();

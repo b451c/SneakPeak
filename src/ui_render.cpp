@@ -1078,3 +1078,134 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
   }
   presentSurface(hdc, x, y, w, h, devW, devH);
 }
+
+// --- the premium Settings panel (v2.2.0) ------------------------------------
+
+// Base-coords geometry, shared with SettingsPanel hit-testing. Vertical rhythm:
+// header 44, then per-section caption row + control rows with even spacing.
+// kSettingsH (200) == the final y + 16 bottom pad - keep them in sync.
+SettingsLayout ComputeSettingsLayout(double w, double h)
+{
+  (void)h;   // fixed vertical rhythm; h is the (matching) kSettingsH
+  SettingsLayout L;
+  const double pad = (double)dynui::kPanelPad;
+  L.header   = { 0, 0, w, (double)dynui::kHeaderH };
+  L.closeBtn = { w - pad - 18.0, L.header.h * 0.5 - 9.0, 18.0, 18.0 };
+
+  double y = L.header.h + 14.0;
+  L.scaleLabel = { pad, y, 120.0, 16.0 };
+  L.scaleValue = { w - pad - 80.0, y, 80.0, 16.0 };
+  y += 22.0;
+  L.sliderRow   = { pad, y, w - 2.0 * pad, 28.0 };
+  // Track inset by the thumb radius so the thumb never clips the panel edge.
+  L.sliderTrack = { pad + 8.0, y + 12.0, w - 2.0 * pad - 16.0, 4.0 };
+  y += 38.0;
+  const double segW = (w - 2.0 * pad - 12.0) / 3.0;
+  for (int i = 0; i < 3; ++i)
+    L.density[i] = { pad + i * (segW + 6.0), y, segW, 28.0 };
+  y += 38.0;
+  L.fitBtn = { pad, y, w - 2.0 * pad, 28.0 };
+  return L;
+}
+
+void UiCanvas::RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                                   const SettingsVM& vm)
+{
+  if (!hdc || w < 8 || h < 8) return;
+  if (dpr < 1.0) dpr = 1.0;
+  // Same uniform-scale model as RenderPanel: lay out in base kSettingsW x kSettingsH,
+  // fold S into the context transform, derive the device buffer from base*S*dpr.
+  const double S = (double)w / (double)dynui::kSettingsW;
+  const int devW = (int)std::lround((double)dynui::kSettingsW * S * dpr);
+  const int devH = (int)std::lround((double)dynui::kSettingsH * S * dpr);
+  if (!prepareSurface(hdc, devW, devH)) return;
+  {
+    BLContext ctx;
+    if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
+    ctx.clear_all();
+    ctx.scale(dpr * S);
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+    const Gfx& gfx = *m_gfx;
+    const double W = (double)dynui::kSettingsW, H = (double)dynui::kSettingsH;
+
+    // panel slab: same treatment as the dynamics panel (gradient + hairline)
+    {
+      BLGradient bg(BLLinearGradientValues(0, 0, 0, H));
+      bg.add_stop(0.0, col(dynui::kSurface1));
+      bg.add_stop(1.0, col(dynui::kSurface0));
+      ctx.fill_round_rect(BLRoundRect(0, 0, W, H, dynui::kRadiusPanel), bg);
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_round_rect(BLRoundRect(0.5, 0.5, W - 1, H - 1, dynui::kRadiusPanel),
+                            col(dynui::kHairline));
+    }
+
+    const SettingsLayout L = ComputeSettingsLayout(W, H);
+
+    // header: title + close
+    if (gfx.fontsReady) {
+      ctx.fill_utf8_text(BLPoint(dynui::kPanelPad, L.header.h * 0.5 + 5.0), gfx.fValue,
+                         "SETTINGS", SIZE_MAX, col(dynui::kInkPrimary));
+      TextCentered(ctx, gfx.fValue, L.closeBtn, "x",
+                   vm.hover == SET_HIT_CLOSE ? dynui::kInkPrimary : dynui::kInkMuted);
+    }
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_line(BLLine(0, L.header.h, W, L.header.h), col(dynui::kHairline));
+
+    // UI SCALE caption + live % readout (amber while dragging)
+    if (gfx.fontsReady) {
+      ctx.fill_utf8_text(BLPoint(L.scaleLabel.x, L.scaleLabel.y + 12.0), gfx.fLabel,
+                         "UI SCALE", SIZE_MAX, col(dynui::kInkSecondary));
+      char pct[16];
+      std::snprintf(pct, sizeof(pct), "%d%%", (int)std::lround(vm.uiScale * 100.0));
+      const double tw = TextWidth(gfx.fValue, pct);
+      ctx.fill_utf8_text(BLPoint(L.scaleValue.x + L.scaleValue.w - tw, L.scaleValue.y + 13.0),
+                         gfx.fValue, pct, SIZE_MAX,
+                         col(vm.dragging ? dynui::kAmber : dynui::kInkPrimary));
+    }
+
+    // slider: rail + amber fill + 100% reference notch + thumb (glow on hover/drag)
+    {
+      const double norm = std::clamp((vm.uiScale - 0.8) / 1.2, 0.0, 1.0);
+      const double cy = L.sliderTrack.y + L.sliderTrack.h * 0.5;
+      const double tx = L.sliderTrack.x + norm * L.sliderTrack.w;
+      FillURound(ctx, L.sliderTrack, 2.0, dynui::kSurface2);
+      if (tx > L.sliderTrack.x + 0.5)
+        ctx.fill_round_rect(BLRoundRect(L.sliderTrack.x, L.sliderTrack.y,
+                                        tx - L.sliderTrack.x, L.sliderTrack.h, 2.0),
+                            col(dynui::kAmber));
+      {
+        const double nx = L.sliderTrack.x + ((1.0 - 0.8) / 1.2) * L.sliderTrack.w;
+        ctx.fill_rect(BLRect(nx - 0.75, cy - 8.0, 1.5, 4.5), colA(dynui::kInkMuted, 180));
+      }
+      const bool hot = vm.dragging || vm.hover == SET_HIT_SLIDER;
+      if (hot) {
+        ctx.set_comp_op(BL_COMP_OP_PLUS);
+        ctx.fill_circle(BLCircle(tx, cy, 11.0), colA(dynui::kAmber, 26));
+        ctx.fill_circle(BLCircle(tx, cy, 8.5), colA(dynui::kAmber, 40));
+        ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+      }
+      ctx.fill_circle(BLCircle(tx, cy, 7.0), col(dynui::kAmber));
+      ctx.fill_circle(BLCircle(tx, cy, 2.6), col(dynui::kSurface0));
+    }
+
+    // density presets: 3-segment selector; the segment matching the current scale
+    // lights up (none when the slider sits between presets)
+    {
+      static const char* const kDensityLabels[3] = { "COMPACT", "COMFORTABLE", "SPACIOUS" };
+      int active = -1;
+      for (int i = 0; i < 3; ++i)
+        if (std::fabs(vm.uiScale - dynui::kDensityScale[i]) < 0.005) active = i;
+      DrawSegmented3(ctx, gfx, L.density, kDensityLabels, active);
+    }
+
+    // fit-to-window
+    FillURound(ctx, L.fitBtn, dynui::kRadiusCtrl,
+               vm.hover == SET_HIT_FIT ? dynui::kSurface3 : dynui::kSurface2);
+    if (gfx.fontsReady)
+      TextCentered(ctx, gfx.fLabel, L.fitBtn, "FIT TO WINDOW",
+                   vm.hover == SET_HIT_FIT ? dynui::kInkPrimary : dynui::kInkSecondary);
+
+    if (ctx.end() != BL_SUCCESS) return;
+  }
+  presentSurface(hdc, x, y, w, h, devW, devH);
+}

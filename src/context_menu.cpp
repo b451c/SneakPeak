@@ -289,8 +289,10 @@ void SneakPeak::OnRightClick(int x, int y)
              m_waveform.GetShowRMS() ? "Show RMS  \xE2\x9C\x93" : "Show RMS");
   MenuAppend(viewMenu, MF_STRING, CM_SHOW_METERS,
              m_showMeters ? "Show Meters  \xE2\x9C\x93" : "Show Meters");
-  // UI Scale submenu (v2.2.0): global legibility scale for the whole UI (fonts +
-  // layout), persisted per machine. Independent of waveform zoom.
+#ifndef SNEAKPEAK_BLEND2D_PANEL
+  // UI Scale submenu - the OFF-build (GDI) fallback control only. The premium build
+  // hosts UI scale in the Settings panel (gear / "Settings...") to keep the context
+  // menu a WORK menu; this submenu disappears with the GDI path in Phase 3.
   {
     HMENU scaleMenu = CreatePopupMenu();
     char buf[32];
@@ -309,6 +311,7 @@ void SneakPeak::OnRightClick(int x, int y)
     }
     MenuAppendSubmenu(viewMenu, scaleMenu, "UI Scale");
   }
+#endif
   if (!m_waveform.IsStandaloneMode() && hasItem) {
     MenuAppend(viewMenu, MF_STRING, CM_TRACK_VIEW,
                (m_workingSet.active || m_workingSet.dormant)
@@ -361,6 +364,11 @@ void SneakPeak::OnRightClick(int x, int y)
     MenuAppend(menu, MF_STRING, CM_REPLACE_SOURCE, "Replace Source in REAPER Timeline");
   }
   MenuAppendSeparator(menu);
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  // One discoverability entry for the premium Settings panel (the gear in the mode
+  // bar is the primary entry) - UI preferences live there, not in this work menu.
+  MenuAppend(menu, MF_STRING, CM_SETTINGS, "Settings...");
+#endif
   MenuAppend(menu, MF_STRING, CM_DOCK_WINDOW,
              m_isDocked ? "Undock SneakPeak" : "Dock SneakPeak in Docker");
 
@@ -746,6 +754,10 @@ void SneakPeak::OnContextMenuCommand(int id)
       break;
     case CM_UI_SCALE_RESET:
       ApplyUiScale(1.0); SaveUiScale();
+      break;
+    case CM_SETTINGS:
+      if (m_settingsPanel.IsVisible()) m_settingsPanel.Hide();
+      else m_settingsPanel.Show();
       break;
     default: {
       // Preset selection: factory (CM_PRESET_BASE+i), a user preset
