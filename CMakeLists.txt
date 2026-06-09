@@ -166,9 +166,11 @@ elseif(WIN32)
   target_compile_definitions(reaper_sneakpeak PRIVATE
     WIN32_LEAN_AND_MEAN
   )
-  # UTF-8 text/file/menu API wrappers (forum #63) - Windows only; SWELL is UTF-8 native.
+  # UTF-8 text/file/menu API wrappers (forum #63) - Windows only; SWELL is UTF-8
+  # native. Wrapped in our own TU: WIN32_LEAN_AND_MEAN needs shellapi/commdlg
+  # pulled in first, and the WDL checkout is upstream (no local patches).
   target_sources(reaper_sneakpeak PRIVATE
-    ${WDL_DIR}/win32_utf8.c
+    src/win32_utf8_unit.c
   )
 elseif(UNIX)
   set_target_properties(reaper_sneakpeak PROPERTIES

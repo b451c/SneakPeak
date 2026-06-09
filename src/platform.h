@@ -56,6 +56,12 @@
 // Windows (SetWindowText, MessageBox, DragQueryFile, fopen, GetOpen/SaveFileName,
 // menus, ...). DrawText is NOT remapped - call DrawTextUTF8 explicitly; on SWELL
 // platforms (already UTF-8 native) it maps straight back to DrawText.
+#ifdef _WIN32
+  // WIN32_LEAN_AND_MEAN strips these from <windows.h>, but win32_utf8.h's
+  // prototypes need HDROP (shellapi) and LPOPENFILENAME (commdlg).
+  #include <shellapi.h>
+  #include <commdlg.h>
+#endif
 #include "win32_utf8.h"
 
 // Portable dialog creation
