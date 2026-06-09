@@ -2,6 +2,7 @@
 #pragma once
 
 #include "platform.h"
+#include "ui_render.h"
 #include <vector>
 
 enum class MeterMode { PEAK, RMS, VU };
@@ -31,6 +32,9 @@ public:
   // Feed pre-computed peak values directly (e.g. from Track_GetPeakInfo)
   void UpdateFromTrackPeak(double peakLinL, double peakLinR, bool playing, int nch);
   void Draw(HDC hdc, RECT rect, int nch);
+  // Premium Blend2D meters (v2.2.0 Inc E), drawn in OnPaintOverlay - crisp on
+  // HiDPI; bars/labels scale with the global UI scale.
+  void DrawPremium(HDC hdc, RECT rect, int nch, double dpr);
   bool IsDecaying() const { return m_barL > -59.0 || m_barR > -59.0 || m_peakHoldL > -59.0 || m_peakHoldR > -59.0; }
 
   void SetMode(MeterMode mode) { m_mode = mode; DestroyGdiCache(); }
@@ -54,5 +58,6 @@ private:
   int m_peakHoldCountL = 0, m_peakHoldCountR = 0;
   bool m_wasPlaying = false;
   MeterGdiCache m_gdi;
+  UiCanvas m_canvas;   // Blend2D renderer for the premium meters (Inc E)
   static constexpr int PEAK_HOLD_TICKS = 30; // ~1s at 33ms
 };

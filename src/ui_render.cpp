@@ -160,12 +160,20 @@ bool UiCanvas::ensure(HDC hdc, int devW, int devH)
   if (devW < 1 || devH < 1) return false;
   if (m_memDC && m_w == devW && m_h == devH) return true;
 
+  // [BUG, latent Linux skew - same root cause as forum #65] The platform surface
+  // stride is NOT always its width: SWELL's Linux (LICE) backend pads the row
+  // span to (w+4)&~4 (stride != width when w%8 is in {4..7}), while macOS
+  // (rowbytes w*4) and Win32 32bpp DIBs have no padding. Allocate at a
+  // multiple-of-8 width so stride == m_strideW on EVERY backend; presentSurface
+  // writes rows at m_strideW and blits only the visible devW.
+  const int strideW = (devW + 7) & ~7;
+
 #ifdef _WIN32
   if (m_memBmp) { DeleteObject(m_memBmp); m_memBmp = nullptr; }
   if (m_memDC)  { DeleteDC(m_memDC); m_memDC = nullptr; }
   BITMAPINFO bmi = {};
   bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-  bmi.bmiHeader.biWidth = devW;
+  bmi.bmiHeader.biWidth = strideW;
   bmi.bmiHeader.biHeight = -devH; // top-down
   bmi.bmiHeader.biPlanes = 1;
   bmi.bmiHeader.biBitCount = 32;
@@ -178,11 +186,12 @@ bool UiCanvas::ensure(HDC hdc, int devW, int devH)
   SelectObject(m_memDC, m_memBmp);
 #else
   if (m_memDC) { SWELL_DeleteGfxContext(m_memDC); m_memDC = nullptr; }
-  m_memDC = SWELL_CreateMemContext(hdc, devW, devH);
+  m_memDC = SWELL_CreateMemContext(hdc, strideW, devH);
   if (!m_memDC) return false;
 #endif
   m_w = devW;
   m_h = devH;
+  m_strideW = strideW;
   return true;
 }
 
@@ -577,9 +586,11 @@ void UiCanvas::presentSurface(HDC hdc, int x, int y, int w, int h, int devW, int
   if (!dat.pixel_data) return;
   if (dat.stride <= 0 || (dat.stride % 4) != 0 || dat.stride < (intptr_t)devW * 4) return;
   const uint8_t* srcBase = (const uint8_t*)dat.pixel_data;
+  // Dest rows advance by the REAL surface stride (m_strideW, alignment-padded in
+  // ensure()) - never by devW, which shears on the Linux LICE backend (see ensure).
   for (int row = 0; row < devH; ++row) {
     const unsigned int* s = (const unsigned int*)(srcBase + (intptr_t)row * dat.stride);
-    unsigned int* d = fbuf + (size_t)row * (size_t)devW;
+    unsigned int* d = fbuf + (size_t)row * (size_t)m_strideW;
     for (int col2 = 0; col2 < devW; ++col2)
       d[col2] = s[col2] | 0xFF000000u;
   }
@@ -991,25 +1002,23 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
 {
   if (!hdc || w < 8 || h < 8) return;
   if (dpr < 1.0) dpr = 1.0;
-  // Uniform UI scale (aspect locked): the panel always lays out in base
-  // kPanelW x kPanelH coords; S folds into the context transform alongside dpr so
-  // fonts/chrome/controls all scale together and stay vector-crisp at any size.
-  const double S = (double)w / (double)dynui::kPanelW;
-  // Compact mode lays out in a shorter base height (plot hidden); width base is
-  // always kPanelW so S (the uniform scale) is unchanged.
+  // Compact mode lays out in a shorter base height (plot hidden).
   const double baseH = vm.compact ? (double)dynui::kPanelHCompact : (double)dynui::kPanelH;
-  // The device buffer must match the painted content exactly: base content fills
-  // [0..kPanelW]x[0..baseH] under ctx.scale(dpr*S). Derive BOTH dims from base*S*dpr
-  // (not h*dpr) - pw/ph in GetRect round independently from m_uiScale, so h*dpr could
-  // exceed baseH*S*dpr and leave a sub-px unpainted (black) strip at the bottom.
-  const int devW = (int)std::lround((double)dynui::kPanelW * S * dpr);
-  const int devH = (int)std::lround(baseH * S * dpr);
+  // Crisp-blit invariant (v2.2.0): derive the device buffer from the EXACT integer
+  // w/h that presentSurface blits, so devW == w*dpr / devH == h*dpr whenever dpr is
+  // integral -> the scaled blit hits the platform's integer fast path (mac Metal 2:1)
+  // instead of the soft resampler at fractional panel scales. The context then
+  // scales base content to fill the buffer EXACTLY (per-axis; the sub-pixel
+  // anisotropy from independent w/h rounding is invisible, while a one-axis-derived
+  // buffer would leave an unpainted strip or soften the blit).
+  const int devW = (int)std::lround((double)w * dpr);
+  const int devH = (int)std::lround((double)h * dpr);
   if (!prepareSurface(hdc, devW, devH)) return;
   {
     BLContext ctx;
     if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
     ctx.clear_all();
-    ctx.scale(dpr * S);
+    ctx.scale((double)devW / (double)dynui::kPanelW, (double)devH / baseH);
     ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
 
     const double W = dynui::kPanelW, H = baseH;   // base layout coords (H shrinks in Compact)
@@ -1143,17 +1152,17 @@ void UiCanvas::RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double d
 {
   if (!hdc || w < 8 || h < 8) return;
   if (dpr < 1.0) dpr = 1.0;
-  // Same uniform-scale model as RenderPanel: lay out in base kSettingsW x kSettingsH,
-  // fold S into the context transform, derive the device buffer from base*S*dpr.
-  const double S = (double)w / (double)dynui::kSettingsW;
-  const int devW = (int)std::lround((double)dynui::kSettingsW * S * dpr);
-  const int devH = (int)std::lround((double)dynui::kSettingsH * S * dpr);
+  // Crisp-blit invariant: device buffer from the exact blitted w/h; the context
+  // scales base content to fill it exactly (see RenderPanel for the rationale).
+  const int devW = (int)std::lround((double)w * dpr);
+  const int devH = (int)std::lround((double)h * dpr);
   if (!prepareSurface(hdc, devW, devH)) return;
   {
     BLContext ctx;
     if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
     ctx.clear_all();
-    ctx.scale(dpr * S);
+    ctx.scale((double)devW / (double)dynui::kSettingsW,
+              (double)devH / (double)dynui::kSettingsH);
     ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
     const Gfx& gfx = *m_gfx;
     const double W = (double)dynui::kSettingsW, H = (double)dynui::kSettingsH;
@@ -1282,16 +1291,16 @@ void UiCanvas::RenderGainPanel(HDC hdc, int x, int y, int w, int h, double dpr,
   if (dpr < 1.0) dpr = 1.0;
   // Base layout = the GDI panel's 110x32 literal coords (knob zone x<32, readout
   // 32..96, close 96..110/y<14), so GainPanel's SP()-scaled hit-test matches.
+  // Crisp-blit invariant: device buffer from the exact blitted w/h (see RenderPanel).
   const double BW = 110.0, BH = 32.0;
-  const double S = (double)w / BW;
-  const int devW = (int)std::lround(BW * S * dpr);
-  const int devH = (int)std::lround(BH * S * dpr);
+  const int devW = (int)std::lround((double)w * dpr);
+  const int devH = (int)std::lround((double)h * dpr);
   if (!prepareSurface(hdc, devW, devH)) return;
   {
     BLContext ctx;
     if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
     ctx.clear_all();
-    ctx.scale(dpr * S);
+    ctx.scale((double)devW / BW, (double)devH / BH);
     ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
     const Gfx& gfx = *m_gfx;
 
@@ -1351,6 +1360,117 @@ void UiCanvas::RenderGainPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     if (gfx.fontsReady) {
       const URect xr{ BW - 14.0, 0.0, 14.0, 16.0 };
       TextCentered(ctx, gfx.fLabel, xr, "x", dynui::kInkMuted);
+    }
+
+    if (ctx.end() != BL_SUCCESS) return;
+  }
+  presentSurface(hdc, x, y, w, h, devW, devH);
+}
+
+// --- the premium L/R meters (v2.2.0 Inc E) -----------------------------------
+
+void UiCanvas::RenderMeters(HDC hdc, int x, int y, int w, int h, double dpr,
+                            const MetersVM& vm)
+{
+  if (!hdc || w < 16 || h < 16) return;
+  if (dpr < 1.0) dpr = 1.0;
+  // The meters fill a layout rect (variable size), so the base coords are the
+  // rect divided by the global UI scale - content (bars, fonts, spacing) then
+  // scales with the UI like the fixed-base panels do.
+  const double S = vm.uiScale > 0.0 ? vm.uiScale : 1.0;
+  const double BW = (double)w / S, BH = (double)h / S;
+  const int devW = (int)std::lround((double)w * dpr);
+  const int devH = (int)std::lround((double)h * dpr);
+  if (!prepareSurface(hdc, devW, devH)) return;
+  {
+    BLContext ctx;
+    if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
+    ctx.clear_all();
+    ctx.scale((double)devW / BW, (double)devH / BH);
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+    const Gfx& gfx = *m_gfx;
+
+    // background slab (flat surface0 - sits inside the GDI bottom panel)
+    ctx.fill_rect(BLRect(0, 0, BW, BH), col(dynui::kSurface0));
+
+    // geometry: mirrors the GDI meter (labels left, bars right, scale row below)
+    const double scaleH = 12.0, gap = 2.0, labelW = 14.0;
+    const double barsH = BH - scaleH;
+    const int numCh = vm.numCh >= 2 ? 2 : 1;
+    const double barH = (numCh == 2) ? (barsH - gap) / 2.0 : barsH;
+    const double barLeft = labelW, barRight = BW - 2.0;
+    const double barW = barRight - barLeft;
+    if (barW < 10.0) { ctx.end(); return; }
+
+    // per-mode bar shades (Peak bright / RMS mid / VU dim - the GDI distinction)
+    struct Shades { uint32_t g, yel, r; };
+    static const Shades kShades[3] = {
+      { 0xFF32D25A, 0xFFD2BE28, 0xFFDC3232 },   // PEAK
+      { 0xFF28A03C, 0xFFBEAA1E, 0xFFC82828 },   // RMS
+      { 0xFF1E9646, 0xFFB4A01E, 0xFFBE2828 },   // VU
+    };
+    const Shades& sh = kShades[vm.mode >= 0 && vm.mode <= 2 ? vm.mode : 0];
+    const double nYellow = (-18.0 + 60.0) / 60.0;   // zone boundaries (dB -> norm)
+    const double nRed    = (-6.0 + 60.0) / 60.0;
+
+    static const char* const chLabels2[2] = { "L", "R" };
+    for (int ch = 0; ch < numCh; ++ch) {
+      const double yTop = ch * (barH + gap);
+
+      // channel label
+      if (gfx.fontsReady)
+        TextCentered(ctx, gfx.fTick, URect{ 0.0, yTop, labelW, barH },
+                     numCh == 1 ? "M" : chLabels2[ch], dynui::kInkSecondary);
+
+      // bar well
+      ctx.fill_round_rect(BLRoundRect(barLeft, yTop, barW, barH, 2.0),
+                          col(dynui::kSurface2));
+
+      // value bar: green->yellow->red gradient, clipped to the current level
+      const double bn = std::clamp(vm.barNorm[ch], 0.0, 1.0);
+      if (bn > 0.003) {
+        BLGradient g(BLLinearGradientValues(barLeft, 0, barLeft + barW, 0));
+        g.add_stop(0.0,            col(sh.g));
+        g.add_stop(nYellow - 0.02, col(sh.g));
+        g.add_stop(nYellow + 0.02, col(sh.yel));
+        g.add_stop(nRed - 0.02,    col(sh.yel));
+        g.add_stop(nRed + 0.02,    col(sh.r));
+        g.add_stop(1.0,            col(sh.r));
+        ctx.save();
+        ctx.clip_to_rect(BLRect(barLeft, yTop, barW * bn, barH));
+        ctx.fill_round_rect(BLRoundRect(barLeft, yTop + 1.0, barW, barH - 2.0, 2.0), g);
+        ctx.restore();
+      }
+
+      // dB ticks inside the well (subtle)
+      static const double kTicksDb[] = { -48, -36, -24, -18, -12, -6, -3 };
+      for (double db : kTicksDb) {
+        const double tx = barLeft + ((db + 60.0) / 60.0) * barW;
+        ctx.fill_rect(BLRect(tx, yTop + 1.0, 1.0, barH - 2.0), colA(0xFFFFFFFF, 14));
+      }
+
+      // peak-hold: 2px line colored by zone
+      const double pn = std::clamp(vm.peakNorm[ch], 0.0, 1.0);
+      if (pn > 0.01) {
+        const uint32_t pc = pn > nRed ? sh.r : pn > nYellow ? sh.yel : sh.g;
+        ctx.fill_rect(BLRect(barLeft + pn * barW - 1.0, yTop, 2.0, barH), col(pc));
+      }
+    }
+
+    // scale row: mode caption + dB numbers under the bars
+    if (gfx.fontsReady) {
+      const double sy = BH - scaleH;
+      TextCentered(ctx, gfx.fTick, URect{ 0.0, sy, labelW, scaleH },
+                   vm.modeLabel ? vm.modeLabel : "dB", dynui::kInkMuted);
+      static const double kMarksDb[] = { -54, -48, -42, -36, -30, -24, -18, -12, -6, -3, 0 };
+      for (double db : kMarksDb) {
+        const double mx = barLeft + ((db + 60.0) / 60.0) * barW;
+        ctx.fill_rect(BLRect(mx, sy, 1.0, 3.0), colA(0xFFFFFFFF, 30));
+        char buf[8];
+        std::snprintf(buf, sizeof(buf), "%.0f", db);
+        TextCentered(ctx, gfx.fTick, URect{ mx - 14.0, sy + 2.0, 28.0, scaleH - 2.0 },
+                     buf, dynui::kInkMuted);
+      }
     }
 
     if (ctx.end() != BL_SUCCESS) return;

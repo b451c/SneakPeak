@@ -1044,8 +1044,11 @@ void SneakPeak::UpdateItemState()
       }
     }
 
-    // Meter source: master track or item audio
-    if (m_meterFromMaster && g_GetMasterTrack && g_Track_GetPeakInfo && g_GetPlayState) {
+    // Meter source: master track or item audio. Standalone always meters its own
+    // buffer - the preview plays outside the project graph, so the master track
+    // never carries its signal (a master-source meter would just sit flat).
+    if (m_meterFromMaster && !m_waveform.IsStandaloneMode() &&
+        g_GetMasterTrack && g_Track_GetPeakInfo && g_GetPlayState) {
       MediaTrack* master = g_GetMasterTrack(nullptr);
       bool playing = (g_GetPlayState() & 1) != 0;
       if (master) {
@@ -1058,11 +1061,22 @@ void SneakPeak::UpdateItemState()
       int nch = m_waveform.GetNumChannels();
       if (sr > 0 && nch > 0) {
         bool playing = g_GetPlayState && (g_GetPlayState() & 1);
+        // Standalone preview plays through PlayPreview, NOT the main transport, so
+        // GetPlayState() stays stopped and the meters never moved in standalone.
+        // Treat an active preview as playing and read its position from the
+        // preview register (same source the playback cursor uses).
+        const bool preview = m_previewActive && m_previewReg && m_waveform.IsStandaloneMode();
+        if (preview) playing = true;
         int startFrame, endFrame;
         if (playing) {
-          double absPos = g_GetPlayPosition ? g_GetPlayPosition()
-                        : (g_GetPlayPosition2 ? g_GetPlayPosition2() : 0.0);
-          double playPos = m_waveform.AbsTimeToRelTime(absPos);
+          double playPos;
+          if (preview) {
+            playPos = ((preview_register_t*)m_previewReg)->curpos;
+          } else {
+            double absPos = g_GetPlayPosition ? g_GetPlayPosition()
+                          : (g_GetPlayPosition2 ? g_GetPlayPosition2() : 0.0);
+            playPos = m_waveform.AbsTimeToRelTime(absPos);
+          }
           if (playPos < 0.0) playPos = 0.0;
           int center = static_cast<int>(playPos * sr);
           int halfWin = m_levels.GetIntegrationHalfWindow(sr);
@@ -1072,8 +1086,10 @@ void SneakPeak::UpdateItemState()
           startFrame = static_cast<int>(m_waveform.GetViewStart() * sr);
           endFrame = static_cast<int>(m_waveform.GetViewEnd() * sr);
         }
+        // Item volume: only when a real REAPER item backs the view (standalone has
+        // none - a null-item query would return 0.0 and silence the meters).
         double itemVol = 1.0;
-        if (!m_waveform.IsMultiItem() && g_GetMediaItemInfo_Value) {
+        if (!m_waveform.IsMultiItem() && m_waveform.GetItem() && g_GetMediaItemInfo_Value) {
           itemVol = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_VOL");
           if (g_GetSetMediaItemTakeInfo && m_waveform.GetTake()) {
             double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "D_VOL", nullptr);

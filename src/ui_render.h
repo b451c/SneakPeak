@@ -173,6 +173,19 @@ struct GainVM {
   bool gold  = false;        // batch-without-selection (relative mode) readout tint
 };
 
+// --- Bottom-panel meters (premium port, v2.2.0 Inc E) -------------------------
+// View-model for RenderMeters: per-channel bar + peak-hold as 0..1 norms over the
+// -60..0 dB range (the same DbToX mapping as the GDI meter). The renderer lays out
+// in rect/uiScale base coords so the meter content scales with the global UI scale.
+struct MetersVM {
+  double barNorm[2]  = { 0.0, 0.0 };
+  double peakNorm[2] = { 0.0, 0.0 };
+  int    numCh = 2;                    // 1 (M) or 2 (L/R)
+  int    mode  = 0;                    // 0=Peak 1=RMS 2=VU -> per-mode gradient shades
+  const char* modeLabel = nullptr;     // "PPM"/"RMS"/"VU" scale caption
+  double uiScale = 1.0;                // g_uiScale (content scales with the UI)
+};
+
 // Computed geometry in base kSettingsW x kSettingsH coords - the single source for
 // BOTH the renderer and SettingsPanel hit-testing (draw == hit by construction).
 struct SettingsLayout {
@@ -215,6 +228,11 @@ public:
   void RenderGainPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                        const GainVM& vm);
 
+  // Render the premium L/R meters into the bottom-panel meters rect (v2.2.0
+  // Inc E): per-mode gradient bars + peak-hold + scaled dB ticks/labels.
+  void RenderMeters(HDC hdc, int x, int y, int w, int h, double dpr,
+                    const MetersVM& vm);
+
 private:
   bool ensure(HDC hdc, int devW, int devH);   // (re)create offscreen surface
   bool prepareSurface(HDC hdc, int devW, int devH);              // surface + cached image/fonts
@@ -226,5 +244,6 @@ private:
 #endif
   int m_w = 0;
   int m_h = 0;
+  int m_strideW = 0;   // real surface row stride (alignment-padded; see ensure())
   std::unique_ptr<Gfx> m_gfx;   // cached BLImage + fonts (opaque; see ui_render.cpp)
 };
