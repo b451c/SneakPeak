@@ -57,6 +57,7 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
     int meterCh = (m_masterMode || m_meterFromMaster) ? 2 : m_waveform.GetNumChannels();
     m_levels.DrawPremium(hdc, m_metersRect, meterCh, GetUiDpr());
   }
+  DrawToastPremium(hdc);   // always LAST - the toast sits above every premium surface
   {
     // Settings panel (above dynamics): hand it the host-owned preference values.
     SettingsPrefs sp;
@@ -166,7 +167,10 @@ void SneakPeak::OnPaint(HDC hdc)
   if (m_minimapVisible) m_minimap.Paint(hdc, m_waveform);
   DrawScrollbar(hdc);
   if (m_showMeters) DrawBottomPanel(hdc);
+#ifndef SNEAKPEAK_BLEND2D_PANEL
+  // GDI toast (OFF build only - the premium build draws it last in OnPaintOverlay)
   DrawToast(hdc);
+#endif
 }
 
 void SneakPeak::DrawSplitter(HDC hdc)
@@ -1309,6 +1313,35 @@ void SneakPeak::ShowToast(const char* text)
   snprintf(m_toastText, sizeof(m_toastText), "%s", text);
   m_toastStartTick = GetTickCount();
   InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+void SneakPeak::DrawToastPremium(HDC hdc)
+{
+  if (!m_toastStartTick) return;
+  DWORD elapsed = GetTickCount() - m_toastStartTick;
+  if (elapsed > 2000) { m_toastStartTick = 0; return; }
+  int textLen = (int)strlen(m_toastText);
+  if (textLen == 0) return;
+
+  // Same lifetime/fade/geometry model as the GDI toast (solid 1.5s, 500ms fade).
+  double alpha = 1.0;
+  if (elapsed > 1500) alpha = 1.0 - (double)(elapsed - 1500) / 500.0;
+
+  int pillW = textLen * SP(9) + SP(24);
+  int pillH = SP(26);
+  int cx = (m_waveformRect.left + m_waveformRect.right) / 2;
+  int cy = m_waveformRect.top + SP(30);
+
+  ToastVM vm;
+  vm.text    = m_toastText;
+  vm.alpha   = alpha;
+  vm.uiScale = g_uiScale;
+  COLORREF bg = g_theme.waveformBg;   // COLORREF (0x00BBGGRR) -> ARGB
+  vm.bgColor = 0xFF000000u | ((uint32_t)GetRValue(bg) << 16) |
+               ((uint32_t)GetGValue(bg) << 8) | (uint32_t)GetBValue(bg);
+
+  m_toastCanvas.RenderToast(hdc, cx - pillW / 2, cy - pillH / 2, pillW, pillH,
+                            GetUiDpr(), vm);
 }
 
 void SneakPeak::DrawToast(HDC hdc)

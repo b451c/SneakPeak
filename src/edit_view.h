@@ -410,8 +410,10 @@ private:
   // Toast overlay (e.g. "Saved!")
   DWORD m_toastStartTick = 0;
   char m_toastText[64] = {};
+  UiCanvas m_toastCanvas;   // premium toast renderer (Inc F)
   void ShowToast(const char* text);
   void DrawToast(HDC hdc);
+  void DrawToastPremium(HDC hdc);   // alpha-faded Blend2D toast, drawn last in the overlay
 
   // Cached file size (avoid stat() every paint)
   double m_cachedFileSizeMB = 0.0;
