@@ -662,14 +662,14 @@ void WaveformView::SetRect(int x, int y, int w, int h)
 int WaveformView::GetChannelTop(int channel) const
 {
   int chH = GetChannelHeight();
-  return m_rect.top + channel * (chH + CHANNEL_SEPARATOR_HEIGHT);
+  return m_rect.top + channel * (chH + SP(CHANNEL_SEPARATOR_HEIGHT));
 }
 
 int WaveformView::GetChannelHeight() const
 {
   int totalH = m_rect.bottom - m_rect.top;
   if (m_numChannels <= 1) return totalH;
-  return (totalH - CHANNEL_SEPARATOR_HEIGHT * (m_numChannels - 1)) / m_numChannels;
+  return (totalH - SP(CHANNEL_SEPARATOR_HEIGHT) * (m_numChannels - 1)) / m_numChannels;
 }
 
 // --- Navigation ---
@@ -790,14 +790,14 @@ void WaveformView::SetBatchGainOffset(double linearOffset)
 // --- Coordinate conversion ---
 
 double WaveformView::XToTime(int x) const {
-  int w = m_rect.right - m_rect.left - DB_SCALE_WIDTH;
+  int w = m_rect.right - m_rect.left - SP(DB_SCALE_WIDTH);
   if (w < 1) w = m_rect.right - m_rect.left;
   if (w <= 0) return m_viewStartTime;
   return m_viewStartTime + ((double)(x - m_rect.left) / (double)w) * m_viewDuration;
 }
 
 int WaveformView::TimeToX(double time) const {
-  int w = m_rect.right - m_rect.left - DB_SCALE_WIDTH;
+  int w = m_rect.right - m_rect.left - SP(DB_SCALE_WIDTH);
   if (w < 1) w = m_rect.right - m_rect.left;
   if (m_viewDuration <= 0.0) return m_rect.left;
   return m_rect.left + (int)(((time - m_viewStartTime) / m_viewDuration) * (double)w);

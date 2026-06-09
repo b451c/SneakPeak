@@ -206,7 +206,7 @@ void SpectralView::ComputeThreadFunc(std::vector<double> audio, int nch, int sr,
 // Render visible portion from pre-computed data (optimized)
 void SpectralView::RenderView(const WaveformView& waveform)
 {
-  int width = m_rect.right - m_rect.left - DB_SCALE_WIDTH;
+  int width = m_rect.right - m_rect.left - SP(DB_SCALE_WIDTH);
   int height = m_rect.bottom - m_rect.top;
   if (width < 1 || height < 1) return;
 
@@ -226,7 +226,7 @@ void SpectralView::RenderView(const WaveformView& waveform)
   {
     std::lock_guard<std::mutex> lock(m_specMutex);
     int nch = m_specNch;
-    int chSep = (nch > 1) ? CHANNEL_SEPARATOR_HEIGHT : 0;
+    int chSep = (nch > 1) ? SP(CHANNEL_SEPARATOR_HEIGHT) : 0;
     int chH = (nch > 1) ? (height - chSep) / 2 : height;
 
     double colTime = (double)HOP_SIZE / (double)m_specSr;
@@ -292,7 +292,7 @@ done:
 
 void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
 {
-  int scaleLeft = m_rect.right - DB_SCALE_WIDTH;
+  int scaleLeft = m_rect.right - SP(DB_SCALE_WIDTH);
   int scaleRight = m_rect.right;
 
   RECT colRect = { scaleLeft, yTop, scaleRight, yTop + height };
@@ -336,19 +336,19 @@ void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
   };
 
   HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
-  int lastDrawnY = yTop + height + 20;
+  int lastDrawnY = yTop + height + SP(20);
 
   for (const auto& lab : labels) {
     if (lab.freq < fMin || lab.freq > fMax) continue;
 
     int y = FreqToY(lab.freq, yTop, height);
-    if (y < yTop + 1 || y > yTop + height - 2) continue;
-    if (lastDrawnY - y < 11) continue;
+    if (y < yTop + 1 || y > yTop + height - SP(2)) continue;
+    if (lastDrawnY - y < SP(11)) continue;
 
     // Tick
     oldPen = (HPEN)SelectObject(hdc, tickPen);
     MoveToEx(hdc, scaleLeft + 1, y, nullptr);
-    LineTo(hdc, scaleLeft + 5, y);
+    LineTo(hdc, scaleLeft + SP(5), y);
     SelectObject(hdc, oldPen);
 
     // Label
@@ -360,11 +360,11 @@ void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
       SetTextColor(hdc, RGB(150, 150, 150));
     }
 
-    int labelTop = y - 5, labelBot = y + 5;
-    if (y - yTop < 5) { labelTop = yTop; labelBot = yTop + 11; }
-    else if (yTop + height - y < 5) { labelTop = yTop + height - 11; labelBot = yTop + height; }
+    int labelTop = y - SP(5), labelBot = y + SP(5);
+    if (y - yTop < SP(5)) { labelTop = yTop; labelBot = yTop + SP(11); }
+    else if (yTop + height - y < SP(5)) { labelTop = yTop + height - SP(11); labelBot = yTop + height; }
 
-    RECT tr = { scaleLeft + 6, labelTop, scaleRight - 2, labelBot };
+    RECT tr = { scaleLeft + SP(6), labelTop, scaleRight - SP(2), labelBot };
     DrawText(hdc, lab.text, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     lastDrawnY = y;
   }
@@ -377,7 +377,7 @@ void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
 
 void SpectralView::DrawPlayhead(HDC hdc, const WaveformView& waveform)
 {
-  int contentRight = m_rect.right - DB_SCALE_WIDTH;
+  int contentRight = m_rect.right - SP(DB_SCALE_WIDTH);
 
   bool isPlaying = g_GetPlayState && (g_GetPlayState() & 1);
 
@@ -434,7 +434,7 @@ void SpectralView::DrawSelection(HDC hdc, const WaveformView& waveform)
   double s2 = std::max(waveform.GetSelection().startTime, waveform.GetSelection().endTime);
   int x1 = waveform.TimeToX(s1);
   int x2 = waveform.TimeToX(s2);
-  int lim = m_rect.right - DB_SCALE_WIDTH;
+  int lim = m_rect.right - SP(DB_SCALE_WIDTH);
 
   // Selection boundary lines
   HPEN pen = CreatePen(PS_SOLID, 1, RGB(220, 220, 220));
@@ -460,9 +460,9 @@ void SpectralView::DrawFreqSelectionOverlay(HDC hdc, const WaveformView& wavefor
 
   int nch = waveform.GetNumChannels();
   int height = m_rect.bottom - m_rect.top;
-  int chSep = (nch > 1) ? CHANNEL_SEPARATOR_HEIGHT : 0;
+  int chSep = (nch > 1) ? SP(CHANNEL_SEPARATOR_HEIGHT) : 0;
   int chH = (nch > 1) ? (height - chSep) / 2 : height;
-  int contentRight = m_rect.right - DB_SCALE_WIDTH;
+  int contentRight = m_rect.right - SP(DB_SCALE_WIDTH);
 
   double fLow = GetFreqSelLow();
   double fHigh = GetFreqSelHigh();
@@ -562,10 +562,10 @@ void SpectralView::DrawLoadingOverlay(HDC hdc)
 
   // Progress bar
   float pct = m_progress.load();
-  int barW = std::min(200, (int)(m_rect.right - m_rect.left) - 40);
-  int barH = 4;
+  int barW = std::min(SP(200), (int)(m_rect.right - m_rect.left) - SP(40));
+  int barH = SPmin(4);
   int barL = cx - barW / 2;
-  int barT = cy + 10;
+  int barT = cy + SP(10);
 
   // Track
   RECT trackRect = { barL, barT, barL + barW, barT + barH };
@@ -622,17 +622,27 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
 
   RenderView(waveform);
 
-  int contentW = width - DB_SCALE_WIDTH;
+  int contentW = width - SP(DB_SCALE_WIDTH);
   if (m_pixW < 1 || m_pixH < 1) return;
+
+  // [BUG forum #65] The mem-context framebuffer stride is NOT always the width:
+  // SWELL's Linux (LICE) backend pads the row span to (w+4)&~4, so writing rows
+  // at contentW shears the image diagonally for widths with w%8 in {4..7}
+  // (macOS CGBitmapContext uses exactly w*4 and our Win32 32bpp DIB has no row
+  // padding - both immune, which is why this only bit Linux). Allocating the
+  // context at a multiple-of-8 width makes stride == alloc width on EVERY
+  // backend (LICE: (w+4)&~4 == w when w%8 == 0); the BitBlt then copies only
+  // the visible contentW. Same pattern as ui_render.cpp presentSurface.
+  const int allocW = (contentW + 7) & ~7;
 
 #ifdef _WIN32
   // Win32: CreateDIBSection for direct framebuffer access
-  if (!m_memDC || m_memW != contentW || m_memH != height) {
+  if (!m_memDC || m_memW != allocW || m_memH != height) {
     if (m_memBmp) { DeleteObject(m_memBmp); m_memBmp = nullptr; }
     if (m_memDC) { DeleteDC(m_memDC); m_memDC = nullptr; }
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = contentW;
+    bmi.bmiHeader.biWidth = allocW;
     bmi.bmiHeader.biHeight = -height; // top-down
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
@@ -643,7 +653,7 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
       m_memDC = CreateCompatibleDC(hdc);
       SelectObject(m_memDC, m_memBmp);
     }
-    m_memW = contentW;
+    m_memW = allocW;
     m_memH = height;
   }
   if (m_memDC && m_memBmp) {
@@ -655,17 +665,17 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
       for (int col = 0; col < cols; col++) {
         const unsigned char* colData = &m_pixels[col * m_pixH];
         for (int row = 0; row < m_pixH; row++)
-          fbuf[row * contentW + col] = m_colorLUT_Native[colData[row]];
+          fbuf[row * allocW + col] = m_colorLUT_Native[colData[row]];
       }
       BitBlt(hdc, m_rect.left, m_rect.top, contentW, height, m_memDC, 0, 0, SRCCOPY);
     }
   }
 #else
   // SWELL: direct framebuffer access via SWELL_CreateMemContext
-  if (!m_memDC || m_memW != contentW || m_memH != height) {
+  if (!m_memDC || m_memW != allocW || m_memH != height) {
     if (m_memDC) SWELL_DeleteGfxContext(m_memDC);
-    m_memDC = SWELL_CreateMemContext(hdc, contentW, height);
-    m_memW = contentW;
+    m_memDC = SWELL_CreateMemContext(hdc, allocW, height);
+    m_memW = allocW;
     m_memH = height;
   }
   if (m_memDC) {
@@ -675,7 +685,7 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
       for (int col = 0; col < cols; col++) {
         const unsigned char* colData = &m_pixels[col * m_pixH];
         for (int row = 0; row < m_pixH; row++)
-          fbuf[row * contentW + col] = m_colorLUT_Native[colData[row]];
+          fbuf[row * allocW + col] = m_colorLUT_Native[colData[row]];
       }
       BitBlt(hdc, m_rect.left, m_rect.top, contentW, height, m_memDC, 0, 0, SRCCOPY);
     }
@@ -686,9 +696,9 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
   int nch = waveform.GetNumChannels();
   int sr = waveform.GetSampleRate();
   if (nch > 1) {
-    int chH = (height - CHANNEL_SEPARATOR_HEIGHT) / 2;
+    int chH = (height - SP(CHANNEL_SEPARATOR_HEIGHT)) / 2;
     DrawFreqScale(hdc, m_rect.top, chH, sr);
-    DrawFreqScale(hdc, m_rect.top + chH + CHANNEL_SEPARATOR_HEIGHT, chH, sr);
+    DrawFreqScale(hdc, m_rect.top + chH + SP(CHANNEL_SEPARATOR_HEIGHT), chH, sr);
   } else {
     DrawFreqScale(hdc, m_rect.top, height, sr);
   }

@@ -454,13 +454,13 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
                                double viewStart, double viewDur, float verticalZoom,
                                const WaveformSelection& selection, double gainOffset)
 {
-  int w = rect.right - rect.left - DB_SCALE_WIDTH;
+  int w = rect.right - rect.left - SP(DB_SCALE_WIDTH);
   if (w < 1) w = 1;
   int nch = numChannels;
   if (nch < 1) return;
 
   int totalH = rect.bottom - rect.top;
-  int chH = (nch <= 1) ? totalH : (totalH - CHANNEL_SEPARATOR_HEIGHT * (nch - 1)) / nch;
+  int chH = (nch <= 1) ? totalH : (totalH - SP(CHANNEL_SEPARATOR_HEIGHT) * (nch - 1)) / nch;
 
   // Selection range in pixels
   bool hasSel = selection.active && selection.startTime != selection.endTime;
@@ -519,7 +519,7 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
     if (colStart >= colEnd) continue;
 
     for (int ch = 0; ch < nch; ch++) {
-      int chTop = rect.top + ch * (chH + CHANNEL_SEPARATOR_HEIGHT);
+      int chTop = rect.top + ch * (chH + SP(CHANNEL_SEPARATOR_HEIGHT));
       int centerY = chTop + chH / 2;
       float halfH = (float)(chH / 2) * verticalZoom;
 

@@ -24,7 +24,7 @@
 
 void WaveformView::UpdatePeaks()
 {
-  int w = m_rect.right - m_rect.left - DB_SCALE_WIDTH;
+  int w = m_rect.right - m_rect.left - SP(DB_SCALE_WIDTH);
   if (w < 1) w = m_rect.right - m_rect.left;
 
   // Multi-item active: delegate peak computation
@@ -163,7 +163,7 @@ void WaveformView::Paint(HDC hdc)
   if (hasSel) {
     double selStart = std::min(m_selection.startTime, m_selection.endTime);
     double selEnd = std::max(m_selection.startTime, m_selection.endTime);
-    int waveR = m_rect.right - DB_SCALE_WIDTH;
+    int waveR = m_rect.right - SP(DB_SCALE_WIDTH);
     int x1 = std::max((int)m_rect.left, std::min(waveR, TimeToX(selStart)));
     int x2 = std::max((int)m_rect.left, std::min(waveR, TimeToX(selEnd)));
     if (x2 > x1) {
@@ -189,7 +189,7 @@ void WaveformView::Paint(HDC hdc)
   // Draw gap regions between segments (timeline view + multi-item MIX mode)
   if ((m_timelineViewActive || m_multiItemActive) && m_segments.size() >= 2) {
     int waveL = m_rect.left;
-    int waveR = m_rect.right - DB_SCALE_WIDTH;
+    int waveR = m_rect.right - SP(DB_SCALE_WIDTH);
     OwnedBrush gapBrush(RGB(20, 20, 20));
     for (size_t i = 0; i + 1 < m_segments.size(); i++) {
       double gapStart = m_segments[i].relativeOffset + m_segments[i].duration;
@@ -234,8 +234,8 @@ void WaveformView::Paint(HDC hdc)
 
   // Channel separator on top of everything
   if (m_numChannels == 2) {
-    int sepY = GetChannelTop(1) - CHANNEL_SEPARATOR_HEIGHT;
-    RECT sepRect = { m_rect.left, sepY, m_rect.right, sepY + CHANNEL_SEPARATOR_HEIGHT };
+    int sepY = GetChannelTop(1) - SP(CHANNEL_SEPARATOR_HEIGHT);
+    RECT sepRect = { m_rect.left, sepY, m_rect.right, sepY + SP(CHANNEL_SEPARATOR_HEIGHT) };
     HBRUSH sepBrush = CreateSolidBrush(RGB(60, 60, 60));
     FillRect(hdc, &sepRect, sepBrush);
     DeleteObject(sepBrush);
@@ -244,7 +244,7 @@ void WaveformView::Paint(HDC hdc)
 
 void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int height)
 {
-  int w = m_rect.right - m_rect.left - DB_SCALE_WIDTH;
+  int w = m_rect.right - m_rect.left - SP(DB_SCALE_WIDTH);
   if (w < 1) w = 1;
   int nch = m_numChannels;
   if (nch <= 0 || !m_peaksValid) return;
@@ -456,7 +456,7 @@ void WaveformView::DrawCenterLine(HDC hdc, int yCenter)
   OwnedPen pen(PS_SOLID, 1, g_theme.centerLine);
   DCPenScope scope(hdc, pen);
   MoveToEx(hdc, m_rect.left, yCenter, nullptr);
-  LineTo(hdc, m_rect.right - DB_SCALE_WIDTH, yCenter);
+  LineTo(hdc, m_rect.right - SP(DB_SCALE_WIDTH), yCenter);
 }
 
 void WaveformView::DrawClipIndicators(HDC hdc)
@@ -570,7 +570,7 @@ void WaveformView::DrawSelection(HDC hdc)
   double selStart = std::min(m_selection.startTime, m_selection.endTime);
   double selEnd = std::max(m_selection.startTime, m_selection.endTime);
 
-  int waveRight = m_rect.right - DB_SCALE_WIDTH;
+  int waveRight = m_rect.right - SP(DB_SCALE_WIDTH);
   int x1 = std::max((int)m_rect.left, std::min(waveRight, TimeToX(selStart)));
   int x2 = std::max((int)m_rect.left, std::min(waveRight, TimeToX(selEnd)));
   if (x2 <= x1) return;
@@ -589,7 +589,7 @@ void WaveformView::DrawSelection(HDC hdc)
 // Vertical time grid lines — synced with ruler tick interval
 void WaveformView::DrawTimeGrid(HDC hdc)
 {
-  int w = m_rect.right - m_rect.left - DB_SCALE_WIDTH;
+  int w = m_rect.right - m_rect.left - SP(DB_SCALE_WIDTH);
   if (w < 10 || m_viewDuration <= 0) return;
 
   int waveRight = m_rect.left + w;
@@ -632,7 +632,7 @@ void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
 
   int centerY = yTop + height / 2;
   float halfH = (float)(height / 2) * m_verticalZoom;
-  int waveRight = m_rect.right - DB_SCALE_WIDTH;
+  int waveRight = m_rect.right - SP(DB_SCALE_WIDTH);
 
   HPEN gridPen = CreatePen(PS_SOLID, 1, RGB(35, 55, 40));
   HPEN oldPen = (HPEN)SelectObject(hdc, gridPen);
@@ -652,13 +652,13 @@ void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
     int y2 = centerY + yOff;
 
     // Top half — min 30px spacing
-    if (y1 >= yTop && y1 < yTop + height && lastY_top - y1 >= 30) {
+    if (y1 >= yTop && y1 < yTop + height && lastY_top - y1 >= SP(DB_GRID_MIN_SPACING)) {
       MoveToEx(hdc, m_rect.left, y1, nullptr);
       LineTo(hdc, waveRight, y1);
       lastY_top = y1;
     }
     // Bottom half
-    if (y2 >= yTop && y2 < yTop + height && y2 != y1 && y2 - lastY_bot >= 30) {
+    if (y2 >= yTop && y2 < yTop + height && y2 != y1 && y2 - lastY_bot >= SP(DB_GRID_MIN_SPACING)) {
       MoveToEx(hdc, m_rect.left, y2, nullptr);
       LineTo(hdc, waveRight, y2);
       lastY_bot = y2;
@@ -676,7 +676,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
 
   int centerY = yTop + height / 2;
   float halfH = (float)(height / 2) * m_verticalZoom;
-  int scaleLeft = m_rect.right - DB_SCALE_WIDTH;
+  int scaleLeft = m_rect.right - SP(DB_SCALE_WIDTH);
 
   // Column background
   RECT colRect = { scaleLeft, yTop, m_rect.right, yTop + height };
@@ -698,7 +698,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
 
   // "dB" header
   SetTextColor(hdc, g_theme.dbScaleText);
-  RECT hdrRect = { scaleLeft + 2, yTop + 1, m_rect.right - 2, yTop + 13 };
+  RECT hdrRect = { scaleLeft + SP(2), yTop + 1, m_rect.right - SP(2), yTop + SP(13) };
   DrawText(hdc, "dB", -1, &hdrRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   // Dynamic dB labels — Audition-style, adapts to vertical zoom
@@ -719,14 +719,14 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
   HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
 
   // -∞ at center line
-  if (centerY > yTop + 4 && centerY < yTop + height - 4) {
+  if (centerY > yTop + SP(4) && centerY < yTop + height - SP(4)) {
     oldPen = (HPEN)SelectObject(hdc, tickPen);
     MoveToEx(hdc, scaleLeft + 1, centerY, nullptr);
-    LineTo(hdc, scaleLeft + 5, centerY);
+    LineTo(hdc, scaleLeft + SP(5), centerY);
     SelectObject(hdc, oldPen);
 
     SetTextColor(hdc, g_theme.dbScaleText);
-    RECT tr = { scaleLeft + 5, centerY - 6, m_rect.right - 2, centerY + 6 };
+    RECT tr = { scaleLeft + SP(5), centerY - SP(6), m_rect.right - SP(2), centerY + SP(6) };
     DrawText(hdc, "-\xE2\x88\x9E", -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
@@ -738,18 +738,18 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     int yOff = (int)(linear * (double)halfH);
     if (yOff < 1) continue;
     int y = centerY - yOff;
-    if (y > yTop + height - 4 || y < yTop + 2) continue;
-    if (lastY_top - y < 13) continue;
+    if (y > yTop + height - SP(4) || y < yTop + SP(2)) continue;
+    if (lastY_top - y < SP(DB_LABEL_MIN_SPACING)) continue;
 
     oldPen = (HPEN)SelectObject(hdc, tickPen);
     MoveToEx(hdc, scaleLeft + 1, y, nullptr);
-    LineTo(hdc, scaleLeft + 5, y);
+    LineTo(hdc, scaleLeft + SP(5), y);
     SelectObject(hdc, oldPen);
 
     char label[8];
     snprintf(label, sizeof(label), "%d", (int)db);
     SetTextColor(hdc, g_theme.dbScaleText);
-    RECT tr = { scaleLeft + 5, y - 6, m_rect.right - 2, y + 6 };
+    RECT tr = { scaleLeft + SP(5), y - SP(6), m_rect.right - SP(2), y + SP(6) };
     DrawText(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     lastY_top = y;
   }
@@ -762,18 +762,18 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     int yOff = (int)(linear * (double)halfH);
     if (yOff < 1) continue;
     int y = centerY + yOff;
-    if (y < yTop + 4 || y > yTop + height - 2) continue;
-    if (y - lastY_bot < 13) continue;
+    if (y < yTop + SP(4) || y > yTop + height - SP(2)) continue;
+    if (y - lastY_bot < SP(DB_LABEL_MIN_SPACING)) continue;
 
     oldPen = (HPEN)SelectObject(hdc, tickPen);
     MoveToEx(hdc, scaleLeft + 1, y, nullptr);
-    LineTo(hdc, scaleLeft + 5, y);
+    LineTo(hdc, scaleLeft + SP(5), y);
     SelectObject(hdc, oldPen);
 
     char label[8];
     snprintf(label, sizeof(label), "%d", (int)db);
     SetTextColor(hdc, g_theme.dbScaleText);
-    RECT tr = { scaleLeft + 5, y - 6, m_rect.right - 2, y + 6 };
+    RECT tr = { scaleLeft + SP(5), y - SP(6), m_rect.right - SP(2), y + SP(6) };
     DrawText(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     lastY_bot = y;
   }
@@ -785,8 +785,8 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     char chLabel[4];
     snprintf(chLabel, sizeof(chLabel), "%d", channel + 1);
 
-    int btnW = 18, btnH = 16;
-    int btnX = scaleLeft + (DB_SCALE_WIDTH - btnW) / 2;
+    int btnW = SP(CHAN_BTN_WIDTH), btnH = SP(CHAN_BTN_HEIGHT);
+    int btnX = scaleLeft + (SP(DB_SCALE_WIDTH) - btnW) / 2;
     int btnY = centerY - btnH / 2;
     RECT btnRect = { btnX, btnY, btnX + btnW, btnY + btnH };
 
@@ -826,7 +826,7 @@ void WaveformView::DrawCursor(HDC hdc)
   }
 
   // Limit cursor drawing to waveform area (exclude dB scale)
-  int waveRight = m_rect.right - DB_SCALE_WIDTH;
+  int waveRight = m_rect.right - SP(DB_SCALE_WIDTH);
 
   if (!isPlaying) {
     // Stopped: solid red line at edit cursor position
@@ -977,11 +977,11 @@ bool WaveformView::ClickChannelButton(int x, int y)
 {
   if (m_numChannels < 2) return false;
 
-  int scaleLeft = m_rect.right - DB_SCALE_WIDTH;
+  int scaleLeft = m_rect.right - SP(DB_SCALE_WIDTH);
   if (x < scaleLeft || x > m_rect.right) return false;
 
-  int btnW = 18, btnH = 16;
-  int btnX = scaleLeft + (DB_SCALE_WIDTH - btnW) / 2;
+  int btnW = SP(CHAN_BTN_WIDTH), btnH = SP(CHAN_BTN_HEIGHT);
+  int btnX = scaleLeft + (SP(DB_SCALE_WIDTH) - btnW) / 2;
 
   for (int ch = 0; ch < m_numChannels; ch++) {
     int chTop = GetChannelTop(ch);
@@ -1012,7 +1012,7 @@ void WaveformView::DrawFadeBackground(HDC hdc)
   if (fadeInLen < FADE_MIN_LEN && fadeOutLen < FADE_MIN_LEN) return;
 
   int waveL = m_rect.left;
-  int waveR = m_rect.right - DB_SCALE_WIDTH;
+  int waveR = m_rect.right - SP(DB_SCALE_WIDTH);
   int yTop = m_rect.top;
   int yBot = m_rect.bottom;
   int yRange = yBot - yTop;
@@ -1064,7 +1064,7 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
   double fadeInDir = fp.fadeInDir, fadeOutDir = fp.fadeOutDir;
 
   int waveL = m_rect.left;
-  int waveR = m_rect.right - DB_SCALE_WIDTH;
+  int waveR = m_rect.right - SP(DB_SCALE_WIDTH);
 
   // Draw once across full waveform height
   int yFull = m_rect.top + 2;           // gain = 1.0
@@ -1091,7 +1091,7 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
       }
     }
     int hx = (fadeInLen >= FADE_MIN_LEN) ? x1 : x0;
-    RECT handle = { hx - FADE_HANDLE_HALF_SIZE, yFull - FADE_HANDLE_HALF_SIZE, hx + FADE_HANDLE_HALF_SIZE, yFull + FADE_HANDLE_HALF_SIZE };
+    RECT handle = { hx - SPmin(FADE_HANDLE_HALF_SIZE), yFull - SPmin(FADE_HANDLE_HALF_SIZE), hx + SPmin(FADE_HANDLE_HALF_SIZE), yFull + SPmin(FADE_HANDLE_HALF_SIZE) };
     handleBrush.Fill(hdc, &handle);
   }
 
@@ -1109,7 +1109,7 @@ void WaveformView::DrawFadeEnvelope(HDC hdc)
       }
     }
     int hx = (fadeOutLen >= FADE_MIN_LEN) ? x0 : x1;
-    RECT handle = { hx - FADE_HANDLE_HALF_SIZE, yFull - FADE_HANDLE_HALF_SIZE, hx + FADE_HANDLE_HALF_SIZE, yFull + FADE_HANDLE_HALF_SIZE };
+    RECT handle = { hx - SPmin(FADE_HANDLE_HALF_SIZE), yFull - SPmin(FADE_HANDLE_HALF_SIZE), hx + SPmin(FADE_HANDLE_HALF_SIZE), yFull + SPmin(FADE_HANDLE_HALF_SIZE) };
     handleBrush.Fill(hdc, &handle);
   }
 
@@ -1312,7 +1312,7 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
   }
 
   int waveL = m_rect.left;
-  int waveR = m_rect.right - DB_SCALE_WIDTH;
+  int waveR = m_rect.right - SP(DB_SCALE_WIDTH);
   int w = waveR - waveL;
   if (w < 2) return;
 
@@ -1438,7 +1438,7 @@ void WaveformView::DrawStandaloneFadeHandles(HDC hdc)
   if (!m_standaloneMode) return;
 
   int waveL = m_rect.left;
-  int waveR = m_rect.right - DB_SCALE_WIDTH;
+  int waveR = m_rect.right - SP(DB_SCALE_WIDTH);
   int yTop = m_rect.top + 2;
 
   OwnedBrush hb(RGB(255, 200, 50));
@@ -1447,13 +1447,13 @@ void WaveformView::DrawStandaloneFadeHandles(HDC hdc)
   int fiX = waveL;
   if (m_standaloneFade.fadeInLen >= FADE_MIN_LEN)
     fiX = std::min(waveR, TimeToX(m_standaloneFade.fadeInLen));
-  RECT fiHandle = { fiX - FADE_HANDLE_HALF_SIZE, yTop - FADE_HANDLE_HALF_SIZE, fiX + FADE_HANDLE_HALF_SIZE, yTop + FADE_HANDLE_HALF_SIZE };
+  RECT fiHandle = { fiX - SPmin(FADE_HANDLE_HALF_SIZE), yTop - SPmin(FADE_HANDLE_HALF_SIZE), fiX + SPmin(FADE_HANDLE_HALF_SIZE), yTop + SPmin(FADE_HANDLE_HALF_SIZE) };
   hb.Fill(hdc, &fiHandle);
 
   // Fade-out handle
   int foX = waveR;
   if (m_standaloneFade.fadeOutLen >= FADE_MIN_LEN)
     foX = std::max(waveL, TimeToX(m_itemDuration - m_standaloneFade.fadeOutLen));
-  RECT foHandle = { foX - FADE_HANDLE_HALF_SIZE, yTop - FADE_HANDLE_HALF_SIZE, foX + FADE_HANDLE_HALF_SIZE, yTop + FADE_HANDLE_HALF_SIZE };
+  RECT foHandle = { foX - SPmin(FADE_HANDLE_HALF_SIZE), yTop - SPmin(FADE_HANDLE_HALF_SIZE), foX + SPmin(FADE_HANDLE_HALF_SIZE), yTop + SPmin(FADE_HANDLE_HALF_SIZE) };
   hb.Fill(hdc, &foHandle);
 }
