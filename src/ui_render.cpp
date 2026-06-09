@@ -597,51 +597,6 @@ void UiCanvas::presentSurface(HDC hdc, int x, int y, int w, int h, int devW, int
   StretchBlt(hdc, x, y, w, h, m_memDC, 0, 0, devW, devH, SRCCOPY);
 }
 
-// --- the hero render (spike) -----------------------------------------------
-
-void UiCanvas::RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double dpr,
-                                   const DynCurveParams& p)
-{
-  if (!hdc || w < 8 || h < 8) return;
-  if (dpr < 1.0) dpr = 1.0;
-  const int devW = (int)std::lround(w * dpr);
-  const int devH = (int)std::lround(h * dpr);
-  if (!prepareSurface(hdc, devW, devH)) return;
-  {
-    BLContext ctx;
-    if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
-    ctx.clear_all();                // cached image persists prior pixels - start clean
-    ctx.scale(dpr);                 // draw everything in LOGICAL coordinates
-    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
-
-    const double W = w, H = h;
-
-    // --- panel slab: vertical gradient + rounded body + top hairline highlight
-    {
-      BLGradient bg(BLLinearGradientValues(0, 0, 0, H));
-      bg.add_stop(0.0, col(dynui::kSurface1));
-      bg.add_stop(1.0, col(dynui::kSurface0));
-      ctx.fill_round_rect(BLRoundRect(0, 0, W, H, dynui::kRadiusPanel), bg);
-      ctx.set_stroke_width(1.0);
-      ctx.stroke_round_rect(BLRoundRect(0.5, 0.5, W - 1, H - 1, dynui::kRadiusPanel),
-                            col(dynui::kHairline));
-    }
-
-    // --- plot well geometry (square, inset); helpers draw the content ---
-    const double pad = dynui::kPanelPad;
-    const double plotSide = std::min(W - 2 * pad, H - 2 * pad);
-    const double px0 = pad;
-    const double py0 = (H - plotSide) * 0.5;
-    const double px1 = px0 + plotSide;
-
-    DrawTransferPlot(ctx, *m_gfx, px0, py0, plotSide, p);
-    DrawGrMeter(ctx, *m_gfx, px1, py0, plotSide, p);
-
-    if (ctx.end() != BL_SUCCESS) return;
-  }
-  presentSurface(hdc, x, y, w, h, devW, devH);
-}
-
 // --- panel layout + chrome (Inc 3b) ----------------------------------------
 
 DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)

@@ -223,12 +223,6 @@ public:
   UiCanvas(const UiCanvas&) = delete;
   UiCanvas& operator=(const UiCanvas&) = delete;
 
-  // Render the premium transfer-curve hero into an offscreen Blend2D buffer,
-  // then BitBlt to hdc at (x, y), sized w x h logical px. The render runs at
-  // device pixels (w*dpr x h*dpr) with a dpr scale so it is crisp on HiDPI.
-  void RenderTransferCurve(HDC hdc, int x, int y, int w, int h, double dpr,
-                           const DynCurveParams& p);
-
   // Render the full premium Dynamics Panel into the offscreen buffer, then
   // scaled-blit to hdc at (x,y), sized w x h logical px (crisp on HiDPI).
   void RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,

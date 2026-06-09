@@ -126,14 +126,6 @@ endif()
 # the include site in ui_render.cpp.
 target_link_libraries(reaper_sneakpeak PRIVATE blend2d::blend2d)
 
-# PHASE 0 ONLY: the SNEAKPEAK_UI_SPIKE demo tile that de-risks the Blend2D
-# renderer. REMOVE this option + the SNEAKPEAK_UI_SPIKE code (ui_render spike,
-# DrawUiSpike, the OnPaint call) once Phase 0 is complete.
-option(SNEAKPEAK_UI_SPIKE_PHASE0 "Phase 0 Blend2D de-risk demo tile (remove after Phase 0)" ON)
-if(SNEAKPEAK_UI_SPIKE_PHASE0)
-  target_compile_definitions(reaper_sneakpeak PRIVATE SNEAKPEAK_UI_SPIKE)
-endif()
-
 # PHASE 2: the premium Blend2D UI (Dynamics/Settings/gain/meters/toast). When ON,
 # the GDI panel paths are replaced by the Blend2D renderers (OnPaintOverlay on the
 # real window DC). Default ON since v2.2.0 (parity + global UI scale reached); the

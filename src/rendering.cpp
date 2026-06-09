@@ -72,31 +72,7 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
     m_settingsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), sp);
   }
 #endif
-#ifdef SNEAKPEAK_UI_SPIKE
-  DrawUiSpike(hdc);
-#endif
 }
-
-#ifdef SNEAKPEAK_UI_SPIKE
-// PHASE 0/1 (branch feat/premium-ui): Blend2D renderer de-risk + HiDPI calibration
-// tile. Proves Blend2D compiles/links/JITs/rasterises in REAPER, and (Inc 1) that
-// the scaled-blit Retina path renders crisp on the real window DC. Removed in P3.
-void SneakPeak::DrawUiSpike(HDC hdc)
-{
-  RECT wr = m_waveformRect;
-  const int tileW = 360;
-  const int tileH = 260;
-  const int margin = 12;
-  int x = wr.right - tileW - margin;
-  int y = wr.top + margin;
-  if (x < wr.left || y + tileH > wr.bottom) return;
-  DynCurveParams p;  // representative (Voice-ish); real panel params wired in Phase 2
-  p.thresholdDb = -24.0; p.ratio = 3.5; p.kneeDb = 6.0;
-  p.gateThreshDb = -40.0; p.gateRangeDb = 20.0; p.avgPeakDb = -16.0;
-  p.makeupDb = 6.0; p.avgGrDb = -6.0;  // representative auto-makeup + engine avg GR
-  m_uiSpikeCanvas.RenderTransferCurve(hdc, x, y, tileW, tileH, GetUiDpr(), p);
-}
-#endif
 
 void SneakPeak::OnPaint(HDC hdc)
 {
@@ -127,7 +103,7 @@ void SneakPeak::OnPaint(HDC hdc)
 #ifndef SNEAKPEAK_BLEND2D_PANEL
     m_dynamicsPanel.Draw(hdc, m_waveformRect);
 #endif
-    // (premium panel + spike drawn in OnPaintOverlay on the real window DC)
+    // (premium panel drawn in OnPaintOverlay on the real window DC)
     // Envelope selection rectangle overlay (hatched semi-transparent fill + cyan border)
     if (m_envRectSelecting) {
       int rx1 = std::min(m_envRectStartX, m_envRectEndX);
