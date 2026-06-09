@@ -173,6 +173,18 @@ struct GainVM {
   bool gold  = false;        // batch-without-selection (relative mode) readout tint
 };
 
+// --- Toast (premium port, v2.2.0 Inc F) ---------------------------------------
+// View-model for RenderToast: short status pill, faded via alpha. The blit rect
+// is opaque (presentSurface forces alpha), so the renderer composites the pill
+// over the host-provided background color - the rect then blends seamlessly with
+// the waveform background it covers (the GDI toast was an opaque box too).
+struct ToastVM {
+  const char* text = nullptr;
+  double alpha   = 1.0;          // 1 = solid, ->0 over the last 500ms
+  double uiScale = 1.0;          // g_uiScale (pill content scales with the UI)
+  uint32_t bgColor = 0xFF000000; // theme waveform bg (ARGB) under the pill
+};
+
 // --- Bottom-panel meters (premium port, v2.2.0 Inc E) -------------------------
 // View-model for RenderMeters: per-channel bar + peak-hold as 0..1 norms over the
 // -60..0 dB range (the same DbToX mapping as the GDI meter). The renderer lays out
@@ -232,6 +244,11 @@ public:
   // Inc E): per-mode gradient bars + peak-hold + scaled dB ticks/labels.
   void RenderMeters(HDC hdc, int x, int y, int w, int h, double dpr,
                     const MetersVM& vm);
+
+  // Render the premium toast pill (v2.2.0 Inc F), alpha-faded; drawn LAST in
+  // OnPaintOverlay so it sits above every other premium surface.
+  void RenderToast(HDC hdc, int x, int y, int w, int h, double dpr,
+                   const ToastVM& vm);
 
 private:
   bool ensure(HDC hdc, int devW, int devH);   // (re)create offscreen surface

@@ -1477,3 +1477,45 @@ void UiCanvas::RenderMeters(HDC hdc, int x, int y, int w, int h, double dpr,
   }
   presentSurface(hdc, x, y, w, h, devW, devH);
 }
+
+// --- the premium toast (v2.2.0 Inc F) ----------------------------------------
+
+void UiCanvas::RenderToast(HDC hdc, int x, int y, int w, int h, double dpr,
+                           const ToastVM& vm)
+{
+  if (!hdc || w < 8 || h < 8 || !vm.text || !vm.text[0]) return;
+  if (dpr < 1.0) dpr = 1.0;
+  const double S = vm.uiScale > 0.0 ? vm.uiScale : 1.0;
+  const double BW = (double)w / S, BH = (double)h / S;
+  const int devW = (int)std::lround((double)w * dpr);
+  const int devH = (int)std::lround((double)h * dpr);
+  if (!prepareSurface(hdc, devW, devH)) return;
+  {
+    BLContext ctx;
+    if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
+    ctx.clear_all();
+    ctx.scale((double)devW / BW, (double)devH / BH);
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+    const Gfx& gfx = *m_gfx;
+
+    // Opaque underlay in the waveform bg color (the blit rect is opaque; this
+    // makes it blend with what it covers), then the pill composites over it
+    // with the fade alpha - a real alpha fade against the right background.
+    ctx.fill_rect(BLRect(0, 0, BW, BH), col(vm.bgColor));
+    ctx.set_global_alpha(std::clamp(vm.alpha, 0.0, 1.0));
+
+    BLGradient bg(BLLinearGradientValues(0, 0, 0, BH));
+    bg.add_stop(0.0, col(dynui::kSurface3));
+    bg.add_stop(1.0, col(dynui::kSurface1));
+    ctx.fill_round_rect(BLRoundRect(0, 0, BW, BH, dynui::kRadiusCtrl), bg);
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_round_rect(BLRoundRect(0.5, 0.5, BW - 1, BH - 1, dynui::kRadiusCtrl),
+                          col(dynui::kHairline));
+    if (gfx.fontsReady)
+      TextCentered(ctx, gfx.fTab, URect{ 0.0, 0.0, BW, BH }, vm.text,
+                   dynui::kInkPrimary);
+
+    if (ctx.end() != BL_SUCCESS) return;
+  }
+  presentSurface(hdc, x, y, w, h, devW, devH);
+}
