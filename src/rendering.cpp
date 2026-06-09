@@ -164,11 +164,11 @@ void SneakPeak::DrawSplitter(HDC hdc)
   FillRect(hdc, &m_splitterRect, bg);
   DeleteObject(bg);
 
-  // Grip dots in center
+  // Grip dots in center (dot size 3px = hairline detail, KEEP; spread scales)
   int cx = (m_splitterRect.left + m_splitterRect.right) / 2;
   int cy = (m_splitterRect.top + m_splitterRect.bottom) / 2;
   HBRUSH dot = CreateSolidBrush(RGB(120, 120, 120));
-  for (int dx = -12; dx <= 12; dx += 6) {
+  for (int dx = -SP(12); dx <= SP(12); dx += SP(6)) {
     RECT d = { cx + dx - 1, cy - 1, cx + dx + 2, cy + 2 };
     FillRect(hdc, &d, dot);
   }
@@ -198,7 +198,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
   HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
 
   m_modeBarTabs.clear();
-  int xPos = 6;
+  int xPos = SP(6);
   int yMid = m_modeBarRect.top + h / 2;
 
   bool isStandalone = m_waveform.IsStandaloneMode() || !m_standaloneFiles.empty();
@@ -211,19 +211,19 @@ void SneakPeak::DrawModeBar(HDC hdc)
   if (isEmpty && !m_masterMode) {
     // Empty state
     SetTextColor(hdc, g_theme.emptyText);
-    RECT textR = { xPos, m_modeBarRect.top, m_modeBarRect.right - 80, m_modeBarRect.bottom };
+    RECT textR = { xPos, m_modeBarRect.top, m_modeBarRect.right - SP(80), m_modeBarRect.bottom };
     DrawText(hdc, "SneakPeak v" SNEAKPEAK_VERSION " - Drop audio file or select item", -1, &textR,
              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   } else if (isEmpty && m_masterMode) {
     // Master mode active — show indicator
     COLORREF accent = RGB(200, 80, 80);
     HBRUSH accentBrush = CreateSolidBrush(accent);
-    RECT dot = { xPos, yMid - 3, xPos + 7, yMid + 4 };
+    RECT dot = { xPos, yMid - SP(3), xPos + SP(7), yMid + SP(4) };
     FillRect(hdc, &dot, accentBrush);
     DeleteObject(accentBrush);
-    xPos += 12;
+    xPos += SP(12);
     SetTextColor(hdc, accent);
-    RECT labelR = { xPos, m_modeBarRect.top, xPos + 80, m_modeBarRect.bottom };
+    RECT labelR = { xPos, m_modeBarRect.top, xPos + SP(80), m_modeBarRect.bottom };
     DrawText(hdc, "MASTER", -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   } else {
     // Mode indicator
@@ -250,12 +250,12 @@ void SneakPeak::DrawModeBar(HDC hdc)
     HBRUSH accentBrush = CreateSolidBrush(accent);
     if (isStandalone && !isReaper) {
       // Orange filled circle (small rounded rect)
-      RECT dot = { xPos, yMid - 3, xPos + 7, yMid + 4 };
+      RECT dot = { xPos, yMid - SP(3), xPos + SP(7), yMid + SP(4) };
       FillRect(hdc, &dot, accentBrush);
     } else {
       // Blue diamond — draw as small rotated square using lines
-      int cx = xPos + 3, cy = yMid;
-      POINT diamond[4] = { {cx, cy-4}, {cx+4, cy}, {cx, cy+4}, {cx-4, cy} };
+      int cx = xPos + SP(3), cy = yMid;
+      POINT diamond[4] = { {cx, cy-SP(4)}, {cx+SP(4), cy}, {cx, cy+SP(4)}, {cx-SP(4), cy} };
       HPEN acPen = CreatePen(PS_SOLID, 1, accent);
       HPEN prevPen = (HPEN)SelectObject(hdc, acPen);
       HBRUSH prevBr = (HBRUSH)SelectObject(hdc, accentBrush);
@@ -265,31 +265,31 @@ void SneakPeak::DrawModeBar(HDC hdc)
       DeleteObject(acPen);
     }
     DeleteObject(accentBrush);
-    xPos += 12;
+    xPos += SP(12);
 
     // Mode label
     SetTextColor(hdc, accent);
-    RECT labelR = { xPos, m_modeBarRect.top, xPos + 80, m_modeBarRect.bottom };
+    RECT labelR = { xPos, m_modeBarRect.top, xPos + SP(80), m_modeBarRect.bottom };
     DrawText(hdc, modeLabel, -1, &labelR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     RECT labelMeasure = { 0, 0, 200, 20 };
     DrawText(hdc, modeLabel, -1, &labelMeasure, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
     int labelW = labelMeasure.right - labelMeasure.left;
-    m_modeLabelRect = { xPos - 12, m_modeBarRect.top, xPos + labelW + 4, m_modeBarRect.bottom };
-    xPos += labelW + 8;
+    m_modeLabelRect = { xPos - SP(12), m_modeBarRect.top, xPos + labelW + SP(4), m_modeBarRect.bottom };
+    xPos += labelW + SP(8);
 
     // Separator
     HPEN sepPen = CreatePen(PS_SOLID, 1, g_theme.border);
     HPEN sPrev = (HPEN)SelectObject(hdc, sepPen);
-    MoveToEx(hdc, xPos, m_modeBarRect.top + 3, nullptr);
-    LineTo(hdc, xPos, m_modeBarRect.bottom - 3);
+    MoveToEx(hdc, xPos, m_modeBarRect.top + SP(3), nullptr);
+    LineTo(hdc, xPos, m_modeBarRect.bottom - SP(3));
     SelectObject(hdc, sPrev);
     DeleteObject(sepPen);
-    xPos += 8;
+    xPos += SP(8);
 
     // Switch to normal weight for tabs
     oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
 
-    int tabAreaRight = m_modeBarRect.right - 8;
+    int tabAreaRight = m_modeBarRect.right - SP(8);
 
     // ITEM pseudo-tab (if we have standalone files and we're in REAPER mode, or for switching back)
     if (isReaper && !m_standaloneFiles.empty()) {
@@ -308,7 +308,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
       }
       RECT tsR = { 0, 0, 300, 20 };
       DrawText(hdc, reaperLabel, -1, &tsR, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
-      int tw = std::min((int)(tsR.right - tsR.left) + 12, MODE_TAB_MAX_W);
+      int tw = std::min((int)(tsR.right - tsR.left) + SP(12), SP(MODE_TAB_MAX_W));
 
       RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
       HBRUSH tabBg = CreateSolidBrush(g_theme.modeBarActiveTab);
@@ -324,7 +324,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
       DeleteObject(ulPen);
 
       SetTextColor(hdc, RGB(220, 220, 220));
-      RECT textR = { tabR.left + 6, tabR.top, tabR.right - 6, tabR.bottom };
+      RECT textR = { tabR.left + SP(6), tabR.top, tabR.right - SP(6), tabR.bottom };
       DrawText(hdc, reaperLabel, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 
       ModeBarTab mbt;
@@ -333,7 +333,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
       mbt.fileIdx = -1;
       mbt.isReaper = true;
       m_modeBarTabs.push_back(mbt);
-      xPos = tabR.right + 2;
+      xPos = tabR.right + SP(2);
     }
 
     // Standalone file tabs
@@ -350,10 +350,10 @@ void SneakPeak::DrawModeBar(HDC hdc)
       RECT tsR2 = { 0, 0, 300, 20 };
       DrawText(hdc, label, -1, &tsR2, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
       bool isActive = (m_waveform.IsStandaloneMode() && i == m_activeFileIdx);
-      int closeW = isActive ? MODE_TAB_CLOSE_SIZE : 0;
-      int tw = std::min((int)(tsR2.right - tsR2.left) + 12 + closeW, MODE_TAB_MAX_W);
+      int closeW = isActive ? SP(MODE_TAB_CLOSE_SIZE) : 0;
+      int tw = std::min((int)(tsR2.right - tsR2.left) + SP(12) + closeW, SP(MODE_TAB_MAX_W));
       if (xPos + tw > tabAreaRight) tw = tabAreaRight - xPos;
-      if (tw < 20) break;
+      if (tw < SP(20)) break;
 
       RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
       HBRUSH tabBg = CreateSolidBrush(isActive ? g_theme.modeBarActiveTab : g_theme.modeBarInactiveTab);
@@ -371,15 +371,15 @@ void SneakPeak::DrawModeBar(HDC hdc)
       }
 
       SetTextColor(hdc, isActive ? RGB(220, 220, 220) : g_theme.modeBarText);
-      int textRight = tabR.right - 4 - closeW;
-      RECT textR = { tabR.left + 6, tabR.top, textRight, tabR.bottom };
+      int textRight = tabR.right - SP(4) - closeW;
+      RECT textR = { tabR.left + SP(6), tabR.top, textRight, tabR.bottom };
       DrawText(hdc, label, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 
       // Close button on active tab
       RECT closeR = {};
       if (isActive) {
-        int csz = MODE_TAB_CLOSE_SIZE - 4;
-        int cx = tabR.right - MODE_TAB_CLOSE_SIZE + 1;
+        int csz = SPmin(MODE_TAB_CLOSE_SIZE - 4);
+        int cx = tabR.right - SP(MODE_TAB_CLOSE_SIZE) + 1;
         int cy = yMid - csz / 2;
         closeR = { cx, cy, cx + csz, cy + csz };
         SetTextColor(hdc, g_theme.modeBarText);
@@ -392,7 +392,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
       mbt.fileIdx = i;
       mbt.isReaper = false;
       m_modeBarTabs.push_back(mbt);
-      xPos = tabR.right + 2;
+      xPos = tabR.right + SP(2);
     }
 
     // If in standalone mode with no REAPER item showing, but we had a REAPER item before,
@@ -403,7 +403,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
         const char* rl = "ITEM";
         RECT tsR3 = { 0, 0, 300, 20 };
         DrawText(hdc, rl, -1, &tsR3, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
-        int tw = std::min((int)(tsR3.right - tsR3.left) + 12, MODE_TAB_MAX_W);
+        int tw = std::min((int)(tsR3.right - tsR3.left) + SP(12), SP(MODE_TAB_MAX_W));
         if (xPos + tw <= tabAreaRight) {
           RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
           HBRUSH tabBg = CreateSolidBrush(g_theme.modeBarInactiveTab);
@@ -411,7 +411,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
           DeleteObject(tabBg);
 
           SetTextColor(hdc, g_theme.modeBarReaperAccent);
-          RECT textR = { tabR.left + 6, tabR.top, tabR.right - 4, tabR.bottom };
+          RECT textR = { tabR.left + SP(6), tabR.top, tabR.right - SP(4), tabR.bottom };
           DrawText(hdc, rl, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
           ModeBarTab mbt;
@@ -428,21 +428,21 @@ void SneakPeak::DrawModeBar(HDC hdc)
   // Version + Support link — subtle, right of content, left of MASTER
   {
     SelectObject(hdc, g_fonts.normal11);
-    int verRight = m_modeBarRect.right - 70;
+    int verRight = m_modeBarRect.right - SP(70);
 #ifdef SNEAKPEAK_BLEND2D_PANEL
     // Settings gear (premium): opens the Settings panel (UI scale etc.). Drawn as a
     // text glyph like the Support heart (font fallback supplies the symbol).
     SetTextColor(hdc, RGB(120, 120, 120));
-    m_gearRect = { verRight - 152, m_modeBarRect.top, verRight - 134, m_modeBarRect.bottom };
+    m_gearRect = { verRight - SP(152), m_modeBarRect.top, verRight - SP(134), m_modeBarRect.bottom };
     DrawText(hdc, "\xE2\x9A\x99", -1, &m_gearRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 #endif
     SetTextColor(hdc, RGB(90, 90, 90));
-    RECT verR = { verRight - 130, m_modeBarRect.top, verRight - 50, m_modeBarRect.bottom };
+    RECT verR = { verRight - SP(130), m_modeBarRect.top, verRight - SP(50), m_modeBarRect.bottom };
     DrawText(hdc, "v" SNEAKPEAK_VERSION, -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     m_versionRect = verR;
     // Support button (heart + text)
     SetTextColor(hdc, RGB(160, 80, 80));
-    m_supportRect = { verRight - 46, m_modeBarRect.top, verRight, m_modeBarRect.bottom };
+    m_supportRect = { verRight - SP(46), m_modeBarRect.top, verRight, m_modeBarRect.bottom };
     DrawText(hdc, "\xe2\x99\xa5 Support", -1, &m_supportRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
@@ -452,8 +452,8 @@ void SneakPeak::DrawModeBar(HDC hdc)
     const char* ml = "MASTER";
     RECT tsM = { 0, 0, 200, 20 };
     DrawText(hdc, ml, -1, &tsM, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
-    int tw = (int)(tsM.right - tsM.left) + 14;
-    int tabRight = m_modeBarRect.right - 6;
+    int tw = (int)(tsM.right - tsM.left) + SP(14);
+    int tabRight = m_modeBarRect.right - SP(6);
     int tabLeft = tabRight - tw;
 
     RECT tabR = { tabLeft, m_modeBarRect.top + 1, tabRight, m_modeBarRect.bottom - 1 };
@@ -471,7 +471,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     }
 
     SetTextColor(hdc, m_masterMode ? RGB(220, 220, 220) : RGB(200, 80, 80));
-    RECT textR = { tabR.left + 7, tabR.top, tabR.right - 7, tabR.bottom };
+    RECT textR = { tabR.left + SP(7), tabR.top, tabR.right - SP(7), tabR.bottom };
     DrawText(hdc, ml, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     ModeBarTab mbt;
@@ -516,7 +516,7 @@ void SneakPeak::DrawRuler(HDC hdc)
   };
   double tickInterval = 300.0;
   for (double iv : intervals) {
-    if (iv * pixelsPerSec >= 80.0) { tickInterval = iv; break; }
+    if (iv * pixelsPerSec >= (double)SP(80)) { tickInterval = iv; break; }  // labels widen with the scaled font
   }
 
   SetBkMode(hdc, TRANSPARENT);
@@ -536,7 +536,7 @@ void SneakPeak::DrawRuler(HDC hdc)
     if (tx < m_rulerRect.left || tx >= m_rulerRect.right) continue;
 
     HPEN op = (HPEN)SelectObject(hdc, tickPen);
-    MoveToEx(hdc, tx, y + h - 8, nullptr);
+    MoveToEx(hdc, tx, y + h - SP(8), nullptr);
     LineTo(hdc, tx, y + h - 1);
     SelectObject(hdc, op);
 
@@ -561,7 +561,7 @@ void SneakPeak::DrawRuler(HDC hdc)
         snprintf(label, sizeof(label), "%02d;%02d;%02d;%03d", hours, mins, secs, ms);
       }
     }
-    RECT textRect = { tx + 3, y + 2, tx + 80, y + h - 8 };
+    RECT textRect = { tx + SP(3), y + SP(2), tx + SP(80), y + h - SP(8) };
     DrawText(hdc, label, -1, &textRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
 
     double minorIv = tickInterval / 5.0;
@@ -569,7 +569,7 @@ void SneakPeak::DrawRuler(HDC hdc)
       int mx = m_waveform.TimeToX(t + mi * minorIv);
       if (mx >= m_rulerRect.left && mx < m_rulerRect.right) {
         HPEN op2 = (HPEN)SelectObject(hdc, minorPen);
-        MoveToEx(hdc, mx, y + h - 4, nullptr);
+        MoveToEx(hdc, mx, y + h - SP(4), nullptr);
         LineTo(hdc, mx, y + h - 1);
         SelectObject(hdc, op2);
       }
@@ -588,7 +588,7 @@ void SneakPeak::DrawRuler(HDC hdc)
       RGB(200, 100, 180), RGB(180, 180, 80), RGB(100, 200, 200),
     };
     static const int NUM_COLORS = 6;
-    int barH = 3;
+    int barH = SPmin(3);
     int barY = m_rulerRect.bottom - barH;
     int trackCount = g_GetTrackNumMediaItems(m_workingSet.track);
 
@@ -637,10 +637,10 @@ void SneakPeak::DrawScrollbar(HDC hdc)
   double endRatio = std::min(1.0, (viewStart + viewDur) / totalDur);
 
   int thumbX = m_scrollbarRect.left + (int)(startRatio * (double)sw);
-  int thumbW = std::max(20, (int)((endRatio - startRatio) * (double)sw));
+  int thumbW = std::max(SP(20), (int)((endRatio - startRatio) * (double)sw));
 
   COLORREF thumbColor = m_scrollbarDragging ? g_theme.scrollbarHover : g_theme.scrollbarThumb;
-  RECT thumbRect = { thumbX, m_scrollbarRect.top + 2, thumbX + thumbW, m_scrollbarRect.bottom - 2 };
+  RECT thumbRect = { thumbX, m_scrollbarRect.top + SP(2), thumbX + thumbW, m_scrollbarRect.bottom - SP(2) };
   HBRUSH thumbBrush = CreateSolidBrush(thumbColor);
   FillRect(hdc, &thumbRect, thumbBrush);
   DeleteObject(thumbBrush);
@@ -665,9 +665,9 @@ void SneakPeak::DrawSoloButton(HDC hdc)
   if (!m_waveform.HasItem()) return;
 
   // Position: top-right of waveform area, well left of dB scale and fade handles
-  int btnW = 22, btnH = 16;
-  int btnX = m_waveformRect.right - DB_SCALE_WIDTH - btnW - 30;
-  int btnY = m_waveformRect.top + 10;
+  int btnW = SP(22), btnH = SP(16);
+  int btnX = m_waveformRect.right - SP(DB_SCALE_WIDTH) - btnW - SP(30);
+  int btnY = m_waveformRect.top + SP(10);
   m_soloBtnRect = { btnX, btnY, btnX + btnW, btnY + btnH };
 
   // Background
@@ -999,7 +999,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
 void SneakPeak::DrawMasterWaveform(HDC hdc)
 {
   RECT r = m_waveformRect;
-  int scaleLeft = r.right - DB_SCALE_WIDTH;
+  int scaleLeft = r.right - SP(DB_SCALE_WIDTH);
   int waveRight = scaleLeft; // waveform ends before dB scale
   int w = waveRight - r.left;
   int h = r.bottom - r.top;
@@ -1113,7 +1113,7 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
   // "MASTER" label
   SetBkMode(hdc, TRANSPARENT);
   SetTextColor(hdc, RGB(100, 100, 100));
-  RECT lblRect = { r.left + 6, r.top + 4, r.left + 120, r.top + 20 };
+  RECT lblRect = { r.left + SP(6), r.top + SP(4), r.left + SP(120), r.top + SP(20) };
   DrawText(hdc, "MASTER", -1, &lblRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
 
   // dB scale (right column)
@@ -1132,16 +1132,16 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
   SetTextColor(hdc, g_theme.dbScaleText);
   HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.normal11);
 
-  RECT hdrRect = { scaleLeft + 2, r.top + 1, r.right - 2, r.top + 13 };
+  RECT hdrRect = { scaleLeft + SP(2), r.top + 1, r.right - SP(2), r.top + SP(13) };
   DrawText(hdc, "dB", -1, &hdrRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   // -∞ at center
   HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
   HPEN tpOld = (HPEN)SelectObject(hdc, tickPen);
   MoveToEx(hdc, scaleLeft + 1, centerY, nullptr);
-  LineTo(hdc, scaleLeft + 5, centerY);
+  LineTo(hdc, scaleLeft + SP(5), centerY);
   SelectObject(hdc, tpOld);
-  RECT infR = { scaleLeft + 5, centerY - 6, r.right - 2, centerY + 6 };
+  RECT infR = { scaleLeft + SP(5), centerY - SP(6), r.right - SP(2), centerY + SP(6) };
   DrawText(hdc, "-\xE2\x88\x9E", -1, &infR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
   static const double dbVals[] = { -48, -36, -24, -18, -12, -6, -3, 0 };
@@ -1153,25 +1153,25 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
 
     // Top half
     int yt = centerY - yOff;
-    if (yt > r.top + 2 && lastYTop - yt >= 13) {
+    if (yt > r.top + SP(2) && lastYTop - yt >= SP(DB_LABEL_MIN_SPACING)) {
       tpOld = (HPEN)SelectObject(hdc, tickPen);
       MoveToEx(hdc, scaleLeft + 1, yt, nullptr);
-      LineTo(hdc, scaleLeft + 5, yt);
+      LineTo(hdc, scaleLeft + SP(5), yt);
       SelectObject(hdc, tpOld);
       char lbl[8]; snprintf(lbl, sizeof(lbl), "%d", (int)db);
-      RECT tr = { scaleLeft + 5, yt - 6, r.right - 2, yt + 6 };
+      RECT tr = { scaleLeft + SP(5), yt - SP(6), r.right - SP(2), yt + SP(6) };
       DrawText(hdc, lbl, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
       lastYTop = yt;
     }
     // Bottom half
     int yb = centerY + yOff;
-    if (yb < r.bottom - 2 && yb - lastYBot >= 13) {
+    if (yb < r.bottom - SP(2) && yb - lastYBot >= SP(DB_LABEL_MIN_SPACING)) {
       tpOld = (HPEN)SelectObject(hdc, tickPen);
       MoveToEx(hdc, scaleLeft + 1, yb, nullptr);
-      LineTo(hdc, scaleLeft + 5, yb);
+      LineTo(hdc, scaleLeft + SP(5), yb);
       SelectObject(hdc, tpOld);
       char lbl[8]; snprintf(lbl, sizeof(lbl), "%d", (int)db);
-      RECT tr = { scaleLeft + 5, yb - 6, r.right - 2, yb + 6 };
+      RECT tr = { scaleLeft + SP(5), yb - SP(6), r.right - SP(2), yb + SP(6) };
       DrawText(hdc, lbl, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
       lastYBot = yb;
     }
@@ -1197,7 +1197,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
 
   int panelW = m_bottomPanelRect.right - m_bottomPanelRect.left;
   int infoW = panelW * 35 / 100; // 35% for info, 65% for RMS
-  if (infoW > 320) infoW = 320;
+  if (infoW > SP(320)) infoW = SP(320);
   int dividerX = m_bottomPanelRect.right - infoW;
 
   // Meters on the left (fills most space)
@@ -1219,9 +1219,9 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
 
   // Info text on the right side
   SetBkMode(hdc, TRANSPARENT);
-  int infoLeft = dividerX + 6;
-  int infoRight = m_bottomPanelRect.right - 4;
-  int panelTop = m_bottomPanelRect.top + 2;
+  int infoLeft = dividerX + SP(6);
+  int infoRight = m_bottomPanelRect.right - SP(4);
+  int panelTop = m_bottomPanelRect.top + SP(2);
   int panelBot = m_bottomPanelRect.bottom - 1;
   int rowH = (panelBot - panelTop) / 3;
 
@@ -1308,10 +1308,10 @@ void SneakPeak::DrawToast(HDC hdc)
   int textLen = (int)strlen(m_toastText);
   if (textLen == 0) return;
 
-  int pillW = textLen * 9 + 24;
-  int pillH = 26;
+  int pillW = textLen * SP(9) + SP(24);
+  int pillH = SP(26);
   int cx = (m_waveformRect.left + m_waveformRect.right) / 2;
-  int cy = m_waveformRect.top + 30;
+  int cy = m_waveformRect.top + SP(30);
   RECT pill = { cx - pillW/2, cy - pillH/2, cx + pillW/2, cy + pillH/2 };
 
   // Background
@@ -1387,20 +1387,20 @@ void SneakPeak::DrawRulerBarsBeats(HDC hdc)
     // Draw major tick (measure start) + label
     if (mx >= m_rulerRect.left && mx < m_rulerRect.right) {
       HPEN op = (HPEN)SelectObject(hdc, majorPen);
-      MoveToEx(hdc, mx, y + h - 8, nullptr);
+      MoveToEx(hdc, mx, y + h - SP(8), nullptr);
       LineTo(hdc, mx, y + h - 1);
       SelectObject(hdc, op);
 
       char label[32];
       snprintf(label, sizeof(label), "%d", m + 1); // 1-based measure number
-      RECT lr = { mx + 3, y + 1, mx + 60, y + h - 2 };
+      RECT lr = { mx + SP(3), y + 1, mx + SP(60), y + h - SP(2) };
       DrawText(hdc, label, -1, &lr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
 
     // Draw beat subdivisions within this measure
     if (tsNum <= 0) tsNum = 4;
     double beatDur = measDur / (double)tsNum;
-    double minBeatPx = 20.0; // minimum pixels between beat ticks
+    double minBeatPx = (double)SP(20); // minimum pixels between beat ticks
     double beatPx = beatDur / viewDur * (double)w;
     if (beatPx < minBeatPx) continue; // too dense, skip beats
 
@@ -1410,15 +1410,15 @@ void SneakPeak::DrawRulerBarsBeats(HDC hdc)
       int bx = m_waveform.TimeToX(relBeat);
       if (bx >= m_rulerRect.left && bx < m_rulerRect.right) {
         HPEN op = (HPEN)SelectObject(hdc, minorPen);
-        MoveToEx(hdc, bx, y + h - 5, nullptr);
+        MoveToEx(hdc, bx, y + h - SP(5), nullptr);
         LineTo(hdc, bx, y + h - 1);
         SelectObject(hdc, op);
 
         // Beat label at higher zoom
-        if (beatPx > 50.0) {
+        if (beatPx > (double)SP(50)) {
           char bl[16];
           snprintf(bl, sizeof(bl), "%d:%d", m + 1, b + 1);
-          RECT br = { bx + 2, y + 1, bx + 50, y + h - 2 };
+          RECT br = { bx + SP(2), y + 1, bx + SP(50), y + h - SP(2) };
           DrawText(hdc, bl, -1, &br, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         }
       }
