@@ -345,7 +345,6 @@ private:
   DynamicsPanel m_dynamicsPanel;
   SettingsPanel m_settingsPanel;  // premium Settings overlay (UI scale; migrated prefs next)
   RECT m_gearRect = {};           // settings gear in the mode bar (premium build only)
-  UiCanvas m_uiSpikeCanvas;   // PHASE 0: Blend2D renderer de-risk spike
   bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;
   bool m_spectralPainted = false;  // triggers one repaint after FFT completes
@@ -478,7 +477,6 @@ private:
   int m_masterPeakCount = 0;
   void DrawMasterWaveform(HDC hdc);
   void DrawDynamicsCurve(HDC hdc);
-  void DrawUiSpike(HDC hdc);   // PHASE 0: Blend2D renderer de-risk spike
   void ApplyDynamicsToEnvelope();
   void SaveDynamicsToItem();
   bool LoadDynamicsFromItem();
