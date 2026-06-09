@@ -6,35 +6,44 @@
 
 **Precision waveform item editor for REAPER** - a native C++ extension that gives you a detailed, dockable waveform view for any media item. Click an item in REAPER's arrange view, and SneakPeak instantly shows you a full-featured waveform editor with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, real-time metering, and full interface scaling (80-200%). Available for macOS (arm64/x86_64), Windows (x64), and Linux (x86_64/aarch64).
 
-![SneakPeak](docs/images/sneakpeak-hero.png)
+![SneakPeak](docs/images/dynamics-gate-overview.png)
 
-> *Select any audio item in REAPER and get an instant, detailed waveform with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, and real-time metering - all in a dockable window.*
+> *Select any audio item in REAPER and get an instant, detailed waveform with dynamics processing, volume envelope editing, spectral analysis, multi-item layering, and real-time metering - all in a dockable window. Above: the gate taming breaths between dialogue phrases, with threshold/gate lines, envelope automation and detector curves drawn live on the waveform.*
 
 ## Screenshots
 
-| Standalone editing | Multi-item layered view |
-|:---:|:---:|
-| ![Standalone](docs/images/standalone-editing.gif) | ![Multiview](docs/images/multiview.gif) |
+<p align="center">
+  <img src="docs/images/dynamics-panel.png" width="66%" alt="Dynamics panel - compressor tab with transfer curve, GR meter and parameter knobs">
+  <img src="docs/images/settings-panel.png" width="28%" alt="Settings panel - UI scale slider, density presets, ruler, meters and view preferences">
+</p>
+<p align="center"><i>The Dynamics panel (compressor tab) and the Settings panel - UI scale 80-200%, density presets, view preferences.</i></p>
 
-| Spectral analysis | Minimap navigation |
-|:---:|:---:|
-| ![Spectral](docs/images/spectral-view.png) | ![Minimap](docs/images/minimap.gif) |
+<p align="center">
+  <img src="docs/images/spectral-view.png" width="72%" alt="Spectral analysis view with stacked stereo channels">
+</p>
+<p align="center"><i>Spectral view - async FFT spectrogram with frequency band selection.</i></p>
 
-| Fade handles with continuous curvature |
-|:---:|
-| ![Fades](docs/images/fades.gif) |
+<details>
+<summary><b>More demos (animated GIFs - click to expand)</b></summary>
+<br>
 
-| Dynamics with GR shading | Live mode with envelope |
-|:---:|:---:|
-| ![Dynamics](docs/images/dynamics-gr-shading.png) | ![Live](docs/images/dynamics-live-mode.png) |
+**Standalone destructive editing** - drag & drop any file, edit, save:
 
-| Dynamics panel (v2.2) | Settings panel (v2.2) |
-|:---:|:---:|
-| ![Panel](docs/images/dynamics-panel.png) | ![Settings](docs/images/settings-panel.png) |
+![Standalone editing](docs/images/standalone-editing.gif)
 
-| Gate taming breaths between dialogue phrases - threshold/gate lines, envelope automation and detector curves drawn live on the waveform |
-|:---:|
-| ![Gate](docs/images/dynamics-gate-overview.png) |
+**Multi-item layered view:**
+
+![Multi-item layered view](docs/images/multiview.gif)
+
+**Fade handles with continuous curvature** (horizontal = length, vertical = shape):
+
+![Fade handles](docs/images/fades.gif)
+
+**Minimap navigation:**
+
+![Minimap](docs/images/minimap.gif)
+
+</details>
 
 ---
 
