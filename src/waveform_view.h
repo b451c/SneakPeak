@@ -209,9 +209,9 @@ public:
   }
   void ClearStandaloneGain() { m_standaloneGain = 1.0; m_standaloneGainStart = -1; m_standaloneGainEnd = -1; }
 
-  // Channel active state (mute buttons: both on by default)
+  // Channel active state (solo badges: both on by default; audio = take pan balance, host-side)
   bool IsChannelActive(int ch) const { return m_channelActive[ch]; } // ch: 0=L, 1=R
-  int GetChanMode() const; // returns I_CHANMODE value based on active state
+  void ResetChannelsActive() { m_channelActive[0] = m_channelActive[1] = true; } // re-arm badges (solo is per-take)
   bool ClickChannelButton(int x, int y); // returns true if hit
 
 

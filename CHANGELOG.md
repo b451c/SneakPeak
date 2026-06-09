@@ -4,6 +4,35 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - Unreleased
+
+### Highlights
+SneakPeak v2.2.0 is the **UI scaling release**: the entire interface scales from 80% to 200% (the top forum request), a new premium Settings panel becomes the home for preferences, the gain knob, level meters and toasts get the premium rendering treatment, and the waveform now tells the truth about clipping.
+
+### Added
+- **Global UI scale (80-200%)** - every part of the interface (fonts, toolbar, mode bar, ruler, scrollbar, meters, panels, hit zones) scales from a single slider. First run auto-detects the system DPI (Windows display scaling, Linux GDK scale); after a manual change your choice is never overridden. On Windows, dragging the floating window across mixed-DPI monitors re-suggests the scale automatically until you set one manually. (Reporters: Rodulf #59, weirpaul #61, X-Raym #63, Illad #66, Stevie #77)
+- **Settings panel** - click the gear icon in the mode bar (or right-click > Settings...). UI scale slider with live preview, density presets (Compact / Comfortable / Spacious), Fit to Window, plus the migrated Ruler / Meters / View preferences. The right-click context menu now stays a pure work menu.
+- **Premium-rendered gain knob, L/R meters and toasts** - anti-aliased, DPI-crisp rendering with gradient meter bars (-18/-6 dB zones, per-mode shading for Peak/RMS/VU) and zone-colored peak-hold. Toast notifications fade smoothly.
+- **Dynamics panel follows the global scale** - the panel multiplies the global UI scale with its own resize grip (capped at 2.4x), so it grows with the rest of the UI and the grip stays a per-panel fine-tune.
+- **Truthful clip display** - red now means real clipping in the source samples (flat-topped runs, detected on raw data - including int16 files clipped at positive full-scale, which the old test missed); amber means over 0 dBFS headroom warning in float contexts where nothing actually clips yet. A dark red 0 dBFS reference line appears when zoomed out vertically. (Forum discussion #72-#79, mschnell and Lunar Ladder)
+- **Meters show what you hear** - the level meter feed now folds in item fades and the take volume envelope at the latency-compensated play position (A/B bypass respected), so Live dynamics meters as heard.
+- **ESC closes the Dynamics panel**; new **D hotkey** toggles it (Stevie #77).
+- **New action "SneakPeak: Toggle Master Track View"** - a bindable action for the MASTER output view, same as clicking the mode-bar MASTER tab (X-Raym #63).
+- **Wheel-zoom center preference** - choose whether scroll zoom anchors on the mouse position (default) or the edit cursor: Settings > View > Zoom (Ben Zero #83).
+- **Middle-mouse drag pans the view** horizontally in the waveform and spectral areas (weirpaul #61).
+- **Selection edge resize** - hover a selection edge to get a resize cursor and drag it to adjust the selection (Lunar Ladder #64).
+
+### Fixed
+- **Skewed spectral view on Linux (Wayland/arm64)** - the spectrogram wrote rows assuming the framebuffer stride equals the width, but Linux SWELL pads the stride, shearing the image diagonally at roughly half of all window widths. Same latent bug fixed in the premium panel blitter. (Reporter: Lunar Ladder #65, Arch/KDE/Wayland)
+- **Garbled non-ASCII text on Windows** - all text, window titles, message boxes, file dialogs, drag&drop paths and file IO now go through UTF-8-aware Win32 wrappers (WDL win32_utf8). Fixes accented take/file names, the gear/heart/infinity glyphs, and opening/saving files with non-ASCII paths. (Reporter: X-Raym #63)
+- **Standalone mode unreachable on Windows** - dropped files fell through to the REAPER timeline because the window never registered for Windows drag&drop (mac/Linux register automatically). (Reporter: Ben Zero #83)
+- **Launch shortcut dead when docked** - if you bound a SneakPeak action to a bare key, SneakPeak's own keyboard handler could swallow that key while the docked window had focus. SneakPeak now recognizes its own action bindings and lets them fire. (Reporter: Ben Zero #83)
+- **Standalone meter feed** - meters now run during standalone preview playback, item volume is no longer misread when no REAPER item is loaded, and the Master meter source is ignored in standalone (preview plays outside the project graph).
+- **Channel solo keeps stereo placement** - the [1]/[2] channel badges now solo via take pan balance instead of REAPER's mono channel modes, so a soloed channel stays on its own side instead of folding to centred mono. Your take pan is saved on solo and restored on unsolo or item switch. Also fixes the old trap where the badges disappeared after a reload (the take had been turned mono) with no way to revert from SneakPeak.
+- **Mode bar polish** - hover feedback on tabs / MASTER / gear / Support (with hand cursor), the Settings gear moved to the far right and enlarged, ruler timestamps vertically centred, and the dB scale column decluttered (wider label spacing, no collisions with the channel badges, real margins).
+
+---
+
 ## [2.1.1] - 2026-04-18
 
 ### Fixed

@@ -78,6 +78,8 @@ int SettingsPanel::HitId(double lx, double ly) const
   if (L.viewToggle[1].contains(lx, ly)) return SET_HIT_VIEW_RMS;
   if (L.viewToggle[2].contains(lx, ly)) return SET_HIT_VIEW_SNAP;
   if (L.viewToggle[3].contains(lx, ly)) return SET_HIT_VIEW_MINIMAP;
+  if (L.zoomSeg[0].contains(lx, ly))    return SET_HIT_VIEW_ZOOM0;
+  if (L.zoomSeg[1].contains(lx, ly))    return SET_HIT_VIEW_ZOOM1;
   return SET_HIT_NONE;
 }
 
@@ -132,7 +134,7 @@ bool SettingsPanel::OnMouseDown(int x, int y, RECT wr)
   // Migrated preferences: report the control id; the host runs its CM_* handler
   // (single behavior path for the panel and the OFF-build menu).
   const int hit = HitId(lx, ly);
-  if (hit >= SET_HIT_RULER0 && hit <= SET_HIT_VIEW_MINIMAP) {
+  if (hit >= SET_HIT_RULER0 && hit <= SET_HIT_VIEW_ZOOM1) {
     m_prefClicked = hit;
     return true;
   }

@@ -135,6 +135,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <a href="#installation" class="nav-link">Installation</a>
     <a href="#first-launch" class="nav-link">First Launch</a>
     <a href="#three-modes" class="nav-link">Three Editing Modes</a>
+    <a href="#destructive" class="nav-link">Destructive Editing</a>
   </div>
 
   <div class="nav-group">
@@ -203,6 +204,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <a href="#markers" class="nav-link">Markers</a>
     <a href="#master" class="nav-link">Master Mode</a>
     <a href="#ruler" class="nav-link">Ruler & Time</a>
+    <a href="#settings-panel" class="nav-link">Settings & UI Scale</a>
     <a href="#clipping" class="nav-link">Over 0 dB &amp; Clipping</a>
   </div>
 
@@ -321,6 +323,25 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <hr>
 
+<!-- Destructive editing orientation -->
+<h2 id="destructive">Destructive Editing - Where to Find It</h2>
+<div class="modes"><span class="mode mode-all">ORIENTATION</span></div>
+
+<p>SneakPeak does both non-destructive and destructive editing. Here is the map:</p>
+
+<ul>
+  <li><strong>Non-destructive (default):</strong> everything you do in ITEM / SET / Timeline modes - splits, gain, fades, envelopes, Dynamics - goes through the REAPER API and lands in REAPER's undo history. Your audio files are never touched.</li>
+  <li><strong>Destructive on a REAPER item:</strong> the processing entries in the right-click menu (Reverse, Normalize, DC Remove, LUFS Normalize, ...) rewrite the item's source WAV on disk after a confirmation prompt. Non-WAV sources are written to a new <code>name_edit.wav</code> instead.</li>
+  <li><strong>Destructive standalone editor:</strong> drag a file from Finder/Explorer (or any file browser) and drop it ONTO the SneakPeak window - the mode bar switches to the orange STANDALONE tab. Cut, paste, silence, process and draw freely; nothing happens to any file until you Save (<kbd>Ctrl</kbd>+<kbd>S</kbd>) or use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a>. Standalone has its own 20-level undo, independent of REAPER's.</li>
+</ul>
+
+<div class="tip">
+  <strong>Drop target matters</strong>
+  Drop the file onto the SneakPeak window itself, not the REAPER timeline. Dropping on the timeline creates a REAPER item as usual; dropping on SneakPeak opens the standalone editor.
+</div>
+
+<hr>
+
 <!-- REAPER Mode Details -->
 <h2 id="reaper-basics">ITEM Mode - Basics</h2>
 <div class="modes"><span class="mode mode-reaper">ITEM</span></div>
@@ -351,6 +372,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <div class="shortcut-grid">
   <div class="key"><kbd>Click</kbd> + <kbd>Drag</kbd></div><div class="desc">Create a new selection</div>
   <div class="key"><kbd>Shift</kbd> + <kbd>Click</kbd></div><div class="desc">Extend selection to clicked position</div>
+  <div class="key">Drag selection edge</div><div class="desc">Resize the selection - hover an edge to get the resize cursor, then drag</div>
   <div class="key"><kbd>Ctrl</kbd>+<kbd>A</kbd></div><div class="desc">Select the entire item</div>
   <div class="key"><kbd>Double-click</kbd></div><div class="desc">Select all</div>
   <div class="key"><kbd>Escape</kbd></div><div class="desc">Clear selection</div>
@@ -368,7 +390,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h4>Horizontal zoom</h4>
 <div class="shortcut-grid">
-  <div class="key"><kbd>Scroll Up</kbd></div><div class="desc">Zoom in (centered on mouse position)</div>
+  <div class="key"><kbd>Scroll Up</kbd></div><div class="desc">Zoom in (centered on the mouse position by default; switch to the edit cursor in Settings &gt; View &gt; Zoom)</div>
   <div class="key"><kbd>Scroll Down</kbd></div><div class="desc">Zoom out</div>
   <div class="key">Trackpad pinch</div><div class="desc">Zoom in/out (centered on cursor, dampened for smooth feel)</div>
 </div>
@@ -376,6 +398,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h4>Horizontal pan</h4>
 <div class="shortcut-grid">
   <div class="key"><kbd>Cmd</kbd> + <kbd>Scroll</kbd></div><div class="desc">Pan left/right (mouse wheel)</div>
+  <div class="key">Middle-mouse drag</div><div class="desc">Pan left/right by dragging (waveform and spectral areas)</div>
   <div class="key">Trackpad horizontal swipe</div><div class="desc">Pan left/right (two-finger swipe)</div>
 </div>
 
@@ -743,6 +766,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Toggle <strong>Peak/RMS</strong> in the panel to switch detection mode. RMS provides smoother, less aggressive curves suited for music. Peak is more responsive, better for speech.</p>
 
+<p>Press <kbd>D</kbd> to open or close the panel from the keyboard; <kbd>Escape</kbd> also closes it (restoring the envelope first if A/B bypass was engaged). The panel scales with the global UI scale and can additionally be resized with the grip in its bottom-right corner.</p>
+
 <h2 id="dynamics-live">Live Mode</h2>
 
 <p>Click the <strong>[Live]</strong> toggle (green when active) to enable real-time envelope writing. In Live mode, every slider change immediately writes envelope points to REAPER - the waveform updates in real-time as you drag. No need to click Apply.</p>
@@ -879,6 +904,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>This is a view-only mode. No editing operations are available. Use it for monitoring during mixing or mastering.</p>
 
+<p>You can also bind a keyboard shortcut to the REAPER action <strong>"SneakPeak: Toggle Master Track View"</strong> to switch this view without reaching for the mouse.</p>
+
 <h2 id="ruler">Ruler & Time Display</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
 
@@ -893,6 +920,28 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>The selected ruler mode persists across sessions. In SET mode, absolute time is enabled by default so you can correlate positions between SneakPeak and the REAPER timeline.</p>
 
 <p>The bottom info panel shows cursor position, selection range, view range, sample rate, bit depth, channels, and file size.</p>
+
+<h2 id="settings-panel">Settings & UI Scale</h2>
+<div class="modes"><span class="mode mode-all">ALL MODES</span></div>
+
+<p>Click the <strong>gear icon</strong> in the mode bar (or right-click &gt; Settings...) to open the Settings panel - the home for SneakPeak's interface preferences. Click anywhere outside the panel or press <kbd>Escape</kbd> to close it.</p>
+
+<h4>UI Scale</h4>
+<p>The whole interface - fonts, toolbar, ruler, meters, panels and every click target - scales between <strong>80% and 200%</strong> from a single slider, with a live preview while you drag. Quick options:</p>
+<ul>
+  <li><strong>Density presets</strong> - Compact (90%), Comfortable (100%), Spacious (125%).</li>
+  <li><strong>Fit to Window</strong> - picks the largest scale at which all chrome still fits the current window.</li>
+</ul>
+<p>On first run SneakPeak suggests a scale from your system DPI (Windows display scaling, Linux GDK scale). Once you set a scale manually it is never overridden - though on Windows, dragging the floating window across monitors with different DPI will keep suggesting a matching scale until you do.</p>
+
+<h4>Preferences</h4>
+<ul>
+  <li><strong>Ruler</strong> - Relative / Absolute / Bars &amp; Beats.</li>
+  <li><strong>Meters</strong> - Peak / RMS / VU ballistics, plus the Master Output source toggle.</li>
+  <li><strong>View</strong> - Meters, RMS overlay, Snap to Zero-Crossing, Minimap, and the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor).</li>
+</ul>
+
+<p>The Dynamics panel follows the global scale too, multiplied by its own corner resize grip, so it grows with the rest of the UI while staying independently adjustable.</p>
 
 <h2 id="clipping">Over 0 dB &amp; Clipping</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
@@ -920,6 +969,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>T</kbd></td><td>Toggle Working Set mode</td><td>REAPER</td></tr>
     <tr><td><kbd>S</kbd></td><td>Split at cursor / selection</td><td>REAPER, SET</td></tr>
     <tr><td><kbd>G</kbd></td><td>Toggle gain panel</td><td>All</td></tr>
+    <tr><td><kbd>D</kbd></td><td>Toggle Dynamics panel</td><td>REAPER, SET, Timeline</td></tr>
     <tr><td><kbd>M</kbd></td><td>Add marker at cursor</td><td>REAPER</td></tr>
     <tr><td><kbd>Shift</kbd>+<kbd>M</kbd></td><td>Add region from selection</td><td>REAPER</td></tr>
     <tr><td><kbd>E</kbd></td><td>Delete selection (gap preserved)</td><td>All</td></tr>
@@ -931,7 +981,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>Down</kbd></td><td>Gain -1 dB</td><td>All</td></tr>
     <tr><td><kbd>Option</kbd>+<kbd>Right</kbd></td><td>Next segment (select + scroll)</td><td>SET, Timeline, Multi</td></tr>
     <tr><td><kbd>Option</kbd>+<kbd>Left</kbd></td><td>Previous segment</td><td>SET, Timeline, Multi</td></tr>
-    <tr><td><kbd>Escape</kbd></td><td>Exit working set / clear selection / stop</td><td>All</td></tr>
+    <tr><td><kbd>Escape</kbd></td><td>Close Settings/Dynamics panel / exit working set / clear selection / stop</td><td>All</td></tr>
     <tr><td><kbd>Home</kbd></td><td>Go to item start</td><td>All</td></tr>
     <tr><td><kbd>End</kbd></td><td>Go to item end</td><td>All</td></tr>
     <tr><td><kbd>Tab</kbd></td><td>Next marker</td><td>REAPER</td></tr>
@@ -981,7 +1031,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Drag</td><td>Scrollbar</td><td>Scroll horizontally</td></tr>
     <tr><td>Drag</td><td>Splitter</td><td>Resize waveform/spectral split</td></tr>
     <tr><td>Click</td><td>Solo button</td><td>Toggle track solo</td></tr>
-    <tr><td>Click</td><td>Channel button</td><td>Mute/unmute channel</td></tr>
+    <tr><td>Click</td><td>Channel button</td><td>Solo/unsolo channel (keeps its left/right placement; your take pan is restored on unsolo)</td></tr>
     <tr><td>Click</td><td>Envelope line</td><td>Add point at click position</td></tr>
     <tr><td>Click + Drag</td><td>Envelope point</td><td>Move point (or all selected)</td></tr>
     <tr><td>Shift + Click</td><td>Envelope point</td><td>Toggle point selection</td></tr>

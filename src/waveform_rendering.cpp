@@ -768,15 +768,21 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
 
   HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 60));
 
-  // -∞ at center line
-  if (centerY > yTop + SP(4) && centerY < yTop + height - SP(4)) {
+  // Breathing room (user feedback: the column read cramped): labels keep clear
+  // of the channel badge (stereo - the badge owns the center, so -inf is skipped
+  // there too) and of the "dB" header; text gets a real right margin.
+  const int badgeHalf = (m_numChannels > 1) ? SP(CHAN_BTN_HEIGHT) / 2 + SP(9) : 0;
+
+  // -∞ at center line (mono only - in stereo the channel badge sits here)
+  if (m_numChannels <= 1 &&
+      centerY > yTop + SP(4) && centerY < yTop + height - SP(4)) {
     oldPen = (HPEN)SelectObject(hdc, tickPen);
     MoveToEx(hdc, scaleLeft + 1, centerY, nullptr);
     LineTo(hdc, scaleLeft + SP(5), centerY);
     SelectObject(hdc, oldPen);
 
     SetTextColor(hdc, g_theme.dbScaleText);
-    RECT tr = { scaleLeft + SP(5), centerY - SP(6), m_rect.right - SP(2), centerY + SP(6) };
+    RECT tr = { scaleLeft + SP(5), centerY - SP(6), m_rect.right - SP(4), centerY + SP(6) };
     DrawTextUTF8(hdc, "-\xE2\x88\x9E", -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
@@ -788,7 +794,8 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     int yOff = (int)(linear * (double)halfH);
     if (yOff < 1) continue;
     int y = centerY - yOff;
-    if (y > yTop + height - SP(4) || y < yTop + SP(2)) continue;
+    if (y > yTop + height - SP(4) || y < yTop + SP(15)) continue;  // SP(15): stay below the "dB" header
+    if (badgeHalf && centerY - y < badgeHalf) continue;            // clear of the channel badge
     if (lastY_top - y < SP(DB_LABEL_MIN_SPACING)) continue;
 
     oldPen = (HPEN)SelectObject(hdc, tickPen);
@@ -799,7 +806,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     char label[8];
     snprintf(label, sizeof(label), "%d", (int)db);
     SetTextColor(hdc, g_theme.dbScaleText);
-    RECT tr = { scaleLeft + SP(5), y - SP(6), m_rect.right - SP(2), y + SP(6) };
+    RECT tr = { scaleLeft + SP(5), y - SP(6), m_rect.right - SP(4), y + SP(6) };
     DrawTextUTF8(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     lastY_top = y;
   }
@@ -813,6 +820,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     if (yOff < 1) continue;
     int y = centerY + yOff;
     if (y < yTop + SP(4) || y > yTop + height - SP(2)) continue;
+    if (badgeHalf && y - centerY < badgeHalf) continue;            // clear of the channel badge
     if (y - lastY_bot < SP(DB_LABEL_MIN_SPACING)) continue;
 
     oldPen = (HPEN)SelectObject(hdc, tickPen);
@@ -823,7 +831,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
     char label[8];
     snprintf(label, sizeof(label), "%d", (int)db);
     SetTextColor(hdc, g_theme.dbScaleText);
-    RECT tr = { scaleLeft + SP(5), y - SP(6), m_rect.right - SP(2), y + SP(6) };
+    RECT tr = { scaleLeft + SP(5), y - SP(6), m_rect.right - SP(4), y + SP(6) };
     DrawTextUTF8(hdc, label, -1, &tr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     lastY_bot = y;
   }
@@ -832,8 +840,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
 
   // Channel button — centered vertically, clickable for solo
   if (m_numChannels > 1) {
-    char chLabel[4];
-    snprintf(chLabel, sizeof(chLabel), "%d", channel + 1);
+    const char* chLabel = (channel == 0) ? "L" : "R";
 
     int btnW = SP(CHAN_BTN_WIDTH), btnH = SP(CHAN_BTN_HEIGHT);
     int btnX = scaleLeft + (SP(DB_SCALE_WIDTH) - btnW) / 2;
@@ -1011,16 +1018,6 @@ void WaveformView::SetFadeDragInfo(int dragType, int shape)
 {
   m_fadeDragType = dragType;
   m_fadeDragShape = shape;
-}
-
-int WaveformView::GetChanMode() const
-{
-  if (m_numChannels < 2) return 0;
-  bool L = m_channelActive[0], R = m_channelActive[1];
-  if (L && R) return 0;   // stereo
-  if (L && !R) return 3;  // left only
-  if (!L && R) return 4;  // right only
-  return 0; // both off shouldn't happen
 }
 
 bool WaveformView::ClickChannelButton(int x, int y)

@@ -68,6 +68,7 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
     sp.showRMS         = m_waveform.GetShowRMS();
     sp.snapZero        = m_waveform.GetSnapToZero();
     sp.minimap         = m_minimapVisible;
+    sp.zoomOnCursor    = m_zoomOnEditCursor;
     m_settingsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), sp);
   }
 #endif
@@ -214,6 +215,12 @@ void SneakPeak::DrawModeBar(HDC hdc)
   SetBkMode(hdc, TRANSPARENT);
   HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
 
+  // Hover feedback helper: brighten a fill colour for the element under the cursor.
+  auto lightenCol = [](COLORREF c, int d) -> COLORREF {
+    int r = GetRValue(c) + d, g = GetGValue(c) + d, b = GetBValue(c) + d;
+    return RGB(r > 255 ? 255 : r, g > 255 ? 255 : g, b > 255 ? 255 : b);
+  };
+
   m_modeBarTabs.clear();
   int xPos = SP(6);
   int yMid = m_modeBarRect.top + h / 2;
@@ -327,8 +334,10 @@ void SneakPeak::DrawModeBar(HDC hdc)
       DrawTextUTF8(hdc, reaperLabel, -1, &tsR, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
       int tw = std::min((int)(tsR.right - tsR.left) + SP(12), SP(MODE_TAB_MAX_W));
 
+      bool hovTab = (m_modeBarHover == (int)m_modeBarTabs.size());
       RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
-      HBRUSH tabBg = CreateSolidBrush(g_theme.modeBarActiveTab);
+      HBRUSH tabBg = CreateSolidBrush(hovTab ? lightenCol(g_theme.modeBarActiveTab, 14)
+                                             : g_theme.modeBarActiveTab);
       FillRect(hdc, &tabR, tabBg);
       DeleteObject(tabBg);
 
@@ -372,8 +381,12 @@ void SneakPeak::DrawModeBar(HDC hdc)
       if (xPos + tw > tabAreaRight) tw = tabAreaRight - xPos;
       if (tw < SP(20)) break;
 
+      bool hovTab = (m_modeBarHover == (int)m_modeBarTabs.size());
       RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
-      HBRUSH tabBg = CreateSolidBrush(isActive ? g_theme.modeBarActiveTab : g_theme.modeBarInactiveTab);
+      HBRUSH tabBg = CreateSolidBrush(
+          isActive ? g_theme.modeBarActiveTab
+                   : (hovTab ? lightenCol(g_theme.modeBarInactiveTab, 14)
+                             : g_theme.modeBarInactiveTab));
       FillRect(hdc, &tabR, tabBg);
       DeleteObject(tabBg);
 
@@ -387,7 +400,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
         DeleteObject(ulPen);
       }
 
-      SetTextColor(hdc, isActive ? RGB(220, 220, 220) : g_theme.modeBarText);
+      SetTextColor(hdc, (isActive || hovTab) ? RGB(220, 220, 220) : g_theme.modeBarText);
       int textRight = tabR.right - SP(4) - closeW;
       RECT textR = { tabR.left + SP(6), tabR.top, textRight, tabR.bottom };
       DrawTextUTF8(hdc, label, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
@@ -422,8 +435,10 @@ void SneakPeak::DrawModeBar(HDC hdc)
         DrawTextUTF8(hdc, rl, -1, &tsR3, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
         int tw = std::min((int)(tsR3.right - tsR3.left) + SP(12), SP(MODE_TAB_MAX_W));
         if (xPos + tw <= tabAreaRight) {
+          bool hovTab = (m_modeBarHover == (int)m_modeBarTabs.size());
           RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
-          HBRUSH tabBg = CreateSolidBrush(g_theme.modeBarInactiveTab);
+          HBRUSH tabBg = CreateSolidBrush(hovTab ? lightenCol(g_theme.modeBarInactiveTab, 14)
+                                                 : g_theme.modeBarInactiveTab);
           FillRect(hdc, &tabR, tabBg);
           DeleteObject(tabBg);
 
@@ -442,39 +457,61 @@ void SneakPeak::DrawModeBar(HDC hdc)
     }
   }
 
+  // Right cluster order (left -> right): version, Support, MASTER tab, gear.
+  // The gear is the LAST element at the far right edge (user feedback: it sat
+  // between content and looked like a stray dot at 100%).
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  const int gearZone = SP(24);   // reserved at the right edge for the gear
+#else
+  const int gearZone = 0;
+#endif
+
   // Version + Support link — subtle, right of content, left of MASTER
   {
     SelectObject(hdc, g_fonts.normal11);
-    int verRight = m_modeBarRect.right - SP(70);
-#ifdef SNEAKPEAK_BLEND2D_PANEL
-    // Settings gear (premium): opens the Settings panel (UI scale etc.). Drawn as a
-    // text glyph like the Support heart (font fallback supplies the symbol).
-    SetTextColor(hdc, RGB(120, 120, 120));
-    m_gearRect = { verRight - SP(152), m_modeBarRect.top, verRight - SP(134), m_modeBarRect.bottom };
-    DrawTextUTF8(hdc, "\xE2\x9A\x99", -1, &m_gearRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-#endif
-    SetTextColor(hdc, RGB(90, 90, 90));
+    int verRight = m_modeBarRect.right - SP(70) - gearZone;
+    SetTextColor(hdc, m_modeBarHover == MB_HOVER_VERSION ? RGB(150, 150, 150)
+                                                         : RGB(90, 90, 90));
     RECT verR = { verRight - SP(130), m_modeBarRect.top, verRight - SP(50), m_modeBarRect.bottom };
     DrawTextUTF8(hdc, "v" SNEAKPEAK_VERSION, -1, &verR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     m_versionRect = verR;
     // Support button (heart + text)
-    SetTextColor(hdc, RGB(160, 80, 80));
+    SetTextColor(hdc, m_modeBarHover == MB_HOVER_SUPPORT ? RGB(225, 120, 120)
+                                                         : RGB(160, 80, 80));
     m_supportRect = { verRight - SP(46), m_modeBarRect.top, verRight, m_modeBarRect.bottom };
     DrawTextUTF8(hdc, "\xe2\x99\xa5 Support", -1, &m_supportRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
 
-  // MASTER tab — right-aligned, always visible
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  // Settings gear (premium): opens the Settings panel. Far right, bigger glyph
+  // (bold14 - at normal11 it read as a stray dot at 100%).
+  {
+    HFONT prevF = (HFONT)SelectObject(hdc, g_fonts.bold14);
+    SetTextColor(hdc, m_modeBarHover == MB_HOVER_GEAR ? RGB(225, 225, 225)
+                                                      : RGB(150, 150, 150));
+    m_gearRect = { m_modeBarRect.right - SP(26), m_modeBarRect.top,
+                   m_modeBarRect.right - SP(2),  m_modeBarRect.bottom };
+    DrawTextUTF8(hdc, "\xE2\x9A\x99", -1, &m_gearRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(hdc, prevF);
+  }
+#endif
+
+  // MASTER tab — right-aligned (left of the gear), always visible
   {
     SelectObject(hdc, g_fonts.normal11);
     const char* ml = "MASTER";
     RECT tsM = { 0, 0, 200, 20 };
     DrawTextUTF8(hdc, ml, -1, &tsM, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
     int tw = (int)(tsM.right - tsM.left) + SP(14);
-    int tabRight = m_modeBarRect.right - SP(6);
+    int tabRight = m_modeBarRect.right - SP(6) - gearZone;
     int tabLeft = tabRight - tw;
 
+    bool hovTab = (m_modeBarHover == (int)m_modeBarTabs.size());
     RECT tabR = { tabLeft, m_modeBarRect.top + 1, tabRight, m_modeBarRect.bottom - 1 };
-    HBRUSH tabBg = CreateSolidBrush(m_masterMode ? g_theme.modeBarActiveTab : g_theme.modeBarInactiveTab);
+    HBRUSH tabBg = CreateSolidBrush(
+        m_masterMode ? g_theme.modeBarActiveTab
+                     : (hovTab ? lightenCol(g_theme.modeBarInactiveTab, 14)
+                               : g_theme.modeBarInactiveTab));
     FillRect(hdc, &tabR, tabBg);
     DeleteObject(tabBg);
 
@@ -487,7 +524,8 @@ void SneakPeak::DrawModeBar(HDC hdc)
       DeleteObject(ulPen);
     }
 
-    SetTextColor(hdc, m_masterMode ? RGB(220, 220, 220) : RGB(200, 80, 80));
+    SetTextColor(hdc, m_masterMode ? RGB(220, 220, 220)
+                                   : (hovTab ? RGB(230, 110, 110) : RGB(200, 80, 80)));
     RECT textR = { tabR.left + SP(7), tabR.top, tabR.right - SP(7), tabR.bottom };
     DrawTextUTF8(hdc, ml, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
@@ -578,8 +616,10 @@ void SneakPeak::DrawRuler(HDC hdc)
         snprintf(label, sizeof(label), "%02d;%02d;%02d;%03d", hours, mins, secs, ms);
       }
     }
-    RECT textRect = { tx + SP(3), y + SP(2), tx + SP(80), y + h - SP(8) };
-    DrawTextUTF8(hdc, label, -1, &textRect, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+    // Vertically centered in the band above the major ticks (matches Bars&Beats;
+    // DT_TOP glued the numbers to the ruler's top edge).
+    RECT textRect = { tx + SP(3), y, tx + SP(80), y + h - SP(7) };
+    DrawTextUTF8(hdc, label, -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     double minorIv = tickInterval / 5.0;
     for (int mi = 1; mi < 5; mi++) {

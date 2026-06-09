@@ -140,6 +140,8 @@ enum SettingsHit {
   SET_HIT_VIEW_RMS     = 14,  // show RMS overlay
   SET_HIT_VIEW_SNAP    = 15,  // snap to zero-crossing
   SET_HIT_VIEW_MINIMAP = 16,  // minimap
+  SET_HIT_VIEW_ZOOM0   = 17,  // wheel-zoom center: mouse (#83)
+  SET_HIT_VIEW_ZOOM1   = 18,  // wheel-zoom center: edit cursor
 };
 
 // Current preference values, filled by the host each paint (it owns this state).
@@ -151,6 +153,7 @@ struct SettingsPrefs {
   bool showRMS = true;
   bool snapZero = false;
   bool minimap = false;
+  bool zoomOnCursor = false;   // wheel zoom centers on the edit cursor (default: mouse)
 };
 
 // View-model for RenderSettingsPanel - pure data, built by SettingsPanel each paint.
@@ -209,6 +212,7 @@ struct SettingsLayout {
   URect rulerCaption, rulerSeg[3];               // RULER section
   URect metersCaption, masterToggle, meterSeg[3]; // METERS section (+ master pill)
   URect viewCaption, viewToggle[4];              // VIEW: Meters / RMS / Snap / Minimap
+  URect zoomSeg[2];                              // VIEW: wheel-zoom center Mouse / Cursor
 };
 SettingsLayout ComputeSettingsLayout(double w, double h);
 

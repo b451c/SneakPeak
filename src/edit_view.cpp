@@ -98,6 +98,8 @@ void SneakPeak::Create()
     if (showRms && showRms[0] == '0') m_waveform.SetShowRMS(false);
     const char* showMeters = g_GetExtState("SneakPeak", "show_meters");
     if (showMeters && showMeters[0] == '0') m_showMeters = false;
+    const char* zc = g_GetExtState("SneakPeak", "zoom_center");
+    if (zc && zc[0] == '1') m_zoomOnEditCursor = true;
   }
 
   // First-run DPI auto-seed (v2.2.0): if the user has never set a UI scale, seed it
@@ -687,6 +689,17 @@ void SneakPeak::LoadSelectedItem()
       if (stat(path.c_str(), &st) == 0)
         m_cachedFileSizeMB = static_cast<double>(st.st_size) / (1024.0 * 1024.0);
     }
+  }
+
+  // Channel solo is per-take monitoring state: when the displayed take changes,
+  // restore the saved pan on the previous take (validated - it may be gone) and
+  // re-arm both channel badges.
+  if (m_chanSoloTake && m_chanSoloTake != m_waveform.GetTake()) {
+    if (g_GetSetMediaItemTakeInfo && g_ValidatePtr2 &&
+        g_ValidatePtr2(nullptr, (void*)m_chanSoloTake, "MediaItem_Take*"))
+      g_GetSetMediaItemTakeInfo(m_chanSoloTake, "D_PAN", &m_chanSoloPrevPan);
+    m_chanSoloTake = nullptr;
+    m_waveform.ResetChannelsActive();
   }
 
   m_hasUndo = false;
@@ -1407,6 +1420,21 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_TIMER:
       if (wParam == TIMER_REFRESH) OnTimer();
+      return 0;
+
+    case WM_MBUTTONDOWN: {
+      // #61: middle-mouse drag pans the view horizontally
+      int x = (short)LOWORD(lParam);
+      int y = (short)HIWORD(lParam);
+      OnMiddleDown(x, y);
+      return 0;
+    }
+
+    case WM_MBUTTONUP:
+      if (m_mmbPanning) {
+        m_mmbPanning = false;
+        ReleaseCapture();
+      }
       return 0;
 
 #ifdef _WIN32

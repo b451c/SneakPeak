@@ -156,6 +156,9 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           case SET_HIT_VIEW_RMS:     cmd = CM_SHOW_RMS;             break;
           case SET_HIT_VIEW_SNAP:    cmd = CM_SNAP_ZERO;            break;
           case SET_HIT_VIEW_MINIMAP: cmd = CM_MINIMAP;              break;
+          // Zoom-center is a 2-way selector: only toggle when the clicked side differs.
+          case SET_HIT_VIEW_ZOOM0:   if (m_zoomOnEditCursor)  cmd = CM_ZOOM_CENTER; break;
+          case SET_HIT_VIEW_ZOOM1:   if (!m_zoomOnEditCursor) cmd = CM_ZOOM_CENTER; break;
         }
         if (cmd) OnContextMenuCommand(cmd);
       }
@@ -478,12 +481,46 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
         return;
       }
 
-      // Channel mute button — visual dimming + audio via I_CHANMODE
+      // Channel solo - visual dimming + audio via take pan BALANCE, not
+      // I_CHANMODE: REAPER's mono-left/right modes fold the take to CENTRED
+      // mono (both ears) and collapse our display to one channel on reload,
+      // stranding the badges. Full-left/right pan under REAPER's default
+      // balance law mutes the opposite channel while KEEPING the soloed
+      // channel on its own side (Audition-style monitoring). The user's pan
+      // is saved on first solo and restored on un-solo / item switch.
       if (m_waveform.ClickChannelButton(x, y)) {
-        int chanMode = m_waveform.GetChanMode();
         if (m_waveform.GetTake() && g_GetSetMediaItemTakeInfo) {
-          g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "I_CHANMODE", &chanMode);
-          m_lastChanMode = chanMode;
+          MediaItem_Take* take = m_waveform.GetTake();
+          const bool L = m_waveform.IsChannelActive(0);
+          const bool R = m_waveform.IsChannelActive(1);
+          if (L && R) {
+            // Un-solo: restore the pre-solo pan (if we set one on this take)
+            if (m_chanSoloTake == take) {
+              g_GetSetMediaItemTakeInfo(take, "D_PAN", &m_chanSoloPrevPan);
+              m_chanSoloTake = nullptr;
+            }
+          } else {
+            if (m_chanSoloTake != take) {        // entering solo: save the user's pan
+              double* p = (double*)g_GetSetMediaItemTakeInfo(take, "D_PAN", nullptr);
+              m_chanSoloPrevPan = p ? *p : 0.0;
+              m_chanSoloTake = take;
+            }
+            double pan = L ? -1.0 : 1.0;         // balance: the opposite side goes silent
+            g_GetSetMediaItemTakeInfo(take, "D_PAN", &pan);
+          }
+          // Make the pan change audible promptly during playback: REAPER's media
+          // buffering would otherwise drain the already-buffered audio first (up
+          // to the media buffer length of lag). UpdateItemInProject is NOT usable
+          // here - it counts as an item edit and trips REAPER's "stop playback
+          // when editing media" preference. Instead re-seek the transport to the
+          // current play position (flushes the buffers, playback continues) and
+          // put the edit cursor back where the user had it.
+          if (g_GetPlayState && (g_GetPlayState() & 1) &&
+              g_GetPlayPosition && g_GetCursorPosition && g_SetEditCurPos) {
+            const double editPos = g_GetCursorPosition();
+            g_SetEditCurPos(g_GetPlayPosition(), false, true);   // seek = buffer flush
+            g_SetEditCurPos(editPos, false, false);              // restore edit cursor
+          }
           if (g_UpdateArrange) g_UpdateArrange();
         }
         InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -738,6 +775,25 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
         }
       }
 
+      // #64: grab a selection edge to resize it (the cursor already shows <->
+      // over the zone). Checked BEFORE drag-export so the edge zone wins over
+      // click-inside-selection. Re-anchors the selection on the OPPOSITE edge
+      // and rides the existing m_dragging path - move/up/snap/sync unchanged.
+      if (!(wParam & MK_SHIFT)) {
+        const int edge = HitSelectionEdge(x, y);
+        if (edge) {
+          WaveformSelection sel = m_waveform.GetSelection();
+          const double s = std::min(sel.startTime, sel.endTime);
+          const double e = std::max(sel.startTime, sel.endTime);
+          m_waveform.StartSelection(edge == 1 ? e : s);   // anchor = opposite edge
+          m_waveform.UpdateSelection(time);
+          m_dragging = true;
+          SetCapture(m_hwnd);
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+          return;
+        }
+      }
+
       // Drag export: click inside existing selection
       // Alt+drag: immediate drag export (for external apps / Finder)
       // No modifier: drag export starts when mouse leaves waveform area (for REAPER timeline)
@@ -770,6 +826,44 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
       SetCapture(m_hwnd);
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
+}
+
+// #61: middle-mouse pan start - grabs the view for a horizontal scroll drag in
+// the waveform or spectral area (the move/up handling lives in OnMouseMove /
+// WM_MBUTTONUP).
+void SneakPeak::OnMiddleDown(int x, int y)
+{
+  if (!m_waveform.HasItem()) return;
+  const bool inWave = y >= m_waveformRect.top && y < m_waveformRect.bottom;
+  const bool inSpec = m_spectralVisible &&
+                      y >= m_spectralRect.top && y < m_spectralRect.bottom;
+  if (!inWave && !inSpec) return;
+  m_mmbPanning = true;
+  m_mmbLastX = x;
+  SetCapture(m_hwnd);
+  SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
+}
+
+// #64: which selection edge is under the cursor in the waveform area (0 = none,
+// 1 = start edge, 2 = end edge). Edge zone = +/-SPmin(4) px; on a tiny on-screen
+// selection the nearer edge wins, so both edges stay grabbable.
+int SneakPeak::HitSelectionEdge(int x, int y)
+{
+  if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return 0;
+  if (y < m_waveformRect.top || y >= m_waveformRect.bottom) return 0;
+  if (x >= m_waveformRect.right - SP(DB_SCALE_WIDTH)) return 0;   // dB scale column
+  WaveformSelection sel = m_waveform.GetSelection();
+  const double s = std::min(sel.startTime, sel.endTime);
+  const double e = std::max(sel.startTime, sel.endTime);
+  if (e <= s) return 0;
+  const int sx = m_waveform.TimeToX(s);
+  const int ex = m_waveform.TimeToX(e);
+  const int zone = SPmin(4);
+  const int ds = abs(x - sx), de = abs(x - ex);
+  if (ds <= zone && de <= zone) return (ds <= de) ? 1 : 2;
+  if (ds <= zone) return 1;
+  if (de <= zone) return 2;
+  return 0;
 }
 
 void SneakPeak::OnMouseUp(int x, int y)
@@ -1291,6 +1385,23 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     return;
   }
 
+  // #61: middle-mouse horizontal pan (capture held; exclusive while active)
+  if (m_mmbPanning) {
+    if (x != m_mmbLastX) {
+      // Time delta from the pixel delta at the CURRENT view (both X evaluated
+      // before the scroll, so the grabbed audio stays under the cursor).
+      const double dt = m_waveform.XToTime(m_mmbLastX) - m_waveform.XToTime(x);
+      m_waveform.ScrollH(dt);
+      m_mmbLastX = x;
+      m_spectral.Invalidate();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
+    m_lastMouseX = x;
+    m_lastMouseY = y;
+    return;
+  }
+
   // Envelope selection rectangle (Cmd+left-drag)
   if (m_envRectStartX != 0 || m_envRectStartY != 0) {
     int dx = x - m_envRectStartX;
@@ -1582,6 +1693,39 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     }
   }
 
+  // Mode bar hover feedback: brighten the element under the cursor (tabs /
+  // MASTER / gear / Support / version) and show a hand cursor. Uses the rects
+  // cached by the last DrawModeBar; repaints only the mode bar on change.
+  {
+    int hov = MB_HOVER_NONE;
+    if (y >= m_modeBarRect.top && y < m_modeBarRect.bottom &&
+        !m_dragging && !m_mmbPanning && !m_scrollbarDragging) {
+      auto inR = [&](const RECT& r) {
+        return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+      };
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+      if (inR(m_gearRect)) hov = MB_HOVER_GEAR;
+      else
+#endif
+      if (inR(m_supportRect)) hov = MB_HOVER_SUPPORT;
+      else if (inR(m_versionRect)) hov = MB_HOVER_VERSION;
+      else {
+        for (int i = 0; i < (int)m_modeBarTabs.size(); ++i)
+          if (inR(m_modeBarTabs[i].rect)) { hov = i; break; }
+      }
+    }
+    if (hov != m_modeBarHover) {
+      m_modeBarHover = hov;
+      InvalidateRect(m_hwnd, &m_modeBarRect, FALSE);
+    }
+    if (hov != MB_HOVER_NONE) {
+      SetCursor(LoadCursor(nullptr, IDC_HAND));
+      m_lastMouseX = x;
+      m_lastMouseY = y;
+      return;   // cursor decided; nothing below applies inside the mode bar
+    }
+  }
+
   // Update mouse cursor based on what's under pointer
   {
     HCURSOR cur = LoadCursor(nullptr, IDC_ARROW);
@@ -1623,6 +1767,10 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 #endif
       // Fade handles (near item edges)
       else if (m_fadeDragging != FADE_NONE) {
+        cur = LoadCursor(nullptr, IDC_SIZEWE);
+      }
+      // #64: selection edge resize affordance
+      else if (HitSelectionEdge(x, y) != 0) {
         cur = LoadCursor(nullptr, IDC_SIZEWE);
       }
     }
@@ -1736,7 +1884,9 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
     // Cmd+Scroll = horizontal pan (may not reach us when docked — trackpad pan via WM_MOUSEHWHEEL)
     m_waveform.ScrollH(-steps * m_waveform.GetViewDuration() * 0.1);
   } else {
-    double centerTime = m_waveform.XToTime(x);
+    // #83: zoom anchor preference - mouse position (default) or the edit cursor.
+    double centerTime = m_zoomOnEditCursor ? m_waveform.GetCursorTime()
+                                           : m_waveform.XToTime(x);
     m_waveform.ZoomHorizontal(pow(ZOOM_FACTOR, steps), centerTime);
   }
 
