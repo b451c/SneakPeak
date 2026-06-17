@@ -4,7 +4,7 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.2.0] - Unreleased
+## [2.2.0] - 2026-06-17
 
 ### Highlights
 SneakPeak v2.2.0 is the **UI scaling release**: the entire interface scales from 80% to 200% (the top forum request), a new premium Settings panel becomes the home for preferences, the gain knob, level meters and toasts get the premium rendering treatment, and the waveform now tells the truth about clipping.
