@@ -40,6 +40,33 @@
 ]]></description>
       </metadata>
 
+      <version name="2.2.0" author="b451c" time="2026-06-17T09:55:47Z">
+        <changelog><![CDATA[UI Scaling Release - Global UI Scale, Settings Panel, Premium Rendering, Truthful Clipping
+
+New features:
+- Global UI scale (80-200%): the whole interface scales from a single slider, with first-run DPI auto-detection (Windows display scaling, Linux GDK scale) and automatic re-suggestion across mixed-DPI monitors on Windows
+- Settings panel (gear icon, or right-click > Settings): UI scale slider with live preview, density presets (Compact / Comfortable / Spacious), Fit to Window, plus the migrated Ruler / Meters / View preferences; the right-click menu is now a pure work menu
+- Premium-rendered gain knob, L/R meters and toasts: anti-aliased, DPI-crisp, gradient meter bars with per-mode shading (Peak / RMS / VU) and zone-colored peak-hold
+- Dynamics panel follows the global scale (its resize grip stays a per-panel fine-tune)
+- New action "SneakPeak: Toggle Master Track View" (bindable, same as the mode-bar MASTER tab)
+- Wheel-zoom center preference (mouse position or edit cursor), middle-mouse drag to pan, selection edge resize, ESC closes the Dynamics panel and D toggles it
+
+Bug fixes:
+- Skewed spectral view on Linux (Wayland / arm64): the spectrogram ignored the padded framebuffer stride, shearing the image at about half of all window widths (reporter: Lunar Ladder)
+- Garbled non-ASCII text on Windows: all text, window titles, dialogs, drag-and-drop paths and file IO now use UTF-8-aware Win32 wrappers (reporter: X-Raym)
+- Standalone mode unreachable on Windows: dropped files fell through to the REAPER timeline because the window never registered for Windows drag-and-drop (reporter: Ben Zero)
+- Launch shortcut dead when docked: SneakPeak now recognizes its own action bindings and lets them fire (reporter: Ben Zero)
+- Truthful clip display: red now means real clipping in the source samples; amber means an over-0 dBFS headroom warning in float contexts
+- Meters now fold in item fades and the take volume envelope at the latency-compensated play position
+- Channel solo keeps stereo placement (solo via take pan balance instead of mono channel modes)
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.2.0/reaper_sneakpeak-arm64.dylib</source>
+        <source platform="darwin64" file="reaper_sneakpeak-x86_64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.2.0/reaper_sneakpeak-x86_64.dylib</source>
+        <source platform="win64" file="reaper_sneakpeak-x64.dll">https://github.com/b451c/SneakPeak/releases/download/v2.2.0/reaper_sneakpeak-x64.dll</source>
+        <source platform="linux64" file="reaper_sneakpeak-x86_64.so">https://github.com/b451c/SneakPeak/releases/download/v2.2.0/reaper_sneakpeak-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_sneakpeak-aarch64.so">https://github.com/b451c/SneakPeak/releases/download/v2.2.0/reaper_sneakpeak-aarch64.so</source>
+      </version>
+
       <version name="2.1.1" author="b451c" time="2026-04-18T22:00:00Z">
         <changelog><![CDATA[Linux destructive-edit refresh hotfix
 
