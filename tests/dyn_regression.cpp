@@ -200,6 +200,17 @@ int main()
     { -24.0, 4.0, 6.0, 0.0, true, 5.0, 80.0, 5.0, true, 5.0,
       -45.0, -18.0, 80.0, -60.0, 6.0 }, -6.0});
 
+  // v2.3.0 INC-1 gate extension: exercise the NEW trailing params
+  // (gateRatio, gateHystDb, gateAttackMs, gateReleaseMs).
+  scenarios.push_back({"gate-ratio4-hyst6",
+    { -24.0, 2.0, 6.0, 0.0, true, 5.0, 100.0, 0.0, false, 5.0,
+      -45.0, -40.0, 50.0, -60.0, 6.0,
+      4.0, -6.0, 5.0, 200.0 }, 0.0});
+  scenarios.push_back({"gate-deepfloor-hard",
+    { -24.0, 2.0, 6.0, 0.0, true, 5.0, 100.0, 0.0, false, 5.0,
+      -70.0, -80.0, 100.0, -60.0, 6.0,
+      10.0, -12.0, 0.5, 50.0 }, 0.0});
+
   for (const auto& sig : signals)
     for (const auto& sc : scenarios)
       RunScenario(sc, sig);
