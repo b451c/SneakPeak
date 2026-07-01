@@ -40,7 +40,26 @@ struct DynamicsParams {
   double gateHystDb = 0.0;      // close threshold relative to G.Thr (<= 0; 0 = legacy single threshold)
   double gateAttackMs = 2.0;    // gate open speed (legacy hard-coded constant)
   double gateReleaseMs = 100.0; // gate close speed (legacy hard-coded constant)
+
+  // Upward compression (v2.3.0 INC-2) - same append-at-end rule as above.
+  bool upwardMode = false;      // false = classic downward (legacy); true = boost below threshold
+  double maxBoostDb = 8.0;      // Up-mode boost cap (mandatory - uncapped boosts the noise floor)
 };
+
+// Static-curve slope factor S = 1/R - 1, extended ratio encoding (v2.3.0):
+//   r >= 1  -> classic compression, S in (-1, 0] (bit-identical to the legacy
+//              1.0 / max(1.0, r) - 1.0 for the legacy range)
+//   r == 0  -> Inf:1 sentinel (true limiting, S = -1)
+//   r <  0  -> over-compression (saxmand): reduction EXCEEDS the overshoot,
+//              output slope goes negative; r = -2 -> S = -1.5, r = -1 -> S = -2
+// Old binaries reading a new P_EXT string degrade gracefully: max(1.0, r)
+// clamps 0/negative to 1 -> compression off, never garbage.
+inline double DynSlopeFromRatio(double r)
+{
+  if (r == 0.0) return -1.0;
+  if (r < 0.0) return 1.0 / r - 1.0;
+  return 1.0 / (r < 1.0 ? 1.0 : r) - 1.0;
+}
 
 struct DynamicsPoint {
   double time;       // seconds from item start
@@ -64,6 +83,7 @@ enum {
   PRESET_BROADCAST,
   PRESET_DEBREATH,
   PRESET_MUSIC_BUS,
+  PRESET_UPWARD,     // v2.3.0: upward leveling (Up mode showcase)
   PRESET_COUNT
 };
 
