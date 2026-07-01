@@ -45,7 +45,7 @@ void DynamicsParamsToString(const DynamicsParams& p, char* buf, int bufSize)
     p.attackMs, p.releaseMs, p.lookaheadMs, p.rmsMode ? 1 : 0,
     p.gateThreshDb, p.gateRangeDb, p.gateHoldMs,
     p.gateRatio, p.gateHystDb, p.gateAttackMs, p.gateReleaseMs,
-    p.upwardMode ? 1 : 0, p.maxBoostDb);
+    p.compMode, p.maxBoostDb);
 }
 
 bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
@@ -80,7 +80,9 @@ bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
   // v2.3.0 upward compression ("up=" / "mb=" have no earlier key= collisions;
   // legacy "m=" matches first at its original position).
   double up = 0.0;
-  readKey("up", up); out.upwardMode = (up > 0.5);
+  readKey("up", up);
+  out.compMode = (int)(up + 0.5);
+  if (out.compMode < 0 || out.compMode > 2) out.compMode = 0;
   readKey("mb", out.maxBoostDb);
   return true;
 }
@@ -220,7 +222,10 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   // negative = over-compression. See DynSlopeFromRatio in the header.
   double slope = DynSlopeFromRatio(m_params.ratio);
   double halfKnee = knee / 2.0;
-  bool upward = m_params.upwardMode;
+  // 0=Down, 1=Up, 2=Both (leveler: both contributions summed per point)
+  const int compMode = std::min(2, std::max(0, m_params.compMode));
+  const bool hasDown = (compMode != COMP_MODE_UP);
+  const bool hasUp   = (compMode != COMP_MODE_DOWN);
 
   // Attack/release coefficients for GR smoothing
   double dt = (m_results.size() > 1)
@@ -284,34 +289,39 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
     double overshoot = rawDb - thresh;
     double instantGR = 0.0;
 
-    if (!upward) {
+    if (hasDown) {
       // Classic downward: reduce above the threshold (JAES 2012 Eq. 4).
       if (knee > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
         double x = overshoot + halfKnee;
-        instantGR = slope * x * x / (2.0 * knee);
+        instantGR += slope * x * x / (2.0 * knee);
       } else if (overshoot > 0.0) {
-        instantGR = slope * overshoot;
+        instantGR += slope * overshoot;
       }
-    } else {
+    }
+    if (hasUp) {
       // Upward (v2.3.0): point reflection of the downward gain computer about
       // the threshold - boost below, unity above, C1 at both knee edges
       // (research_v230 'Upward Compression', reviewer-verified derivation).
+      // In Both mode the two knee quadratics SUM to an exactly linear
+      // S*(x - T) through the threshold - a seamless leveler.
+      double gUp = 0.0;
       if (knee > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
         double x = overshoot - halfKnee;                 // mirrored knee quadratic
-        instantGR = -slope * x * x / (2.0 * knee);
+        gUp = -slope * x * x / (2.0 * knee);
       } else if (overshoot < 0.0) {
-        instantGR = slope * overshoot;                   // slope<=0, overshoot<0 => boost
+        gUp = slope * overshoot;                         // slope<=0, overshoot<0 => boost
       }
       // Mandatory cap - uncapped, the curve boosts the noise floor without bound.
-      instantGR = std::min(instantGR, m_params.maxBoostDb);
+      gUp = std::min(gUp, m_params.maxBoostDb);
       // Gate coupling: the boost is floored at the gate threshold, compared on
       // the SAME level the gate state machine detects on (raw peak WITHOUT
       // lookahead) so "the gate always wins" holds exactly; lookahead keeps
       // driving only the early REMOVAL of boost before transients.
       if (gateEnabled) {
         double rawNoLaDb = 20.0 * log10(std::max(pt.peakLinear, EPSILON)) + m_itemVolDb;
-        if (rawNoLaDb < gateThresh) instantGR = 0.0;
+        if (rawNoLaDb < gateThresh) gUp = 0.0;
       }
+      instantGR += gUp;
     }
 
     // Smooth compressor GR (sign-agnostic branch: works for boost too)
@@ -340,7 +350,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   bool gateOpen = false;
   if (gateEnabled && n > 0) {
     double rawDb0 = 20.0 * log10(std::max(m_results[0].peakLinear, EPSILON)) + m_itemVolDb;
-    gateOpen = ((upward ? rawDb0 : rawDb0 + compGRs[0]) >= tClose);
+    gateOpen = ((hasUp ? rawDb0 : rawDb0 + compGRs[0]) >= tClose);
   }
 
   // Second pass: gate (detects on the post-compression, PRE-makeup level) + output.
@@ -358,9 +368,9 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
 
     if (gateEnabled) {
       double rawDb = 20.0 * log10(std::max(pt.peakLinear, EPSILON)) + m_itemVolDb;
-      // Down: post-comp, pre-makeup (breath-reduction intent). Up: RAW input -
-      // boosted noise must never hold the gate open (research gate coupling).
-      double detectLevel = upward ? rawDb : rawDb + compGR;
+      // Down: post-comp, pre-makeup (breath-reduction intent). Up/Both: RAW
+      // input - boosted noise must never hold the gate open (gate coupling).
+      double detectLevel = hasUp ? rawDb : rawDb + compGR;
 
       // Schmitt state machine: the gate opens at/above tOpen; the hysteresis
       // band [tClose, tOpen) keeps it open WITHOUT consuming hold; hold is

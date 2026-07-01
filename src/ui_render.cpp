@@ -89,23 +89,28 @@ static double CompressionGrDb(double inDb, const DynCurveParams& p) {
   const double slope = SlopeFromRatioUi(p.ratio);
   const double halfKnee = p.kneeDb * 0.5;
   const double overshoot = inDb - p.thresholdDb;
+  const bool hasDown = (p.mode != 1), hasUp = (p.mode != 0);
   double g = 0.0;
-  if (!p.upward) {
-    if (overshoot <= -halfKnee) return 0.0;
-    if (p.kneeDb > 0.0 && overshoot < halfKnee) {
+  if (hasDown) {
+    if (p.kneeDb > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
       const double t = overshoot + halfKnee;
-      return slope * t * t / (2.0 * p.kneeDb);
+      g += slope * t * t / (2.0 * p.kneeDb);
+    } else if (overshoot > 0.0) {
+      g += slope * overshoot;
     }
-    return slope * overshoot;
   }
-  if (p.kneeDb > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
-    const double t = overshoot - halfKnee;                 // mirrored knee quadratic
-    g = -slope * t * t / (2.0 * p.kneeDb);
-  } else if (overshoot < 0.0) {
-    g = slope * overshoot;                                 // boost below threshold
+  if (hasUp) {
+    double gUp = 0.0;
+    if (p.kneeDb > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
+      const double t = overshoot - halfKnee;               // mirrored knee quadratic
+      gUp = -slope * t * t / (2.0 * p.kneeDb);
+    } else if (overshoot < 0.0) {
+      gUp = slope * overshoot;                             // boost below threshold
+    }
+    gUp = std::min(gUp, p.maxBoostDb);
+    if (p.showGate && inDb < p.gateThreshDb) gUp = 0.0;    // gate-coupled boost floor
+    g += gUp;
   }
-  g = std::min(g, p.maxBoostDb);
-  if (p.showGate && inDb < p.gateThreshDb) g = 0.0;        // gate-coupled boost floor
   return g;
 }
 
@@ -118,7 +123,7 @@ static double CurveOutDb(double in, const DynCurveParams& p) {
   if (p.showGate) {
     // Gate detection domain mirrors the engine: Down = post-comp pre-makeup,
     // Up = RAW input (boosted noise must never hold the gate open).
-    const double detect = p.upward ? in : in + g;
+    const double detect = (p.mode != 0) ? in : in + g;
     // Closed-state ("basic") expander curve: slope Rg-1 below the open
     // threshold, clamped to range. Hysteresis only affects the time behavior
     // (band shading), never this static curve.
@@ -262,7 +267,7 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   };
   auto gateGrDb = [&](double in, double compGr) -> double {
     if (!p.showGate) return 0.0;
-    const double detect = p.upward ? in : in + compGr;                       // Up: raw; Down: post-comp, PRE-makeup
+    const double detect = (p.mode != 0) ? in : in + compGr;                  // Up/Both: raw; Down: post-comp, PRE-makeup
     if (detect >= p.gateThreshDb) return 0.0;
     const double gateRangeNeg = -std::fabs(p.gateRangeDb);                   // engine range is negative
     const double gateSlope = std::max(1.0, p.gateRatio) - 1.0;               // closed-state slope Rg-1
@@ -287,7 +292,7 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   // input range by bisection. Dims with the gate on the Compressor tab.
   if (p.showGate && p.gateHystDb < 0.0) {
     // Detection domain mirrors the engine: Up gates on the RAW input (x axis).
-    auto detectAt = [&](double in) { return p.upward ? in : in + compGrDb(in); };
+    auto detectAt = [&](double in) { return (p.mode != 0) ? in : in + compGrDb(in); };
     auto invDetect = [&](double target) {
       double lo = inMin, hi = inMax;
       if (detectAt(lo) >= target) return lo;
@@ -856,15 +861,17 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
 
     // DOWN/UP processor-mode state button (v2.3.0 upward compression):
     // A/B-pattern - neutral "DOWN" at rest, amber outline + "UP" when engaged.
-    FillURound(ctx, L.modeBtn, dynui::kRadiusCtrl, vm.upward ? dynui::kSurface3 : dynui::kSurface2);
-    if (vm.upward) {
+    const bool modeHot = (vm.mode != 0);
+    FillURound(ctx, L.modeBtn, dynui::kRadiusCtrl, modeHot ? dynui::kSurface3 : dynui::kSurface2);
+    if (modeHot) {
       ctx.set_stroke_width(1.0);
       ctx.stroke_round_rect(BLRoundRect(L.modeBtn.x + 0.5, L.modeBtn.y + 0.5,
                                         L.modeBtn.w - 1.0, L.modeBtn.h - 1.0, dynui::kRadiusCtrl),
                             col(dynui::kAmber));
     }
-    TextCentered(ctx, gfx.fLabel, L.modeBtn, vm.upward ? "UP" : "DOWN",
-                 vm.upward ? dynui::kAmber : dynui::kInkSecondary);
+    static const char* const kModeTxt[3] = { "DOWN", "UP", "BOTH" };
+    TextCentered(ctx, gfx.fLabel, L.modeBtn, kModeTxt[vm.mode < 0 || vm.mode > 2 ? 0 : vm.mode],
+                 modeHot ? dynui::kAmber : dynui::kInkSecondary);
 
     // GR hero readout, right-aligned left of the A/B button - the load-bearing
     // number from the engine average GR (truthful applied GR). In Up mode the
@@ -1118,7 +1125,7 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                   vm.curve, /*withNumber=*/false);
     }
     for (int i = 0; i < kDynNumParams; ++i) {
-      if (i == kDynParamMaxBoost && !vm.upward) continue;  // M.Boost is Up-mode-only
+      if (i == kDynParamMaxBoost && vm.mode == 0) continue;  // M.Boost only in Up/Both
       DrawKnob(ctx, *m_gfx, L.knob[i], vm.knobs[i]);
     }
 

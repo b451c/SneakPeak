@@ -42,9 +42,15 @@ struct DynamicsParams {
   double gateReleaseMs = 100.0; // gate close speed (legacy hard-coded constant)
 
   // Upward compression (v2.3.0 INC-2) - same append-at-end rule as above.
-  bool upwardMode = false;      // false = classic downward (legacy); true = boost below threshold
-  double maxBoostDb = 8.0;      // Up-mode boost cap (mandatory - uncapped boosts the noise floor)
+  // 0 = Down (classic, legacy), 1 = Up (boost below threshold), 2 = Both
+  // (leveler: Down above + Up below in one pass; the summed knee quadratics
+  // collapse to an exactly linear S*(x-T) through the threshold).
+  // Serialized as "up=" (old strings: absent -> 0; 0/1 keep their meaning).
+  int compMode = 0;
+  double maxBoostDb = 8.0;      // boost cap in Up/Both (mandatory - uncapped boosts the noise floor)
 };
+
+enum { COMP_MODE_DOWN = 0, COMP_MODE_UP = 1, COMP_MODE_BOTH = 2 };
 
 // Static-curve slope factor S = 1/R - 1, extended ratio encoding (v2.3.0):
 //   r >= 1  -> classic compression, S in (-1, 0] (bit-identical to the legacy

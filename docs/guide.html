@@ -742,7 +742,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="dynamics-panel">Dynamics Panel</h2>
 
-<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 15 real-time controls across the COMP and GATE tabs. The <strong>DOWN / UP</strong> switch in the panel header selects the processor mode: DOWN is a classic compressor (reduce loud material above the threshold), UP is an upward compressor (boost quiet material below the threshold - leveling quiet speech without touching the peaks). In Up mode the GR readout turns amber and reads "BOOST", auto-makeup acts as a trim (default off), and the boost is capped by M.Boost and floored at the gate threshold when the gate is on.</p>
+<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 15 real-time controls across the COMP and GATE tabs. The mode button in the panel header cycles <strong>DOWN / UP / BOTH</strong>: DOWN is a classic compressor (reduce loud material above the threshold), UP is an upward compressor (boost quiet material below the threshold - leveling quiet speech without touching the peaks), and BOTH does the two at once in a single pass - a full leveler that pulls everything toward the threshold, ideal for "lift the quiet, tame the loud" voice work. In Up/Both the GR readout turns amber when the net gain is a boost, auto-makeup acts as a trim, and the boost is capped by M.Boost and floored at the gate threshold when the gate is on.</p>
 
 <table>
   <thead><tr><th>Slider</th><th>Range</th><th>Description</th></tr></thead>

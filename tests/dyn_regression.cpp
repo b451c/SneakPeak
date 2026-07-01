@@ -228,6 +228,17 @@ int main()
     { -20.0, -2.0, 6.0, 0.0, true, 5.0, 100.0, 0.0, false, 5.0,
       -100.0, -20.0, 50.0, -60.0, 6.0 }, 0.0});
 
+  // v2.3.0 BOTH mode (leveler: Down above + Up below the threshold in one
+  // pass; summed knee quadratics collapse to linear S*(x-T) through it).
+  scenarios.push_back({"both-leveler",
+    { -20.0, 2.0, 12.0, 0.0, false, 5.0, 100.0, 0.0, false, 5.0,
+      -100.0, -20.0, 50.0, -60.0, 6.0,
+      2.0, 0.0, 2.0, 100.0, 2, 8.0 }, 0.0});
+  scenarios.push_back({"both-gated",
+    { -24.0, 2.0, 6.0, 0.0, true, 5.0, 100.0, 0.0, true, 5.0,
+      -50.0, -40.0, 50.0, -60.0, 6.0,
+      2.0, -6.0, 2.0, 100.0, 2, 8.0 }, 0.0});
+
   for (const auto& sig : signals)
     for (const auto& sc : scenarios)
       RunScenario(sc, sig);

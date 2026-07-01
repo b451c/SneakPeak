@@ -31,8 +31,8 @@ struct DynCurveParams {
   double gateRangeDb  = 24.0;   // POSITIVE magnitude (engine value is negated at the wiring point)
   double gateRatio    = 2.0;    // downward-expander ratio Rg (closed-state slope Rg-1; 2.0 = legacy)
   double gateHystDb   = 0.0;    // close threshold relative to gate thresh (<= 0; band shading)
-  bool   upward       = false;  // Up mode: boost below threshold (mirrored gain computer)
-  double maxBoostDb   = 8.0;    // Up-mode boost cap; boost also floored at gateThreshDb (raw x)
+  int    mode         = 0;      // 0=Down, 1=Up (boost below thresh), 2=Both (leveler)
+  double maxBoostDb   = 8.0;    // Up/Both boost cap; boost also floored at gateThreshDb (raw x)
   double makeupDb     = 0.0;    // post-comp makeup; used for the GATE onset (engine gates post-makeup)
   double avgPeakDb    = -18.0;  // operating point (signal level); < inMinDb hides it
   double avgGrDb      = 0.0;    // engine GetAvgGainReduction(), NEGATIVE dB - drives the GR meter value
@@ -83,7 +83,7 @@ struct DynPanelVM {
   bool  liveMode = false;
   bool  bypassed = false;
   bool  rmsMode  = false;
-  bool  upward   = false;           // Down/Up header pill state; hides M.Boost when false
+  int   mode     = 0;               // 0=Down, 1=Up, 2=Both; M.Boost hidden when 0
   int   meterFloorSel = 0;          // active meter-scale segment index (see kMeterFloorOptDb)
   bool  compact  = false;           // Compact mode: hero plot hidden, knobs in a 4-col grid
   int   dragHandle = -1;            // curve handle being dragged (-1 none, 0 knee, 1 gate) -> glow

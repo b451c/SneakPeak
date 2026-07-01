@@ -456,13 +456,14 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   // user opts back in) and flags a one-shot hint toast when the gate is off
   // (boosted noise floor; never auto-enables the gate - locked 2026-07-02).
   if (L.modeBtn.contains(lx, ly)) {
-    m_params.upwardMode = !m_params.upwardMode;
-    if (m_params.upwardMode) {
-      m_params.autoMakeup = false;
-      if (m_params.gateThreshDb <= -99.0 && !m_upHintShown) {
-        m_upHintPending = true;
-        m_upHintShown = true;
-      }
+    // Cycles DOWN -> UP -> BOTH -> DOWN. Entering UP defaults auto-makeup OFF
+    // once (trim convention); BOTH keeps it (its average is a meaningful net).
+    m_params.compMode = (m_params.compMode + 1) % 3;
+    if (m_params.compMode == COMP_MODE_UP) m_params.autoMakeup = false;
+    if (m_params.compMode != COMP_MODE_DOWN &&
+        m_params.gateThreshDb <= -99.0 && !m_upHintShown) {
+      m_upHintPending = true;
+      m_upHintShown = true;
     }
     m_paramsChanged = true;
     m_presetIdx = -1;
@@ -499,7 +500,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   // m_dragSlider keeps IsDragging()/SetCapture/reanalyze/Live byte-for-byte with
   // the GDI slider path.
   for (int i = 0; i < NUM_SLIDERS; ++i) {
-    if (i == kDynParamMaxBoost && !m_params.upwardMode) continue;  // Up-mode-only knob
+    if (i == kDynParamMaxBoost && m_params.compMode == COMP_MODE_DOWN) continue;  // Up/Both-only knob
     if (!L.knob[i].contains(lx, ly)) continue;
     if (IsFineMode()) {                          // Cmd-click = reset to the param default
       if (i == 5) {                              // Makeup -> auto (DynamicsParams default)
@@ -604,13 +605,12 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   // Down/Up mode toggle (GDI fallback; same side effects as the premium pill)
   RECT upR = GetUpToggleRect(pr);
   if (x >= upR.left && x < upR.right && y >= upR.top && y < upR.bottom) {
-    m_params.upwardMode = !m_params.upwardMode;
-    if (m_params.upwardMode) {
-      m_params.autoMakeup = false;
-      if (m_params.gateThreshDb <= -99.0 && !m_upHintShown) {
-        m_upHintPending = true;
-        m_upHintShown = true;
-      }
+    m_params.compMode = (m_params.compMode + 1) % 3;   // Dn -> Up -> Both -> Dn
+    if (m_params.compMode == COMP_MODE_UP) m_params.autoMakeup = false;
+    if (m_params.compMode != COMP_MODE_DOWN &&
+        m_params.gateThreshDb <= -99.0 && !m_upHintShown) {
+      m_upHintPending = true;
+      m_upHintShown = true;
     }
     m_paramsChanged = true;
     m_presetIdx = -1;
@@ -801,7 +801,7 @@ int DynamicsPanel::HitTestKnob(int x, int y, RECT pr) const
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
   const DynLayout L = PanelLayout();
   for (int i = 0; i < NUM_SLIDERS; ++i) {
-    if (i == kDynParamMaxBoost && !m_params.upwardMode) continue;  // Up-mode-only knob
+    if (i == kDynParamMaxBoost && m_params.compMode == COMP_MODE_DOWN) continue;  // Up/Both-only knob
     if (L.knob[i].contains(lx, ly)) return i;
   }
   return -1;
@@ -879,7 +879,7 @@ DynCurveParams DynamicsPanel::BuildCurveParams() const
   c.showGate     = (m_params.gateThreshDb > -99.0);
   c.gateRatio    = m_params.gateRatio;               // closed-state slope for the plotted expander curve
   c.gateHystDb   = std::min(0.0, m_params.gateHystDb);
-  c.upward       = m_params.upwardMode;              // mirrored gain computer + raw-domain gate
+  c.mode         = m_params.compMode;                // 0=Down, 1=Up, 2=Both
   c.maxBoostDb   = m_params.maxBoostDb;
   c.inMinDb      = dynui::kMeterFloorOptDb[m_meterFloorSel];  // View-tab meter-scale floor (default -60); inMaxDb stays 0
   return c;
@@ -1256,7 +1256,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     // Down/Up mode toggle (GDI fallback; amber when Up is engaged)
     RECT upR = GetUpToggleRect(pr);
     {
-      OwnedPen upPen(PS_SOLID, 1, m_params.upwardMode ? RGB(255, 160, 40) : RGB(80, 80, 80));
+      OwnedPen upPen(PS_SOLID, 1, m_params.compMode != COMP_MODE_DOWN ? RGB(255, 160, 40) : RGB(80, 80, 80));
       DCPenScope scope(hdc, upPen);
       MoveToEx(hdc, upR.left, upR.top, nullptr);
       LineTo(hdc, upR.right - 1, upR.top);
@@ -1264,8 +1264,9 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       LineTo(hdc, upR.left, upR.bottom - 1);
       LineTo(hdc, upR.left, upR.top);
     }
-    SetTextColor(hdc, m_params.upwardMode ? RGB(255, 160, 40) : RGB(160, 160, 160));
-    DrawTextUTF8(hdc, "Up", -1, &upR,
+    SetTextColor(hdc, m_params.compMode != COMP_MODE_DOWN ? RGB(255, 160, 40) : RGB(160, 160, 160));
+    DrawTextUTF8(hdc, m_params.compMode == COMP_MODE_UP ? "Up"
+               : m_params.compMode == COMP_MODE_BOTH ? "D+U" : "Dn", -1, &upR,
              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Dyn toggle
@@ -1382,7 +1383,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.liveMode = m_liveMode;
   vm.bypassed = m_bypassed;
   vm.rmsMode  = m_params.rmsMode;
-  vm.upward   = m_params.upwardMode;
+  vm.mode     = m_params.compMode;
   vm.meterFloorSel = m_meterFloorSel;
   vm.compact  = m_compactMode;
   vm.dragHandle = m_dragHandle;
