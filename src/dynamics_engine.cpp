@@ -11,12 +11,17 @@ static constexpr double EPSILON = 1e-12;
 
 // --- Built-in presets (researched from iZotope, Waves, EBU R128, BBC guidelines) ---
 
+// The three gate-enabled voice presets ship -6 dB hysteresis (v2.3.0): a voice
+// gate without hysteresis chatters on breathy material hovering at the threshold
+// (LSP Gate defaults -12 relative, cycfi Q +12 gap - both on raw input; ours
+// detects post-comp, hence the smaller heuristic). Rows list all 19 fields then;
+// the gate-off rows keep 15 values + trailing NSDMI legacy defaults.
 const DynamicsPreset g_dynamicsPresets[PRESET_COUNT] = {
   { "Default", { 0.0, 1.0, 0.0, 0.0, false, 10.0, 100.0, 0.0, false, 5.0, -100.0, -20.0, 50.0, -60.0, 6.0 } },
   { "Gentle Leveling", { -18.0, 2.0, 12.0, 0.0, true, 20.0, 150.0, 3.0, true, 5.0, -100.0, -40.0, 50.0, -60.0, 6.0 } },
-  { "Voice / Podcast", { -24.0, 4.0, 6.0, 0.0, true, 5.0, 80.0, 5.0, true, 5.0, -45.0, -18.0, 80.0, -60.0, 6.0 } },
-  { "Broadcast", { -20.0, 6.0, 3.0, 0.0, true, 1.0, 50.0, 5.0, true, 5.0, -40.0, -24.0, 60.0, -60.0, 6.0 } },
-  { "De-breath", { -18.0, 2.0, 8.0, 0.0, true, 10.0, 100.0, 5.0, false, 5.0, -35.0, -12.0, 30.0, -60.0, 6.0 } },
+  { "Voice / Podcast", { -24.0, 4.0, 6.0, 0.0, true, 5.0, 80.0, 5.0, true, 5.0, -45.0, -18.0, 80.0, -60.0, 6.0, 2.0, -6.0, 2.0, 100.0 } },
+  { "Broadcast", { -20.0, 6.0, 3.0, 0.0, true, 1.0, 50.0, 5.0, true, 5.0, -40.0, -24.0, 60.0, -60.0, 6.0, 2.0, -6.0, 2.0, 100.0 } },
+  { "De-breath", { -18.0, 2.0, 8.0, 0.0, true, 10.0, 100.0, 5.0, false, 5.0, -35.0, -12.0, 30.0, -60.0, 6.0, 2.0, -6.0, 2.0, 100.0 } },
   { "Music Bus", { -16.0, 2.0, 9.0, 0.0, true, 30.0, 200.0, 0.0, true, 5.0, -100.0, -40.0, 50.0, -60.0, 6.0 } },
 };
 
