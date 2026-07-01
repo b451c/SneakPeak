@@ -136,6 +136,29 @@ if(SNEAKPEAK_BLEND2D_PANEL)
   target_compile_definitions(reaper_sneakpeak PRIVATE SNEAKPEAK_BLEND2D_PANEL)
 endif()
 
+# --- v2.3.0 INC-0: offline envelope-diff regression harness ---
+# Pure-DSP test binary (no REAPER/SWELL/Blend2D deps). Deterministic signals
+# through DynamicsEngine; canonical dump byte-diffed against tests/baselines/
+# by tests/run_dyn_regression.sh (or "record" to re-baseline intentionally).
+add_executable(dyn_regression
+  tests/dyn_regression.cpp
+  src/dynamics_engine.cpp
+)
+target_include_directories(dyn_regression PRIVATE src)
+target_compile_definitions(dyn_regression PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+)
+if(MSVC)
+  target_compile_options(dyn_regression PRIVATE /W3)
+else()
+  target_compile_options(dyn_regression PRIVATE
+    -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
+    -Wshadow
+    -Wconversion -Wno-sign-conversion
+    -fsigned-char
+  )
+endif()
+
 if(APPLE)
   set_target_properties(reaper_sneakpeak PROPERTIES
     SUFFIX ".dylib"
