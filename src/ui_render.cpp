@@ -95,8 +95,13 @@ static double CurveOutDb(double in, const DynCurveParams& p) {
   double out = in + g + p.makeupDb;
   if (p.showGate) {
     const double detect = in + g;   // engine gates on the post-comp, PRE-makeup level (makeup is output-only)
-    if (detect < p.gateThreshDb)
-      out += std::max(detect - p.gateThreshDb, -std::fabs(p.gateRangeDb));
+    // Closed-state ("basic") expander curve, mirroring the engine: slope Rg-1
+    // below the open threshold, clamped to range. Hysteresis only affects the
+    // time behavior (band shading), never this static curve.
+    if (detect < p.gateThreshDb) {
+      const double gateSlope = std::max(1.0, p.gateRatio) - 1.0;
+      out += std::max(gateSlope * (detect - p.gateThreshDb), -std::fabs(p.gateRangeDb));
+    }
   }
   return out;
 }
@@ -236,7 +241,8 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
     const double detect = in + compGr;                                       // engine: post-comp, PRE-makeup
     if (detect >= p.gateThreshDb) return 0.0;
     const double gateRangeNeg = -std::fabs(p.gateRangeDb);                   // engine range is negative
-    return std::max(detect - p.gateThreshDb, gateRangeNeg);                  // ramp 0 -> range, clamped
+    const double gateSlope = std::max(1.0, p.gateRatio) - 1.0;               // closed-state slope Rg-1
+    return std::max(gateSlope * (detect - p.gateThreshDb), gateRangeNeg);    // ramp 0 -> range, clamped
   };
   auto compOut = [&](double in) { return in + compGrDb(in) + p.makeupDb; }; // wedge bottom: comp + makeup
   auto outAt   = [&](double in) { return CurveOutDb(in, p); };             // full output (shared w/ handles)
@@ -420,7 +426,7 @@ static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
 // L.ahead), tab 1=Gate (G.Thr/G.Range/G.Hold), tab 2=View (no knobs). Matches the
 // SLIDER_DEFS order in dynamics_panel.cpp. The single IA source for render + hit.
 struct KnobSlot { int tab, col, row; };
-static const KnobSlot KNOB_SLOTS[10] = {
+static const KnobSlot KNOB_SLOTS[kDynNumParams] = {
   { 0, 0, 0 },  // 0  Thresh   (Compressor / DYNAMICS)
   { 0, 0, 1 },  // 1  Ratio
   { 0, 0, 2 },  // 2  Knee
@@ -428,16 +434,20 @@ static const KnobSlot KNOB_SLOTS[10] = {
   { 0, 1, 1 },  // 4  Release
   { 0, 0, 3 },  // 5  Makeup   (Compressor / DYNAMICS)
   { 0, 1, 2 },  // 6  L.ahead  (Compressor / TIME)
-  { 1, 0, 0 },  // 7  G.Thr    (Gate)
-  { 1, 0, 1 },  // 8  G.Range
-  { 1, 0, 2 },  // 9  G.Hold
+  { 1, 0, 0 },  // 7  G.Thr    (Gate / LEVELS - mirrors the Compressor tab IA)
+  { 1, 0, 2 },  // 8  G.Range
+  { 1, 1, 2 },  // 9  G.Hold   (Gate / TIME)
+  { 1, 0, 1 },  // 10 G.Ratio  (Gate / LEVELS)
+  { 1, 0, 3 },  // 11 G.Hyst
+  { 1, 1, 0 },  // 12 G.Att    (Gate / TIME)
+  { 1, 1, 1 },  // 13 G.Rel
 };
 
 // Compact-mode slots: the hero plot is hidden, so the knobs reflow into a wider
 // 4-col x 2-row grid filling the full body width. Compressor row0 = Thresh/Ratio/
 // Knee/Makeup, row1 = Attack/Release/L.ahead (+ Peak/RMS in col3); Gate row0 = the
 // three gate knobs. Same param indices as KNOB_SLOTS, different cell positions.
-static const KnobSlot COMPACT_KNOB_SLOTS[10] = {
+static const KnobSlot COMPACT_KNOB_SLOTS[kDynNumParams] = {
   { 0, 0, 0 },  // 0  Thresh
   { 0, 1, 0 },  // 1  Ratio
   { 0, 2, 0 },  // 2  Knee
@@ -445,9 +455,13 @@ static const KnobSlot COMPACT_KNOB_SLOTS[10] = {
   { 0, 1, 1 },  // 4  Release
   { 0, 3, 0 },  // 5  Makeup
   { 0, 2, 1 },  // 6  L.ahead
-  { 1, 0, 0 },  // 7  G.Thr
-  { 1, 1, 0 },  // 8  G.Range
-  { 1, 2, 0 },  // 9  G.Hold
+  { 1, 0, 0 },  // 7  G.Thr    (row0 = levels, row1 = time)
+  { 1, 2, 0 },  // 8  G.Range
+  { 1, 2, 1 },  // 9  G.Hold
+  { 1, 1, 0 },  // 10 G.Ratio
+  { 1, 3, 0 },  // 11 G.Hyst
+  { 1, 0, 1 },  // 12 G.Att
+  { 1, 1, 1 },  // 13 G.Rel
 };
 
 static inline double Deg2Rad(double d) { return d * 3.14159265358979323846 / 180.0; }
@@ -542,10 +556,12 @@ static void DrawKnob(BLContext& ctx, const Gfx& gfx, const URect& cell, const Kn
       // Value number (16px primary) + unit (11px muted) on its own advance, per the
       // type spec - keeps long readouts ("1000 ms") inside the content margin and lets
       // ":1" abut the number. Auto-makeup shows the computed value with a muted "auto".
+      // showOff (G.Thr at the sentinel / hard-left detent) renders "Off", no unit.
       char num[24];
-      std::snprintf(num, sizeof(num), k.precision == 1 ? "%.1f" : "%.0f", k.value);
+      if (k.showOff) std::snprintf(num, sizeof(num), "Off");
+      else std::snprintf(num, sizeof(num), k.precision == 1 ? "%.1f" : "%.0f", k.value);
       ctx.fill_utf8_text(BLPoint(tx, vy), gfx.fValue, num, SIZE_MAX, col(dynui::kInkPrimary));
-      const char* unit = k.showAuto ? "auto" : (k.unit ? k.unit : "");
+      const char* unit = k.showOff ? "" : (k.showAuto ? "auto" : (k.unit ? k.unit : ""));
       if (*unit) {
         const bool abut = (unit[0] == ':');   // ratio ":1" sits flush against the number
         const double ux = tx + TextWidth(gfx.fValue, num) + (abut ? 1.0 : 4.0);
@@ -629,7 +645,7 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
       return { gridX + (double)ccol * (cCellW + colGap), gridTop + (double)crow * cCellH,
                cCellW, cCellH };
     };
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < kDynNumParams; ++i) {
       const KnobSlot& s = COMPACT_KNOB_SLOTS[i];
       L.knob[i] = (s.tab == activeTab) ? ccell(s.col, s.row) : URect{ 0, 0, 0, 0 };
     }
@@ -674,7 +690,7 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
     return { gridX + (double)ccol * (cellW + colGap), L.plotWell.y + (double)crow * cellH,
              cellW, cellH };
   };
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < kDynNumParams; ++i) {
     const KnobSlot& s = KNOB_SLOTS[i];
     L.knob[i] = (s.tab == activeTab) ? cellRect(s.col, s.row) : URect{ 0, 0, 0, 0 };
   }
@@ -1003,7 +1019,7 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
       DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w,
                   vm.curve, /*withNumber=*/false);
     }
-    for (int i = 0; i < 10; ++i)
+    for (int i = 0; i < kDynNumParams; ++i)
       DrawKnob(ctx, *m_gfx, L.knob[i], vm.knobs[i]);
 
     // Peak/RMS switch (Compressor tab) + View-tab state toggles. Each helper

@@ -21,9 +21,13 @@ const DynamicsPanel::SliderDef DynamicsPanel::SLIDER_DEFS[NUM_SLIDERS] = {
   { "Release",   0.0, 1000.0, "ms",  0,  100.0 },  // 4
   { "Makeup",    0.0,   24.0, "dB",  1,    0.0 },  // 5
   { "L.ahead",   0.0,   20.0, "ms",  1,    0.0 },  // 6
-  { "G.Thr",   -60.0,    0.0, "dB",  1, -100.0 },  // 7: gate threshold (-100 = off, engine default)
-  { "G.Range", -40.0,    0.0, "dB",  0,  -20.0 },  // 8: gate max reduction
-  { "G.Hold",    0.0,  200.0, "ms",  0,   50.0 },  // 9: gate hold time
+  { "G.Thr",   -90.0,    0.0, "dB",  1, -100.0 },  // 7: gate threshold (-100 = off; hard-left detent snaps to it)
+  { "G.Range", -80.0,    0.0, "dB",  0,  -20.0 },  // 8: gate max reduction
+  { "G.Hold",    0.0,  500.0, "ms",  0,   50.0 },  // 9: gate hold time
+  { "G.Ratio",   1.0,   10.0, ":1",  1,    2.0 },  // 10: expander ratio (2.0 = legacy slope)
+  { "G.Hyst",  -24.0,    0.0, "dB",  0,    0.0 },  // 11: close threshold relative to G.Thr
+  { "G.Att",     0.0,   50.0, "ms",  1,    2.0 },  // 12: gate open speed
+  { "G.Rel",    10.0, 1000.0, "ms",  0,  100.0 },  // 13: gate close speed
 };
 
 // --- Layout constants ---
@@ -81,6 +85,10 @@ double DynamicsPanel::GetSliderValue(int idx) const
     case 7: return m_params.gateThreshDb;
     case 8: return m_params.gateRangeDb;
     case 9: return m_params.gateHoldMs;
+    case 10: return m_params.gateRatio;
+    case 11: return m_params.gateHystDb;
+    case 12: return m_params.gateAttackMs;
+    case 13: return m_params.gateReleaseMs;
     default: return 0.0;
   }
 }
@@ -97,9 +105,18 @@ void DynamicsPanel::SetSliderValue(int idx, double val)
     case 4: m_params.releaseMs = val; break;
     case 5: m_params.makeupDb = val; m_params.autoMakeup = false; break;
     case 6: m_params.lookaheadMs = val; break;
-    case 7: m_params.gateThreshDb = val; break;
+    case 7:
+      // Hard-left detent: the bottom of the knob range snaps to the engine's
+      // OFF sentinel (-100), so the gate is disengaged by dragging fully left
+      // (Cmd-click stays as the shortcut). The readout shows "Off" there.
+      m_params.gateThreshDb = (val <= def.minVal + 0.05) ? -100.0 : val;
+      break;
     case 8: m_params.gateRangeDb = val; break;
     case 9: m_params.gateHoldMs = val; break;
+    case 10: m_params.gateRatio = val; break;
+    case 11: m_params.gateHystDb = val; break;
+    case 12: m_params.gateAttackMs = val; break;
+    case 13: m_params.gateReleaseMs = val; break;
   }
 }
 
@@ -742,6 +759,8 @@ DynCurveParams DynamicsPanel::BuildCurveParams() const
   c.avgPeakDb    = m_avgPeakDb;
   c.avgGrDb      = m_avgGR;                          // engine avg GR (negative) drives the meter (#2)
   c.showGate     = (m_params.gateThreshDb > -99.0);
+  c.gateRatio    = m_params.gateRatio;               // closed-state slope for the plotted expander curve
+  c.gateHystDb   = std::min(0.0, m_params.gateHystDb);
   c.inMinDb      = dynui::kMeterFloorOptDb[m_meterFloorSel];  // View-tab meter-scale floor (default -60); inMaxDb stays 0
   return c;
 }
@@ -1077,6 +1096,8 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       if (i == 5 && m_params.autoMakeup) {
         // Makeup: show auto-computed value
         snprintf(text, sizeof(text), "%.1f auto", fabs(m_avgGR));
+      } else if (i == 7 && val <= -99.0) {
+        snprintf(text, sizeof(text), "Off");
       } else if (def.precision == 1) {
         snprintf(text, sizeof(text), "%.1f %s", val, def.unit);
       } else {
@@ -1249,6 +1270,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
     k.precision   = def.precision;
     k.isGate      = (i >= 7);
     k.showAuto    = (i == 5 && m_params.autoMakeup);
+    k.showOff     = (i == 7 && k.value <= -99.0);   // G.Thr sentinel -> "Off" readout
     if (k.showAuto) { k.value = fabs(m_avgGR); targetN = norm(k.value); }
 
     // Value-ease (motion pass): the arc + indicator glide ~120ms to a value set by

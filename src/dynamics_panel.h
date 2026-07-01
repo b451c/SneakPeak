@@ -93,7 +93,7 @@ public:
 
 private:
   enum class Tab { Compressor, Gate, View };   // premium panel active tab
-  static constexpr int NUM_SLIDERS = 10;
+  static constexpr int NUM_SLIDERS = kDynNumParams;  // 14 since the v2.3.0 gate extension
   static constexpr int HANDLE_KNEE = 0;        // curve drag-handle ids
   static constexpr int HANDLE_GATE = 1;
 
@@ -109,14 +109,18 @@ private:
   double GetSliderValue(int idx) const;
   void SetSliderValue(int idx, double val);
 
-  static int SliderCol(int idx) { return (idx < 3 || idx == 6 || idx == 8) ? 0 : 1; }
+  static int SliderCol(int idx) {
+    return (idx < 3 || idx == 6 || idx == 8 || idx == 10 || idx == 12) ? 0 : 1;
+  }
   static int SliderRow(int idx) {
     if (idx < 3) return idx;       // 0-2: left rows 0-2
     if (idx < 6) return idx - 3;   // 3-5: right rows 0-2
     if (idx == 6) return 3;        // L.ahead: left row 3
     if (idx == 7) return 3;        // G.Thr: right row 3
     if (idx == 8) return 4;        // G.Range: left row 4
-    return 4;                      // G.Hold: right row 4
+    if (idx == 9) return 4;        // G.Hold: right row 4
+    if (idx < 12) return 5;        // G.Ratio: left / G.Hyst: right row 5
+    return 6;                      // G.Att: left / G.Rel: right row 6
   }
 
   RECT GetSliderTrackRect(RECT panelRect, int idx) const;
@@ -206,7 +210,7 @@ private:
   [[maybe_unused]] double m_resizeStartScale = 1.0;  // m_uiScale at grab -> first move = no-op
 
   static const int PANEL_W = 380;
-  static const int PANEL_H = 148;
+  static const int PANEL_H = 184;  // 7 slider rows since the gate extension (was 148 / 5 rows)
   static const int TITLE_H = 22;
   static const int ROW_H = 18;
   static const int THUMB_R = 4;

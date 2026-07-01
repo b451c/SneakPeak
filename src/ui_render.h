@@ -16,6 +16,10 @@
 #include <cstdint>
 #include <memory>
 
+// Shared param count for the Dynamics panel (SLIDER_DEFS rows, knob slots, VM
+// arrays). v2.3.0 gate extension: 10 -> 14.
+constexpr int kDynNumParams = 14;
+
 // Inputs for the transfer-curve hero. Plain values (no Blend2D in the header);
 // the compression math mirrors dynamics_engine.cpp ComputeCompression().
 struct DynCurveParams {
@@ -24,6 +28,8 @@ struct DynCurveParams {
   double kneeDb       = 6.0;
   double gateThreshDb = -55.0;
   double gateRangeDb  = 24.0;   // POSITIVE magnitude (engine value is negated at the wiring point)
+  double gateRatio    = 2.0;    // downward-expander ratio Rg (closed-state slope Rg-1; 2.0 = legacy)
+  double gateHystDb   = 0.0;    // close threshold relative to gate thresh (<= 0; band shading)
   double makeupDb     = 0.0;    // post-comp makeup; used for the GATE onset (engine gates post-makeup)
   double avgPeakDb    = -18.0;  // operating point (signal level); < inMinDb hides it
   double avgGrDb      = 0.0;    // engine GetAvgGainReduction(), NEGATIVE dB - drives the GR meter value
@@ -49,6 +55,7 @@ struct KnobVM {
   int    precision   = 1;
   bool   isGate      = false; // violet fill (gate params) vs amber (compressor)
   bool   showAuto    = false; // Makeup in auto mode -> "<n> auto" readout
+  bool   showOff     = false; // sentinel value -> "Off" readout (G.Thr detent)
   bool   hover       = false; // cursor over (or dragging) this knob -> glow + cap tint
   bool   editing     = false; // inline type-value editor open on this knob (Inc 8)
   const char* editText = nullptr; // live edit buffer (valid only during the paint)
@@ -63,7 +70,7 @@ struct DynPanelVM {
   DynCurveParams curve;              // transfer plot + GR meter
   int   activeTab   = 0;            // 0=Compressor, 1=Gate, 2=View
   const char* presetName = nullptr; // null -> "Preset"
-  KnobVM knobs[10];                  // all 10 params; only on-tab ones get a rect
+  KnobVM knobs[kDynNumParams];       // all params; only on-tab ones get a rect
   // Toggle/state (Inc 5): the View-tab pills + header A/B render from these; the
   // Peak/RMS segmented reads rmsMode. Mirror DynamicsPanel's live members.
   bool  showDyn  = true;
@@ -98,7 +105,7 @@ struct DynLayout {
   URect header, footer, plotWell, grMeter;
   URect preset, abBtn, closeBtn, apply;
   URect tabSeg[3];   // Compressor / Gate / View pill segments
-  URect knob[10];    // per-param knob cells; empty (w==0) when not on the active tab
+  URect knob[kDynNumParams]; // per-param knob cells; empty (w==0) when not on the active tab
   URect rms[2];      // Peak / RMS segmented halves (Compressor tab; empty otherwise)
   URect viewToggle[5]; // Dyn / Env / GR / Live / A-B pills (View tab; empty otherwise)
   URect meterScale[3]; // plot/GR-meter dB-floor selector segments (View tab; empty otherwise)
