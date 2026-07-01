@@ -60,9 +60,14 @@ public:
   void SetShowEnv(bool v) { m_showEnv = v; }
   void SetShowGR(bool v) { m_showGR = v; }
   // Meter-scale selector (View tab, premium): the plot/GR-meter dB floor.
-  // 0 = -60 dB (default), 1 = -36, 2 = -24. Render-only; persisted as a global pref.
+  // Index into dynui::kMeterFloorOptDb {-96, -60, -36, -24}; default -60 (idx 1).
+  // Render-only; persisted as a global pref (dyn_meter_floor2 since v2.3.0).
   int  GetMeterFloor() const { return m_meterFloorSel; }
-  void SetMeterFloor(int idx) { m_meterFloorSel = idx < 0 ? 0 : (idx > 2 ? 2 : idx); }
+  void SetMeterFloor(int idx) { m_meterFloorSel = idx < 0 ? 0 : (idx > 3 ? 3 : idx); }
+  // Set when a G.Thr change auto-expanded the plot floor (gate node would have
+  // been pinned invisibly at the plot edge); host shows a one-shot toast.
+  bool FloorAutoSwitched() const { return m_floorAutoSwitched; }
+  void ClearFloorAutoSwitched() { m_floorAutoSwitched = false; }
   // Compact mode (View tab, premium): hides the hero plot + GR meter and reflows the
   // knobs into a wider 4-col grid, shrinking the panel height. Persisted as a global pref.
   bool GetCompact() const { return m_compactMode; }
@@ -189,7 +194,8 @@ private:
   bool m_showDyn = true;  // show dynamics curves (orange + purple + threshold)
   bool m_showEnv = true;  // show volume envelope (cyan)
   bool m_showGR = true;   // show gain reduction shading between curves
-  int  m_meterFloorSel = 0;  // meter-scale dB floor: 0=-60 (default), 1=-36, 2=-24; render-only, persisted
+  int  m_meterFloorSel = 1;  // index into dynui::kMeterFloorOptDb; 1 = -60 dB default; render-only, persisted
+  bool m_floorAutoSwitched = false;  // G.Thr drop auto-expanded the floor -> host toast
   bool m_compactMode = false; // Compact mode: hero plot hidden, knobs in a 4-col grid; persisted
   bool m_bypassed = false;  // A/B: envelope bypass for comparison
   bool m_liveMode = false;  // live preview: write envelope on slider change

@@ -108,7 +108,7 @@ struct DynLayout {
   URect knob[kDynNumParams]; // per-param knob cells; empty (w==0) when not on the active tab
   URect rms[2];      // Peak / RMS segmented halves (Compressor tab; empty otherwise)
   URect viewToggle[5]; // Dyn / Env / GR / Live / A-B pills (View tab; empty otherwise)
-  URect meterScale[3]; // plot/GR-meter dB-floor selector segments (View tab; empty otherwise)
+  URect meterScale[4]; // plot/GR-meter dB-floor selector segments (View tab; empty otherwise)
   URect compactToggle; // Compact-mode pill (View tab; empty otherwise)
   URect resizeGrip;  // bottom-right corner drag handle (free resize)
 };

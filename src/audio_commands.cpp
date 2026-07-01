@@ -12,6 +12,7 @@
 #include "audio_ops.h"
 #include "debug.h"
 #include "reaper_plugin.h"
+#include "ui_theme.h"   // dynui::kMeterFloorDefaultSel (meter-floor pref migration)
 
 #include <cstring>
 #include <cstdio>
@@ -1507,9 +1508,15 @@ void SneakPeak::RestoreDynamicsViewPrefs()
   m_dynamicsPanel.SetShowGR (rd("dyn_show_gr",  true));
   // Live persists too (user request). Default OFF. A/B (bypass) stays ephemeral.
   m_dynamicsPanel.SetLiveMode(rd("dyn_live", false));
-  // Meter-scale dB-floor selector (premium View tab). Stored as an index; default -60.
+  // Meter-scale dB-floor selector (premium View tab). Stored as an index into
+  // dynui::kMeterFloorOptDb. v2.3.0 prepended -96 (gate thresholds reach -90 now),
+  // shifting the legacy indices by +1 - the pref moved to dyn_meter_floor2, with a
+  // one-time migration from the old key (old 0/1/2 = -60/-36/-24 -> new 1/2/3).
+  const char* mf2 = g_GetExtState("SneakPeak", "dyn_meter_floor2");
   const char* mf = g_GetExtState("SneakPeak", "dyn_meter_floor");
-  m_dynamicsPanel.SetMeterFloor((mf && mf[0]) ? atoi(mf) : 0);
+  m_dynamicsPanel.SetMeterFloor((mf2 && mf2[0]) ? atoi(mf2)
+                              : (mf && mf[0])   ? atoi(mf) + 1
+                                                : dynui::kMeterFloorDefaultSel);
   // Compact mode (premium View tab). Default off (normal layout).
   m_dynamicsPanel.SetCompact(rd("dyn_compact", false));
   // Panel size (free-resize scale) + position: reopen where/how the user left it.
@@ -1544,7 +1551,7 @@ void SneakPeak::SaveDynamicsViewPrefs()
   g_SetExtState("SneakPeak", "dyn_live",     m_dynamicsPanel.IsLive()     ? "1" : "0", true);
   char mf[8];
   snprintf(mf, sizeof(mf), "%d", m_dynamicsPanel.GetMeterFloor());
-  g_SetExtState("SneakPeak", "dyn_meter_floor", mf, true);
+  g_SetExtState("SneakPeak", "dyn_meter_floor2", mf, true);  // new indexing since v2.3.0 (-96 at 0)
   g_SetExtState("SneakPeak", "dyn_compact", m_dynamicsPanel.GetCompact() ? "1" : "0", true);
 }
 

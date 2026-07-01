@@ -382,6 +382,12 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         m_dynamicsPanel.ClearViewPrefsChanged();
         SaveDynamicsViewPrefs();
       }
+      // One-shot toast when a G.Thr change auto-expanded the plot floor (the gate
+      // node would otherwise sit invisibly pinned at the plot edge).
+      if (m_dynamicsPanel.FloorAutoSwitched()) {
+        m_dynamicsPanel.ClearFloorAutoSwitched();
+        ShowToast("Plot scale expanded to show the gate threshold");
+      }
       // Preset dropdown menu (factory + user presets, Save/Delete) - built in
       // context_menu.cpp where the portable menu helpers live.
       if (m_dynamicsPanel.PresetMenuRequested()) {

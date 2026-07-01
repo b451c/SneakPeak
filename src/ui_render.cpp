@@ -255,6 +255,31 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   ctx.set_stroke_width(1.0);
   ctx.stroke_line(BLLine(px0, py1, px1, py0), col(dynui::kCurveUnity));
 
+  // Hysteresis band (v2.3.0 gate extension): with H < 0 the gate OPENS at tOpen
+  // but stays open down to tClose = tOpen + H, so the instantaneous behaviour in
+  // between is state-dependent - the faint violet band keeps the static plot
+  // honest about that. The band lives in the DETECT domain; detect(x) = x +
+  // compGR(x) is strictly increasing (comp slope > -1), so it inverts to an
+  // input range by bisection. Dims with the gate on the Compressor tab.
+  if (p.showGate && p.gateHystDb < 0.0) {
+    auto detectAt = [&](double in) { return in + compGrDb(in); };
+    auto invDetect = [&](double target) {
+      double lo = inMin, hi = inMax;
+      if (detectAt(lo) >= target) return lo;
+      if (detectAt(hi) <= target) return hi;
+      for (int it = 0; it < 24; ++it) {
+        const double mid = 0.5 * (lo + hi);
+        if (detectAt(mid) < target) lo = mid; else hi = mid;
+      }
+      return 0.5 * (lo + hi);
+    };
+    const double xC = dbToX(invDetect(p.gateThreshDb + p.gateHystDb));
+    const double xO = dbToX(invDetect(p.gateThreshDb));
+    if (xO - xC > 0.5)
+      ctx.fill_rect(BLRect(xC, py0, xO - xC, plotSide),
+                    colA(dynui::kGateViolet, (int)(30.0 * gateA)));
+  }
+
   const int N = dynui::kPlotSamples;
   auto sampleDb = [&](int i) { return inMin + span * (double)i / (double)N; };
 
@@ -716,14 +741,15 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
     // Compact-mode toggle: col1 row1 (below Live).
     const URect cc = cellRect(1, 1);
     L.compactToggle = { cc.x, cc.y + (cc.h - tH) * 0.5, cc.w, tH };
-    // Meter-scale selector: a 3-segment dB-floor control on the bottom grid row,
+    // Meter-scale selector: a 4-segment dB-floor control on the bottom grid row,
     // spanning both columns. A "SCALE" caption (render-only) sits in the left gutter.
     const URect c0 = cellRect(0, 3), c1 = cellRect(1, 3);
     const double segH = 24.0, segGap = 2.0, capW = 44.0;
     const double segY = c0.y + (c0.h - segH) * 0.5;
     const double x0 = c0.x + capW, right = c1.x + c1.w;
-    const double segW = (right - x0 - 2.0 * segGap) / 3.0;
-    for (int i = 0; i < 3; ++i)
+    const int nSeg = dynui::kMeterFloorOptCount;
+    const double segW = (right - x0 - (double)(nSeg - 1) * segGap) / (double)nSeg;
+    for (int i = 0; i < nSeg; ++i)
       L.meterScale[i] = { x0 + (double)i * (segW + segGap), segY, segW, segH };
   }
   }
@@ -911,10 +937,10 @@ static void DrawSegmented2(BLContext& ctx, const Gfx& gfx, const URect& a, const
 // 3-segment selector (the meter-scale dB floor). Same treatment as DrawSegmented2:
 // active = surface3 + a 2 px amber underline + primary ink; inactive = surface1 +
 // secondary ink. Self-skips when empty (off the View tab).
-static void DrawSegmented3(BLContext& ctx, const Gfx& gfx, const URect segs[3],
-                           const char* const labels[3], int activeIdx) {
+static void DrawSegmentedN(BLContext& ctx, const Gfx& gfx, const URect* segs,
+                           const char* const* labels, int n, int activeIdx) {
   if (segs[0].w < 1.0) return;
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < n; ++i) {
     const bool active = (i == activeIdx);
     const URect& s = segs[i];
     FillURound(ctx, s, dynui::kRadiusCtrl, active ? dynui::kSurface3 : dynui::kSurface1);
@@ -924,6 +950,11 @@ static void DrawSegmented3(BLContext& ctx, const Gfx& gfx, const URect segs[3],
       TextCentered(ctx, gfx.fLabel, s, labels[i],
                    active ? dynui::kInkPrimary : dynui::kInkSecondary);
   }
+}
+
+static void DrawSegmented3(BLContext& ctx, const Gfx& gfx, const URect segs[3],
+                           const char* const labels[3], int activeIdx) {
+  DrawSegmentedN(ctx, gfx, segs, labels, 3, activeIdx);
 }
 
 // Bottom-right corner resize grip: 3 short diagonal hairlines, kept inside the
@@ -1033,8 +1064,10 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
 
     // Meter-scale dB-floor selector (View tab) + its left "SCALE" caption. Both
     // self-skip when the rects are empty (off the View tab).
-    static const char* const kScaleLabels[3] = { "-60", "-36", "-24" };
-    DrawSegmented3(ctx, *m_gfx, L.meterScale, kScaleLabels, vm.meterFloorSel);
+    static const char* const kScaleLabels[dynui::kMeterFloorOptCount] =
+      { "-96", "-60", "-36", "-24" };
+    DrawSegmentedN(ctx, *m_gfx, L.meterScale, kScaleLabels,
+                   dynui::kMeterFloorOptCount, vm.meterFloorSel);
     if (m_gfx->fontsReady && L.meterScale[0].w >= 1.0) {
       const URect& s0 = L.meterScale[0];
       const double cw = TextWidth(m_gfx->fLabel, "SCALE");

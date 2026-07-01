@@ -110,6 +110,21 @@ void DynamicsPanel::SetSliderValue(int idx, double val)
       // OFF sentinel (-100), so the gate is disengaged by dragging fully left
       // (Cmd-click stays as the shortcut). The readout shows "Off" there.
       m_params.gateThreshDb = (val <= def.minVal + 0.05) ? -100.0 : val;
+      // Auto-expand the plot floor when the threshold drops below it, so the
+      // gate node never sits invisibly pinned at the plot edge (locked UX
+      // decision 2026-07-01). Picks the shallowest floor that still shows the
+      // threshold (max resolution); persists + flags a one-shot host toast.
+      if (m_params.gateThreshDb > -99.0 &&
+          m_params.gateThreshDb < dynui::kMeterFloorOptDb[m_meterFloorSel]) {
+        int best = m_meterFloorSel;
+        for (int f = 0; f < dynui::kMeterFloorOptCount; ++f)
+          if (dynui::kMeterFloorOptDb[f] <= m_params.gateThreshDb) best = f;
+        if (best != m_meterFloorSel) {
+          m_meterFloorSel = best;
+          m_viewPrefsChanged = true;
+          m_floorAutoSwitched = true;
+        }
+      }
       break;
     case 8: m_params.gateRangeDb = val; break;
     case 9: m_params.gateHoldMs = val; break;
@@ -140,7 +155,7 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   m_showDyn = true;
   m_showEnv = true;
   m_showGR = true;
-  m_meterFloorSel = 0;   // default -60 dB floor (RestoreDynamicsViewPrefs overrides from ExtState)
+  m_meterFloorSel = dynui::kMeterFloorDefaultSel;  // -60 dB floor (RestoreDynamicsViewPrefs overrides from ExtState)
   m_compactMode = false; // default normal layout (RestoreDynamicsViewPrefs overrides from ExtState)
   m_bypassed = false;
   m_liveMode = false;
@@ -459,7 +474,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   // (A/B is handled by the header abBtn above - no View-tab A/B pill.)
   // Meter-scale dB-floor selector: render-only (rescales plot + GR meter), so persist
   // the pref but do NOT mark params changed (no re-analysis).
-  for (int i = 0; i < 3; ++i)
+  for (int i = 0; i < dynui::kMeterFloorOptCount; ++i)
     if (L.meterScale[i].contains(lx, ly)) { m_meterFloorSel = i; m_viewPrefsChanged = true; return true; }
   // Compact toggle: relayout only (panel resizes on the next paint); persist the pref.
   if (L.compactToggle.contains(lx, ly)) { m_compactMode = !m_compactMode; m_viewPrefsChanged = true; return true; }
