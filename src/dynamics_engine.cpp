@@ -241,7 +241,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
     ? (int)(m_params.lookaheadMs / 1000.0 / dt + 0.5) : 0;
 
   // Gate parameters (detects on the post-compression, PRE-makeup level - see the second pass)
-  bool gateEnabled = (m_params.gateThreshDb > -99.0);
+  bool gateEnabled = (m_params.gateThreshDb > -99.0) && !m_params.gateBypass;
   double gateRange = std::min(0.0, m_params.gateRangeDb); // always <= 0
   double gateThresh = m_params.gateThreshDb;
   // v2.3.0 gate extension: generalized downward expander with Schmitt hysteresis.
@@ -296,7 +296,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
     // around the target (W = 0 degenerates to the pure linear leveler).
     const double oDn = (compMode == COMP_MODE_BOTH) ? overshoot - halfKnee : overshoot;
     const double oUp = (compMode == COMP_MODE_BOTH) ? overshoot + halfKnee : overshoot;
-    if (hasDown) {
+    if (hasDown && !m_params.compBypass) {
       // Classic downward: reduce above the threshold (JAES 2012 Eq. 4).
       if (knee > 0.0 && oDn > -halfKnee && oDn < halfKnee) {
         double x = oDn + halfKnee;
@@ -305,7 +305,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
         instantGR += slope * oDn;
       }
     }
-    if (hasUp) {
+    if (hasUp && !m_params.compBypass) {
       // Upward (v2.3.0): point reflection of the downward gain computer about
       // the threshold - boost below, unity above, C1 at both knee edges
       // (research_v230 'Upward Compression', reviewer-verified derivation).
@@ -345,7 +345,9 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   }
 
   m_avgGR = (grCount > 0) ? grSum / (double)grCount : 0.0;
-  double makeup = m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
+  // compBypass silences the WHOLE comp stage - makeup is its output gain.
+  double makeup = m_params.compBypass ? 0.0
+                : m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
   // Extended-ratio zone (slope < -1, Inf/over-comp): cap auto-makeup at the
   // manual knob ceiling - over-compression GR averages can be huge and -avgGR
   // would explode the output (v2.3 addendum: cap auto-makeup in that zone).

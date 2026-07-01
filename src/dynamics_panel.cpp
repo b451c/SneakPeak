@@ -197,6 +197,8 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   m_avgGR = 0.0;
   m_upHintPending = false;     // Up-with-gate-off hint re-arms per panel open
   m_upHintShown = false;
+  m_params.compBypass = false; // stage bypasses are audition controls (like A/B):
+  m_params.gateBypass = false; // never persisted, re-armed on every panel open
   // Reset toggles to show everything on panel open
   m_showDyn = true;
   m_showEnv = true;
@@ -298,6 +300,20 @@ RECT DynamicsPanel::GetUpToggleRect(RECT pr) const
   RECT rms = GetRmsToggleRect(pr);
   int x = rms.right + TOGGLE_GAP;
   return { x, rms.top, x + 30, rms.bottom };
+}
+
+RECT DynamicsPanel::GetCompByToggleRect(RECT pr) const
+{
+  RECT up = GetUpToggleRect(pr);
+  int x = up.right + TOGGLE_GAP;
+  return { x, up.top, x + 18, up.bottom };
+}
+
+RECT DynamicsPanel::GetGateByToggleRect(RECT pr) const
+{
+  RECT c = GetCompByToggleRect(pr);
+  int x = c.right + TOGGLE_GAP;
+  return { x, c.top, x + 18, c.bottom };
 }
 
 RECT DynamicsPanel::GetDynToggleRect(RECT pr) const
@@ -469,6 +485,19 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
     m_presetIdx = -1;
     return true;
   }
+  // Stage-power dots (INC-4): the small left zone of the COMP/GATE pills
+  // toggles that stage's bypass (ephemeral audition, like A/B); the rest of
+  // the pill still switches tabs. paramsChanged -> re-analyse + Live re-apply.
+  if (L.stagePower[0].contains(lx, ly)) {
+    m_params.compBypass = !m_params.compBypass;
+    m_paramsChanged = true;
+    return true;
+  }
+  if (L.stagePower[1].contains(lx, ly)) {
+    m_params.gateBypass = !m_params.gateBypass;
+    m_paramsChanged = true;
+    return true;
+  }
   for (int i = 0; i < 3; ++i)
     if (L.tabSeg[i].contains(lx, ly)) {
       if ((Tab)i != m_tab) { m_tabFrom = (int)m_tab; m_tabSlideStartSec = NowSec(); m_tab = (Tab)i; }
@@ -614,6 +643,20 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
     }
     m_paramsChanged = true;
     m_presetIdx = -1;
+    return true;
+  }
+
+  // Stage bypass toggles (C = comp, G = gate; audition, like A/B)
+  RECT cbR = GetCompByToggleRect(pr);
+  if (x >= cbR.left && x < cbR.right && y >= cbR.top && y < cbR.bottom) {
+    m_params.compBypass = !m_params.compBypass;
+    m_paramsChanged = true;
+    return true;
+  }
+  RECT gbR = GetGateByToggleRect(pr);
+  if (x >= gbR.left && x < gbR.right && y >= gbR.top && y < gbR.bottom) {
+    m_params.gateBypass = !m_params.gateBypass;
+    m_paramsChanged = true;
     return true;
   }
 
@@ -873,14 +916,16 @@ DynCurveParams DynamicsPanel::BuildCurveParams() const
   c.kneeDb       = m_params.kneeDb;
   c.gateThreshDb = m_params.gateThreshDb;
   c.gateRangeDb  = -m_params.gateRangeDb;            // engine NEGATIVE -> render POSITIVE magnitude (#1)
-  c.makeupDb     = m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
+  c.makeupDb     = m_params.compBypass ? 0.0
+                 : m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
   c.avgPeakDb    = m_avgPeakDb;
   c.avgGrDb      = m_avgGR;                          // engine avg GR (negative) drives the meter (#2)
-  c.showGate     = (m_params.gateThreshDb > -99.0);
+  c.showGate     = (m_params.gateThreshDb > -99.0) && !m_params.gateBypass;
   c.gateRatio    = m_params.gateRatio;               // closed-state slope for the plotted expander curve
   c.gateHystDb   = std::min(0.0, m_params.gateHystDb);
   c.mode         = m_params.compMode;                // 0=Down, 1=Up, 2=Both
   c.maxBoostDb   = m_params.maxBoostDb;
+  c.compBypass   = m_params.compBypass;              // bypassed comp: no GR, no makeup
   c.inMinDb      = dynui::kMeterFloorOptDb[m_meterFloorSel];  // View-tab meter-scale floor (default -60); inMaxDb stays 0
   return c;
 }
@@ -1269,6 +1314,14 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
                : m_params.compMode == COMP_MODE_BOTH ? "D+U" : "Dn", -1, &upR,
              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
+    // Stage bypass toggles: C/G lit amber while ACTIVE, dim when bypassed
+    RECT cbR = GetCompByToggleRect(pr);
+    RECT gbR = GetGateByToggleRect(pr);
+    SetTextColor(hdc, m_params.compBypass ? RGB(90, 90, 90) : RGB(255, 160, 40));
+    DrawTextUTF8(hdc, "C", -1, &cbR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SetTextColor(hdc, m_params.gateBypass ? RGB(90, 90, 90) : RGB(255, 160, 40));
+    DrawTextUTF8(hdc, "G", -1, &gbR, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
     // Dyn toggle
     RECT dynR = GetDynToggleRect(pr);
     {
@@ -1384,6 +1437,8 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.bypassed = m_bypassed;
   vm.rmsMode  = m_params.rmsMode;
   vm.mode     = m_params.compMode;
+  vm.compBypass = m_params.compBypass;
+  vm.gateBypass = m_params.gateBypass;
   vm.meterFloorSel = m_meterFloorSel;
   vm.compact  = m_compactMode;
   vm.dragHandle = m_dragHandle;

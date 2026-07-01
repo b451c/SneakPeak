@@ -33,6 +33,7 @@ struct DynCurveParams {
   double gateHystDb   = 0.0;    // close threshold relative to gate thresh (<= 0; band shading)
   int    mode         = 0;      // 0=Down, 1=Up (boost below thresh), 2=Both (leveler)
   double maxBoostDb   = 8.0;    // Up/Both boost cap; boost also floored at gateThreshDb (raw x)
+  bool   compBypass   = false;  // stage bypass: comp GR (+ makeup) contribute nothing
   double makeupDb     = 0.0;    // post-comp makeup; used for the GATE onset (engine gates post-makeup)
   double avgPeakDb    = -18.0;  // operating point (signal level); < inMinDb hides it
   double avgGrDb      = 0.0;    // engine GetAvgGainReduction(), NEGATIVE dB - drives the GR meter value
@@ -84,6 +85,8 @@ struct DynPanelVM {
   bool  bypassed = false;
   bool  rmsMode  = false;
   int   mode     = 0;               // 0=Down, 1=Up, 2=Both; M.Boost hidden when 0
+  bool  compBypass = false;         // per-stage audition bypasses (power dots on the
+  bool  gateBypass = false;         // COMP/GATE footer tab pills; ephemeral like A/B)
   int   meterFloorSel = 0;          // active meter-scale segment index (see kMeterFloorOptDb)
   bool  compact  = false;           // Compact mode: hero plot hidden, knobs in a 4-col grid
   int   dragHandle = -1;            // curve handle being dragged (-1 none, 0 knee, 1 gate) -> glow
@@ -111,6 +114,7 @@ struct DynLayout {
   URect preset, abBtn, closeBtn, apply;
   URect modeBtn;     // DOWN/UP processor-mode state button (A/B-style; click flips)
   URect tabSeg[3];   // Compressor / Gate / View pill segments
+  URect stagePower[2]; // power dots inside the COMP/GATE pills (stage bypass hit zones)
   URect knob[kDynNumParams]; // per-param knob cells; empty (w==0) when not on the active tab
   URect rms[2];      // Peak / RMS segmented halves (Compressor tab; empty otherwise)
   URect viewToggle[5]; // Dyn / Env / GR / Live / A-B pills (View tab; empty otherwise)

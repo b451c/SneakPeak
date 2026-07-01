@@ -138,6 +138,8 @@ private:
   RECT GetApplyButtonRect(RECT panelRect) const;
   RECT GetRmsToggleRect(RECT panelRect) const;
   RECT GetUpToggleRect(RECT panelRect) const;   // GDI Down/Up mode toggle
+  RECT GetCompByToggleRect(RECT panelRect) const;  // GDI comp-stage bypass (C)
+  RECT GetGateByToggleRect(RECT panelRect) const;  // GDI gate-stage bypass (G)
   RECT GetDynToggleRect(RECT panelRect) const;
   RECT GetEnvToggleRect(RECT panelRect) const;
   RECT GetLiveToggleRect(RECT panelRect) const;

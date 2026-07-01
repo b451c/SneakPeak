@@ -95,6 +95,7 @@ static double CompressionGrDb(double inDb, const DynCurveParams& p) {
   const double oDn = (p.mode == 2) ? overshoot - halfKnee : overshoot;
   const double oUp = (p.mode == 2) ? overshoot + halfKnee : overshoot;
   double g = 0.0;
+  if (p.compBypass) return 0.0;   // stage bypassed: no comp contribution at all
   if (hasDown) {
     if (p.kneeDb > 0.0 && oDn > -halfKnee && oDn < halfKnee) {
       const double t = oDn + halfKnee;
@@ -800,6 +801,11 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
   const double pillX = w - pad - pillW;
   for (int i = 0; i < 3; ++i)
     L.tabSeg[i] = { pillX + (double)i * (segW + segGap), fMid - 12.0, segW, 24.0 };
+  // Stage-power dots (v2.3.0 INC-4): a small bypass toggle INSIDE the COMP and
+  // GATE pills (left edge; the rest of the pill still switches tabs) - visible
+  // in every layout mode, tied visually to its stage.
+  for (int i = 0; i < 2; ++i)
+    L.stagePower[i] = { L.tabSeg[i].x + 4.0, L.tabSeg[i].y + 4.0, 16.0, 16.0 };
   // Peak/RMS detection pill (v2.3.0: moved here from the knob grid so M.Boost
   // could take that cell): centred in the footer gap between Apply and the tab
   // pill. Compressor tab only - detection mode pairs with the comp controls.
@@ -921,7 +927,8 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
 }
 
 static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L,
-                       int activeTab, int tabFrom, double slideT) {
+                       int activeTab, int tabFrom, double slideT,
+                       bool compBypass, bool gateBypass) {
   const char* labels[3] = { "COMP", "GATE", "VIEW" };
   // inactive backgrounds first
   for (int i = 0; i < 3; ++i)
@@ -942,6 +949,16 @@ static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L,
     for (int i = 0; i < 3; ++i)
       TextCentered(ctx, gfx.fTab, L.tabSeg[i], labels[i],
                    i == activeTab ? dynui::kAmber : dynui::kInkSecondary);
+  // Stage-power dots: filled amber ring = stage active, hollow grey = bypassed.
+  const bool byp[2] = { compBypass, gateBypass };
+  for (int i = 0; i < 2; ++i) {
+    const URect& d = L.stagePower[i];
+    const double cx = d.x + d.w * 0.5, cy = d.y + d.h * 0.5;
+    ctx.set_stroke_width(1.5);
+    ctx.stroke_circle(BLCircle(cx, cy, 4.0),
+                      col(byp[i] ? dynui::kInkMuted : dynui::kAmber));
+    if (!byp[i]) ctx.fill_circle(BLCircle(cx, cy, 2.0), col(dynui::kAmber));
+  }
 }
 
 // Apply is disabled in Live mode (points are written in real-time, so there is
@@ -1120,7 +1137,8 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     // match what is drawn.
     const DynLayout L = ComputeDynLayout(W, H, vm.activeTab, vm.compact);
     DrawHeader(ctx, *m_gfx, L, vm);
-    DrawTabBar(ctx, *m_gfx, L, vm.activeTab, vm.tabFrom, vm.tabSlideT);
+    DrawTabBar(ctx, *m_gfx, L, vm.activeTab, vm.tabFrom, vm.tabSlideT,
+               vm.compBypass, vm.gateBypass);
     DrawFooter(ctx, *m_gfx, L, /*applyEnabled=*/!vm.liveMode);
     // Hero plot + GR meter: hidden in Compact mode (plotWell is empty there).
     if (L.plotWell.w >= 1.0) {

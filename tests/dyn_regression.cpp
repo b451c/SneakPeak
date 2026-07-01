@@ -142,7 +142,9 @@ void RunScenario(const Scenario& sc, const Signal& sig)
   auto simplified = DynamicsEngine::SimplifyCurve(curve, kRdpEpsilonDb);
 
   double avgGR = engine.GetAvgGainReduction();
-  double makeup = sc.params.autoMakeup ? -avgGR : sc.params.makeupDb;
+  // Echo mirrors the engine's makeup rule (compBypass silences the stage).
+  double makeup = sc.params.compBypass ? 0.0
+                : sc.params.autoMakeup ? -avgGR : sc.params.makeupDb;
 
   char paramStr[256];
   DynamicsParamsToString(sc.params, paramStr, sizeof(paramStr));
@@ -238,6 +240,17 @@ int main()
     { -24.0, 2.0, 6.0, 0.0, true, 5.0, 100.0, 0.0, true, 5.0,
       -50.0, -40.0, 50.0, -60.0, 6.0,
       2.0, -6.0, 2.0, 100.0, 2, 8.0 }, 0.0});
+
+  // v2.3.0 INC-4 per-stage bypass: comp bypassed (gate alone, detecting raw
+  // since compGR==0) and gate bypassed (comp alone, no gate/boost floor).
+  scenarios.push_back({"bypass-comp",
+    { -24.0, 4.0, 6.0, 5.0, false, 5.0, 80.0, 5.0, false, 5.0,
+      -45.0, -18.0, 80.0, -60.0, 6.0,
+      2.0, -6.0, 2.0, 100.0, 0, 8.0, true, false }, 0.0});
+  scenarios.push_back({"bypass-gate",
+    { -24.0, 4.0, 6.0, 0.0, true, 5.0, 80.0, 5.0, false, 5.0,
+      -45.0, -18.0, 80.0, -60.0, 6.0,
+      2.0, -6.0, 2.0, 100.0, 0, 8.0, false, true }, 0.0});
 
   for (const auto& sig : signals)
     for (const auto& sc : scenarios)

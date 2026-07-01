@@ -48,6 +48,14 @@ struct DynamicsParams {
   // Serialized as "up=" (old strings: absent -> 0; 0/1 keep their meaning).
   int compMode = 0;
   double maxBoostDb = 8.0;      // boost cap in Up/Both (mandatory - uncapped boosts the noise floor)
+
+  // Per-stage bypass (v2.3.0 INC-4, sguyader): audition controls, EPHEMERAL
+  // like the whole-chain A/B - deliberately NOT serialized (P_EXT/presets
+  // never carry them) and re-armed to false on panel open. compBypass zeros
+  // the comp GR AND makeup (the whole stage); gateBypass disables the gate
+  // pass (and with it the Up-mode boost floor).
+  bool compBypass = false;
+  bool gateBypass = false;
 };
 
 enum { COMP_MODE_DOWN = 0, COMP_MODE_UP = 1, COMP_MODE_BOTH = 2 };
