@@ -1381,10 +1381,29 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (!liveSession && g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
+  // Take-envelope ceiling clamp (v2.3.0 Up mode): boosts can exceed the
+  // envelope's MAXVAL (default 2.0 = +6 dB) and REAPER would clamp silently on
+  // render - clamp HERE and toast once so the written curve matches what is
+  // heard. MAXVAL read like waveform_rendering.cpp QueryEnvelopeMaxGain.
+  int clampedPts = 0;
+  double clampCeilLin = 2.0;
+  auto envMaxGain = [&](TrackEnvelope* env) -> double {
+    if (!env || !g_GetEnvelopeStateChunk) return 2.0;
+    char buf[512]; // header only, not full chunk
+    if (!g_GetEnvelopeStateChunk(env, buf, sizeof(buf), false)) return 2.0;
+    const char* p = strstr(buf, "\nMAXVAL ");
+    if (!p) p = strstr(buf, " MAXVAL ");
+    if (!p) return 2.0;
+    double mv = 0.0;
+    if (sscanf(p + 8, "%lf", &mv) == 1 && mv > 0.0) return mv;
+    return 2.0;
+  };
+
   // Helper: apply compression points to a single envelope
   auto applyToEnv = [&](TrackEnvelope* env, const std::vector<DynamicsEngine::CompressPoint>& pts) {
     if (pts.empty()) return;
     int scalingMode = g_GetEnvelopeScalingMode(env);
+    const double maxGain = envMaxGain(env);
     double tStart = pts.front().time;
     double tEnd = pts.back().time;
 
@@ -1403,6 +1422,11 @@ void SneakPeak::ApplyDynamicsToEnvelope()
     bool noSort = true;
     for (const auto& cp : pts) {
       double gainLinear = pow(10.0, cp.dbAdjust / 20.0);
+      if (gainLinear > maxGain) {
+        gainLinear = maxGain;      // envelope ceiling (see clamp note above)
+        clampedPts++;
+        clampCeilLin = maxGain;
+      }
       double rawVal = g_ScaleToEnvelopeMode(scalingMode, gainLinear);
       g_InsertEnvelopePointEx(env, -1, cp.time, rawVal, 0, 0.0, false, &noSort);
     }
@@ -1457,8 +1481,12 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   if (g_UpdateArrange) g_UpdateArrange();
   m_dynamicsVisible = true;
   if (!liveSession) {
-    char toast[64];
-    snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), (int)compRaw.size());
+    char toast[96];
+    if (clampedPts > 0)
+      snprintf(toast, sizeof(toast), "Applied %d points - %d clamped at the envelope ceiling (+%.1f dB)",
+               (int)comp.size(), clampedPts, 20.0 * log10(clampCeilLin));
+    else
+      snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), (int)compRaw.size());
     ShowToast(toast);
   }
   InvalidateRect(m_hwnd, nullptr, FALSE);
