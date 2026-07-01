@@ -21,15 +21,21 @@ const DynamicsPreset g_dynamicsPresets[PRESET_COUNT] = {
 };
 
 // --- P_EXT serialization ---
+// INVARIANT: FromString matches keys with a naive strstr("key="), so every NEW
+// key must be (a) appended AFTER all existing keys and (b) named so that no
+// earlier "key=" pattern occurs inside it before its own position (e.g. "gre="
+// contains "re=", which is safe ONLY because the legacy "re=" is serialized
+// first). Repeat this collision analysis for every key added here.
 
 void DynamicsParamsToString(const DynamicsParams& p, char* buf, int bufSize)
 {
   snprintf(buf, bufSize,
     "t=%.1f r=%.1f k=%.1f m=%.1f am=%d a=%.1f re=%.1f la=%.1f rms=%d "
-    "gt=%.1f gr=%.1f gh=%.1f",
+    "gt=%.1f gr=%.1f gh=%.1f gx=%.1f ghy=%.1f gat=%.1f gre=%.1f",
     p.threshold, p.ratio, p.kneeDb, p.makeupDb, p.autoMakeup ? 1 : 0,
     p.attackMs, p.releaseMs, p.lookaheadMs, p.rmsMode ? 1 : 0,
-    p.gateThreshDb, p.gateRangeDb, p.gateHoldMs);
+    p.gateThreshDb, p.gateRangeDb, p.gateHoldMs,
+    p.gateRatio, p.gateHystDb, p.gateAttackMs, p.gateReleaseMs);
 }
 
 bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
@@ -55,6 +61,12 @@ bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
   readKey("gt", out.gateThreshDb);
   readKey("gr", out.gateRangeDb);
   readKey("gh", out.gateHoldMs);
+  // v2.3.0 gate extension - absent in old strings, so the NSDMI defaults
+  // (2.0 / 0.0 / 2.0 / 100.0) reproduce the legacy hard-coded behavior.
+  readKey("gx", out.gateRatio);
+  readKey("ghy", out.gateHystDb);
+  readKey("gat", out.gateAttackMs);
+  readKey("gre", out.gateReleaseMs);
   return true;
 }
 
@@ -210,11 +222,20 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   bool gateEnabled = (m_params.gateThreshDb > -99.0);
   double gateRange = std::min(0.0, m_params.gateRangeDb); // always <= 0
   double gateThresh = m_params.gateThreshDb;
-  // Gate smoothing: fast attack (2ms open), moderate release (100ms close)
-  static constexpr double GATE_ATTACK_MS = 2.0;
-  static constexpr double GATE_RELEASE_MS = 100.0;
-  double gateAttCoeff = exp(-dt / (GATE_ATTACK_MS / 1000.0));
-  double gateRelCoeff = exp(-dt / (GATE_RELEASE_MS / 1000.0));
+  // v2.3.0 gate extension: generalized downward expander with Schmitt hysteresis.
+  // Static curve (textbook/Calf convention): output slope Rg:1 below the OPEN
+  // threshold, i.e. GR = (Rg - 1) * (L - tOpen), clamped to gateRange. Rg = 2
+  // reproduces the legacy fixed 2:1 expander bit-for-bit. Hysteresis (cycfi Q /
+  // LSP model): gate OPENS at tOpen, stays open down to tClose = tOpen + H
+  // (H <= 0); H = 0 degenerates to the legacy single-threshold behavior.
+  double gateSlope = std::max(1.0, m_params.gateRatio) - 1.0;
+  double tOpen = gateThresh;
+  double tClose = tOpen + std::min(0.0, m_params.gateHystDb);
+  // Gate smoothing: user-set open/close speeds (legacy constants 2 ms / 100 ms)
+  double gateAttCoeff = (m_params.gateAttackMs > 0.0)
+    ? exp(-dt / (m_params.gateAttackMs / 1000.0)) : 0.0;
+  double gateRelCoeff = (m_params.gateReleaseMs > 0.0)
+    ? exp(-dt / (m_params.gateReleaseMs / 1000.0)) : 0.0;
   int gateHoldFrames = (m_params.gateHoldMs > 0.0 && dt > 0.0)
     ? (int)(m_params.gateHoldMs / 1000.0 / dt + 0.5) : 0;
 
@@ -267,6 +288,15 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   m_avgGR = (grCount > 0) ? grSum / (double)grCount : 0.0;
   double makeup = m_params.autoMakeup ? -m_avgGR : m_params.makeupDb;
 
+  // Frame-0 seeding: start open if the item begins at/above the close
+  // threshold (prevents chopping items that start mid-word). Below it the
+  // gate starts closed - identical to the legacy hold-exhausted start state.
+  bool gateOpen = false;
+  if (gateEnabled && n > 0) {
+    double rawDb0 = 20.0 * log10(std::max(m_results[0].peakLinear, EPSILON)) + m_itemVolDb;
+    gateOpen = (rawDb0 + compGRs[0] >= tClose);
+  }
+
   // Second pass: gate (detects on the post-compression, PRE-makeup level) + output.
   // Makeup/output gain is a final stage and is NOT in the gate detector - the audio-
   // industry standard (FabFilter/Waves/Logic/Cubase/iZotope + Calf/LSP/CTAGDRC): the
@@ -284,19 +314,28 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
       double rawDb = 20.0 * log10(std::max(pt.peakLinear, EPSILON)) + m_itemVolDb;
       double detectLevel = rawDb + compGR;   // post-comp, pre-makeup (gate detection)
 
-      double instantGateGR = 0.0;
-      if (detectLevel < gateThresh) {
-        // Signal below gate threshold — apply reduction
-        if (gateHoldCounter > 0) {
+      // Schmitt state machine: the gate opens at/above tOpen; the hysteresis
+      // band [tClose, tOpen) keeps it open WITHOUT consuming hold; hold is
+      // consumed only below tClose and re-armed only at/above tOpen.
+      // Order: open (attack) -> hold -> close (release).
+      if (detectLevel >= tOpen) {
+        gateOpen = true;
+        gateHoldCounter = gateHoldFrames; // gate open, re-arm hold
+      } else if (gateOpen) {
+        if (detectLevel >= tClose) {
+          // hysteresis band: stay open, hold untouched
+        } else if (gateHoldCounter > 0) {
           gateHoldCounter--; // hold: keep gate open
         } else {
-          instantGateGR = -(gateThresh - detectLevel);
-          instantGateGR = std::max(instantGateGR, gateRange); // clamp to range
+          gateOpen = false; // close
         }
-      } else {
-        // Signal above threshold — gate open, reset hold
-        gateHoldCounter = gateHoldFrames;
       }
+
+      // Closed-state ("basic") curve references tOpen, so GR returns to 0
+      // continuously as the level climbs back toward the open threshold.
+      double instantGateGR = gateOpen
+        ? 0.0
+        : std::max(gateSlope * (detectLevel - tOpen), gateRange);
 
       // Smooth gate GR independently
       // "Attack" = gate opening (GR toward 0), "Release" = gate closing (GR more negative)

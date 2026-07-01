@@ -31,6 +31,15 @@ struct DynamicsParams {
   // Visual range (normalization for curve display)
   double minDb = -60.0;
   double maxDb = 6.0;
+
+  // Gate extension (v2.3.0) - APPENDED AT END on purpose: g_dynamicsPresets
+  // uses positional aggregate init (15 legacy values per row); trailing NSDMI
+  // fields keep those rows compiling with legacy-equivalent behavior. Never
+  // reorder or insert fields above this line.
+  double gateRatio = 2.0;       // downward-expander ratio Rg (output slope Rg:1 below G.Thr; 2.0 = legacy)
+  double gateHystDb = 0.0;      // close threshold relative to G.Thr (<= 0; 0 = legacy single threshold)
+  double gateAttackMs = 2.0;    // gate open speed (legacy hard-coded constant)
+  double gateReleaseMs = 100.0; // gate close speed (legacy hard-coded constant)
 };
 
 struct DynamicsPoint {

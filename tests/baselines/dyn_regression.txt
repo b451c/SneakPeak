@@ -2,7 +2,7 @@
 # sampleRate=48000 channels=2 rdpEpsilon=0.30
 
 === Default | voice | itemVol=0.00 ===
-params: t=0.0 r=1.0 k=0.0 m=0.0 am=0 a=10.0 re=100.0 la=0.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0
+params: t=0.0 r=1.0 k=0.0 m=0.0 am=0 a=10.0 re=100.0 la=0.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-23.969850991613772 threshold=0 avgGR=0 makeup=0
 full: n=7820 hash=23b0f663da4831cb grhash=7a918aac3c3550a3
 simplified: n=2
@@ -10,7 +10,7 @@ simplified: n=2
 7.819 0
 
 === Gentle Leveling | voice | itemVol=0.00 ===
-params: t=-18.0 r=2.0 k=12.0 m=0.0 am=1 a=20.0 re=150.0 la=3.0 rms=1 gt=-100.0 gr=-40.0 gh=50.0
+params: t=-18.0 r=2.0 k=12.0 m=0.0 am=1 a=20.0 re=150.0 la=3.0 rms=1 gt=-100.0 gr=-40.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-28.584292323497841 threshold=-18 avgGR=-0.78871462991909624 makeup=0.78871462991909624
 full: n=7820 hash=413da48e500d6d4b grhash=b5a141558898207a
 simplified: n=24
@@ -40,7 +40,7 @@ simplified: n=24
 7.819 0.78871462991903252
 
 === Voice / Podcast | voice | itemVol=0.00 ===
-params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0
+params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-28.584292323497841 threshold=-24 avgGR=-2.1481747756620333 makeup=2.1481747756620333
 full: n=7820 hash=a291dfcaba1d1a42 grhash=f58a4e462fbd7f4f
 simplified: n=90
@@ -136,7 +136,7 @@ simplified: n=90
 7.819 -0.47486252682673014
 
 === Broadcast | voice | itemVol=0.00 ===
-params: t=-20.0 r=6.0 k=3.0 m=0.0 am=1 a=1.0 re=50.0 la=5.0 rms=1 gt=-40.0 gr=-24.0 gh=60.0
+params: t=-20.0 r=6.0 k=3.0 m=0.0 am=1 a=1.0 re=50.0 la=5.0 rms=1 gt=-40.0 gr=-24.0 gh=60.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-28.584292323497841 threshold=-20 avgGR=-1.8638134964022133 makeup=1.8638134964022133
 full: n=7820 hash=16f5e8fd70351f53 grhash=e52e429e1ed9a235
 simplified: n=97
@@ -239,7 +239,7 @@ simplified: n=97
 7.819 -7.4541507164710685
 
 === De-breath | voice | itemVol=0.00 ===
-params: t=-18.0 r=2.0 k=8.0 m=0.0 am=1 a=10.0 re=100.0 la=5.0 rms=0 gt=-35.0 gr=-12.0 gh=30.0
+params: t=-18.0 r=2.0 k=8.0 m=0.0 am=1 a=10.0 re=100.0 la=5.0 rms=0 gt=-35.0 gr=-12.0 gh=30.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-23.969850991613772 threshold=-18 avgGR=-1.1807949187648863 makeup=1.1807949187648863
 full: n=7820 hash=aa8902c6bd2bce5d grhash=b179ef3d920b1fc3
 simplified: n=59
@@ -304,7 +304,7 @@ simplified: n=59
 7.819 -5.9468446243933046
 
 === Music Bus | voice | itemVol=0.00 ===
-params: t=-16.0 r=2.0 k=9.0 m=0.0 am=1 a=30.0 re=200.0 la=0.0 rms=1 gt=-100.0 gr=-40.0 gh=50.0
+params: t=-16.0 r=2.0 k=9.0 m=0.0 am=1 a=30.0 re=200.0 la=0.0 rms=1 gt=-100.0 gr=-40.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-28.584292323497841 threshold=-16 avgGR=-0.32599533765554445 makeup=0.32599533765554445
 full: n=7820 hash=5cc914689ac4cdfc grhash=8c139347080ed7ee
 simplified: n=6
@@ -316,7 +316,7 @@ simplified: n=6
 7.819 0.32599533755584253
 
 === sentinel-deepgate | voice | itemVol=0.00 ===
-params: t=-100.0 r=3.0 k=6.0 m=0.0 am=1 a=5.0 re=100.0 la=10.0 rms=0 gt=-50.0 gr=-40.0 gh=100.0
+params: t=-100.0 r=3.0 k=6.0 m=0.0 am=1 a=5.0 re=100.0 la=10.0 rms=0 gt=-50.0 gr=-40.0 gh=100.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-23.969850991613772 threshold=-23.969850991613772 avgGR=-3.829663133238113 makeup=3.829663133238113
 full: n=7820 hash=34ddede9bfc2cc4c grhash=e27fb686c60f592a
 simplified: n=105
@@ -427,7 +427,7 @@ simplified: n=105
 7.819 3.8268009401437384
 
 === limiter-extremes | voice | itemVol=0.00 ===
-params: t=-10.0 r=20.0 k=0.0 m=6.0 am=0 a=0.0 re=10.0 la=20.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0
+params: t=-10.0 r=20.0 k=0.0 m=6.0 am=0 a=0.0 re=10.0 la=20.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-23.969850991613772 threshold=-10 avgGR=-3.9923923172088167 makeup=6
 full: n=7820 hash=7f98506793b3c397 grhash=00f32ed9301ca066
 simplified: n=11
@@ -444,7 +444,7 @@ simplified: n=11
 7.819 6
 
 === itemvol-rms | voice | itemVol=-6.00 ===
-params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0
+params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-34.584292323497841 threshold=-24 avgGR=-0.99010926107429054 makeup=0.99010926107429054
 full: n=7820 hash=09e5e3f5587bbe8c grhash=c188e29d4166d0a5
 simplified: n=60
@@ -510,7 +510,7 @@ simplified: n=60
 7.819 -7.9018424414798138
 
 === Default | ramp | itemVol=0.00 ===
-params: t=0.0 r=1.0 k=0.0 m=0.0 am=0 a=10.0 re=100.0 la=0.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0
+params: t=0.0 r=1.0 k=0.0 m=0.0 am=0 a=10.0 re=100.0 la=0.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-6.0310020537440003 threshold=0 avgGR=0 makeup=0
 full: n=4000 hash=89541a6fbf6e5cf4 grhash=4f4863b184bfaa83
 simplified: n=2
@@ -518,7 +518,7 @@ simplified: n=2
 3.9990000000000001 0
 
 === Gentle Leveling | ramp | itemVol=0.00 ===
-params: t=-18.0 r=2.0 k=12.0 m=0.0 am=1 a=20.0 re=150.0 la=3.0 rms=1 gt=-100.0 gr=-40.0 gh=50.0
+params: t=-18.0 r=2.0 k=12.0 m=0.0 am=1 a=20.0 re=150.0 la=3.0 rms=1 gt=-100.0 gr=-40.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-11.074634809049648 threshold=-18 avgGR=-3.7028996757831862 makeup=3.7028996757831862
 full: n=4000 hash=ba59f880c2824b8f grhash=fa53f722dcaf6e25
 simplified: n=7
@@ -531,7 +531,7 @@ simplified: n=7
 3.9990000000000001 3.5876547155517176
 
 === Voice / Podcast | ramp | itemVol=0.00 ===
-params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0
+params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-11.074634809049648 threshold=-24 avgGR=-9.2694133697101488 makeup=9.2694133697101488
 full: n=4000 hash=81467e2fc0b5b3c4 grhash=c06ed7d56282a83a
 simplified: n=15
@@ -552,7 +552,7 @@ simplified: n=15
 3.9990000000000001 9.1308140388435337
 
 === Broadcast | ramp | itemVol=0.00 ===
-params: t=-20.0 r=6.0 k=3.0 m=0.0 am=1 a=1.0 re=50.0 la=5.0 rms=1 gt=-40.0 gr=-24.0 gh=60.0
+params: t=-20.0 r=6.0 k=3.0 m=0.0 am=1 a=1.0 re=50.0 la=5.0 rms=1 gt=-40.0 gr=-24.0 gh=60.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-11.074634809049648 threshold=-20 avgGR=-7.6406530506734676 makeup=7.6406530506734676
 full: n=4000 hash=70ca38bb7eeeb91f grhash=a5892d25137812db
 simplified: n=15
@@ -573,7 +573,7 @@ simplified: n=15
 3.9990000000000001 7.6395546232572213
 
 === De-breath | ramp | itemVol=0.00 ===
-params: t=-18.0 r=2.0 k=8.0 m=0.0 am=1 a=10.0 re=100.0 la=5.0 rms=0 gt=-35.0 gr=-12.0 gh=30.0
+params: t=-18.0 r=2.0 k=8.0 m=0.0 am=1 a=10.0 re=100.0 la=5.0 rms=0 gt=-35.0 gr=-12.0 gh=30.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-6.0310020537440003 threshold=-18 avgGR=-5.6751816975293572 makeup=5.6751816975293572
 full: n=4000 hash=d032b397767771ca grhash=25daa2d7ec2acaa7
 simplified: n=17
@@ -596,7 +596,7 @@ simplified: n=17
 3.9990000000000001 4.8397044573750376
 
 === Music Bus | ramp | itemVol=0.00 ===
-params: t=-16.0 r=2.0 k=9.0 m=0.0 am=1 a=30.0 re=200.0 la=0.0 rms=1 gt=-100.0 gr=-40.0 gh=50.0
+params: t=-16.0 r=2.0 k=9.0 m=0.0 am=1 a=30.0 re=200.0 la=0.0 rms=1 gt=-100.0 gr=-40.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-11.074634809049648 threshold=-16 avgGR=-2.9255189476655956 makeup=2.9255189476655956
 full: n=4000 hash=1599259c8410f97e grhash=8d14bb615642ce9f
 simplified: n=7
@@ -609,7 +609,7 @@ simplified: n=7
 3.9990000000000001 2.8227234849131073
 
 === sentinel-deepgate | ramp | itemVol=0.00 ===
-params: t=-100.0 r=3.0 k=6.0 m=0.0 am=1 a=5.0 re=100.0 la=10.0 rms=0 gt=-50.0 gr=-40.0 gh=100.0
+params: t=-100.0 r=3.0 k=6.0 m=0.0 am=1 a=5.0 re=100.0 la=10.0 rms=0 gt=-50.0 gr=-40.0 gh=100.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-6.0310020537440003 threshold=-6.0310020537440003 avgGR=-1.8328496458479604 makeup=1.8328496458479604
 full: n=4000 hash=3adde605b1307f11 grhash=3bebc2b63d09bef0
 simplified: n=5
@@ -620,7 +620,7 @@ simplified: n=5
 3.9990000000000001 1.8327482600376175
 
 === limiter-extremes | ramp | itemVol=0.00 ===
-params: t=-10.0 r=20.0 k=0.0 m=6.0 am=0 a=0.0 re=10.0 la=20.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0
+params: t=-10.0 r=20.0 k=0.0 m=6.0 am=0 a=0.0 re=10.0 la=20.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-6.0310020537440003 threshold=-10 avgGR=-5.6519905149689817 makeup=6
 full: n=4000 hash=228787cf59416015 grhash=f58bca0badde3ebf
 simplified: n=10
@@ -636,7 +636,7 @@ simplified: n=10
 3.9990000000000001 6
 
 === itemvol-rms | ramp | itemVol=-6.00 ===
-params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0
+params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0
 avgPeakDb=-17.074634809049648 threshold=-24 avgGR=-5.5127925665615765 makeup=5.5127925665615765
 full: n=4000 hash=255c8fc5507a9405 grhash=e30305971cad2e16
 simplified: n=15
