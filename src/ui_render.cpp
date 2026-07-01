@@ -90,22 +90,26 @@ static double CompressionGrDb(double inDb, const DynCurveParams& p) {
   const double halfKnee = p.kneeDb * 0.5;
   const double overshoot = inDb - p.thresholdDb;
   const bool hasDown = (p.mode != 1), hasUp = (p.mode != 0);
+  // BOTH: knee centers shift +-halfKnee (dead-band leveler; same-center knees
+  // cancel exactly) - mirrors dynamics_engine.cpp ComputeCompression.
+  const double oDn = (p.mode == 2) ? overshoot - halfKnee : overshoot;
+  const double oUp = (p.mode == 2) ? overshoot + halfKnee : overshoot;
   double g = 0.0;
   if (hasDown) {
-    if (p.kneeDb > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
-      const double t = overshoot + halfKnee;
+    if (p.kneeDb > 0.0 && oDn > -halfKnee && oDn < halfKnee) {
+      const double t = oDn + halfKnee;
       g += slope * t * t / (2.0 * p.kneeDb);
-    } else if (overshoot > 0.0) {
-      g += slope * overshoot;
+    } else if (oDn > 0.0) {
+      g += slope * oDn;
     }
   }
   if (hasUp) {
     double gUp = 0.0;
-    if (p.kneeDb > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
-      const double t = overshoot - halfKnee;               // mirrored knee quadratic
+    if (p.kneeDb > 0.0 && oUp > -halfKnee && oUp < halfKnee) {
+      const double t = oUp - halfKnee;                     // mirrored knee quadratic
       gUp = -slope * t * t / (2.0 * p.kneeDb);
-    } else if (overshoot < 0.0) {
-      gUp = slope * overshoot;                             // boost below threshold
+    } else if (oUp < 0.0) {
+      gUp = slope * oUp;                                   // boost below threshold
     }
     gUp = std::min(gUp, p.maxBoostDb);
     if (p.showGate && inDb < p.gateThreshDb) gUp = 0.0;    // gate-coupled boost floor

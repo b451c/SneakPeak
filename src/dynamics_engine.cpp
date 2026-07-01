@@ -289,13 +289,20 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
     double overshoot = rawDb - thresh;
     double instantGR = 0.0;
 
+    // BOTH knee semantics: same-center knees would cancel EXACTLY (the summed
+    // quadratics are linear in x for ANY width - a dead knob), so in Both the
+    // two sides shift by +-halfKnee. The shifted parabolas meet at the
+    // threshold with zero gain: Knee becomes the gentle "leave-alone" band
+    // around the target (W = 0 degenerates to the pure linear leveler).
+    const double oDn = (compMode == COMP_MODE_BOTH) ? overshoot - halfKnee : overshoot;
+    const double oUp = (compMode == COMP_MODE_BOTH) ? overshoot + halfKnee : overshoot;
     if (hasDown) {
       // Classic downward: reduce above the threshold (JAES 2012 Eq. 4).
-      if (knee > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
-        double x = overshoot + halfKnee;
+      if (knee > 0.0 && oDn > -halfKnee && oDn < halfKnee) {
+        double x = oDn + halfKnee;
         instantGR += slope * x * x / (2.0 * knee);
-      } else if (overshoot > 0.0) {
-        instantGR += slope * overshoot;
+      } else if (oDn > 0.0) {
+        instantGR += slope * oDn;
       }
     }
     if (hasUp) {
@@ -305,11 +312,11 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
       // In Both mode the two knee quadratics SUM to an exactly linear
       // S*(x - T) through the threshold - a seamless leveler.
       double gUp = 0.0;
-      if (knee > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
-        double x = overshoot - halfKnee;                 // mirrored knee quadratic
+      if (knee > 0.0 && oUp > -halfKnee && oUp < halfKnee) {
+        double x = oUp - halfKnee;                       // mirrored knee quadratic
         gUp = -slope * x * x / (2.0 * knee);
-      } else if (overshoot < 0.0) {
-        gUp = slope * overshoot;                         // slope<=0, overshoot<0 => boost
+      } else if (oUp < 0.0) {
+        gUp = slope * oUp;                               // slope<=0, below => boost
       }
       // Mandatory cap - uncapped, the curve boosts the noise floor without bound.
       gUp = std::min(gUp, m_params.maxBoostDb);
