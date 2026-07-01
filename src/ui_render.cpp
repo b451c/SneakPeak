@@ -683,12 +683,16 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
   const double hMid = L.header.h * 0.5;
   L.closeBtn = { w - pad - 18.0, hMid - 9.0, 18.0, 18.0 };
   L.abBtn    = { L.closeBtn.x - 48.0, hMid - 11.0, 40.0, 22.0 };
-  L.preset   = { pad + 96.0, hMid - 11.0, 120.0, 22.0 };
+  // Preset box narrowed 120 -> 96 (v2.3.0) to make room for the mode button;
+  // the preset name is CLIPPED to the box when it renders (long names ellipse
+  // visually instead of spilling into the neighbours).
+  L.preset   = { pad + 96.0, hMid - 11.0, 96.0, 22.0 };
   // DOWN/UP processor-mode STATE BUTTON (v2.3.0): header chrome right of the
   // preset box - it switches the whole gain computer, not a tab-local control.
-  // A/B-style (shows the current mode, click flips): a two-segment pill plus
-  // the right-aligned BOOST readout could not coexist at the base width.
-  L.modeBtn = { L.preset.x + L.preset.w + 10.0, hMid - 11.0, 52.0, 22.0 };
+  // A/B-style (shows the current mode, click flips). Header width budget at
+  // kPanelW 480 is exact: the BOOST readout's caption is skipped by DrawHeader
+  // if it would still touch this button (worst-case '+24.0' at kFsGrHero).
+  L.modeBtn = { L.preset.x + L.preset.w + 8.0, hMid - 11.0, 48.0, 22.0 };
 
   const double bodyTop = L.header.h;
   const double bodyH = L.footer.y - bodyTop;
@@ -843,9 +847,12 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
     ctx.fill_utf8_text(BLPoint(dynui::kPanelPad, L.header.h * 0.5 + 5.0), gfx.fValue,
                        "DYNAMICS", SIZE_MAX, col(dynui::kInkPrimary));
     FillURound(ctx, L.preset, dynui::kRadiusCtrl, dynui::kSurface2);
+    ctx.save();   // clip long preset names to the (narrowed) box
+    ctx.clip_to_rect(BLRect(L.preset.x, L.preset.y, L.preset.w - 4.0, L.preset.h));
     ctx.fill_utf8_text(BLPoint(L.preset.x + 8.0, L.preset.y + L.preset.h * 0.5 + 4.0),
                        gfx.fLabel, vm.presetName ? vm.presetName : "Preset", SIZE_MAX,
                        col(dynui::kInkSecondary));
+    ctx.restore();
 
     // DOWN/UP processor-mode state button (v2.3.0 upward compression):
     // A/B-pattern - neutral "DOWN" at rest, amber outline + "UP" when engaged.
@@ -870,12 +877,16 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
     const double unitW = TextWidth(gfx.fUnit, "dB");
     const double numW  = TextWidth(gfx.fGrHero, num);
     const double lblW  = TextWidth(gfx.fLabel, grLbl);
-    const double xR    = L.abBtn.x - 12.0;
+    const double xR    = L.abBtn.x - 10.0;
     const double unitX = xR - unitW;
     const double numX  = unitX - 4.0 - numW;
     const double lblX  = numX - 6.0 - lblW;
     const double baseY = L.header.h * 0.5 + 7.0;
-    ctx.fill_utf8_text(BLPoint(lblX,  baseY), gfx.fLabel,  grLbl, SIZE_MAX, col(dynui::kInkSecondary));
+    // Hard no-overlap guarantee: the caption is dropped (number + unit keep
+    // their place, the amber '+' still reads as boost) if it would touch the
+    // mode button - the header budget at kPanelW is exact at '+24.0'.
+    if (lblX >= L.modeBtn.x + L.modeBtn.w + 6.0)
+      ctx.fill_utf8_text(BLPoint(lblX,  baseY), gfx.fLabel,  grLbl, SIZE_MAX, col(dynui::kInkSecondary));
     ctx.fill_utf8_text(BLPoint(numX,  baseY), gfx.fGrHero, num,  SIZE_MAX,
                        col(boost ? dynui::kAmber : dynui::kGrRed));
     ctx.fill_utf8_text(BLPoint(unitX, baseY), gfx.fUnit,   "dB", SIZE_MAX, col(dynui::kInkMuted));
