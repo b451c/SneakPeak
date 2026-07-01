@@ -135,6 +135,19 @@ void DynamicsPanel::SetSliderValue(int idx, double val)
   }
 }
 
+// Gesture seed for knob drags and wheel nudges: the value the gesture should
+// accumulate FROM. G.Thr parked at the OFF sentinel (-100) seeds from the knob
+// minimum (-90) instead: the sentinel sits 10 dB below the live range, so a raw
+// seed puts the first ~11% of travel inside a dead zone the user must fight
+// through ("frozen knob"), and a wheel notch (1/40 of range) could never
+// re-enter the range at all - the clamp + detent would re-trap every step.
+double DynamicsPanel::DragSeedValue(int idx) const
+{
+  const double v = GetSliderValue(idx);
+  if (idx == 7 && v <= -99.0) return SLIDER_DEFS[7].minVal;
+  return v;
+}
+
 // --- Lifecycle ---
 
 void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
@@ -446,7 +459,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
     m_dragSlider = i;
     m_dragStartY = y;
     m_dragLastY = y;
-    m_dragStartVal = GetSliderValue(i);
+    m_dragStartVal = DragSeedValue(i);
     return true;                                 // IsDragging() -> host SetCapture
   }
 
@@ -573,7 +586,7 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   if (slider >= 0) {
     m_dragSlider = slider;
     m_dragStartX = x;
-    m_dragStartVal = GetSliderValue(slider);
+    m_dragStartVal = DragSeedValue(slider);
     // Grab offset: distance from click to current thumb center.
     // This prevents the value from jumping when you grab near (not on) the thumb.
     RECT tr = GetSliderTrackRect(pr, slider);
@@ -638,8 +651,9 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     // Seed from the value the user actually SEES: with auto-makeup on, the knob
     // displays the computed makeup (fabs(avgGR)), but GetSliderValue(5) reports 0
     // while auto is engaged - seeding from 0 would snap the knob down on first move.
+    // DragSeedValue kills the G.Thr Off dead zone the same way.
     const double cur = (m_dragSlider == 5 && m_params.autoMakeup)
-                         ? fabs(m_avgGR) : GetSliderValue(m_dragSlider);
+                         ? fabs(m_avgGR) : DragSeedValue(m_dragSlider);
     double nrm = (cur - def.minVal) / range;
     nrm = std::max(0.0, std::min(1.0, nrm + (double)dy * gainPerPx));
     SetSliderValue(m_dragSlider, def.minVal + nrm * range);
@@ -716,8 +730,9 @@ bool DynamicsPanel::OnMouseWheel(int x, int y, double steps, bool fine, RECT wr)
   if (i < 0) return false;
   const auto& def = SLIDER_DEFS[i];
   const double range = (def.maxVal - def.minVal) != 0.0 ? (def.maxVal - def.minVal) : 1.0;
-  // Seed Makeup from the displayed value while auto (GetSliderValue(5)==0 then).
-  const double cur = (i == 5 && m_params.autoMakeup) ? fabs(m_avgGR) : GetSliderValue(i);
+  // Seed Makeup from the displayed value while auto (GetSliderValue(5)==0 then);
+  // DragSeedValue lets a wheel notch re-enter the range from G.Thr Off.
+  const double cur = (i == 5 && m_params.autoMakeup) ? fabs(m_avgGR) : DragSeedValue(i);
   double nrm = (cur - def.minVal) / range;
   nrm = std::max(0.0, std::min(1.0, nrm + (fine ? 0.005 : 0.025) * steps));
   SetSliderValue(i, def.minVal + nrm * range);

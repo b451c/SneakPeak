@@ -113,6 +113,7 @@ private:
 
   double GetSliderValue(int idx) const;
   void SetSliderValue(int idx, double val);
+  double DragSeedValue(int idx) const;  // gesture seed; G.Thr Off seeds from the knob min (kills the -100 dead zone)
 
   static int SliderCol(int idx) {
     return (idx < 3 || idx == 6 || idx == 8 || idx == 10 || idx == 12) ? 0 : 1;
