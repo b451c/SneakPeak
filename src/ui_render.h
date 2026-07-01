@@ -109,7 +109,7 @@ struct URect {
 struct DynLayout {
   URect header, footer, plotWell, grMeter;
   URect preset, abBtn, closeBtn, apply;
-  URect modeSeg[2];  // DOWN / UP header pill segments (processor mode; always visible)
+  URect modeBtn;     // DOWN/UP processor-mode state button (A/B-style; click flips)
   URect tabSeg[3];   // Compressor / Gate / View pill segments
   URect knob[kDynNumParams]; // per-param knob cells; empty (w==0) when not on the active tab
   URect rms[2];      // Peak / RMS segmented halves (Compressor tab; empty otherwise)

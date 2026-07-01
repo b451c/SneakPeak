@@ -684,14 +684,11 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
   L.closeBtn = { w - pad - 18.0, hMid - 9.0, 18.0, 18.0 };
   L.abBtn    = { L.closeBtn.x - 48.0, hMid - 11.0, 40.0, 22.0 };
   L.preset   = { pad + 96.0, hMid - 11.0, 120.0, 22.0 };
-  // DOWN/UP processor-mode pill (v2.3.0): header chrome right of the preset
-  // box - it switches the whole gain computer, not a tab-local control.
-  {
-    const double segW = 44.0, segH = 22.0;
-    const double x0 = L.preset.x + L.preset.w + 10.0;
-    L.modeSeg[0] = { x0,        hMid - segH * 0.5, segW, segH };
-    L.modeSeg[1] = { x0 + segW + 2.0, hMid - segH * 0.5, segW, segH };
-  }
+  // DOWN/UP processor-mode STATE BUTTON (v2.3.0): header chrome right of the
+  // preset box - it switches the whole gain computer, not a tab-local control.
+  // A/B-style (shows the current mode, click flips): a two-segment pill plus
+  // the right-aligned BOOST readout could not coexist at the base width.
+  L.modeBtn = { L.preset.x + L.preset.w + 10.0, hMid - 11.0, 52.0, 22.0 };
 
   const double bodyTop = L.header.h;
   const double bodyH = L.footer.y - bodyTop;
@@ -850,9 +847,17 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
                        gfx.fLabel, vm.presetName ? vm.presetName : "Preset", SIZE_MAX,
                        col(dynui::kInkSecondary));
 
-    // DOWN/UP processor-mode pill (v2.3.0 upward compression).
-    static const char* const kModeLabels[2] = { "DOWN", "UP" };
-    DrawSegmentedN(ctx, gfx, L.modeSeg, kModeLabels, 2, vm.upward ? 1 : 0);
+    // DOWN/UP processor-mode state button (v2.3.0 upward compression):
+    // A/B-pattern - neutral "DOWN" at rest, amber outline + "UP" when engaged.
+    FillURound(ctx, L.modeBtn, dynui::kRadiusCtrl, vm.upward ? dynui::kSurface3 : dynui::kSurface2);
+    if (vm.upward) {
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_round_rect(BLRoundRect(L.modeBtn.x + 0.5, L.modeBtn.y + 0.5,
+                                        L.modeBtn.w - 1.0, L.modeBtn.h - 1.0, dynui::kRadiusCtrl),
+                            col(dynui::kAmber));
+    }
+    TextCentered(ctx, gfx.fLabel, L.modeBtn, vm.upward ? "UP" : "DOWN",
+                 vm.upward ? dynui::kAmber : dynui::kInkSecondary);
 
     // GR hero readout, right-aligned left of the A/B button - the load-bearing
     // number from the engine average GR (truthful applied GR). In Up mode the

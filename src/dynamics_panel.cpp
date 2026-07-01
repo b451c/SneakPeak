@@ -451,25 +451,21 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   if (L.closeBtn.contains(lx, ly)) { Hide(); return true; }
   if (L.preset.contains(lx, ly))   { m_presetMenuRequested = true; return true; }
   if (L.abBtn.contains(lx, ly))    { m_bypassed = !m_bypassed; return true; }
-  // DOWN/UP processor-mode pill (v2.3.0). Switching TO Up defaults auto-makeup
-  // OFF once (it acts as a trim there - user opts back in) and flags a one-shot
-  // hint toast when the gate is off (boosted noise floor; never auto-enables
-  // the gate - locked decision 2026-07-02). Re-analysis via m_paramsChanged.
-  for (int s = 0; s < 2; ++s) {
-    if (!L.modeSeg[s].contains(lx, ly)) continue;
-    const bool wantUp = (s == 1);
-    if (wantUp != m_params.upwardMode) {
-      m_params.upwardMode = wantUp;
-      if (wantUp) {
-        m_params.autoMakeup = false;
-        if (m_params.gateThreshDb <= -99.0 && !m_upHintShown) {
-          m_upHintPending = true;
-          m_upHintShown = true;
-        }
+  // DOWN/UP processor-mode state button (v2.3.0; A/B-style, click flips).
+  // Switching TO Up defaults auto-makeup OFF once (it acts as a trim there -
+  // user opts back in) and flags a one-shot hint toast when the gate is off
+  // (boosted noise floor; never auto-enables the gate - locked 2026-07-02).
+  if (L.modeBtn.contains(lx, ly)) {
+    m_params.upwardMode = !m_params.upwardMode;
+    if (m_params.upwardMode) {
+      m_params.autoMakeup = false;
+      if (m_params.gateThreshDb <= -99.0 && !m_upHintShown) {
+        m_upHintPending = true;
+        m_upHintShown = true;
       }
-      m_paramsChanged = true;
-      m_presetIdx = -1;
     }
+    m_paramsChanged = true;
+    m_presetIdx = -1;
     return true;
   }
   for (int i = 0; i < 3; ++i)

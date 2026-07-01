@@ -1483,7 +1483,7 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   if (!liveSession) {
     char toast[96];
     if (clampedPts > 0)
-      snprintf(toast, sizeof(toast), "Applied %d points - %d clamped at the envelope ceiling (+%.1f dB)",
+      snprintf(toast, sizeof(toast), "Applied %d points - %d at the +%.1f dB ceiling",
                (int)comp.size(), clampedPts, 20.0 * log10(clampCeilLin));
     else
       snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), (int)compRaw.size());
