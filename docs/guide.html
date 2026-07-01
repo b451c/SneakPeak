@@ -742,13 +742,13 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="dynamics-panel">Dynamics Panel</h2>
 
-<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 14 real-time controls across the COMP and GATE tabs:</p>
+<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 15 real-time controls across the COMP and GATE tabs. The <strong>DOWN / UP</strong> switch in the panel header selects the processor mode: DOWN is a classic compressor (reduce loud material above the threshold), UP is an upward compressor (boost quiet material below the threshold - leveling quiet speech without touching the peaks). In Up mode the GR readout turns amber and reads "BOOST", auto-makeup acts as a trim (default off), and the boost is capped by M.Boost and floored at the gate threshold when the gate is on.</p>
 
 <table>
   <thead><tr><th>Slider</th><th>Range</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td>Thresh</td><td>-60 to 0 dB</td><td>Compression threshold - signals above this are compressed</td></tr>
-    <tr><td>Ratio</td><td>1:1 to 20:1</td><td>Compression ratio - how much to reduce signals above threshold</td></tr>
+    <tr><td>Ratio</td><td>1:1 to Inf:1 and beyond</td><td>Compression ratio; past 20:1 the knob approaches Inf:1 (true limiting, detent) and continues into over-compression (negative ratios - reduction exceeds the overshoot)</td></tr>
     <tr><td>Knee</td><td>0 to 30 dB</td><td>Soft knee width - gradual transition into compression</td></tr>
     <tr><td>L.ahead</td><td>0 to 20 ms</td><td>Lookahead - catch transients before they arrive</td></tr>
     <tr><td>Attack</td><td>0.1 to 200 ms</td><td>How fast compression fades in</td></tr>
@@ -761,6 +761,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>G.Att</td><td>0 to 50 ms</td><td>Gate attack - how fast the gate opens</td></tr>
     <tr><td>G.Rel</td><td>10 to 1000 ms</td><td>Gate release - how fast the gate closes</td></tr>
     <tr><td>G.Hold</td><td>0 to 500 ms</td><td>Gate hold time - minimum fully-open time after the level exceeds the threshold</td></tr>
+    <tr><td>M.Boost</td><td>0 to 24 dB</td><td>Up mode only: maximum boost applied to quiet material (caps the noise-floor lift)</td></tr>
   </tbody>
 </table>
 
@@ -798,7 +799,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="dynamics-presets">Presets</h2>
 
-<p>Click the preset name in the panel title bar to open a dropdown with 6 built-in presets:</p>
+<p>Click the preset name in the panel title bar to open a dropdown with 7 built-in presets:</p>
 
 <table>
   <thead><tr><th>Preset</th><th>Use Case</th></tr></thead>
@@ -809,6 +810,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Broadcast</td><td>6:1 aggressive compression with fast attack and strong gate</td></tr>
     <tr><td>De-breath</td><td>Light compression + aggressive gate targeting breath removal</td></tr>
     <tr><td>Music Bus</td><td>2:1 slow attack for mix bus glue</td></tr>
+    <tr><td>Upward Leveling</td><td>Up mode: gentle 2:1 RMS lift of quiet passages, gate on so the noise floor stays down</td></tr>
   </tbody>
 </table>
 
