@@ -15,7 +15,7 @@
 // DynamicsParams defaults. -100 on Thresh = "use the analysed average peak".
 const DynamicsPanel::SliderDef DynamicsPanel::SLIDER_DEFS[NUM_SLIDERS] = {
   { "Thresh",  -60.0,    0.0, "dB",  1, -100.0 },  // 0: operating-point default
-  { "Ratio",     1.0,   20.0, ":1",  1,    4.0 },  // 1
+  { "Ratio",   -20.0,  100.0, ":1",  1,    4.0 },  // 1: extended encoding (>=1 classic, 0=Inf, <0=over-comp); knob uses a piecewise norm mapping
   { "Knee",      0.0,   24.0, "dB",  0,    6.0 },  // 2
   { "Attack",    0.0,  500.0, "ms",  0,    5.0 },  // 3
   { "Release",   0.0, 1000.0, "ms",  0,  100.0 },  // 4
@@ -28,7 +28,36 @@ const DynamicsPanel::SliderDef DynamicsPanel::SLIDER_DEFS[NUM_SLIDERS] = {
   { "G.Hyst",  -24.0,    0.0, "dB",  0,    0.0 },  // 11: close threshold relative to G.Thr
   { "G.Att",     0.0,   50.0, "ms",  1,    2.0 },  // 12: gate open speed
   { "G.Rel",    10.0, 1000.0, "ms",  0,  100.0 },  // 13: gate close speed
+  { "M.Boost",   0.0,   24.0, "dB",  1,    8.0 },  // 14: Up-mode boost cap (premium: shown only in Up)
 };
+
+// --- Ratio knob piecewise norm mapping (v2.3.0 extended ratio) ---------------
+// Knob travel: [0, 0.70] = 1..20:1 linear (legacy feel), (0.70, ~0.74) = the
+// 20:1 -> Inf approach (linear in u = 1/R), [~0.74, ~0.76] = Inf:1 detent
+// (engine sentinel 0.0), (0.76, 1.0] = over-compression, u from -0.05 to -1
+// (R from -20 to -1; reduction exceeds the overshoot). Typed values bypass the
+// knob and may exceed its reach (e.g. 100:1); NormFromRatio clamps for display.
+static double RatioFromNorm(double n)
+{
+  n = std::max(0.0, std::min(1.0, n));
+  if (n <= 0.70) return 1.0 + (n / 0.70) * 19.0;
+  if (n < 0.7375) return 1.0 / (0.75 - n);          // 20:1 .. 80:1 approach
+  if (n <= 0.7625) return 0.0;                      // Inf:1 detent
+  return 1.0 / (-(n - 0.75) * 4.0);                 // over-comp: R -20 .. -1
+}
+
+static double NormFromRatio(double r)
+{
+  if (r == 0.0) return 0.75;                        // Inf:1 detent center
+  if (r < 0.0) {
+    double u = 1.0 / r;                             // (-inf, 0) -> clamp to knob reach
+    u = std::max(-1.0, std::min(-0.05, u));
+    return 0.75 - u / 4.0;                          // 0.7625 .. 1.0
+  }
+  if (r <= 20.0) return (std::max(1.0, r) - 1.0) / 19.0 * 0.70;
+  const double u = 1.0 / r;                         // (0, 0.05)
+  return std::max(0.70, std::min(0.7375, 0.75 - u));
+}
 
 // --- Layout constants ---
 static constexpr int MARGIN = 4;
@@ -89,6 +118,7 @@ double DynamicsPanel::GetSliderValue(int idx) const
     case 11: return m_params.gateHystDb;
     case 12: return m_params.gateAttackMs;
     case 13: return m_params.gateReleaseMs;
+    case 14: return m_params.maxBoostDb;
     default: return 0.0;
   }
 }
@@ -132,6 +162,7 @@ void DynamicsPanel::SetSliderValue(int idx, double val)
     case 11: m_params.gateHystDb = val; break;
     case 12: m_params.gateAttackMs = val; break;
     case 13: m_params.gateReleaseMs = val; break;
+    case 14: m_params.maxBoostDb = val; break;
   }
 }
 
@@ -164,6 +195,8 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   m_motionInit = false;        // re-seed value-ease on open (no glide from a stale value)
   m_tabSlideStartSec = -1.0;   // no tab-slide on open
   m_avgGR = 0.0;
+  m_upHintPending = false;     // Up-with-gate-off hint re-arms per panel open
+  m_upHintShown = false;
   // Reset toggles to show everything on panel open
   m_showDyn = true;
   m_showEnv = true;
@@ -249,21 +282,28 @@ RECT DynamicsPanel::GetSliderTrackRect(RECT pr, int idx) const
 RECT DynamicsPanel::GetApplyButtonRect(RECT pr) const
 {
   int x = pr.right - MARGIN - APPLY_W - 2;
-  int y = pr.top + TITLE_H + 7 * ROW_H + 10;  // below the 7 slider rows (gate extension)
+  int y = pr.top + TITLE_H + 8 * ROW_H + 10;  // below the 8 slider rows
   return { x, y, x + APPLY_W, y + APPLY_H };
 }
 
 RECT DynamicsPanel::GetRmsToggleRect(RECT pr) const
 {
   int x = pr.left + R_LABEL_X;
-  int y = pr.top + TITLE_H + 7 * ROW_H + 10;  // below the 7 slider rows (gate extension)
+  int y = pr.top + TITLE_H + 8 * ROW_H + 10;  // below the 8 slider rows
   return { x, y, x + 42, y + APPLY_H };
+}
+
+RECT DynamicsPanel::GetUpToggleRect(RECT pr) const
+{
+  RECT rms = GetRmsToggleRect(pr);
+  int x = rms.right + TOGGLE_GAP;
+  return { x, rms.top, x + 30, rms.bottom };
 }
 
 RECT DynamicsPanel::GetDynToggleRect(RECT pr) const
 {
   int x = pr.left + MARGIN;
-  int y = pr.top + TITLE_H + 7 * ROW_H + 10;  // below the 7 slider rows (gate extension)
+  int y = pr.top + TITLE_H + 8 * ROW_H + 10;  // below the 8 slider rows
   return { x, y, x + TOGGLE_W, y + APPLY_H };
 }
 
@@ -343,7 +383,8 @@ void DynamicsPanel::ApplyParams(const DynamicsParams& p)
 int DynamicsPanel::ValueToPixel(double val, RECT tr, int idx) const
 {
   const auto& def = SLIDER_DEFS[idx];
-  double ratio = (val - def.minVal) / (def.maxVal - def.minVal);
+  double ratio = (idx == 1) ? NormFromRatio(val)   // piecewise extended-ratio mapping
+                            : (val - def.minVal) / (def.maxVal - def.minVal);
   ratio = std::max(0.0, std::min(1.0, ratio));
   return tr.left + (int)(ratio * (double)(tr.right - tr.left));
 }
@@ -353,6 +394,7 @@ double DynamicsPanel::PixelToValue(int px, RECT tr, int idx) const
   const auto& def = SLIDER_DEFS[idx];
   double ratio = (double)(px - tr.left) / (double)(tr.right - tr.left);
   ratio = std::max(0.0, std::min(1.0, ratio));
+  if (idx == 1) return RatioFromNorm(ratio);       // piecewise extended-ratio mapping
   return def.minVal + ratio * (def.maxVal - def.minVal);
 }
 
@@ -409,6 +451,27 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   if (L.closeBtn.contains(lx, ly)) { Hide(); return true; }
   if (L.preset.contains(lx, ly))   { m_presetMenuRequested = true; return true; }
   if (L.abBtn.contains(lx, ly))    { m_bypassed = !m_bypassed; return true; }
+  // DOWN/UP processor-mode pill (v2.3.0). Switching TO Up defaults auto-makeup
+  // OFF once (it acts as a trim there - user opts back in) and flags a one-shot
+  // hint toast when the gate is off (boosted noise floor; never auto-enables
+  // the gate - locked decision 2026-07-02). Re-analysis via m_paramsChanged.
+  for (int s = 0; s < 2; ++s) {
+    if (!L.modeSeg[s].contains(lx, ly)) continue;
+    const bool wantUp = (s == 1);
+    if (wantUp != m_params.upwardMode) {
+      m_params.upwardMode = wantUp;
+      if (wantUp) {
+        m_params.autoMakeup = false;
+        if (m_params.gateThreshDb <= -99.0 && !m_upHintShown) {
+          m_upHintPending = true;
+          m_upHintShown = true;
+        }
+      }
+      m_paramsChanged = true;
+      m_presetIdx = -1;
+    }
+    return true;
+  }
   for (int i = 0; i < 3; ++i)
     if (L.tabSeg[i].contains(lx, ly)) {
       if ((Tab)i != m_tab) { m_tabFrom = (int)m_tab; m_tabSlideStartSec = NowSec(); m_tab = (Tab)i; }
@@ -440,6 +503,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   // m_dragSlider keeps IsDragging()/SetCapture/reanalyze/Live byte-for-byte with
   // the GDI slider path.
   for (int i = 0; i < NUM_SLIDERS; ++i) {
+    if (i == kDynParamMaxBoost && !m_params.upwardMode) continue;  // Up-mode-only knob
     if (!L.knob[i].contains(lx, ly)) continue;
     if (IsFineMode()) {                          // Cmd-click = reset to the param default
       if (i == 5) {                              // Makeup -> auto (DynamicsParams default)
@@ -538,6 +602,22 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   if (x >= rmsR.left && x < rmsR.right && y >= rmsR.top && y < rmsR.bottom) {
     m_params.rmsMode = !m_params.rmsMode;
     m_paramsChanged = true;
+    return true;
+  }
+
+  // Down/Up mode toggle (GDI fallback; same side effects as the premium pill)
+  RECT upR = GetUpToggleRect(pr);
+  if (x >= upR.left && x < upR.right && y >= upR.top && y < upR.bottom) {
+    m_params.upwardMode = !m_params.upwardMode;
+    if (m_params.upwardMode) {
+      m_params.autoMakeup = false;
+      if (m_params.gateThreshDb <= -99.0 && !m_upHintShown) {
+        m_upHintPending = true;
+        m_upHintShown = true;
+      }
+    }
+    m_paramsChanged = true;
+    m_presetIdx = -1;
     return true;
   }
 
@@ -654,9 +734,12 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     // DragSeedValue kills the G.Thr Off dead zone the same way.
     const double cur = (m_dragSlider == 5 && m_params.autoMakeup)
                          ? fabs(m_avgGR) : DragSeedValue(m_dragSlider);
-    double nrm = (cur - def.minVal) / range;
+    // Ratio (idx 1) travels through the piecewise extended mapping (1..20,
+    // Inf detent, over-comp); all other knobs stay linear in the def range.
+    double nrm = (m_dragSlider == 1) ? NormFromRatio(cur) : (cur - def.minVal) / range;
     nrm = std::max(0.0, std::min(1.0, nrm + (double)dy * gainPerPx));
-    SetSliderValue(m_dragSlider, def.minVal + nrm * range);
+    if (m_dragSlider == 1) SetSliderValue(1, RatioFromNorm(nrm));
+    else SetSliderValue(m_dragSlider, def.minVal + nrm * range);
     m_paramsChanged = true;
     m_presetIdx = -1; // manual adjustment = custom
 #else
@@ -665,13 +748,19 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
 
     double val;
     if (IsFineMode()) {
-      // Fine mode (Cmd/Ctrl): delta-based, 1/5th sensitivity from drag start value
+      // Fine mode (Cmd/Ctrl): delta-based, 1/5th sensitivity from drag start value.
+      // Ratio (idx 1) deltas in NORM space so the piecewise zones stay usable.
       int dx = x - m_dragStartX;
       double pxRange = (double)(tr.right - tr.left);
       const auto& def = SLIDER_DEFS[m_dragSlider];
-      double valRange = def.maxVal - def.minVal;
-      double delta = ((double)dx / pxRange) * valRange * 0.2;
-      val = m_dragStartVal + delta;
+      if (m_dragSlider == 1) {
+        double nrm = NormFromRatio(m_dragStartVal) + ((double)dx / pxRange) * 0.2;
+        val = RatioFromNorm(std::max(0.0, std::min(1.0, nrm)));
+      } else {
+        double valRange = def.maxVal - def.minVal;
+        double delta = ((double)dx / pxRange) * valRange * 0.2;
+        val = m_dragStartVal + delta;
+      }
     } else {
       // Normal mode: absolute position with grab offset (no jump on click)
       val = PixelToValue(x + m_dragGrabOffset, tr, m_dragSlider);
@@ -715,8 +804,10 @@ int DynamicsPanel::HitTestKnob(int x, int y, RECT pr) const
   const double S = EffScale();
   const double lx = (double)(x - pr.left) / S, ly = (double)(y - pr.top) / S;
   const DynLayout L = PanelLayout();
-  for (int i = 0; i < NUM_SLIDERS; ++i)
+  for (int i = 0; i < NUM_SLIDERS; ++i) {
+    if (i == kDynParamMaxBoost && !m_params.upwardMode) continue;  // Up-mode-only knob
     if (L.knob[i].contains(lx, ly)) return i;
+  }
   return -1;
 }
 
@@ -733,9 +824,10 @@ bool DynamicsPanel::OnMouseWheel(int x, int y, double steps, bool fine, RECT wr)
   // Seed Makeup from the displayed value while auto (GetSliderValue(5)==0 then);
   // DragSeedValue lets a wheel notch re-enter the range from G.Thr Off.
   const double cur = (i == 5 && m_params.autoMakeup) ? fabs(m_avgGR) : DragSeedValue(i);
-  double nrm = (cur - def.minVal) / range;
+  double nrm = (i == 1) ? NormFromRatio(cur) : (cur - def.minVal) / range;
   nrm = std::max(0.0, std::min(1.0, nrm + (fine ? 0.005 : 0.025) * steps));
-  SetSliderValue(i, def.minVal + nrm * range);
+  if (i == 1) SetSliderValue(1, RatioFromNorm(nrm));
+  else SetSliderValue(i, def.minVal + nrm * range);
   m_paramsChanged = true;
   m_presetIdx = -1;
   return true;
@@ -791,6 +883,8 @@ DynCurveParams DynamicsPanel::BuildCurveParams() const
   c.showGate     = (m_params.gateThreshDb > -99.0);
   c.gateRatio    = m_params.gateRatio;               // closed-state slope for the plotted expander curve
   c.gateHystDb   = std::min(0.0, m_params.gateHystDb);
+  c.upward       = m_params.upwardMode;              // mirrored gain computer + raw-domain gate
+  c.maxBoostDb   = m_params.maxBoostDb;
   c.inMinDb      = dynui::kMeterFloorOptDb[m_meterFloorSel];  // View-tab meter-scale floor (default -60); inMaxDb stays 0
   return c;
 }
@@ -1128,6 +1222,8 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
         snprintf(text, sizeof(text), "%.1f auto", fabs(m_avgGR));
       } else if (i == 7 && val <= -99.0) {
         snprintf(text, sizeof(text), "Off");
+      } else if (i == 1 && val == 0.0) {
+        snprintf(text, sizeof(text), "Inf %s", def.unit);
       } else if (def.precision == 1) {
         snprintf(text, sizeof(text), "%.1f %s", val, def.unit);
       } else {
@@ -1159,6 +1255,21 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
     HFONT oldFont = (HFONT)SelectObject(hdc, g_fonts.bold12);
     SetTextColor(hdc, m_params.rmsMode ? RGB(255, 160, 40) : RGB(160, 160, 160));
     DrawTextUTF8(hdc, m_params.rmsMode ? "RMS" : "Peak", -1, &rmsR,
+             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    // Down/Up mode toggle (GDI fallback; amber when Up is engaged)
+    RECT upR = GetUpToggleRect(pr);
+    {
+      OwnedPen upPen(PS_SOLID, 1, m_params.upwardMode ? RGB(255, 160, 40) : RGB(80, 80, 80));
+      DCPenScope scope(hdc, upPen);
+      MoveToEx(hdc, upR.left, upR.top, nullptr);
+      LineTo(hdc, upR.right - 1, upR.top);
+      LineTo(hdc, upR.right - 1, upR.bottom - 1);
+      LineTo(hdc, upR.left, upR.bottom - 1);
+      LineTo(hdc, upR.left, upR.top);
+    }
+    SetTextColor(hdc, m_params.upwardMode ? RGB(255, 160, 40) : RGB(160, 160, 160));
+    DrawTextUTF8(hdc, "Up", -1, &upR,
              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // Dyn toggle
@@ -1275,6 +1386,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.liveMode = m_liveMode;
   vm.bypassed = m_bypassed;
   vm.rmsMode  = m_params.rmsMode;
+  vm.upward   = m_params.upwardMode;
   vm.meterFloorSel = m_meterFloorSel;
   vm.compact  = m_compactMode;
   vm.dragHandle = m_dragHandle;
@@ -1288,7 +1400,10 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   for (int i = 0; i < NUM_SLIDERS; ++i) {
     const auto& def = SLIDER_DEFS[i];
     const double range = (def.maxVal - def.minVal) != 0.0 ? (def.maxVal - def.minVal) : 1.0;
-    auto norm = [&](double v) { return std::max(0.0, std::min(1.0, (v - def.minVal) / range)); };
+    auto norm = [&](double v) {
+      if (i == 1) return NormFromRatio(v);   // piecewise extended-ratio mapping
+      return std::max(0.0, std::min(1.0, (v - def.minVal) / range));
+    };
     double dflt = def.defaultVal;
     if (i == 0 && dflt <= -99.0) dflt = m_avgPeakDb;   // threshold default = operating point
     KnobVM& k = vm.knobs[i];
@@ -1298,9 +1413,10 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
     k.label       = def.label;
     k.unit        = def.unit;
     k.precision   = def.precision;
-    k.isGate      = (i >= 7);
+    k.isGate      = (i >= 7 && i != kDynParamMaxBoost);  // M.Boost is a comp knob (amber)
     k.showAuto    = (i == 5 && m_params.autoMakeup);
     k.showOff     = (i == 7 && k.value <= -99.0);   // G.Thr sentinel -> "Off" readout
+    k.showInf     = (i == 1 && k.value == 0.0);     // Ratio Inf:1 sentinel -> "Inf" readout
     if (k.showAuto) { k.value = fabs(m_avgGR); targetN = norm(k.value); }
 
     // Value-ease (motion pass): the arc + indicator glide ~120ms to a value set by

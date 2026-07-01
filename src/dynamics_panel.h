@@ -68,6 +68,10 @@ public:
   // been pinned invisibly at the plot edge); host shows a one-shot toast.
   bool FloorAutoSwitched() const { return m_floorAutoSwitched; }
   void ClearFloorAutoSwitched() { m_floorAutoSwitched = false; }
+  // Set when the user switches to Up mode with the gate off (once per panel
+  // open); host shows the "enable the Gate" hint toast - never auto-enables.
+  bool UpHintPending() const { return m_upHintPending; }
+  void ClearUpHintPending() { m_upHintPending = false; }
   // Compact mode (View tab, premium): hides the hero plot + GR meter and reflows the
   // knobs into a wider 4-col grid, shrinking the panel height. Persisted as a global pref.
   bool GetCompact() const { return m_compactMode; }
@@ -116,7 +120,7 @@ private:
   double DragSeedValue(int idx) const;  // gesture seed; G.Thr Off seeds from the knob min (kills the -100 dead zone)
 
   static int SliderCol(int idx) {
-    return (idx < 3 || idx == 6 || idx == 8 || idx == 10 || idx == 12) ? 0 : 1;
+    return (idx < 3 || idx == 6 || idx == 8 || idx == 10 || idx == 12 || idx == 14) ? 0 : 1;
   }
   static int SliderRow(int idx) {
     if (idx < 3) return idx;       // 0-2: left rows 0-2
@@ -126,12 +130,14 @@ private:
     if (idx == 8) return 4;        // G.Range: left row 4
     if (idx == 9) return 4;        // G.Hold: right row 4
     if (idx < 12) return 5;        // G.Ratio: left / G.Hyst: right row 5
-    return 6;                      // G.Att: left / G.Rel: right row 6
+    if (idx < 14) return 6;        // G.Att: left / G.Rel: right row 6
+    return 7;                      // M.Boost: left row 7
   }
 
   RECT GetSliderTrackRect(RECT panelRect, int idx) const;
   RECT GetApplyButtonRect(RECT panelRect) const;
   RECT GetRmsToggleRect(RECT panelRect) const;
+  RECT GetUpToggleRect(RECT panelRect) const;   // GDI Down/Up mode toggle
   RECT GetDynToggleRect(RECT panelRect) const;
   RECT GetEnvToggleRect(RECT panelRect) const;
   RECT GetLiveToggleRect(RECT panelRect) const;
@@ -197,6 +203,8 @@ private:
   bool m_showGR = true;   // show gain reduction shading between curves
   int  m_meterFloorSel = 1;  // index into dynui::kMeterFloorOptDb; 1 = -60 dB default; render-only, persisted
   bool m_floorAutoSwitched = false;  // G.Thr drop auto-expanded the floor -> host toast
+  bool m_upHintPending = false;      // Up enabled with gate off -> host hint toast
+  bool m_upHintShown = false;        // hint fired already this panel-open
   bool m_compactMode = false; // Compact mode: hero plot hidden, knobs in a 4-col grid; persisted
   bool m_bypassed = false;  // A/B: envelope bypass for comparison
   bool m_liveMode = false;  // live preview: write envelope on slider change
@@ -217,7 +225,7 @@ private:
   [[maybe_unused]] double m_resizeStartScale = 1.0;  // m_uiScale at grab -> first move = no-op
 
   static const int PANEL_W = 380;
-  static const int PANEL_H = 184;  // 7 slider rows since the gate extension (was 148 / 5 rows)
+  static const int PANEL_H = 202;  // 8 slider rows (5 legacy + 2 gate ext + M.Boost)
   static const int TITLE_H = 22;
   static const int ROW_H = 18;
   static const int THUMB_R = 4;

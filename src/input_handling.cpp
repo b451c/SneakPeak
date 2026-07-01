@@ -388,6 +388,12 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         m_dynamicsPanel.ClearFloorAutoSwitched();
         ShowToast("Plot scale expanded to show the gate threshold");
       }
+      // One-shot hint when Up mode is engaged with the gate off (the boost is
+      // then capped but the noise floor still rises; we never auto-enable).
+      if (m_dynamicsPanel.UpHintPending()) {
+        m_dynamicsPanel.ClearUpHintPending();
+        ShowToast("Tip: enable the Gate to keep the noise floor quiet");
+      }
       // Preset dropdown menu (factory + user presets, Save/Delete) - built in
       // context_menu.cpp where the portable menu helpers live.
       if (m_dynamicsPanel.PresetMenuRequested()) {

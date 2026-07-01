@@ -17,8 +17,9 @@
 #include <memory>
 
 // Shared param count for the Dynamics panel (SLIDER_DEFS rows, knob slots, VM
-// arrays). v2.3.0 gate extension: 10 -> 14.
-constexpr int kDynNumParams = 14;
+// arrays). v2.3.0: 10 -> 14 (gate extension) -> 15 (M.Boost, upward mode).
+constexpr int kDynNumParams = 15;
+constexpr int kDynParamMaxBoost = 14;  // knob index; laid out only in Up mode
 
 // Inputs for the transfer-curve hero. Plain values (no Blend2D in the header);
 // the compression math mirrors dynamics_engine.cpp ComputeCompression().
@@ -30,6 +31,8 @@ struct DynCurveParams {
   double gateRangeDb  = 24.0;   // POSITIVE magnitude (engine value is negated at the wiring point)
   double gateRatio    = 2.0;    // downward-expander ratio Rg (closed-state slope Rg-1; 2.0 = legacy)
   double gateHystDb   = 0.0;    // close threshold relative to gate thresh (<= 0; band shading)
+  bool   upward       = false;  // Up mode: boost below threshold (mirrored gain computer)
+  double maxBoostDb   = 8.0;    // Up-mode boost cap; boost also floored at gateThreshDb (raw x)
   double makeupDb     = 0.0;    // post-comp makeup; used for the GATE onset (engine gates post-makeup)
   double avgPeakDb    = -18.0;  // operating point (signal level); < inMinDb hides it
   double avgGrDb      = 0.0;    // engine GetAvgGainReduction(), NEGATIVE dB - drives the GR meter value
@@ -56,6 +59,7 @@ struct KnobVM {
   bool   isGate      = false; // violet fill (gate params) vs amber (compressor)
   bool   showAuto    = false; // Makeup in auto mode -> "<n> auto" readout
   bool   showOff     = false; // sentinel value -> "Off" readout (G.Thr detent)
+  bool   showInf     = false; // Ratio at the Inf:1 sentinel (0.0) -> "Inf" readout
   bool   hover       = false; // cursor over (or dragging) this knob -> glow + cap tint
   bool   editing     = false; // inline type-value editor open on this knob (Inc 8)
   const char* editText = nullptr; // live edit buffer (valid only during the paint)
@@ -79,7 +83,8 @@ struct DynPanelVM {
   bool  liveMode = false;
   bool  bypassed = false;
   bool  rmsMode  = false;
-  int   meterFloorSel = 0;          // active meter-scale segment (0=-60dB default, 1=-36, 2=-24)
+  bool  upward   = false;           // Down/Up header pill state; hides M.Boost when false
+  int   meterFloorSel = 0;          // active meter-scale segment index (see kMeterFloorOptDb)
   bool  compact  = false;           // Compact mode: hero plot hidden, knobs in a 4-col grid
   int   dragHandle = -1;            // curve handle being dragged (-1 none, 0 knee, 1 gate) -> glow
   int   hoverHandle = -1;           // curve handle under the cursor -> lights its accent colour
@@ -104,6 +109,7 @@ struct URect {
 struct DynLayout {
   URect header, footer, plotWell, grMeter;
   URect preset, abBtn, closeBtn, apply;
+  URect modeSeg[2];  // DOWN / UP header pill segments (processor mode; always visible)
   URect tabSeg[3];   // Compressor / Gate / View pill segments
   URect knob[kDynNumParams]; // per-param knob cells; empty (w==0) when not on the active tab
   URect rms[2];      // Peak / RMS segmented halves (Compressor tab; empty otherwise)

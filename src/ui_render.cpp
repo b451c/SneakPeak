@@ -72,32 +72,56 @@ static double TextWidth(const BLFont& font, const char* s) {
   return tm.advance.x;
 }
 
-// Compression gain reduction (dB, <= 0) for an input level, matching
-// dynamics_engine.cpp ComputeCompression(): soft-knee, slope = 1/R - 1.
-static double CompressionGrDb(double inDb, double thrDb, double ratio, double kneeDb) {
-  if (ratio <= 1.0) return 0.0;
-  const double slope = 1.0 / ratio - 1.0;   // negative
-  const double halfKnee = kneeDb * 0.5;
-  const double overshoot = inDb - thrDb;
-  if (overshoot <= -halfKnee) return 0.0;
-  if (kneeDb > 0.0 && overshoot < halfKnee) {
-    const double t = overshoot + halfKnee;
-    return slope * t * t / (2.0 * kneeDb);
+// Static-curve slope factor, MIRRORS DynSlopeFromRatio in dynamics_engine.h
+// (kept local: this renderer carries no engine types beyond DynCurveParams).
+// r >= 1 classic, r == 0 -> Inf:1 (S = -1), r < 0 -> over-compression (S < -1).
+static double SlopeFromRatioUi(double r) {
+  if (r == 0.0) return -1.0;
+  if (r < 0.0) return 1.0 / r - 1.0;
+  return 1.0 / (r < 1.0 ? 1.0 : r) - 1.0;
+}
+
+// Compression gain change (dB) for an input level, matching dynamics_engine.cpp
+// ComputeCompression(): soft-knee gain computer, downward (reduce above thresh)
+// or upward (boost below thresh, mirrored knee, min(GR, maxBoost) cap, boost
+// floored at the gate threshold on the RAW input level - the gate always wins).
+static double CompressionGrDb(double inDb, const DynCurveParams& p) {
+  const double slope = SlopeFromRatioUi(p.ratio);
+  const double halfKnee = p.kneeDb * 0.5;
+  const double overshoot = inDb - p.thresholdDb;
+  double g = 0.0;
+  if (!p.upward) {
+    if (overshoot <= -halfKnee) return 0.0;
+    if (p.kneeDb > 0.0 && overshoot < halfKnee) {
+      const double t = overshoot + halfKnee;
+      return slope * t * t / (2.0 * p.kneeDb);
+    }
+    return slope * overshoot;
   }
-  return slope * overshoot;
+  if (p.kneeDb > 0.0 && overshoot > -halfKnee && overshoot < halfKnee) {
+    const double t = overshoot - halfKnee;                 // mirrored knee quadratic
+    g = -slope * t * t / (2.0 * p.kneeDb);
+  } else if (overshoot < 0.0) {
+    g = slope * overshoot;                                 // boost below threshold
+  }
+  g = std::min(g, p.maxBoostDb);
+  if (p.showGate && inDb < p.gateThreshDb) g = 0.0;        // gate-coupled boost floor
+  return g;
 }
 
 // Full output transfer at an input level: y = x + compGR + makeup + gateGR (mirrors
 // dynamics_engine ComputeCompression :306). Shared by the plotted curve and the
 // curve-handle positions so the handle always sits exactly on the drawn line.
 static double CurveOutDb(double in, const DynCurveParams& p) {
-  const double g = CompressionGrDb(in, p.thresholdDb, p.ratio, p.kneeDb);
+  const double g = CompressionGrDb(in, p);
   double out = in + g + p.makeupDb;
   if (p.showGate) {
-    const double detect = in + g;   // engine gates on the post-comp, PRE-makeup level (makeup is output-only)
-    // Closed-state ("basic") expander curve, mirroring the engine: slope Rg-1
-    // below the open threshold, clamped to range. Hysteresis only affects the
-    // time behavior (band shading), never this static curve.
+    // Gate detection domain mirrors the engine: Down = post-comp pre-makeup,
+    // Up = RAW input (boosted noise must never hold the gate open).
+    const double detect = p.upward ? in : in + g;
+    // Closed-state ("basic") expander curve: slope Rg-1 below the open
+    // threshold, clamped to range. Hysteresis only affects the time behavior
+    // (band shading), never this static curve.
     if (detect < p.gateThreshDb) {
       const double gateSlope = std::max(1.0, p.gateRatio) - 1.0;
       out += std::max(gateSlope * (detect - p.gateThreshDb), -std::fabs(p.gateRangeDb));
@@ -234,11 +258,11 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   // still = pure gain reduction. The unity diagonal stays as the 1:1 reference -
   // the gap between it and the curve at low input is the visible makeup boost.
   auto compGrDb = [&](double in) {
-    return CompressionGrDb(in, p.thresholdDb, p.ratio, p.kneeDb);            // <= 0
+    return CompressionGrDb(in, p);   // <= 0 in Down; capped boost >= 0 in Up
   };
   auto gateGrDb = [&](double in, double compGr) -> double {
     if (!p.showGate) return 0.0;
-    const double detect = in + compGr;                                       // engine: post-comp, PRE-makeup
+    const double detect = p.upward ? in : in + compGr;                       // Up: raw; Down: post-comp, PRE-makeup
     if (detect >= p.gateThreshDb) return 0.0;
     const double gateRangeNeg = -std::fabs(p.gateRangeDb);                   // engine range is negative
     const double gateSlope = std::max(1.0, p.gateRatio) - 1.0;               // closed-state slope Rg-1
@@ -262,7 +286,8 @@ static void DrawTransferPlot(BLContext& ctx, const Gfx& gfx,
   // compGR(x) is strictly increasing (comp slope > -1), so it inverts to an
   // input range by bisection. Dims with the gate on the Compressor tab.
   if (p.showGate && p.gateHystDb < 0.0) {
-    auto detectAt = [&](double in) { return in + compGrDb(in); };
+    // Detection domain mirrors the engine: Up gates on the RAW input (x axis).
+    auto detectAt = [&](double in) { return p.upward ? in : in + compGrDb(in); };
     auto invDetect = [&](double target) {
       double lo = inMin, hi = inMax;
       if (detectAt(lo) >= target) return lo;
@@ -403,7 +428,11 @@ static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
   // #2: shared scale, not a private 24 dB range).
   const double span = (p.inMaxDb - p.inMinDb) != 0 ? (p.inMaxDb - p.inMinDb) : 1.0;
   const double pxPerDb = plotSide / span;
-  const double grMag = std::max(0.0, -p.avgGrDb);
+  // Up mode: avgGrDb goes POSITIVE (boost) - same bar geometry, amber fill
+  // (user-locked 2026-07-02); Down keeps the red reduction fill.
+  const bool boost = p.avgGrDb > 0.0;
+  const double grMag = boost ? p.avgGrDb : std::max(0.0, -p.avgGrDb);
+  const uint32_t fillCol = boost ? dynui::kAmber : dynui::kGrRed;
   const double meterX = px1 + (double)dynui::kMeterGap;
   const double barW = (double)dynui::kMeterBarW;
   const double barTop = py0;
@@ -414,8 +443,8 @@ static void DrawGrMeter(BLContext& ctx, const Gfx& gfx,
   const double fillH = std::clamp(grMag * pxPerDb, 0.0, barH);
   if (fillH > 0.5) {
     BLGradient g(BLLinearGradientValues(0, barTop, 0, barTop + barH));
-    g.add_stop(0.0, col(dynui::kGrRed));
-    g.add_stop(1.0, colA(dynui::kGrRed, 120));
+    g.add_stop(0.0, col(fillCol));
+    g.add_stop(1.0, colA(fillCol, 120));
     ctx.fill_round_rect(BLRoundRect(meterX, barTop, barW, fillH, 4.0), g);
     ctx.fill_rect(BLRect(meterX, barTop + fillH - 1.0, barW, 2.0),
                   col(dynui::kAmberGlow));   // peak-hold marker
@@ -466,6 +495,7 @@ static const KnobSlot KNOB_SLOTS[kDynNumParams] = {
   { 1, 0, 3 },  // 11 G.Hyst
   { 1, 1, 0 },  // 12 G.Att    (Gate / TIME)
   { 1, 1, 1 },  // 13 G.Rel
+  { 0, 1, 3 },  // 14 M.Boost  (Compressor; ex-RMS cell - RMS moved to the footer; Up mode only)
 };
 
 // Compact-mode slots: the hero plot is hidden, so the knobs reflow into a wider
@@ -487,6 +517,7 @@ static const KnobSlot COMPACT_KNOB_SLOTS[kDynNumParams] = {
   { 1, 3, 0 },  // 11 G.Hyst
   { 1, 0, 1 },  // 12 G.Att
   { 1, 1, 1 },  // 13 G.Rel
+  { 0, 3, 1 },  // 14 M.Boost  (ex-RMS compact cell; Up mode only)
 };
 
 static inline double Deg2Rad(double d) { return d * 3.14159265358979323846 / 180.0; }
@@ -581,9 +612,11 @@ static void DrawKnob(BLContext& ctx, const Gfx& gfx, const URect& cell, const Kn
       // Value number (16px primary) + unit (11px muted) on its own advance, per the
       // type spec - keeps long readouts ("1000 ms") inside the content margin and lets
       // ":1" abut the number. Auto-makeup shows the computed value with a muted "auto".
-      // showOff (G.Thr at the sentinel / hard-left detent) renders "Off", no unit.
+      // showOff (G.Thr at the sentinel / hard-left detent) renders "Off", no unit;
+      // showInf (Ratio at the Inf:1 sentinel) renders "Inf:1".
       char num[24];
       if (k.showOff) std::snprintf(num, sizeof(num), "Off");
+      else if (k.showInf) std::snprintf(num, sizeof(num), "Inf");
       else std::snprintf(num, sizeof(num), k.precision == 1 ? "%.1f" : "%.0f", k.value);
       ctx.fill_utf8_text(BLPoint(tx, vy), gfx.fValue, num, SIZE_MAX, col(dynui::kInkPrimary));
       const char* unit = k.showOff ? "" : (k.showAuto ? "auto" : (k.unit ? k.unit : ""));
@@ -651,6 +684,14 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
   L.closeBtn = { w - pad - 18.0, hMid - 9.0, 18.0, 18.0 };
   L.abBtn    = { L.closeBtn.x - 48.0, hMid - 11.0, 40.0, 22.0 };
   L.preset   = { pad + 96.0, hMid - 11.0, 120.0, 22.0 };
+  // DOWN/UP processor-mode pill (v2.3.0): header chrome right of the preset
+  // box - it switches the whole gain computer, not a tab-local control.
+  {
+    const double segW = 44.0, segH = 22.0;
+    const double x0 = L.preset.x + L.preset.w + 10.0;
+    L.modeSeg[0] = { x0,        hMid - segH * 0.5, segW, segH };
+    L.modeSeg[1] = { x0 + segW + 2.0, hMid - segH * 0.5, segW, segH };
+  }
 
   const double bodyTop = L.header.h;
   const double bodyH = L.footer.y - bodyTop;
@@ -674,12 +715,7 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
       const KnobSlot& s = COMPACT_KNOB_SLOTS[i];
       L.knob[i] = (s.tab == activeTab) ? ccell(s.col, s.row) : URect{ 0, 0, 0, 0 };
     }
-    if (activeTab == 0) {   // Peak/RMS occupies col3/row1 (no knob maps there)
-      const URect c = ccell(3, 1);
-      const double segH = 24.0, segY = c.y + (c.h - segH) * 0.5, halfW = c.w * 0.5;
-      L.rms[0] = { c.x, segY, halfW, segH };
-      L.rms[1] = { c.x + halfW, segY, c.w - halfW, segH };
-    }
+    // Peak/RMS moved to the footer gap (v2.3.0) - M.Boost owns the ex-RMS cell.
     if (activeTab == 2) {   // View: DYN/ENV/GR/LIVE on row0; Compact on row1
       const double tH = 36.0;
       auto pill = [&](int ccol, int crow) -> URect {
@@ -720,14 +756,7 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
     L.knob[i] = (s.tab == activeTab) ? cellRect(s.col, s.row) : URect{ 0, 0, 0, 0 };
   }
 
-  // Peak/RMS detection switch reuses the reserved Compressor col1-row3 grid cell
-  // (no knob maps there): a centred 2-segment pill. Empty on other tabs.
-  if (activeTab == 0) {
-    const URect c = cellRect(1, 3);
-    const double segH = 24.0, segY = c.y + (c.h - segH) * 0.5, halfW = c.w * 0.5;
-    L.rms[0] = { c.x, segY, halfW, segH };               // Peak
-    L.rms[1] = { c.x + halfW, segY, c.w - halfW, segH };  // RMS
-  }
+  // Peak/RMS moved to the footer gap (v2.3.0) - M.Boost owns the ex-RMS cell.
   // View-tab state toggles fill the knob-grid cells: col0 rows 0-2 = Dyn/Env/GR
   // (overlay visibility), col1 row0 = Live, col1 row1 = Compact. (A/B is NOT here -
   // it lives in the header.) The meter-scale selector spans the bottom row.
@@ -761,6 +790,16 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
   const double pillX = w - pad - pillW;
   for (int i = 0; i < 3; ++i)
     L.tabSeg[i] = { pillX + (double)i * (segW + segGap), fMid - 12.0, segW, 24.0 };
+  // Peak/RMS detection pill (v2.3.0: moved here from the knob grid so M.Boost
+  // could take that cell): centred in the footer gap between Apply and the tab
+  // pill. Compressor tab only - detection mode pairs with the comp controls.
+  if (activeTab == 0) {
+    const double rmsSegW = 44.0, rmsH = 24.0;
+    const double gapL = L.apply.x + L.apply.w, gapR = pillX;
+    const double rx = gapL + ((gapR - gapL) - 2.0 * rmsSegW - 2.0) * 0.5;
+    L.rms[0] = { rx,                  fMid - rmsH * 0.5, rmsSegW, rmsH };
+    L.rms[1] = { rx + rmsSegW + 2.0,  fMid - rmsH * 0.5, rmsSegW, rmsH };
+  }
 
   // Free-resize grip: bottom-right corner. Sits in the right pad margin, just past
   // the tab pill's right edge (w - pad), so it never overlaps the VIEW segment.
@@ -799,6 +838,9 @@ static void TextCentered(BLContext& ctx, const BLFont& f, const URect& r,
                      SIZE_MAX, col(argb));
 }
 
+static void DrawSegmentedN(BLContext& ctx, const Gfx& gfx, const URect* segs,
+                           const char* const* labels, int n, int activeIdx);
+
 static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const DynPanelVM& vm) {
   if (gfx.fontsReady) {
     ctx.fill_utf8_text(BLPoint(dynui::kPanelPad, L.header.h * 0.5 + 5.0), gfx.fValue,
@@ -808,20 +850,29 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
                        gfx.fLabel, vm.presetName ? vm.presetName : "Preset", SIZE_MAX,
                        col(dynui::kInkSecondary));
 
-    // GR hero readout: "GR <n> dB", right-aligned just left of the A/B button. This
-    // is the load-bearing number from the engine average GR (truthful applied GR).
+    // DOWN/UP processor-mode pill (v2.3.0 upward compression).
+    static const char* const kModeLabels[2] = { "DOWN", "UP" };
+    DrawSegmentedN(ctx, gfx, L.modeSeg, kModeLabels, 2, vm.upward ? 1 : 0);
+
+    // GR hero readout, right-aligned left of the A/B button - the load-bearing
+    // number from the engine average GR (truthful applied GR). In Up mode the
+    // average goes positive: caption "BOOST", "+x.x", amber (user-locked).
+    const bool boost = vm.curve.avgGrDb > 0.0;
     char num[16];
-    std::snprintf(num, sizeof(num), "%.1f", std::max(0.0, -vm.curve.avgGrDb));
+    std::snprintf(num, sizeof(num), boost ? "+%.1f" : "%.1f",
+                  boost ? vm.curve.avgGrDb : std::max(0.0, -vm.curve.avgGrDb));
+    const char* grLbl = boost ? "BOOST" : "GR";
     const double unitW = TextWidth(gfx.fUnit, "dB");
     const double numW  = TextWidth(gfx.fGrHero, num);
-    const double lblW  = TextWidth(gfx.fLabel, "GR");
+    const double lblW  = TextWidth(gfx.fLabel, grLbl);
     const double xR    = L.abBtn.x - 12.0;
     const double unitX = xR - unitW;
     const double numX  = unitX - 4.0 - numW;
     const double lblX  = numX - 6.0 - lblW;
     const double baseY = L.header.h * 0.5 + 7.0;
-    ctx.fill_utf8_text(BLPoint(lblX,  baseY), gfx.fLabel,  "GR", SIZE_MAX, col(dynui::kInkSecondary));
-    ctx.fill_utf8_text(BLPoint(numX,  baseY), gfx.fGrHero, num,  SIZE_MAX, col(dynui::kGrRed));
+    ctx.fill_utf8_text(BLPoint(lblX,  baseY), gfx.fLabel,  grLbl, SIZE_MAX, col(dynui::kInkSecondary));
+    ctx.fill_utf8_text(BLPoint(numX,  baseY), gfx.fGrHero, num,  SIZE_MAX,
+                       col(boost ? dynui::kAmber : dynui::kGrRed));
     ctx.fill_utf8_text(BLPoint(unitX, baseY), gfx.fUnit,   "dB", SIZE_MAX, col(dynui::kInkMuted));
 
     // A/B bypass: reflects state (amber outline + "BYP" when bypassed) so the
@@ -1050,8 +1101,10 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
       DrawGrMeter(ctx, *m_gfx, L.plotWell.x + L.plotWell.w, L.plotWell.y, L.plotWell.w,
                   vm.curve, /*withNumber=*/false);
     }
-    for (int i = 0; i < kDynNumParams; ++i)
+    for (int i = 0; i < kDynNumParams; ++i) {
+      if (i == kDynParamMaxBoost && !vm.upward) continue;  // M.Boost is Up-mode-only
       DrawKnob(ctx, *m_gfx, L.knob[i], vm.knobs[i]);
+    }
 
     // Peak/RMS switch (Compressor tab) + View-tab state toggles. Each helper
     // self-skips when its rect is empty, so these are no-ops on the other tabs.
