@@ -742,7 +742,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="dynamics-panel">Dynamics Panel</h2>
 
-<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 10 real-time sliders:</p>
+<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 14 real-time controls across the COMP and GATE tabs:</p>
 
 <table>
   <thead><tr><th>Slider</th><th>Range</th><th>Description</th></tr></thead>
@@ -751,12 +751,16 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Ratio</td><td>1:1 to 20:1</td><td>Compression ratio - how much to reduce signals above threshold</td></tr>
     <tr><td>Knee</td><td>0 to 30 dB</td><td>Soft knee width - gradual transition into compression</td></tr>
     <tr><td>L.ahead</td><td>0 to 20 ms</td><td>Lookahead - catch transients before they arrive</td></tr>
-    <tr><td>G.Thr</td><td>-60 to 0 dB</td><td>Gate threshold - signals below this are attenuated</td></tr>
     <tr><td>Attack</td><td>0.1 to 200 ms</td><td>How fast compression fades in</td></tr>
     <tr><td>Release</td><td>5 to 2000 ms</td><td>How fast compression fades out</td></tr>
     <tr><td>Makeup</td><td>0 to 24 dB</td><td>Gain compensation (auto-calculated from average GR)</td></tr>
-    <tr><td>G.Range</td><td>-40 to 0 dB</td><td>Gate range - maximum attenuation when gate is closed</td></tr>
-    <tr><td>G.Hold</td><td>0 to 200 ms</td><td>Gate hold time - prevents syllable-level chattering</td></tr>
+    <tr><td>G.Thr</td><td>-90 to 0 dB, Off</td><td>Gate threshold - signals below this are attenuated; drag fully left (or Cmd/Ctrl-click) for Off</td></tr>
+    <tr><td>G.Ratio</td><td>1:1 to 10:1</td><td>Gate ratio - attenuation slope below the threshold (2:1 = gentle expander, higher = harder gate)</td></tr>
+    <tr><td>G.Range</td><td>-80 to 0 dB</td><td>Gate range - maximum attenuation when gate is closed</td></tr>
+    <tr><td>G.Hyst</td><td>-24 to 0 dB</td><td>Gate hysteresis - the gate stays open this far below the threshold, preventing chatter on hovering material</td></tr>
+    <tr><td>G.Att</td><td>0 to 50 ms</td><td>Gate attack - how fast the gate opens</td></tr>
+    <tr><td>G.Rel</td><td>10 to 1000 ms</td><td>Gate release - how fast the gate closes</td></tr>
+    <tr><td>G.Hold</td><td>0 to 500 ms</td><td>Gate hold time - minimum fully-open time after the level exceeds the threshold</td></tr>
   </tbody>
 </table>
 
@@ -786,11 +790,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="dynamics-gate">Gate</h2>
 
-<p>The noise gate operates on the <em>post-compression</em> level - after the compressor and makeup gain have been applied. This is specifically designed for breath reduction in speech/podcast audio: compression boosts quiet passages (including breaths), and the gate catches those boosted breaths and pulls them back down.</p>
+<p>The noise gate operates on the <em>post-compression, pre-makeup</em> level. This is specifically designed for breath reduction in speech/podcast audio: compression boosts quiet passages (including breaths), and the gate catches those boosted breaths and pulls them back down - while the makeup gain, an output-only stage, never shifts the gate's operating point.</p>
 
-<p>Three gate parameters: <strong>G.Thr</strong> (threshold - signals below this are gated), <strong>G.Range</strong> (maximum attenuation, default -20 dB for natural sound), <strong>G.Hold</strong> (hold time, prevents rapid on/off chattering on syllable boundaries). Set G.Thr to -100 dB to disable the gate.</p>
+<p>The gate is a full downward expander with seven parameters. <strong>G.Thr</strong> sets where it engages (down to -90 dB; drag fully left or Cmd/Ctrl-click for Off). <strong>G.Ratio</strong> sets how hard it attenuates below the threshold: 2:1 is a gentle expander, 10:1 is effectively a hard gate. <strong>G.Range</strong> caps the attenuation (down to -80 dB; the -20 dB default keeps things natural). <strong>G.Hyst</strong> adds hysteresis - once open, the gate stays open until the level falls this far below the threshold, which stops rapid chatter on material hovering at the threshold (the violet band on the transfer plot). <strong>G.Att</strong> / <strong>G.Rel</strong> set how fast the gate opens and closes, and <strong>G.Hold</strong> keeps it fully open for a minimum time after each opening.</p>
 
-<p>The gate threshold is shown as a dim red horizontal line on the waveform. GR shading and the purple compression curve include gate reduction.</p>
+<p>The gate threshold is shown as a dim red horizontal line on the waveform. GR shading and the purple compression curve include gate reduction. If you drag G.Thr below the current transfer-plot floor, the plot scale expands automatically so the gate node stays visible (floor selectable down to -96 dB in the VIEW tab).</p>
 
 <h2 id="dynamics-presets">Presets</h2>
 

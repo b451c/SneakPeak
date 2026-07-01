@@ -4,6 +4,15 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] - v2.3.0 "Dynamics Suite" (in development)
+
+### Added
+- **Full noise-gate rework** (forum #67) - the fixed 2:1 gate is now a complete downward expander: **G.Ratio** (1-10:1, 2:1 reproduces the old behavior exactly), **G.Hyst** hysteresis (the gate stays open until the level falls this far below the threshold - no more chatter on material hovering at the threshold; shown as a violet band on the transfer plot), exposed **G.Att / G.Rel** open/close speeds, and deeper floors: G.Thr down to **-90 dB**, G.Range down to **-80 dB**, G.Hold up to 500 ms.
+- **G.Thr Off detent** - drag the gate threshold fully left to switch the gate off (readout shows "Off"); Cmd/Ctrl-click still works as a shortcut.
+- **-96 dB transfer-plot floor** with auto-expand - if you push the gate threshold below the current plot floor, the plot rescales automatically (with a toast) so the draggable gate node never disappears off the plot edge.
+- **Preset update** - Voice/Podcast, Broadcast and De-breath now ship with -6 dB gate hysteresis (smoother gating on breathy material). Saved per-item settings are unaffected.
+- Old projects and presets load bit-identically: with the new parameters at their defaults the engine output is byte-for-byte the same as v2.2.0 (verified by an offline envelope-diff regression harness added to the repo).
+
 ## [2.2.0] - 2026-06-17
 
 ### Highlights
