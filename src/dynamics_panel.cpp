@@ -19,7 +19,7 @@ const DynamicsPanel::SliderDef DynamicsPanel::SLIDER_DEFS[NUM_SLIDERS] = {
   { "Knee",      0.0,   24.0, "dB",  0,    6.0 },  // 2
   { "Attack",    0.0,  500.0, "ms",  0,    5.0 },  // 3
   { "Release",   0.0, 1000.0, "ms",  0,  100.0 },  // 4
-  { "Makeup",    0.0,   24.0, "dB",  1,    0.0 },  // 5
+  { "Makeup",  -24.0,   24.0, "dB",  1,    0.0 },  // 5: bipolar since v2.3.0 (negative = trim; the useful direction in Up mode)
   { "L.ahead",   0.0,   20.0, "ms",  1,    0.0 },  // 6
   { "G.Thr",   -90.0,    0.0, "dB",  1, -100.0 },  // 7: gate threshold (-100 = off; hard-left detent snaps to it)
   { "G.Range", -80.0,    0.0, "dB",  0,  -20.0 },  // 8: gate max reduction
@@ -729,7 +729,7 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     // while auto is engaged - seeding from 0 would snap the knob down on first move.
     // DragSeedValue kills the G.Thr Off dead zone the same way.
     const double cur = (m_dragSlider == 5 && m_params.autoMakeup)
-                         ? fabs(m_avgGR) : DragSeedValue(m_dragSlider);
+                         ? -m_avgGR : DragSeedValue(m_dragSlider);
     // Ratio (idx 1) travels through the piecewise extended mapping (1..20,
     // Inf detent, over-comp); all other knobs stay linear in the def range.
     double nrm = (m_dragSlider == 1) ? NormFromRatio(cur) : (cur - def.minVal) / range;
@@ -819,7 +819,7 @@ bool DynamicsPanel::OnMouseWheel(int x, int y, double steps, bool fine, RECT wr)
   const double range = (def.maxVal - def.minVal) != 0.0 ? (def.maxVal - def.minVal) : 1.0;
   // Seed Makeup from the displayed value while auto (GetSliderValue(5)==0 then);
   // DragSeedValue lets a wheel notch re-enter the range from G.Thr Off.
-  const double cur = (i == 5 && m_params.autoMakeup) ? fabs(m_avgGR) : DragSeedValue(i);
+  const double cur = (i == 5 && m_params.autoMakeup) ? -m_avgGR : DragSeedValue(i);
   double nrm = (i == 1) ? NormFromRatio(cur) : (cur - def.minVal) / range;
   nrm = std::max(0.0, std::min(1.0, nrm + (fine ? 0.005 : 0.025) * steps));
   if (i == 1) SetSliderValue(1, RatioFromNorm(nrm));
@@ -970,7 +970,7 @@ void DynamicsPanel::BeginValueEdit(int idx)
   m_editIdx = idx;
   m_editFresh = true;
   m_caretBlinkRef = NowSec();   // caret starts solid, then blinks
-  const double v = (idx == 5 && m_params.autoMakeup) ? fabs(m_avgGR) : GetSliderValue(idx);
+  const double v = (idx == 5 && m_params.autoMakeup) ? -m_avgGR : GetSliderValue(idx);
   std::snprintf(m_editBuf, sizeof(m_editBuf),
                 SLIDER_DEFS[idx].precision == 1 ? "%.1f" : "%.0f", v);
   for (char* s = m_editBuf; *s; ++s) if (*s == ',') *s = '.';  // locale comma -> '.' (we only accept '.')
@@ -1215,7 +1215,7 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
       char text[32];
       if (i == 5 && m_params.autoMakeup) {
         // Makeup: show auto-computed value
-        snprintf(text, sizeof(text), "%.1f auto", fabs(m_avgGR));
+        snprintf(text, sizeof(text), "%.1f auto", -m_avgGR);
       } else if (i == 7 && val <= -99.0) {
         snprintf(text, sizeof(text), "Off");
       } else if (i == 1 && val == 0.0) {
@@ -1413,7 +1413,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
     k.showAuto    = (i == 5 && m_params.autoMakeup);
     k.showOff     = (i == 7 && k.value <= -99.0);   // G.Thr sentinel -> "Off" readout
     k.showInf     = (i == 1 && k.value == 0.0);     // Ratio Inf:1 sentinel -> "Inf" readout
-    if (k.showAuto) { k.value = fabs(m_avgGR); targetN = norm(k.value); }
+    if (k.showAuto) { k.value = -m_avgGR; targetN = norm(k.value); }  // signed: trim in Up
 
     // Value-ease (motion pass): the arc + indicator glide ~120ms to a value set by
     // wheel/type/reset; a drag (or active edit) on THIS knob is direct (no lag). Change
