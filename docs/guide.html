@@ -198,6 +198,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="nav-group">
     <div class="nav-group-title">Features</div>
     <a href="#spectral" class="nav-link">Spectral View</a>
+    <a href="#hard-limiter" class="nav-link">Hard Limiter</a>
     <a href="#multi-item" class="nav-link">Multi-Item View</a>
     <a href="#metering" class="nav-link">Metering</a>
     <a href="#minimap" class="nav-link">Minimap</a>
@@ -884,6 +885,36 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <div class="warning">
   <strong>Standalone only (v1)</strong>
   Spectral Repair works in Standalone mode. For a REAPER item, edit a saved copy and use Replace Source in REAPER Timeline - direct ITEM-mode repair is a planned follow-up. Healing v1 works horizontally (across time); vertical and pattern modes are follow-ups too.
+</div>
+
+<h2 id="hard-limiter">Hard Limiter (True Peak)</h2>
+<div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
+
+<p>A transparent lookahead brickwall limiter for final asset loudness - push a sound effect or a mixed file into a hard ceiling that is guaranteed on <strong>true peaks</strong> (inter-sample peaks measured BS.1770-style), not just sample values. Game platforms commonly require assets to stay at or below <strong>-1 dBTP</strong>; this is the tool for that last step.</p>
+
+<p>Open it in Standalone mode via right-click &gt; <strong>Process &gt; Hard Limiter...</strong> The panel gives you:</p>
+
+<ul>
+  <li><strong>Gain</strong> (0 to +24 dB) - how hard you push into the ceiling.</li>
+  <li><strong>Ceiling</strong> (-12 to 0) - the output limit, in dBTP with True Peak on, dBFS with it off.</li>
+  <li><strong>Attack</strong> (0.1-30 ms) - the lookahead/smoothing window. Longer = softer, more transparent; shorter = tighter, louder.</li>
+  <li><strong>Hold</strong> (0-50 ms) and <strong>Release</strong> (10-1000 ms) - how the gain recovers after a peak. Long release = smoothest, short = loudest.</li>
+  <li><strong>TRUE PEAK</strong> - on (default) limits inter-sample peaks; off limits plain sample peaks.</li>
+  <li><strong>LINK</strong> - on (default) applies one shared gain to all channels (keeps the stereo image); off limits each channel independently (hidden for mono files).</li>
+</ul>
+
+<p>While the panel is open, a red band along the top of the waveform previews the <strong>gain reduction over time</strong> (deeper = more limiting; full band depth = 12 dB), and the readouts show the input peak, the predicted output peak and the maximum reduction. The preview recomputes as you turn knobs. Knobs work like the Dynamics panel: drag vertically, scroll to nudge (Cmd = fine), double-click to type a value, Cmd/Ctrl-click to reset.</p>
+
+<p>The preset box holds four starting points: <strong>Game Asset -1 dBTP</strong> (the defaults), <strong>Master -0.3 dBTP</strong>, <strong>Brickwall 0 dBFS</strong> (sample-peak mode) and <strong>Loud + Proud</strong> (+8 dB push). <strong>Apply</strong> is a destructive edit with full undo: whole file, or just the time selection (with short handoff ramps at the selection edges). The toast reports the achieved output peak and the maximum gain reduction.</p>
+
+<div class="tip">
+  <strong>Zero overshoot by design</strong>
+  The limiter detects peaks on an oversampled grid finer than the BS.1770-4 meter standard and then re-measures its own output, so files it writes read at or below the ceiling on compliance meters (ASWG-R001 style QC included).
+</div>
+
+<div class="warning">
+  <strong>Standalone only (v1)</strong>
+  The Hard Limiter edits the audio loaded in Standalone mode. For a REAPER item, edit a saved copy and use Replace Source in REAPER Timeline - direct ITEM-mode apply is a planned follow-up.
 </div>
 
 <h2 id="multi-item">Multi-Item View</h2>

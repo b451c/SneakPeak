@@ -111,6 +111,21 @@ void SneakPeak::ShowDynamicsPresetMenu()
 }
 
 
+// Limiter factory-preset dropdown (v2.4.0 INC-L1) - anchored under the panel's
+// preset box like the dynamics preset menu; 4 factory presets, no user presets.
+void SneakPeak::ShowLimiterPresetMenu()
+{
+  HMENU presetMenu = CreatePopupMenu();
+  for (int i = 0; i < kLimPresetCount; i++)
+    MenuAppend(presetMenu, MF_STRING, CM_LIM_PRESET_BASE + (unsigned)i,
+               g_limiterPresets[i].name);
+  RECT pbr = m_limiterPanel.GetPresetButtonRect(m_waveformRect);
+  POINT pt = { pbr.left, pbr.bottom + 2 };
+  ClientToScreen(m_hwnd, &pt);
+  TrackPopupMenu(presetMenu, TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
+  DestroyMenu(presetMenu);
+}
+
 void SneakPeak::OnRightClick(int x, int y)
 {
   // Right-click on envelope point → shape selection menu
@@ -240,6 +255,12 @@ void SneakPeak::OnRightClick(int x, int y)
   // Destructive
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_REVERSE, "Reverse");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_DC_REMOVE, "DC Offset Remove");
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  // True-peak hard limiter (v2.4.0 INC-L1): standalone destructive, premium
+  // panel. Grayed (not hidden) outside standalone mode for discoverability.
+  MenuAppend(procMenu, (hasItem && isStandalone) ? MF_STRING : MF_GRAYED,
+             CM_APPLY_LIMITER, "Hard Limiter...");
+#endif
   MenuAppendSeparator(procMenu);
 
   // Spectral Repair (v2.3.0 INC-5): standalone destructive v1, shown only with
@@ -722,6 +743,15 @@ void SneakPeak::OnContextMenuCommand(int id)
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     }
+    case CM_APPLY_LIMITER: {
+      if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) break;
+      RestoreLimiterParams();   // lim_* session defaults (first run -> preset 0)
+      m_limiterPanel.SetMono(m_waveform.GetNumChannels() < 2);
+      m_limiterPanel.Show();
+      MarkLimiterParamsChanged();   // kick the first preview compute
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    }
     case CM_METER_PEAK:
       m_levels.SetMode(MeterMode::PEAK);
       if (g_SetExtState) g_SetExtState("SneakPeak", "meter_mode", "peak", true);
@@ -860,6 +890,12 @@ void SneakPeak::OnContextMenuCommand(int id)
         MarkUiScaleUserSet();
       } else if (id >= CM_SPECTRAL_HEAL_BASE && id < CM_SPECTRAL_HEAL_BASE + kHealStrengthCount) {
         DoSpectralHeal(kHealStrengths[id - CM_SPECTRAL_HEAL_BASE]);
+      } else if (id >= CM_LIM_PRESET_BASE && id < CM_LIM_PRESET_BASE + kLimPresetCount) {
+        m_limiterPanel.ApplyPreset(id - CM_LIM_PRESET_BASE);
+        m_limiterPanel.ClearParamsChanged();
+        MarkLimiterParamsChanged();   // debounced preview recompute
+        SaveLimiterParams();
+        InvalidateRect(m_hwnd, nullptr, FALSE);
       }
       if (applied) {
         // Same re-analysis + Live path as a knob drag, so the curve/GR update at once.

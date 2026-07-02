@@ -162,6 +162,7 @@ void SneakPeak::StandaloneFinishRestore(const char* what)
   m_waveform.Invalidate();
   m_minimap.Invalidate();
   m_spectral.ClearSpectrum();
+  InvalidateLimiterPreview();       // the GR preview renders the buffer we just swapped
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_dirty = true;
   m_previewCacheDirty = true;
@@ -1500,6 +1501,66 @@ void SneakPeak::DoSpectralHeal(double strength)
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
+// v2.4.0 INC-L1: destructive true-peak hard limit on the standalone buffer.
+// Whole file -> full undo snapshot; selection -> range snapshot + 20 ms
+// envelope handoff ramps at the edges (engine edgeRampFrames). Mirrors the
+// DoSpectralHeal pattern (guards, undo-depth pop on no-op, toast, invalidate).
+void SneakPeak::DoApplyLimiter()
+{
+  if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
+
+  auto& data = m_waveform.GetAudioData();
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  const int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+  const LimiterParams p = m_limiterPanel.GetParams();
+
+  int s0 = 0, s1 = frames, ramp = 0;
+  if (m_waveform.HasSelection()) {
+    WaveformSelection sel = m_waveform.GetSelection();
+    const double a = std::min(sel.startTime, sel.endTime);
+    const double b = std::max(sel.startTime, sel.endTime);
+    s0 = std::max(0, std::min(frames, (int)(a * sr + 0.5)));
+    s1 = std::max(s0, std::min(frames, (int)(b * sr + 0.5)));
+    if (s1 - s0 < 64) {
+      ShowToast("Selection too short to limit");
+      return;
+    }
+    ramp = (int)(0.020 * sr + 0.5);   // 20 ms handoff into untouched audio
+  }
+
+  const size_t undoDepth = m_standaloneUndoStack.size();
+  if (s0 == 0 && s1 == frames) StandaloneUndoSave();
+  else StandaloneUndoSaveRange(s0, s1 - s0);
+
+  LimiterResult r = LimiterProcess(data.data() + (size_t)s0 * (size_t)nch,
+                                   s1 - s0, nch, sr, p, ramp);
+  // gain 0 + zero GR = bit-identical passthrough: drop our undo slot, honest toast.
+  const bool noop = r.ok && p.gainDb == 0.0 && r.maxGainReductionDb == 0.0;
+  if (!r.ok || noop) {
+    if (m_standaloneUndoStack.size() > undoDepth)
+      m_standaloneUndoStack.pop_back();
+    m_hasUndo = !m_standaloneUndoStack.empty();
+    ShowToast(!r.ok ? "Limiter failed: empty buffer"
+                    : "Nothing above the ceiling - audio unchanged");
+    return;
+  }
+
+  char buf[96];
+  snprintf(buf, sizeof(buf), "Limited: out %.1f %s, max GR %.1f dB",
+           r.outputPeakDb, p.truePeak ? "dBTP" : "dBFS", r.maxGainReductionDb);
+  ShowToast(buf);
+
+  m_dirty = true;
+  UpdateTitle();
+  m_waveform.Invalidate();
+  m_minimap.Invalidate();
+  m_spectral.ClearSpectrum();
+  InvalidateLimiterPreview();   // recompute the GR band for the limited buffer
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
 void SneakPeak::DoRepairClicks()
 {
   if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
@@ -1817,6 +1878,73 @@ void SneakPeak::SaveDynamicsGeom()
   g_SetExtState("SneakPeak", "dyn_off_x", buf, true);
   snprintf(buf, sizeof(buf), "%d", m_dynamicsPanel.GetPanelOffsetY());
   g_SetExtState("SneakPeak", "dyn_off_y", buf, true);
+}
+
+// --- Hard Limiter session params + geometry (v2.4.0 INC-L1) -----------------
+// Same locale-safe encoding as the dynamics geometry: doubles stored x1000 as
+// integers, bools as "1"/"0". Saved on drag release / pill click / editor
+// commit / preset apply / panel close - session defaults, not per-item state.
+
+void SneakPeak::SaveLimiterParams()
+{
+  if (!g_SetExtState) return;
+  const LimiterParams& p = m_limiterPanel.GetParams();
+  char buf[16];
+  auto wr = [&](const char* key, double v) {
+    snprintf(buf, sizeof(buf), "%d", (int)std::lround(v * 1000.0));
+    g_SetExtState("SneakPeak", key, buf, true);
+  };
+  wr("lim_gain", p.gainDb);
+  wr("lim_ceiling", p.ceilingDb);
+  wr("lim_attack", p.attackMs);
+  wr("lim_hold", p.holdMs);
+  wr("lim_release", p.releaseMs);
+  g_SetExtState("SneakPeak", "lim_truepeak", p.truePeak ? "1" : "0", true);
+  g_SetExtState("SneakPeak", "lim_link", p.link ? "1" : "0", true);
+}
+
+void SneakPeak::RestoreLimiterParams()
+{
+  // Panel offsets restore regardless; params fall back to preset 0 on first run.
+  if (g_GetExtState) {
+    const char* ox = g_GetExtState("SneakPeak", "lim_off_x");
+    const char* oy = g_GetExtState("SneakPeak", "lim_off_y");
+    m_limiterPanel.SetPanelOffset(ox && ox[0] ? atoi(ox) : 0,
+                                  oy && oy[0] ? atoi(oy) : 0);
+    const char* g = g_GetExtState("SneakPeak", "lim_gain");
+    if (g && g[0]) {
+      auto rd = [&](const char* key, double def) {
+        const char* v = g_GetExtState("SneakPeak", key);
+        return (v && v[0]) ? (double)atoi(v) / 1000.0 : def;
+      };
+      auto rb = [&](const char* key, bool def) {
+        const char* v = g_GetExtState("SneakPeak", key);
+        return (v && v[0]) ? (v[0] != '0') : def;
+      };
+      LimiterParams p;
+      p.gainDb = rd("lim_gain", 0.0);
+      p.ceilingDb = rd("lim_ceiling", -1.0);
+      p.attackMs = rd("lim_attack", 5.0);
+      p.holdMs = rd("lim_hold", 10.0);
+      p.releaseMs = rd("lim_release", 60.0);
+      p.truePeak = rb("lim_truepeak", true);
+      p.link = rb("lim_link", true);
+      m_limiterPanel.SetParams(p);   // clamps each field to its knob range
+      return;
+    }
+  }
+  m_limiterPanel.ApplyPreset(0);     // first run: "Game Asset -1 dBTP"
+  m_limiterPanel.ClearParamsChanged();
+}
+
+void SneakPeak::SaveLimiterGeom()
+{
+  if (!g_SetExtState) return;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", m_limiterPanel.GetPanelOffsetX());
+  g_SetExtState("SneakPeak", "lim_off_x", buf, true);
+  snprintf(buf, sizeof(buf), "%d", m_limiterPanel.GetPanelOffsetY());
+  g_SetExtState("SneakPeak", "lim_off_y", buf, true);
 }
 
 // --- User dynamics presets (global, persisted in ExtState) ------------------

@@ -47,6 +47,12 @@ void SneakPeak::OnDoubleClick(int x, int y)
       InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
+  // Limiter panel: same consume-always contract as the dynamics panel above.
+  if (m_limiterPanel.IsVisible() && m_limiterPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_limiterPanel.OnDoubleClick(x, y, m_waveformRect))
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
 #endif
 
   // Double-click on waveform area
@@ -120,6 +126,16 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   if (m_dynamicsPanel.IsEditingValue()) {
     if (m_dynamicsPanel.CommitValueEdit())
       ReanalyzeDynamicsAfterEdit();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+  // Same commit-on-any-click contract for the limiter panel's inline editor.
+  if (m_limiterPanel.IsEditingValue()) {
+    if (m_limiterPanel.CommitValueEdit()) {
+      m_limiterPanel.ClearParamsChanged();
+      MarkLimiterParamsChanged();
+      SaveLimiterParams();
+    }
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
@@ -368,6 +384,27 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         bool skip = m_workingSet.active || m_waveform.IsTimelineOrMultiItem() || hasSelPreview;
         m_gainPanel.SetSkipBatchWrite(skip);
       }
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    return;
+  }
+
+  // Hard Limiter panel interaction (v2.4.0 INC-L1)
+  if (m_limiterPanel.IsVisible() && m_limiterPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_limiterPanel.OnMouseDown(x, y, m_waveformRect)) {
+      if (m_limiterPanel.IsDragging())
+        SetCapture(m_hwnd);
+      if (m_limiterPanel.ApplyRequested())
+        DoApplyLimiter();
+      if (m_limiterPanel.PresetMenuRequested())
+        ShowLimiterPresetMenu();
+      if (m_limiterPanel.ParamsChanged()) {   // pill toggle / Cmd-reset
+        m_limiterPanel.ClearParamsChanged();
+        MarkLimiterParamsChanged();
+        SaveLimiterParams();
+      }
+      if (!m_limiterPanel.IsVisible())        // closed via X: keep session defaults
+        SaveLimiterParams();
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
     return;
@@ -1170,6 +1207,17 @@ void SneakPeak::OnMouseUp(int x, int y)
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
+  if (m_limiterPanel.IsDragging()) {
+    m_limiterPanel.OnMouseUp();
+    if (m_limiterPanel.GeomChanged()) {   // panel drag: persist offsets
+      m_limiterPanel.ClearGeomChanged();
+      SaveLimiterGeom();
+    }
+    SaveLimiterParams();                  // knob drags persist session defaults
+    ReleaseCapture();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
   if (m_dynamicsPanel.IsDragging()) {
     m_dynamicsPanel.OnMouseUp();
     // Persist panel size/position if a resize or panel-drag changed it.
@@ -1947,6 +1995,15 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
+  if (m_limiterPanel.IsDragging()) {
+    m_limiterPanel.OnMouseMove(x, y, m_waveformRect);
+    if (m_limiterPanel.ParamsChanged()) {   // knob drag: debounce the preview
+      m_limiterPanel.ClearParamsChanged();
+      MarkLimiterParamsChanged();
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+
   if (m_dynamicsPanel.IsDragging()) {
     m_dynamicsPanel.OnMouseMove(x, y, m_waveformRect);
     // Real-time reanalysis on slider drag
@@ -2124,6 +2181,8 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     InvalidateRect(m_hwnd, nullptr, FALSE);
   if (m_settingsPanel.IsVisible() && m_settingsPanel.OnHover(x, y, m_waveformRect))
     InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_limiterPanel.IsVisible() && m_limiterPanel.OnHover(x, y, m_waveformRect))
+    InvalidateRect(m_hwnd, nullptr, FALSE);
 #endif
 
   m_lastMouseX = x;
@@ -2145,6 +2204,17 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   // zoom/pan while the user aims at the panel's controls.
   if (m_settingsPanel.IsVisible() && m_settingsPanel.HitTest(x, y, m_waveformRect))
     return;
+  // Scroll over a limiter knob = nudge its value; consume the wheel anywhere
+  // over the panel so the waveform underneath does not zoom/pan.
+  if (m_limiterPanel.IsVisible() && m_limiterPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_limiterPanel.OnMouseWheel(x, y, steps, cmd, m_waveformRect) &&
+        m_limiterPanel.ParamsChanged()) {
+      m_limiterPanel.ClearParamsChanged();
+      MarkLimiterParamsChanged();
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
   // Scroll over a dynamics knob = nudge its value (no need to grab tiny targets;
   // directly mitigates the DPI/scaling complaint). Consume the wheel whenever the
   // cursor is over the panel so the waveform underneath does not zoom/pan.
@@ -2326,6 +2396,20 @@ void SneakPeak::ReanalyzeDynamicsAfterEdit()
 // Route one key (from the SWS accelerator) to the open inline value editor. A commit
 // that changes the value re-analyses like a knob change; otherwise we just repaint
 // (the editor text changed, or it closed via ESC/empty commit).
+// Route one key to the limiter panel's inline editor (SWS accelerator path).
+// A commit that changes the value debounces a preview recompute like a knob.
+void SneakPeak::HandleLimiterEditKey(WPARAM key)
+{
+  if (!m_limiterPanel.IsEditingValue()) return;
+  m_limiterPanel.OnEditKey((int)key);
+  if (m_limiterPanel.ParamsChanged()) {
+    m_limiterPanel.ClearParamsChanged();
+    MarkLimiterParamsChanged();
+    SaveLimiterParams();
+  }
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
 void SneakPeak::HandleDynamicsEditKey(WPARAM key)
 {
   if (!m_dynamicsPanel.IsEditingValue()) return;

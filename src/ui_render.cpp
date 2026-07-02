@@ -1468,6 +1468,149 @@ void UiCanvas::RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double d
 
 // --- the premium gain knob overlay (v2.2.0 Inc D) ----------------------------
 
+// --- Hard Limiter panel (v2.4.0 INC-L1) --------------------------------------
+
+// Base-coord geometry, single source for render + hit-testing. Bottom of the
+// footer MUST equal dynui::kLimPanelH (the kSettingsH-style keep-in-sync rule).
+LimiterLayout ComputeLimiterLayout(double w, double h)
+{
+  (void)h;
+  LimiterLayout L;
+  const double pad = (double)dynui::kPanelPad;
+  L.header   = { 0, 0, w, (double)dynui::kHeaderH };
+  const double hMid = L.header.h * 0.5;
+  L.closeBtn = { w - pad - 18.0, hMid - 9.0, 18.0, 18.0 };
+  L.preset   = { pad + 120.0, hMid - 11.0, 110.0, 22.0 };
+
+  // Knob grid: 3 cols x 2 rows; the free cell (2,1) hosts the TP/LINK pills.
+  const double colGap = 8.0;
+  const double cellW = (w - 2.0 * pad - 2.0 * colGap) / 3.0;
+  const double cellH = 52.0;
+  const double gridTop = L.header.h + 10.0;
+  auto cell = [&](int c, int r) -> URect {
+    return { pad + (double)c * (cellW + colGap), gridTop + (double)r * cellH,
+             cellW, cellH };
+  };
+  L.knob[0] = cell(0, 0);   // Gain
+  L.knob[1] = cell(1, 0);   // Ceiling
+  L.knob[2] = cell(2, 0);   // Attack
+  L.knob[3] = cell(0, 1);   // Hold
+  L.knob[4] = cell(1, 1);   // Release
+  {
+    const URect c = cell(2, 1);
+    L.tpPill   = { c.x, c.y + 4.0, c.w, 20.0 };
+    L.linkPill = { c.x, c.y + 28.0, c.w, 20.0 };
+  }
+
+  const double readTop = gridTop + 2.0 * cellH + 8.0;
+  L.readIn  = { pad, readTop, cellW, 30.0 };
+  L.readOut = { pad + (cellW + colGap), readTop, cellW, 30.0 };
+  L.readGr  = { pad + 2.0 * (cellW + colGap), readTop, cellW, 30.0 };
+  L.grMeter = { pad, readTop + 34.0, w - 2.0 * pad, 12.0 };
+
+  const double footTop = L.grMeter.y + L.grMeter.h + 10.0;
+  L.footer = { 0, footTop, w, (double)dynui::kFooterH };  // bottom == kLimPanelH
+  L.apply  = { w - pad - 100.0, footTop + 9.0, 100.0, 26.0 };
+  return L;
+}
+
+void UiCanvas::RenderLimiterPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                                  const LimiterVM& vm)
+{
+  if (!hdc || w < 8 || h < 8) return;
+  if (dpr < 1.0) dpr = 1.0;
+  const int devW = (int)std::lround((double)w * dpr);
+  const int devH = (int)std::lround((double)h * dpr);
+  if (!prepareSurface(hdc, devW, devH)) return;
+  {
+    BLContext ctx;
+    if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
+    ctx.clear_all();
+    ctx.scale((double)devW / (double)dynui::kLimPanelW,
+              (double)devH / (double)dynui::kLimPanelH);
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+    const Gfx& gfx = *m_gfx;
+    const double W = (double)dynui::kLimPanelW, H = (double)dynui::kLimPanelH;
+
+    // panel slab: same treatment as the other premium panels
+    {
+      BLGradient bg(BLLinearGradientValues(0, 0, 0, H));
+      bg.add_stop(0.0, col(dynui::kSurface1));
+      bg.add_stop(1.0, col(dynui::kSurface0));
+      ctx.fill_round_rect(BLRoundRect(0, 0, W, H, dynui::kRadiusPanel), bg);
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_round_rect(BLRoundRect(0.5, 0.5, W - 1, H - 1, dynui::kRadiusPanel),
+                            col(dynui::kHairline));
+    }
+
+    const LimiterLayout L = ComputeLimiterLayout(W, H);
+
+    // header: title + preset box + close
+    if (gfx.fontsReady) {
+      ctx.fill_utf8_text(BLPoint(dynui::kPanelPad, L.header.h * 0.5 + 5.0), gfx.fValue,
+                         "HARD LIMITER", SIZE_MAX, col(dynui::kInkPrimary));
+      FillURound(ctx, L.preset, dynui::kRadiusCtrl,
+                 vm.hover == LIM_HIT_PRESET ? dynui::kSurface3 : dynui::kSurface2);
+      ctx.save();
+      ctx.clip_to_rect(BLRect(L.preset.x, L.preset.y, L.preset.w - 4.0, L.preset.h));
+      ctx.fill_utf8_text(BLPoint(L.preset.x + 8.0, L.preset.y + L.preset.h * 0.5 + 4.0),
+                         gfx.fLabel, vm.presetName ? vm.presetName : "Preset", SIZE_MAX,
+                         col(dynui::kInkSecondary));
+      ctx.restore();
+      TextCentered(ctx, gfx.fValue, L.closeBtn, "x",
+                   vm.hover == LIM_HIT_CLOSE ? dynui::kInkPrimary : dynui::kInkMuted);
+    }
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_line(BLLine(0, L.header.h, W, L.header.h), col(dynui::kHairline));
+
+    // knobs (shared DrawKnob: arc + indicator + label/value column + editor box)
+    for (int i = 0; i < kLimNumParams; ++i)
+      DrawKnob(ctx, gfx, L.knob[i], vm.knobs[i]);
+
+    // TRUE PEAK / LINK pills (LINK hidden for mono)
+    DrawTogglePill(ctx, gfx, L.tpPill, "TRUE PEAK", vm.truePeak, dynui::kAmber,
+                   false, 0.0);
+    if (vm.showLink)
+      DrawTogglePill(ctx, gfx, L.linkPill, "LINK", vm.link, dynui::kAmber,
+                     false, 0.0);
+
+    // readouts: caption + value (input / output peak, max GR from the preview)
+    if (gfx.fontsReady) {
+      auto readout = [&](const URect& r, const char* cap, const char* val,
+                         uint32_t valCol) {
+        ctx.fill_utf8_text(BLPoint(r.x, r.y + 10.0), gfx.fLabel, cap, SIZE_MAX,
+                           col(dynui::kInkSecondary));
+        ctx.fill_utf8_text(BLPoint(r.x, r.y + 27.0), gfx.fValue,
+                           val ? val : "-", SIZE_MAX, col(valCol));
+      };
+      readout(L.readIn, "IN", vm.inText, dynui::kInkPrimary);
+      readout(L.readOut, "OUT", vm.outText, dynui::kInkPrimary);
+      readout(L.readGr, "MAX GR", vm.grText, dynui::kGrRed);
+    }
+
+    // horizontal max-GR strip (red = reduction, per the colour discipline)
+    FillURound(ctx, L.grMeter, 4.0, dynui::kSurface2);
+    const double fillW = std::clamp(vm.grNorm, 0.0, 1.0) * L.grMeter.w;
+    if (fillW > 0.5) {
+      BLGradient g(BLLinearGradientValues(L.grMeter.x, 0,
+                                          L.grMeter.x + L.grMeter.w, 0));
+      g.add_stop(0.0, col(dynui::kGrRed));
+      g.add_stop(1.0, colA(dynui::kGrRed, 130));
+      ctx.fill_round_rect(BLRoundRect(L.grMeter.x, L.grMeter.y, fillW,
+                                      L.grMeter.h, 4.0), g);
+    }
+
+    // footer + APPLY
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_line(BLLine(0, L.footer.y, W, L.footer.y), col(dynui::kHairline));
+    FillURound(ctx, L.apply, dynui::kRadiusCtrl,
+               vm.hover == LIM_HIT_APPLY ? dynui::kAmberGlow : dynui::kAmber);
+    if (gfx.fontsReady)
+      TextCentered(ctx, gfx.fValue, L.apply, "Apply", dynui::kSurface0);
+  }
+  presentSurface(hdc, x, y, w, h, devW, devH);
+}
+
 void UiCanvas::RenderGainPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                                const GainVM& vm)
 {

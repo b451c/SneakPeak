@@ -102,6 +102,7 @@ void SneakPeak::RestoreStandaloneState(int idx)
   m_spectral.ClearSpectrum();
   m_spectral.Invalidate();
   m_minimap.Invalidate();
+  InvalidateLimiterPreview();   // the GR preview belongs to the previous buffer
 
   if (m_hwnd) {
     const char* fname = FileNameFromPath(fs.filePath.c_str());
@@ -368,6 +369,7 @@ void SneakPeak::FinishStandaloneLoad()
   m_spectral.ClearSpectrum();
   m_spectral.Invalidate();
   m_minimap.Invalidate();
+  InvalidateLimiterPreview();   // the GR preview belongs to the previous buffer
 
   InstallStandaloneTab(spath);
   if (m_hwnd) {

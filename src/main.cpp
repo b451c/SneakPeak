@@ -310,6 +310,10 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
       g_sneakPeak->HandleDynamicsEditKey(msg->wParam);
       return 1;
     }
+    if (g_sneakPeak->IsLimiterEditingValue()) {
+      g_sneakPeak->HandleLimiterEditKey(msg->wParam);
+      return 1;
+    }
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
     WPARAM k = msg->wParam;
     bool handled = false;

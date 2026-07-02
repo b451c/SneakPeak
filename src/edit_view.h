@@ -15,7 +15,11 @@
 #include "dynamics_engine.h"
 #include "dynamics_panel.h"
 #include "settings_panel.h"
+#include "limiter_panel.h"
 #include "ui_render.h"
+#include <atomic>
+#include <mutex>
+#include <thread>
 #include <vector>
 #include <string>
 
@@ -160,6 +164,10 @@ enum ContextMenuID {
   CM_REPAIR_CLICKS,                                    // AR click repair on the time selection
   CM_REDO,                                             // Ctrl+Shift+Z / Ctrl+Y
   CM_ENV_RESET_TENSION,                                // T2-1: reset bezier curvature to 0
+  // Hard Limiter (v2.4.0 INC-L1) - standalone destructive, premium panel.
+  CM_APPLY_LIMITER,                                    // open the HARD LIMITER panel
+  CM_LIM_PRESET_BASE,                                  // + kLimPresetCount factory presets
+  CM_LIM_PRESET_LAST = CM_LIM_PRESET_BASE + 4,
   CM_LAST // sentinel -- keep last
 };
 
@@ -200,6 +208,8 @@ public:
   // an editor is open, so typed digits/Enter/ESC never trigger global shortcuts.
   bool IsDynamicsEditingValue() const { return m_dynamicsPanel.IsEditingValue(); }
   void HandleDynamicsEditKey(WPARAM key);
+  bool IsLimiterEditingValue() const { return m_limiterPanel.IsEditingValue(); }
+  void HandleLimiterEditKey(WPARAM key);
   bool HasFocus() const { return m_hasFocus; }
   bool IsDocked() const { return m_isDocked; }
 
@@ -290,6 +300,7 @@ private:
   void DoNormalizeLUFS(double targetLufs = -14.0);
   void DoSpectralHeal(double strength);  // v2.3.0 INC-5: STFT heal of time x freq selection
   void DoRepairClicks();                 // v2.3.0 INC-5: AR click repair on time selection
+  void DoApplyLimiter();                 // v2.4.0 INC-L1: true-peak hard limiter apply
 
   // Navigation
   void NavigateToMarker(bool forward);
@@ -395,6 +406,7 @@ private:
   DynamicsEngine m_dynamics;
   DynamicsPanel m_dynamicsPanel;
   SettingsPanel m_settingsPanel;  // premium Settings overlay (UI scale; migrated prefs next)
+  LimiterPanel m_limiterPanel;    // premium HARD LIMITER overlay (v2.4.0 INC-L1)
   RECT m_gearRect = {};           // settings gear in the mode bar (premium build only)
   bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;
@@ -558,6 +570,35 @@ private:
   // User dynamics presets (stored globally in ExtState, shown in the Preset dropdown).
   static constexpr int MAX_USER_PRESETS = 32;
   void ShowDynamicsPresetMenu();                 // build + track the Preset dropdown (factory + user)
+
+  // --- Hard Limiter host glue (v2.4.0 INC-L1) --------------------------------
+  // Debounced preview worker: computes the limiter envelope on a COPY of the
+  // standalone buffer (spectral_view threading pattern; generation counter
+  // instead of a cancel flag), decimates it to min-gain buckets for the
+  // waveform GR band, and measures the in/out peaks for the panel readouts.
+  void ShowLimiterPresetMenu();          // 4 factory presets under the preset box
+  void SaveLimiterParams();              // lim_* ExtState session defaults
+  void RestoreLimiterParams();           // (first run -> preset 0) + panel offsets
+  void SaveLimiterGeom();                // lim_off_x / lim_off_y
+  void DrawLimiterOverlay(HDC hdc);      // top-anchored GR band + trace (GDI pass)
+  void MarkLimiterParamsChanged();       // debounce tick + gen bump + pending "..."
+  void InvalidateLimiterPreview();       // buffer changed (apply/undo/load)
+  void LimiterPreviewTick();             // OnTimer: debounce launch + finish pump
+  void StartLimiterPreview();
+  void LimiterPreviewThread(std::vector<double> audio, int frames, int nch,
+                            int sr, LimiterParams p, uint64_t gen);
+  std::thread m_limPrevThread;
+  std::atomic<bool> m_limPrevComputing{ false };
+  std::atomic<bool> m_limPrevFinished{ false };  // one-shot: pump repaints + stats
+  std::atomic<uint64_t> m_limPrevGen{ 1 };       // bumped on param/buffer change
+  std::mutex m_limPrevMutex;                     // guards the result block below
+  std::vector<float> m_limPrevEnvMin;            // decimated min gain per bucket
+  int m_limPrevFrames = 0;                       // buffer identity of the result
+  LimiterResult m_limPrevResult;
+  bool m_limPrevValid = false;
+  bool m_limPrevDirty = false;                   // params/buffer changed since compute
+  DWORD m_limPrevChangeTick = 0;                 // debounce reference (~150 ms)
+
   std::vector<DynUserPreset> LoadUserPresets();  // parse user presets from ExtState
   void SaveUserPresets(const std::vector<DynUserPreset>& list);
   void AddUserPreset();                          // prompt for a name, save current panel params

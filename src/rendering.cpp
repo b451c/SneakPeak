@@ -47,6 +47,8 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
   if (!hdc) return;
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   m_dynamicsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
+  // Premium HARD LIMITER panel (v2.4.0 INC-L1) - same layer as dynamics.
+  m_limiterPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
   // Premium gain knob (above dynamics, below settings/toast per the z-order spec).
   // Same HasItem gate as the GDI path had in OnPaint.
   if (m_waveform.HasItem())
@@ -102,6 +104,8 @@ void SneakPeak::OnPaint(HDC hdc)
         (!m_dynamicsPanel.IsVisible() || m_dynamicsPanel.GetShowDyn());
     if (showDyn)
       DrawDynamicsCurve(hdc);
+    // Limiter GR preview band (v2.4.0 INC-L1; gates itself on panel + preview)
+    DrawLimiterOverlay(hdc);
     // T2-1: live tension readout beside the cursor during a curvature drag
     if (m_envTensionDragging) {
       char tbuf[16];
@@ -867,6 +871,80 @@ void SneakPeak::UpdateSoloState()
   for (auto* tr : tracks) {
     int* pSolo = (int*)g_GetSetMediaTrackInfo(tr, "I_SOLO", nullptr);
     if (pSolo && *pSolo != 0) { m_trackSoloed = true; break; }
+  }
+}
+
+// v2.4.0 INC-L1: limiter gain-reduction preview - a top-anchored red band
+// (Pro-L-style GR-over-time) fed by the decimated preview envelope, plus a
+// 1 px trace at its lower edge. GDI has no alpha, so the fill skips alternate
+// columns like the dynamics GR shading. Scale: 12 dB of reduction = full band.
+void SneakPeak::DrawLimiterOverlay(HDC hdc)
+{
+  if (!m_limiterPanel.IsVisible() || !m_waveform.IsStandaloneMode() ||
+      !m_waveform.HasItem())
+    return;
+  std::lock_guard<std::mutex> lock(m_limPrevMutex);
+  if (!m_limPrevValid || m_limPrevEnvMin.empty()) return;
+  // Stale-identity guard: the preview belongs to the buffer it was computed
+  // from; a tab switch / load with a different length hides it until the
+  // recompute lands (same-length swaps are covered by InvalidateLimiterPreview).
+  if (m_limPrevFrames != m_waveform.GetAudioSampleCount()) return;
+
+  RECT wr = m_waveform.GetRect();
+  const int waveL = wr.left;
+  const int waveR = wr.right - SP(DB_SCALE_WIDTH);
+  const int waveW = waveR - waveL;
+  if (waveW <= 0) return;
+
+  const int sr = m_waveform.GetSampleRate();
+  if (sr <= 0) return;
+  const double viewStart = m_waveform.GetViewStart();
+  const double viewDur = m_waveform.GetViewDuration();
+  if (viewDur <= 0.0) return;
+  const int nb = (int)m_limPrevEnvMin.size();
+  const int bandMax = SP(48);
+  const int bandTop = wr.top + 1;
+
+  // Per-column reduction depth (0 = no limiting under this pixel).
+  auto depthAt = [&](int px) -> int {
+    const double t = viewStart + (double)(px - waveL) / (double)waveW * viewDur;
+    const long long frame = (long long)(t * (double)sr);
+    if (frame < 0 || frame >= (long long)m_limPrevFrames) return 0;
+    int b = (int)(frame * nb / m_limPrevFrames);
+    if (b >= nb) b = nb - 1;
+    const double env = (double)m_limPrevEnvMin[(size_t)b];
+    if (env >= 1.0 || env <= 0.0) return 0;
+    const double grDb = -20.0 * log10(env);
+    if (grDb <= 0.05) return 0;
+    return std::min(bandMax, (int)(grDb / 12.0 * (double)bandMax) + 1);
+  };
+
+  {
+    OwnedPen fillPen(PS_SOLID, 1, RGB(140, 40, 44));   // dim GR red (band fill)
+    DCPenScope scope(hdc, fillPen);
+    for (int px = waveL; px <= waveR; px += 2) {       // alternate columns = fake alpha
+      const int depth = depthAt(px);
+      if (depth <= 0) continue;
+      MoveToEx(hdc, px, bandTop, nullptr);
+      LineTo(hdc, px, bandTop + depth);
+    }
+  }
+  {
+    OwnedPen tracePen(PS_SOLID, 1, RGB(229, 72, 77));  // kGrRed (trace line)
+    DCPenScope scope(hdc, tracePen);
+    int prevY = bandTop;
+    bool prevHot = false;
+    for (int px = waveL; px <= waveR; ++px) {
+      const int depth = depthAt(px);
+      const int ty = bandTop + depth;
+      const bool hot = depth > 0;
+      if (px > waveL && (hot || prevHot)) {
+        MoveToEx(hdc, px - 1, prevY, nullptr);
+        LineTo(hdc, px, ty);
+      }
+      prevY = ty;
+      prevHot = hot;
+    }
   }
 }
 

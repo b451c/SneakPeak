@@ -138,6 +138,48 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab = 0, bool compact =
 void ComputeCurveHandles(const URect& plotWell, const DynCurveParams& p, int activeTab,
                          URect out[2]);
 
+// --- Hard Limiter panel (premium overlay, v2.4.0 INC-L1) ---------------------
+
+constexpr int kLimNumParams = 5;   // Gain, Ceiling, Attack, Hold, Release
+
+// Hit ids shared by LimiterPanel hit-testing and the renderer's hover styling.
+enum LimiterHit {
+  LIM_HIT_NONE   = -1,
+  LIM_HIT_CLOSE  = 0,
+  LIM_HIT_PRESET = 1,
+  LIM_HIT_APPLY  = 2,
+  LIM_HIT_TP     = 3,
+  LIM_HIT_LINK   = 4,
+  LIM_HIT_KNOB0  = 5,   // + knob index (0..kLimNumParams-1)
+};
+
+// View-model for RenderLimiterPanel - pure data, built by LimiterPanel each
+// paint. Readout strings point into panel-owned buffers (valid for the paint).
+struct LimiterVM {
+  KnobVM knobs[kLimNumParams];
+  const char* presetName = nullptr;  // null -> "Preset"
+  bool truePeak = true;
+  bool link = true;
+  bool showLink = true;              // hidden for mono files
+  double grNorm = 0.0;               // GR meter fill 0..1 (maxGR / 24 dB)
+  const char* inText = nullptr;      // input / output peak + max-GR readouts
+  const char* outText = nullptr;
+  const char* grText = nullptr;
+  int hover = LIM_HIT_NONE;
+};
+
+// Computed geometry in base kLimPanelW x kLimPanelH coords - the single source
+// for BOTH the renderer and LimiterPanel hit-testing (draw == hit by construction).
+struct LimiterLayout {
+  URect header, closeBtn, preset;
+  URect knob[kLimNumParams];
+  URect tpPill, linkPill;
+  URect readIn, readOut, readGr;   // caption + value readout cells
+  URect grMeter;                   // horizontal max-GR strip
+  URect footer, apply;
+};
+LimiterLayout ComputeLimiterLayout(double w, double h);
+
 // --- Settings panel (premium Settings overlay, v2.2.0) -----------------------
 
 // Hit ids shared by the panel's hit-testing and the renderer's hover styling, so
@@ -263,6 +305,11 @@ public:
   // density presets + fit-to-window. Same surface/blit flow as RenderPanel.
   void RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                            const SettingsVM& vm);
+
+  // Render the premium Hard Limiter panel (v2.4.0 INC-L1): knob grid + TP/LINK
+  // pills + peak/GR readouts + GR strip + Apply. Same flow as RenderPanel.
+  void RenderLimiterPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                          const LimiterVM& vm);
 
   // Render the premium gain knob overlay (v2.2.0 Inc D): 110x32 base, knob +
   // active arc + dB readout + close. Crisp on HiDPI like the other panels.

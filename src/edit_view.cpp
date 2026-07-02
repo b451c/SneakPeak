@@ -762,6 +762,9 @@ void SneakPeak::OnTimer()
   if (m_dynamicsPanel.WantsAnimationFrame())
     InvalidateRect(m_hwnd, nullptr, FALSE);
 
+  // Limiter preview pump (v2.4.0 INC-L1): debounced worker launch + finish repaint.
+  LimiterPreviewTick();
+
   // Incremental standalone load (STA-1): one ~20 ms decode slice per tick.
   StepStandaloneLoad();
 
@@ -1518,6 +1521,12 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_DESTROY:
       FlushFadeWheelUndo();   // never leak an open undo block past the window
+      // Limiter preview worker: pure DSP on its own copy (no REAPER calls), so a
+      // plain join is safe; worst case it finishes its current pass first.
+      if (m_limPrevThread.joinable()) {
+        m_limPrevGen++;       // any result it produces is discarded as stale
+        m_limPrevThread.join();
+      }
       KillTimer(m_hwnd, TIMER_REFRESH);
       return 0;
   }
@@ -1772,3 +1781,130 @@ void SneakPeak::OnSize(int w, int h)
 }
 
 // --- Painting ---
+
+// --- Hard Limiter preview worker (v2.4.0 INC-L1) ---------------------------
+// Spectral_view threading pattern with a generation counter instead of a
+// cancel flag: every param/buffer change bumps m_limPrevGen, the worker
+// captures the gen at launch and its result is dropped on handoff if the gen
+// moved. The worker owns a COPY of the audio (never touches the live buffer)
+// and makes no REAPER calls, so it is safe across tab switches and undo.
+
+void SneakPeak::MarkLimiterParamsChanged()
+{
+  m_limPrevDirty = true;
+  m_limPrevChangeTick = GetTickCount();
+  m_limPrevGen++;
+  m_limiterPanel.SetStatsPending(true);
+}
+
+void SneakPeak::InvalidateLimiterPreview()
+{
+  m_limPrevGen++;
+  {
+    std::lock_guard<std::mutex> lock(m_limPrevMutex);
+    m_limPrevValid = false;
+  }
+  if (m_limiterPanel.IsVisible()) {
+    m_limPrevDirty = true;
+    m_limPrevChangeTick = GetTickCount();
+    m_limiterPanel.SetStatsPending(true);
+  }
+}
+
+void SneakPeak::LimiterPreviewTick()
+{
+  // Finished worker: hand the stats to the panel + repaint the overlay once.
+  if (m_limPrevFinished.exchange(false)) {
+    {
+      std::lock_guard<std::mutex> lock(m_limPrevMutex);
+      if (m_limPrevValid)
+        m_limiterPanel.SetPreviewStats(m_limPrevResult.inputPeakDb,
+                                       m_limPrevResult.outputPeakDb,
+                                       m_limPrevResult.maxGainReductionDb);
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+  if (!m_limiterPanel.IsVisible()) return;
+  // The limiter edits the standalone buffer only: leaving standalone mode
+  // closes the panel (it would otherwise float inert over ITEM mode).
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) {
+    m_limiterPanel.Hide();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+  // Buffer identity changed under the panel (tab switch, new load): the old
+  // preview belongs to another file - drop it and recompute. Same-length
+  // swaps are already covered by InvalidateLimiterPreview at their edit sites.
+  {
+    std::lock_guard<std::mutex> lock(m_limPrevMutex);
+    if (m_limPrevValid && m_limPrevFrames != m_waveform.GetAudioSampleCount()) {
+      m_limPrevValid = false;
+      m_limPrevDirty = true;
+      m_limPrevChangeTick = GetTickCount();
+      m_limPrevGen++;
+      m_limiterPanel.SetStatsPending(true);
+    }
+  }
+  if (!m_limPrevDirty || m_limPrevComputing.load()) return;
+  if (GetTickCount() - m_limPrevChangeTick < 150) return;   // debounce
+  m_limPrevDirty = false;
+  StartLimiterPreview();
+}
+
+void SneakPeak::StartLimiterPreview()
+{
+  const int frames = m_waveform.GetAudioSampleCount();
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+  if (m_limPrevThread.joinable()) m_limPrevThread.join();  // finished (guarded by !computing)
+  m_limPrevComputing.store(true);
+  m_limiterPanel.SetStatsPending(true);
+  const uint64_t gen = m_limPrevGen.load();
+  std::vector<double> copy = m_waveform.GetAudioData();
+  m_limPrevThread = std::thread(&SneakPeak::LimiterPreviewThread, this,
+                                std::move(copy), frames, nch, sr,
+                                m_limiterPanel.GetParams(), gen);
+}
+
+void SneakPeak::LimiterPreviewThread(std::vector<double> audio, int frames,
+                                     int nch, int sr, LimiterParams p,
+                                     uint64_t gen)
+{
+  std::vector<double> env;
+  LimiterResult r = LimiterComputeEnvelope(audio.data(), frames, nch, sr, p, env);
+  const int chains = (p.link || nch == 1) ? 1 : nch;
+  if (r.ok) {
+    // Honest OUT readout: apply the envelope to our copy and re-measure with
+    // the same detector the ceiling uses.
+    const double gainLin = pow(10.0, p.gainDb / 20.0);
+    for (int i = 0; i < frames; i++)
+      for (int c = 0; c < nch; c++)
+        audio[(size_t)i * (size_t)nch + (size_t)c] *=
+            gainLin * env[(size_t)i * (size_t)chains + (size_t)(chains == 1 ? 0 : c)];
+    const double pk = LimiterMeasurePeak(audio.data(), frames, nch, sr, p.truePeak);
+    if (pk > 0.0) r.outputPeakDb = 20.0 * log10(pk);
+  }
+  // Decimate to min-gain buckets: the deepest reduction wins a pixel column.
+  const int nb = frames < 4096 ? frames : 4096;
+  std::vector<float> dec((size_t)(nb > 0 ? nb : 1), 1.0f);
+  if (r.ok && nb > 0)
+    for (int i = 0; i < frames; i++) {
+      const int b = (int)((long long)i * nb / frames);
+      for (int c = 0; c < chains; c++) {
+        const float e = (float)env[(size_t)i * (size_t)chains + (size_t)c];
+        if (e < dec[(size_t)b]) dec[(size_t)b] = e;
+      }
+    }
+  {
+    std::lock_guard<std::mutex> lock(m_limPrevMutex);
+    if (gen == m_limPrevGen.load() && r.ok) {
+      m_limPrevEnvMin = std::move(dec);
+      m_limPrevResult = r;
+      m_limPrevFrames = frames;
+      m_limPrevValid = true;
+    }
+  }
+  m_limPrevComputing.store(false);
+  m_limPrevFinished.store(true);
+}

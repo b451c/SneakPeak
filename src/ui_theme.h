@@ -85,6 +85,10 @@ constexpr int    kKnobTextGap   = 8;      // gap from knob edge to label/value c
 constexpr int    kKnobGridGap   = 18;     // gap from the GR meter to the knob grid
 constexpr int    kDefaultTickLen = 5;     // default-value notch length on the ring
 
+// --- Hard Limiter panel (premium overlay, v2.4.0 INC-L1) ---
+constexpr int    kLimPanelW = 480;   // base size, logical px (scales with g_uiScale)
+constexpr int    kLimPanelH = 266;   // == ComputeLimiterLayout's footer bottom (keep in sync)
+
 // --- Settings panel (premium Settings overlay, v2.2.0) ---
 constexpr int    kSettingsW = 320;   // base size, logical px (scales with g_uiScale)
 constexpr int    kSettingsH = 538;   // == ComputeSettingsLayout's final y + bottom pad (keep in sync)

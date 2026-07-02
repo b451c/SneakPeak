@@ -1,0 +1,109 @@
+// limiter_panel.h — premium HARD LIMITER overlay (v2.4.0 INC-L1)
+//
+// Standalone-mode front end for limiter_engine (true-peak hard limiter):
+// 5 knobs (Gain/Ceiling/Attack/Hold/Release), TRUE PEAK + LINK pills, preview
+// readouts (in/out peak, max GR), GR strip, factory presets, Apply. Premium
+// (Blend2D) only - in the OFF build Show() is a no-op and the menu entry is
+// grayed, mirroring the Settings panel's premium-only reality.
+//
+// Host contract (mirrors DynamicsPanel/SettingsPanel): OnMouseDown returns
+// true when the click landed on the panel; the host then polls the one-shot
+// flags (ApplyRequested / PresetMenuRequested / ParamsChanged / GeomChanged).
+// The knob drag / wheel nudge / double-click type-in mechanics are copied from
+// DynamicsPanel so the two panels feel identical.
+#pragma once
+
+#include "platform.h"
+#include "ui_render.h"
+#include "limiter_engine.h"
+
+// Factory presets (plan C7). No user presets in v1.
+struct LimiterPreset {
+  const char* name;
+  LimiterParams params;
+};
+constexpr int kLimPresetCount = 4;
+extern const LimiterPreset g_limiterPresets[kLimPresetCount];
+
+class LimiterPanel {
+public:
+  bool IsVisible() const { return m_visible; }
+  void Show();   // premium-only: no-op in the OFF build
+  void Hide();
+
+  RECT GetRect(RECT waveformRect) const;
+  bool HitTest(int x, int y, RECT waveformRect) const;
+  void DrawPremium(HDC hdc, RECT waveformRect, double dpr);
+
+  bool OnMouseDown(int x, int y, RECT waveformRect);  // true = consumed
+  void OnMouseMove(int x, int y, RECT waveformRect);
+  void OnMouseUp();
+  bool OnHover(int x, int y, RECT waveformRect);      // true = hover changed (repaint)
+  bool OnMouseWheel(int x, int y, double steps, bool fine, RECT waveformRect);
+  bool OnDoubleClick(int x, int y, RECT waveformRect);
+  bool IsDragging() const { return m_dragKnob >= 0 || m_panelDragging; }
+
+  // Inline type-value editor (DynamicsPanel Inc-8 mechanics; caret non-blinking).
+  bool IsEditingValue() const { return m_editIdx >= 0; }
+  bool OnEditKey(int vk);       // true = consumed (always, while editing)
+  bool CommitValueEdit();       // true = the value actually changed
+
+  // One-shot flags, polled by the host after a consumed interaction.
+  bool ApplyRequested()      { bool v = m_applyRequested; m_applyRequested = false; return v; }
+  bool PresetMenuRequested() { bool v = m_presetMenuReq; m_presetMenuReq = false; return v; }
+  bool ParamsChanged() const { return m_paramsChanged; }
+  void ClearParamsChanged()  { m_paramsChanged = false; }
+  bool GeomChanged() const   { return m_geomChanged; }
+  void ClearGeomChanged()    { m_geomChanged = false; }
+
+  const LimiterParams& GetParams() const { return m_params; }
+  void SetParams(const LimiterParams& p);   // clamps each field to its knob range
+  void ApplyPreset(int idx);
+  int  GetPresetIdx() const { return m_presetIdx; }
+  RECT GetPresetButtonRect(RECT waveformRect) const;  // screen coords (menu anchor)
+
+  void SetMono(bool mono) { m_mono = mono; }
+  void SetPanelOffset(int ox, int oy) { m_offsetX = ox; m_offsetY = oy; }
+  int  GetPanelOffsetX() const { return m_offsetX; }
+  int  GetPanelOffsetY() const { return m_offsetY; }
+
+  // Preview stats from the host worker -> readouts; pending renders "...".
+  void SetPreviewStats(double inDb, double outDb, double grDb);
+  void SetStatsPending(bool pending) { m_statsPending = pending; }
+
+private:
+  double EffScale(RECT waveformRect) const;  // g_uiScale, fit-clamped to the rect
+  int    HitId(double lx, double ly) const;  // base-coord point -> LimiterHit id
+  double GetValue(int idx) const;
+  void   SetValue(int idx, double v);        // clamps to the knob range
+  void   BeginValueEdit(int idx);
+  void   CancelValueEdit() { m_editIdx = -1; }
+
+  bool m_visible = false;
+  LimiterParams m_params;
+  int  m_presetIdx = 0;          // defaults == preset 0 ("Game Asset -1 dBTP")
+  bool m_mono = false;
+
+  int  m_offsetX = 0, m_offsetY = 0;   // panel-drag offsets (persisted by host)
+  int  m_dragKnob = -1, m_dragLastY = 0;
+  bool m_panelDragging = false;
+  int  m_dragOffX = 0, m_dragOffY = 0;
+  bool m_geomChanged = false;
+  int  m_hover = LIM_HIT_NONE;
+
+  bool m_applyRequested = false;
+  bool m_presetMenuReq = false;
+  bool m_paramsChanged = false;
+
+  int  m_editIdx = -1;
+  char m_editBuf[24] = { 0 };
+  bool m_editFresh = false;
+
+  double m_inDb = -999.0, m_outDb = -999.0, m_grDb = 0.0;
+  bool m_statsValid = false, m_statsPending = false;
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  char m_inText[24] = { 0 }, m_outText[24] = { 0 }, m_grText[24] = { 0 };
+#endif
+
+  UiCanvas m_canvas;
+};
