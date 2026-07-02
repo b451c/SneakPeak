@@ -46,6 +46,19 @@ void SneakPeak::GetSelectionSampleRange(int& startFrame, int& endFrame) const
 
 void SneakPeak::UndoSave()
 {
+  // Destructive ITEM edits rewrite the source FILE - REAPER's native undo
+  // cannot restore that, so these edits were effectively one-way (user
+  // report 2026-07-02; the confirm prompt was the only guard). Snapshot the
+  // pre-edit buffer + the file it belongs to + the WAV format the edit will
+  // write with; UndoRestore writes it back. Single level.
+  if (!m_waveform.IsStandaloneMode() && m_waveform.GetTake()) {
+    m_itemUndoPath = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+    m_itemUndoData = m_waveform.GetAudioData();
+    m_itemUndoNch = m_waveform.GetNumChannels();
+    m_itemUndoSr = m_waveform.GetSampleRate();
+    m_itemUndoBits = m_wavBitsPerSample;
+    m_itemUndoFmt = m_wavAudioFormat;
+  }
   m_hasUndo = true;
 }
 
@@ -53,6 +66,31 @@ void SneakPeak::UndoRestore()
 {
   if (m_waveform.IsStandaloneMode()) {
     StandaloneUndoRestore();
+    return;
+  }
+  // Destructive-edit restore: if the snapshot belongs to the CURRENT take's
+  // source file, write the pre-edit audio back and reload from disk. REAPER's
+  // own undo point for the edit stays in its history as a no-op label - we
+  // deliberately do NOT pop it (the user may have made project changes since;
+  // popping would undo those instead).
+  if (m_hasUndo && !m_itemUndoData.empty() && m_itemUndoNch > 0 &&
+      m_waveform.GetTake() &&
+      AudioEngine::GetSourceFilePath(m_waveform.GetTake()) == m_itemUndoPath) {
+    const int frames = (int)(m_itemUndoData.size() / (size_t)m_itemUndoNch);
+    if (!AudioEngine::WriteWavFile(m_itemUndoPath, m_itemUndoData.data(),
+                                   frames, m_itemUndoNch, m_itemUndoSr,
+                                   m_itemUndoBits, m_itemUndoFmt)) {
+      ShowToast("Undo failed - check the file permissions");
+      return;
+    }
+    AudioEngine::RefreshItemSource(m_waveform.GetItem(), m_waveform.GetTake());
+    m_itemUndoData = std::vector<double>();
+    m_itemUndoPath.clear();
+    m_hasUndo = false;
+    m_waveform.ClearItem();
+    LoadSelectedItem();
+    ShowToast("Destructive edit undone");
+    InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
   // Trigger REAPER's native undo

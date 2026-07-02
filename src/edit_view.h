@@ -537,6 +537,14 @@ private:
 
   // Undo state
   bool m_hasUndo = false;
+  // Destructive ITEM undo (single level, 2026-07-02): destructive edits
+  // rewrite the source FILE, which REAPER's native undo cannot restore -
+  // so UndoSave snapshots the pre-edit buffer + the file it belongs to
+  // (path-checked at restore) + the WAV format it was written with.
+  std::vector<double> m_itemUndoData;
+  std::string m_itemUndoPath;
+  int m_itemUndoNch = 0, m_itemUndoSr = 0;
+  int m_itemUndoBits = 16, m_itemUndoFmt = 1;
   // Standalone undo/redo stacks (full or range snapshots - StandaloneUndoEntry)
   std::vector<StandaloneUndoEntry> m_standaloneUndoStack;
   std::vector<StandaloneUndoEntry> m_standaloneRedoStack;
