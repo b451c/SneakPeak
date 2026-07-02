@@ -184,6 +184,7 @@ public:
   void LoadSelectedItem();
   void ToggleTrackView();
   void ToggleMasterView();  // REAPER action (#63 X-Raym): toggle the MASTER output view (same as the mode-bar tab)
+  void RunToolbarCommand(int button);  // named toolbar actions (forum #51): same path as a toolbar click
   void OnTimer();
 
   // Mode bar / standalone tab management

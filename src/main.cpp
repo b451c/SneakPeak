@@ -145,6 +145,28 @@ static int g_cmdToggle = 0;
 static int g_cmdLoadItem = 0;
 static int g_cmdTrackView = 0;
 static int g_cmdMasterView = 0;
+
+// Toolbar commands as named actions (forum #51): every toolbar button is
+// bindable in REAPER's Action List, so the Action List is the keymap editor.
+// The action runs the exact toolbar-click path (RunToolbarCommand).
+struct ToolbarActionDef { const char* id; const char* desc; int button; };
+static const ToolbarActionDef kToolbarActions[] = {
+  { "SneakPeak_ZoomIn",     "SneakPeak: Zoom in",              TB_ZOOM_IN },
+  { "SneakPeak_ZoomOut",    "SneakPeak: Zoom out",             TB_ZOOM_OUT },
+  { "SneakPeak_ZoomFit",    "SneakPeak: Zoom to fit",          TB_ZOOM_FIT },
+  { "SneakPeak_ZoomSel",    "SneakPeak: Zoom to selection",    TB_ZOOM_SEL },
+  { "SneakPeak_Play",       "SneakPeak: Play",                 TB_PLAY },
+  { "SneakPeak_Stop",       "SneakPeak: Stop",                 TB_STOP },
+  { "SneakPeak_Normalize",  "SneakPeak: Normalize",            TB_NORMALIZE },
+  { "SneakPeak_FadeIn",     "SneakPeak: Fade in",              TB_FADE_IN },
+  { "SneakPeak_FadeOut",    "SneakPeak: Fade out",             TB_FADE_OUT },
+  { "SneakPeak_Reverse",    "SneakPeak: Reverse",              TB_REVERSE },
+  { "SneakPeak_VZoomIn",    "SneakPeak: Vertical zoom in",     TB_VZOOM_IN },
+  { "SneakPeak_VZoomOut",   "SneakPeak: Vertical zoom out",    TB_VZOOM_OUT },
+  { "SneakPeak_VZoomReset", "SneakPeak: Vertical zoom reset",  TB_VZOOM_RESET },
+};
+constexpr int kToolbarActionCount = (int)(sizeof(kToolbarActions) / sizeof(kToolbarActions[0]));
+static int g_cmdToolbar[kToolbarActionCount] = {};
 static MediaItem* g_lastSelectedItem = nullptr;
 static int g_lastSelectedCount = 0;
 
@@ -211,8 +233,9 @@ static bool keyMatchesOurBinding(WPARAM key)
   const bool mAlt   = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
   const bool mWin   = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0;
 
-  const int cmds[4] = { g_cmdToggle, g_cmdLoadItem, g_cmdTrackView, g_cmdMasterView };
-  for (int c = 0; c < 4; ++c) {
+  int cmds[4 + kToolbarActionCount] = { g_cmdToggle, g_cmdLoadItem, g_cmdTrackView, g_cmdMasterView };
+  for (int i = 0; i < kToolbarActionCount; ++i) cmds[4 + i] = g_cmdToolbar[i];
+  for (int c = 0; c < 4 + kToolbarActionCount; ++c) {
     if (!cmds[c]) continue;
     const int n = g_CountActionShortcuts(sec, cmds[c]);
     for (int i = 0; i < n; ++i) {
@@ -369,6 +392,15 @@ static bool hookCommandProc(int command, int flag)
   if (command == g_cmdMasterView) {
     if (g_sneakPeak && g_sneakPeak->GetHwnd()) g_sneakPeak->ToggleMasterView();
     return true;
+  }
+  for (int i = 0; i < kToolbarActionCount; ++i) {
+    if (command && command == g_cmdToolbar[i]) {
+      // Only act on a live, visible window: the commands target the loaded audio
+      // (Normalize/Reverse must never edit invisibly).
+      if (g_sneakPeak && g_sneakPeak->GetHwnd() && g_sneakPeak->IsVisible())
+        g_sneakPeak->RunToolbarCommand(kToolbarActions[i].button);
+      return true;
+    }
   }
   return false;
 }
@@ -595,6 +627,16 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   static gaccel_register_t accelMasterView = {{0, 0, 0}, "SneakPeak: Toggle Master Track View"};
   accelMasterView.accel.cmd = static_cast<unsigned short>(g_cmdMasterView);
   rec->Register("gaccel", &accelMasterView);
+
+  // Toolbar commands as named actions (forum #51): bindable in the Action List.
+  static gaccel_register_t accelToolbar[kToolbarActionCount] = {};
+  for (int i = 0; i < kToolbarActionCount; ++i) {
+    g_cmdToolbar[i] = rec->Register("command_id", (void*)kToolbarActions[i].id);
+    if (!g_cmdToolbar[i]) continue;   // fail-open: the toolbar itself still works
+    accelToolbar[i].accel.cmd = static_cast<unsigned short>(g_cmdToolbar[i]);
+    accelToolbar[i].desc = kToolbarActions[i].desc;
+    rec->Register("gaccel", &accelToolbar[i]);
+  }
 
   rec->Register("hookcommand", (void*)hookCommandProc);
   rec->Register("toggleaction", (void*)toggleActionCallback);

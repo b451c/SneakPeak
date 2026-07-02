@@ -2697,6 +2697,13 @@ void SneakPeak::OnKeyDown(WPARAM key)
 
 // --- Toolbar actions ---
 
+// Named-action entry (forum #51): REAPER's Action List can bind any toolbar
+// command; the action runs exactly what a toolbar click runs.
+void SneakPeak::RunToolbarCommand(int button)
+{
+  OnToolbarClick(button);
+}
+
 void SneakPeak::OnToolbarClick(int button)
 {
   switch (button) {

@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Waveform style: Detailed / Simple** (forum #83) - a new selector in Settings > View: Detailed (default) keeps the darker RMS band inside the peak waveform; Simple draws a single-colour waveform (peaks only, the same state as the old Show RMS toggle). Clip and over-0dB marking stays in both styles.
 - **Hide the ruler** (forum #51, Khron Studio) - a Ruler toggle in Settings > View collapses the time ruler so the waveform gets the extra rows. Markers and regions stay visible (drawn over the waveform); ruler editing gestures need the ruler shown.
 - **Faster, finer fades** (forum #51, Khron Studio) - scroll the mouse wheel over a fade handle to nudge its length (5% of the item per notch, Cmd = 1 ms steps), and hold Shift while dragging a handle for a fine 1/4-speed trim (press or release Shift mid-drag freely - the fade edge never jumps).
+- **Bindable toolbar shortcuts** (forum #51, Khron Studio) - every toolbar command is now a named REAPER action (SneakPeak: Zoom in/out/to fit/to selection, Play, Stop, Normalize, Fade in/out, Reverse, Vertical zoom in/out/reset): assign any shortcut in REAPER's Action List. Actions run only while the SneakPeak window is open, and keys you bind to them are never swallowed by the editor's own shortcut list.
 - Old projects and presets load bit-identically: with the new parameters at their defaults the engine output is byte-for-byte the same as v2.2.0 (verified by an offline envelope-diff regression harness added to the repo).
 
 ### Fixed
