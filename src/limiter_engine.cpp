@@ -247,6 +247,25 @@ int RunChain(const std::vector<double>& need, int attackW, int holdW,
   return delay;
 }
 
+// Selection-apply handoff: blend the envelope to exactly 1.0 at both buffer
+// edges over edgeRampFrames (the ramp region may exceed the ceiling by
+// design — it hands off to untouched audio outside the selection).
+void ApplyEdgeRamp(std::vector<double>& envOut, int numFrames, int numChains,
+                   int edgeRampFrames)
+{
+  if (edgeRampFrames <= 0) return;
+  const int ramp = edgeRampFrames < numFrames ? edgeRampFrames : numFrames;
+  for (int i = 0; i < numFrames; i++) {
+    int edge = i < numFrames - 1 - i ? i : numFrames - 1 - i;
+    if (edge >= ramp) continue;
+    const double w = (double)edge / (double)ramp;
+    for (int c = 0; c < numChains; c++) {
+      const size_t at = (size_t)i * (size_t)numChains + (size_t)c;
+      envOut[at] = 1.0 + (envOut[at] - 1.0) * w;
+    }
+  }
+}
+
 } // namespace
 
 LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
@@ -254,7 +273,8 @@ LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
                                      const LimiterParams& params,
                                      std::vector<double>& envOut,
                                      int edgeRampFrames,
-                                     LimiterDebugTaps* debugTaps)
+                                     LimiterDebugTaps* debugTaps,
+                                     std::vector<double>* detectorPeaksOut)
 {
   LimiterResult res;
   if (!audio || numFrames <= 0 || numChannels <= 0 || sampleRate <= 0)
@@ -277,6 +297,7 @@ LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
 
   const size_t envSize = (size_t)numFrames * (size_t)numChains;
   envOut.assign(envSize, 1.0);
+  if (detectorPeaksOut) detectorPeaksOut->assign(envSize, 0.0);
   if (debugTaps) {
     debugTaps->need.assign(envSize, 1.0);
     debugTaps->e1.assign(envSize, 1.0);
@@ -308,6 +329,10 @@ LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
         }
       }
     }
+    if (detectorPeaksOut)
+      for (int i = 0; i < numFrames; i++)
+        (*detectorPeaksOut)[(size_t)i * (size_t)numChains + (size_t)chain] =
+            peak[(size_t)i];
     for (int i = 0; i < numFrames; i++) {
       const double p = peak[(size_t)i] * gainLin; // input gain pre-detection
       if (p > maxPeakAll) maxPeakAll = p;
@@ -350,21 +375,7 @@ LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
     }
   }
 
-  // Selection-apply handoff: blend the envelope to exactly 1.0 at both buffer
-  // edges over edgeRampFrames (the ramp region may exceed the ceiling by
-  // design — it hands off to untouched audio outside the selection).
-  if (edgeRampFrames > 0) {
-    const int ramp = edgeRampFrames < numFrames ? edgeRampFrames : numFrames;
-    for (int i = 0; i < numFrames; i++) {
-      int edge = i < numFrames - 1 - i ? i : numFrames - 1 - i;
-      if (edge >= ramp) continue;
-      const double w = (double)edge / (double)ramp;
-      for (int c = 0; c < numChains; c++) {
-        const size_t at = (size_t)i * (size_t)numChains + (size_t)c;
-        envOut[at] = 1.0 + (envOut[at] - 1.0) * w;
-      }
-    }
-  }
+  ApplyEdgeRamp(envOut, numFrames, numChains, edgeRampFrames);
 
   double minEnv = 1.0;
   for (double e : envOut)
@@ -373,6 +384,55 @@ LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
   res.ok = true;
   res.latencySamples = latency;
   if (debugTaps) debugTaps->latencySamples = latency;
+  if (maxPeakAll > 0.0) res.inputPeakDb = 20.0 * std::log10(maxPeakAll);
+  if (minEnv < 1.0 && minEnv > 0.0)
+    res.maxGainReductionDb = -20.0 * std::log10(minEnv);
+  return res;
+}
+
+LimiterResult LimiterEnvelopeFromPeaks(const double* peaks, int numFrames,
+                                       int numChains, int sampleRate,
+                                       const LimiterParams& params,
+                                       std::vector<double>& envOut,
+                                       int edgeRampFrames)
+{
+  LimiterResult res;
+  if (!peaks || numFrames <= 0 || numChains <= 0 || sampleRate <= 0)
+    return res;
+
+  const double gainLin = std::pow(10.0, params.gainDb / 20.0);
+  const double ceilingLin = std::pow(10.0, params.ceilingDb / 20.0);
+  int attackW = (int)std::floor(params.attackMs * 0.001 * (double)sampleRate + 0.5);
+  attackW = ClampInt(attackW, 1, numFrames);
+  int holdW = (int)std::floor(params.holdMs * 0.001 * (double)sampleRate + 0.5);
+  holdW = ClampInt(holdW, 0, numFrames);
+  const double releaseSamples = params.releaseMs * 0.001 * (double)sampleRate;
+
+  envOut.assign((size_t)numFrames * (size_t)numChains, 1.0);
+  std::vector<double> need((size_t)numFrames, 1.0);
+  double maxPeakAll = 0.0;
+  int latency = 0;
+
+  for (int chain = 0; chain < numChains; chain++) {
+    for (int i = 0; i < numFrames; i++) {
+      const double p =
+          (double)peaks[(size_t)i * (size_t)numChains + (size_t)chain] * gainLin;
+      if (p > maxPeakAll) maxPeakAll = p;
+      const double nd = ceilingLin / (p > 1e-12 ? p : 1e-12);
+      need[(size_t)i] = nd < 1.0 ? nd : 1.0;
+    }
+    latency = RunChain(need, attackW, holdW, releaseSamples, envOut, numChains,
+                       chain, nullptr);
+  }
+
+  ApplyEdgeRamp(envOut, numFrames, numChains, edgeRampFrames);
+
+  double minEnv = 1.0;
+  for (double e : envOut)
+    if (e < minEnv) minEnv = e;
+
+  res.ok = true;
+  res.latencySamples = latency;
   if (maxPeakAll > 0.0) res.inputPeakDb = 20.0 * std::log10(maxPeakAll);
   if (minEnv < 1.0 && minEnv > 0.0)
     res.maxGainReductionDb = -20.0 * std::log10(minEnv);

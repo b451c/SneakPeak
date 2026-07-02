@@ -68,7 +68,8 @@ public:
   int  GetPanelOffsetY() const { return m_offsetY; }
 
   // Preview stats from the host worker -> readouts; pending renders "...".
-  void SetPreviewStats(double inDb, double outDb, double grDb);
+  // outPending: draft result (no output measure yet) - OUT alone shows "...".
+  void SetPreviewStats(double inDb, double outDb, double grDb, bool outPending);
   void SetStatsPending(bool pending) { m_statsPending = pending; }
 
 private:
@@ -100,7 +101,7 @@ private:
   bool m_editFresh = false;
 
   double m_inDb = -999.0, m_outDb = -999.0, m_grDb = 0.0;
-  bool m_statsValid = false, m_statsPending = false;
+  bool m_statsValid = false, m_statsPending = false, m_outPending = false;
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   char m_inText[24] = { 0 }, m_outText[24] = { 0 }, m_grText[24] = { 0 };
 #endif

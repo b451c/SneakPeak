@@ -405,6 +405,59 @@ void TestGainPush()
         what);
 }
 
+// --- Draft path: LimiterEnvelopeFromPeaks vs the full engine ------------------
+// The live knob-drag preview reuses cached detector peaks. With TP off the
+// refinement loop never runs, so the draft must be BIT-IDENTICAL to the full
+// path; with TP on the draft may only sit at or ABOVE the refined envelope
+// (refinement only ever tightens) - never below (that would overstate GR).
+
+void TestDraftPath()
+{
+  printf("-- draft path (cached peaks) --\n");
+  Fixture f = MakeNoise();
+  const int n = f.NumFrames();
+
+  LimiterParams p;
+  p.gainDb = 12.0;
+  p.ceilingDb = -6.0;
+  p.truePeak = false;
+  std::vector<double> envFull, envDraft;
+  std::vector<double> peaks;
+  LimiterResult rf = LimiterComputeEnvelope(f.frames.data(), n, kNch, kSr, p,
+                                            envFull, 0, nullptr, &peaks);
+  LimiterResult rd =
+      LimiterEnvelopeFromPeaks(peaks.data(), n, 1, kSr, p, envDraft);
+  Check(rf.ok && rd.ok && envFull.size() == envDraft.size(),
+        "draft path runs and matches the full path's envelope size");
+  Check(std::memcmp(envFull.data(), envDraft.data(),
+                    envFull.size() * sizeof(double)) == 0,
+        "TP off: draft envelope bit-identical to the full path");
+  Check(rd.inputPeakDb == rf.inputPeakDb &&
+            rd.maxGainReductionDb == rf.maxGainReductionDb,
+        "TP off: draft stats identical to the full path");
+
+  p.truePeak = true;
+  LimiterResult rf2 = LimiterComputeEnvelope(f.frames.data(), n, kNch, kSr, p,
+                                             envFull, 0, nullptr, &peaks);
+  LimiterResult rd2 =
+      LimiterEnvelopeFromPeaks(peaks.data(), n, 1, kSr, p, envDraft);
+  bool draftAtOrAbove = rf2.ok && rd2.ok;
+  double worstGapDb = 0.0;
+  for (int i = 0; i < n && draftAtOrAbove; i++) {
+    if (envDraft[(size_t)i] < envFull[(size_t)i] - 1e-9) draftAtOrAbove = false;
+    if (envFull[(size_t)i] > 0.0 && envDraft[(size_t)i] > 0.0) {
+      const double gap =
+          20.0 * std::log10(envDraft[(size_t)i] / envFull[(size_t)i]);
+      if (gap > worstGapDb) worstGapDb = gap;
+    }
+  }
+  char what[160];
+  snprintf(what, sizeof(what),
+           "TP on: draft >= refined pointwise (visual gap max %.3f dB)",
+           worstGapDb);
+  Check(draftAtOrAbove, what);
+}
+
 // --- Baseline dump ("dump" arg) ----------------------------------------------
 
 void DumpOne(const Fixture& f, const LimiterParams& p, int edgeRamp)
@@ -464,6 +517,7 @@ int main(int argc, char** argv)
   TestLink();
   TestMicro();
   TestGainPush();
+  TestDraftPath();
 
   printf("-- ceiling sweep: attack x release x ceiling x TP (36 configs each) --\n");
   const Fixture fixtures[] = { MakeSquare997(), MakeIspSine(), MakeImpulses(),

@@ -63,12 +63,30 @@ struct LimiterDebugTaps {
 // out = in * gainLin * env. edgeRampFrames > 0 forces the envelope to 1.0 at
 // both buffer edges with a linear blend over that many frames (selection-apply
 // handoff — the ramp region may exceed the ceiling by design).
+// detectorPeaksOut (optional): receives the PRE-GAIN per-frame detector peaks,
+// one value per frame per chain ([frame * numChains + chain]) — a cache for
+// LimiterEnvelopeFromPeaks. Valid for this buffer + truePeak/link combo;
+// independent of gain/ceiling/attack/hold/release. Kept double so the draft
+// path is bit-exact against this function's own need computation.
 LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
                                      int numChannels, int sampleRate,
                                      const LimiterParams& params,
                                      std::vector<double>& envOut,
                                      int edgeRampFrames = 0,
-                                     LimiterDebugTaps* debugTaps = nullptr);
+                                     LimiterDebugTaps* debugTaps = nullptr,
+                                     std::vector<double>* detectorPeaksOut = nullptr);
+
+// DRAFT envelope from cached detector peaks: need -> chain -> edge ramp, but
+// NO true-peak refinement loop and no output measure (both need the audio).
+// The knob-drag live preview path: visually identical GR trace (refinement
+// tightens by fractions of a dB), orders of magnitude cheaper than detection.
+// numChains must match the cache ((link || mono) ? 1 : channels); outputPeakDb
+// stays unset. Apply and the settled preview keep the refined guarantee.
+LimiterResult LimiterEnvelopeFromPeaks(const double* peaks, int numFrames,
+                                       int numChains, int sampleRate,
+                                       const LimiterParams& params,
+                                       std::vector<double>& envOut,
+                                       int edgeRampFrames = 0);
 
 // Apply the limiter in place: gain -> envelope -> multiply. Two-pass offline
 // (exact, no streaming state). Returns the same stats as ComputeEnvelope plus

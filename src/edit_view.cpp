@@ -1789,12 +1789,31 @@ void SneakPeak::OnSize(int w, int h)
 // moved. The worker owns a COPY of the audio (never touches the live buffer)
 // and makes no REAPER calls, so it is safe across tab switches and undo.
 
+// Decimate an envelope to min-gain buckets: the deepest reduction wins a
+// pixel column. Shared by the full and draft workers.
+static std::vector<float> DecimateEnvMin(const std::vector<double>& env,
+                                         int frames, int chains)
+{
+  const int nb = frames < 4096 ? frames : 4096;
+  std::vector<float> dec((size_t)(nb > 0 ? nb : 1), 1.0f);
+  if (nb > 0)
+    for (int i = 0; i < frames; i++) {
+      const int b = (int)((long long)i * nb / frames);
+      for (int c = 0; c < chains; c++) {
+        const float e = (float)env[(size_t)i * (size_t)chains + (size_t)c];
+        if (e < dec[(size_t)b]) dec[(size_t)b] = e;
+      }
+    }
+  return dec;
+}
+
 void SneakPeak::MarkLimiterParamsChanged()
 {
   m_limPrevDirty = true;
   m_limPrevChangeTick = GetTickCount();
   m_limPrevGen++;
-  m_limiterPanel.SetStatsPending(true);
+  // No "..." flip here: with a warm peak cache a draft lands within a tick or
+  // two, so the readouts stay live instead of flickering to pending.
 }
 
 void SneakPeak::InvalidateLimiterPreview()
@@ -1803,7 +1822,10 @@ void SneakPeak::InvalidateLimiterPreview()
   {
     std::lock_guard<std::mutex> lock(m_limPrevMutex);
     m_limPrevValid = false;
+    m_limPeakCache.reset();   // peaks belong to the old buffer / TP mode
+    m_limPeakCacheFrames = 0;
   }
+  m_limFullPending = false;
   if (m_limiterPanel.IsVisible()) {
     m_limPrevDirty = true;
     m_limPrevChangeTick = GetTickCount();
@@ -1820,7 +1842,8 @@ void SneakPeak::LimiterPreviewTick()
       if (m_limPrevValid)
         m_limiterPanel.SetPreviewStats(m_limPrevResult.inputPeakDb,
                                        m_limPrevResult.outputPeakDb,
-                                       m_limPrevResult.maxGainReductionDb);
+                                       m_limPrevResult.maxGainReductionDb,
+                                       m_limPrevDraft);
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
@@ -1839,16 +1862,46 @@ void SneakPeak::LimiterPreviewTick()
     std::lock_guard<std::mutex> lock(m_limPrevMutex);
     if (m_limPrevValid && m_limPrevFrames != m_waveform.GetAudioSampleCount()) {
       m_limPrevValid = false;
+      m_limPeakCache.reset();
+      m_limPeakCacheFrames = 0;
       m_limPrevDirty = true;
       m_limPrevChangeTick = GetTickCount();
       m_limPrevGen++;
       m_limiterPanel.SetStatsPending(true);
     }
   }
-  if (!m_limPrevDirty || m_limPrevComputing.load()) return;
-  if (GetTickCount() - m_limPrevChangeTick < 150) return;   // debounce
-  m_limPrevDirty = false;
-  StartLimiterPreview();
+  if (m_limPrevComputing.load()) return;
+
+  // Draft-vs-full scheduling: with a warm peak cache a knob change launches a
+  // cheap draft IMMEDIATELY (live band tracking); the refined pass (TP
+  // refinement + honest OUT measure) upgrades it once the knobs settle. A
+  // cold cache (first open, TP/LINK flip, new buffer) takes the full path.
+  const DWORD now = GetTickCount();
+  bool canDraft = false;
+  {
+    std::lock_guard<std::mutex> lock(m_limPrevMutex);
+    const LimiterParams p = m_limiterPanel.GetParams();
+    const int nch = m_waveform.GetNumChannels();
+    const int chains = (p.link || nch <= 1) ? 1 : nch;
+    canDraft = m_limPeakCache != nullptr &&
+               m_limPeakCacheFrames == m_waveform.GetAudioSampleCount() &&
+               m_limPeakCacheChains == chains && m_limPeakCacheTP == p.truePeak;
+  }
+  if (m_limPrevDirty) {
+    if (canDraft) {
+      m_limPrevDirty = false;
+      m_limFullPending = true;
+      StartLimiterPreviewDraft();
+    } else if (now - m_limPrevChangeTick >= 150) {   // debounce the heavy pass
+      m_limPrevDirty = false;
+      m_limFullPending = false;
+      m_limiterPanel.SetStatsPending(true);
+      StartLimiterPreview();
+    }
+  } else if (m_limFullPending && now - m_limPrevChangeTick >= 400) {
+    m_limFullPending = false;
+    StartLimiterPreview();   // knobs settled: refined band + honest OUT
+  }
 }
 
 void SneakPeak::StartLimiterPreview()
@@ -1872,7 +1925,9 @@ void SneakPeak::LimiterPreviewThread(std::vector<double> audio, int frames,
                                      uint64_t gen)
 {
   std::vector<double> env;
-  LimiterResult r = LimiterComputeEnvelope(audio.data(), frames, nch, sr, p, env);
+  std::vector<double> peaks;  // pre-gain detector peaks -> the draft cache
+  LimiterResult r = LimiterComputeEnvelope(audio.data(), frames, nch, sr, p,
+                                           env, 0, nullptr, &peaks);
   const int chains = (p.link || nch == 1) ? 1 : nch;
   if (r.ok) {
     // Honest OUT readout: apply the envelope to our copy and re-measure with
@@ -1885,17 +1940,7 @@ void SneakPeak::LimiterPreviewThread(std::vector<double> audio, int frames,
     const double pk = LimiterMeasurePeak(audio.data(), frames, nch, sr, p.truePeak);
     if (pk > 0.0) r.outputPeakDb = 20.0 * log10(pk);
   }
-  // Decimate to min-gain buckets: the deepest reduction wins a pixel column.
-  const int nb = frames < 4096 ? frames : 4096;
-  std::vector<float> dec((size_t)(nb > 0 ? nb : 1), 1.0f);
-  if (r.ok && nb > 0)
-    for (int i = 0; i < frames; i++) {
-      const int b = (int)((long long)i * nb / frames);
-      for (int c = 0; c < chains; c++) {
-        const float e = (float)env[(size_t)i * (size_t)chains + (size_t)c];
-        if (e < dec[(size_t)b]) dec[(size_t)b] = e;
-      }
-    }
+  std::vector<float> dec = DecimateEnvMin(env, frames, chains);
   {
     std::lock_guard<std::mutex> lock(m_limPrevMutex);
     if (gen == m_limPrevGen.load() && r.ok) {
@@ -1903,6 +1948,57 @@ void SneakPeak::LimiterPreviewThread(std::vector<double> audio, int frames,
       m_limPrevResult = r;
       m_limPrevFrames = frames;
       m_limPrevValid = true;
+      m_limPrevDraft = false;
+      // Warm the draft cache: knob moves now re-run only the cheap chain.
+      m_limPeakCache = std::make_shared<const std::vector<double>>(std::move(peaks));
+      m_limPeakCacheFrames = frames;
+      m_limPeakCacheChains = chains;
+      m_limPeakCacheTP = p.truePeak;
+    }
+  }
+  m_limPrevComputing.store(false);
+  m_limPrevFinished.store(true);
+}
+
+void SneakPeak::StartLimiterPreviewDraft()
+{
+  std::shared_ptr<const std::vector<double>> peaks;
+  int frames = 0, chains = 1;
+  {
+    std::lock_guard<std::mutex> lock(m_limPrevMutex);
+    peaks = m_limPeakCache;
+    frames = m_limPeakCacheFrames;
+    chains = m_limPeakCacheChains;
+  }
+  const int sr = m_waveform.GetSampleRate();
+  if (!peaks || frames <= 0 || chains <= 0 || sr <= 0) {
+    m_limPrevDirty = true;   // cache raced away: retry via the full path
+    return;
+  }
+  if (m_limPrevThread.joinable()) m_limPrevThread.join();
+  m_limPrevComputing.store(true);
+  const uint64_t gen = m_limPrevGen.load();
+  m_limPrevThread = std::thread(&SneakPeak::LimiterPreviewDraftThread, this,
+                                std::move(peaks), frames, chains, sr,
+                                m_limiterPanel.GetParams(), gen);
+}
+
+void SneakPeak::LimiterPreviewDraftThread(
+    std::shared_ptr<const std::vector<double>> peaks, int frames, int chains,
+    int sr, LimiterParams p, uint64_t gen)
+{
+  std::vector<double> env;
+  LimiterResult r =
+      LimiterEnvelopeFromPeaks(peaks->data(), frames, chains, sr, p, env);
+  std::vector<float> dec = DecimateEnvMin(env, frames, chains);
+  {
+    std::lock_guard<std::mutex> lock(m_limPrevMutex);
+    if (gen == m_limPrevGen.load() && r.ok) {
+      m_limPrevEnvMin = std::move(dec);
+      m_limPrevResult = r;            // outputPeakDb unset: OUT reads "..."
+      m_limPrevFrames = frames;
+      m_limPrevValid = true;
+      m_limPrevDraft = true;
     }
   }
   m_limPrevComputing.store(false);

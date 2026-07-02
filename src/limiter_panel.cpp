@@ -383,11 +383,13 @@ bool LimiterPanel::OnEditKey(int vk)
 
 // --- Preview stats + paint -----------------------------------------------------
 
-void LimiterPanel::SetPreviewStats(double inDb, double outDb, double grDb)
+void LimiterPanel::SetPreviewStats(double inDb, double outDb, double grDb,
+                                   bool outPending)
 {
   m_inDb = inDb;
   m_outDb = outDb;
   m_grDb = grDb;
+  m_outPending = outPending;
   m_statsValid = true;
   m_statsPending = false;
 }
@@ -429,8 +431,11 @@ void LimiterPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
     std::snprintf(m_grText, sizeof(m_grText), "...");
     vm.grNorm = 0.0;
   } else if (m_statsValid) {
-    std::snprintf(m_inText, sizeof(m_inText), "%.1f %s", m_inDb, peakUnit);
-    std::snprintf(m_outText, sizeof(m_outText), "%.1f %s", m_outDb, peakUnit);
+    if (m_inDb <= -900.0) std::snprintf(m_inText, sizeof(m_inText), "-inf");
+    else std::snprintf(m_inText, sizeof(m_inText), "%.1f %s", m_inDb, peakUnit);
+    if (m_outPending) std::snprintf(m_outText, sizeof(m_outText), "...");
+    else if (m_outDb <= -900.0) std::snprintf(m_outText, sizeof(m_outText), "-inf");
+    else std::snprintf(m_outText, sizeof(m_outText), "%.1f %s", m_outDb, peakUnit);
     std::snprintf(m_grText, sizeof(m_grText), "%.1f dB", m_grDb);
     vm.grNorm = ClampD(m_grDb / 24.0, 0.0, 1.0);
   } else {

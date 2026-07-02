@@ -18,6 +18,7 @@
 #include "limiter_panel.h"
 #include "ui_render.h"
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -583,10 +584,23 @@ private:
   void DrawLimiterOverlay(HDC hdc);      // top-anchored GR band + trace (GDI pass)
   void MarkLimiterParamsChanged();       // debounce tick + gen bump + pending "..."
   void InvalidateLimiterPreview();       // buffer changed (apply/undo/load)
-  void LimiterPreviewTick();             // OnTimer: debounce launch + finish pump
-  void StartLimiterPreview();
+  void LimiterPreviewTick();             // OnTimer: draft/full launch + finish pump
+  void StartLimiterPreview();            // FULL: detection + refinement + OUT measure
   void LimiterPreviewThread(std::vector<double> audio, int frames, int nch,
                             int sr, LimiterParams p, uint64_t gen);
+  // DRAFT path (live knob response): the expensive detector peaks depend only
+  // on the buffer + truePeak/link, so they are cached once by the full pass
+  // and knob changes re-run just the cheap envelope chain - no debounce, the
+  // GR band tracks the drag. The refined full pass upgrades it after settle.
+  void StartLimiterPreviewDraft();
+  void LimiterPreviewDraftThread(std::shared_ptr<const std::vector<double>> peaks,
+                                 int frames, int chains, int sr,
+                                 LimiterParams p, uint64_t gen);
+  std::shared_ptr<const std::vector<double>> m_limPeakCache; // pre-gain detector peaks
+  int m_limPeakCacheFrames = 0, m_limPeakCacheChains = 0;   // cache identity...
+  bool m_limPeakCacheTP = true;                             // ...(under the mutex)
+  bool m_limFullPending = false;  // draft on screen: schedule the refined pass
+  bool m_limPrevDraft = false;    // current result lacks the OUT measure (under the mutex)
   std::thread m_limPrevThread;
   std::atomic<bool> m_limPrevComputing{ false };
   std::atomic<bool> m_limPrevFinished{ false };  // one-shot: pump repaints + stats
