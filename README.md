@@ -93,7 +93,7 @@ SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timelin
 - **Bindable toolbar actions** (new in v2.4) - every toolbar command is a named REAPER action: assign any shortcut in the Action List.
 
 ### Dynamics Processing
-Right-click > Process > Dynamics Panel. SneakPeak auto-activates the take volume envelope if it isn't already enabled (no manual setup). Analyzes audio and writes volume envelope automation - zero CPU cost during playback.
+Right-click > Process > Dynamics Panel. SneakPeak auto-activates the take volume envelope if it isn't already enabled (no manual setup). Analyzes audio and writes volume envelope automation - zero CPU cost during playback. In Standalone mode (new in v2.4) the same panel applies destructively instead - the gain curve (comp + gate + de-ess) is multiplied into the audio with one undo step, completing the standalone podcast chain (Dynamics > Hard Limiter > Save).
 - **Built-in compressor** - Industry-standard gain-smoothing architecture (ratio, threshold, soft knee, attack, release, auto makeup gain). Matches FabFilter Pro-C / Waves / ReaComp.
 - **Upward compression + BOTH mode** (new in v2.4) - a DOWN/UP/BOTH switch: lift quiet material toward the threshold (with an M.Boost cap and a gate-coupled floor), or run the single-pass leveler that tames loud and lifts quiet at once, with the knee acting as a leave-alone band.
 - **Extended ratio** (new in v2.4) - 1:1 through Inf:1 (true limiting, with a detent) and into over-compression (negative ratios).

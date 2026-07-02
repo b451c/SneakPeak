@@ -84,6 +84,7 @@ struct DynPanelVM {
   bool  showGR   = true;
   bool  liveMode = false;
   bool  bypassed = false;
+  bool  standalone = false;         // INC-D1: Live + A/B render disabled (no envelope)
   bool  rmsMode  = false;
   int   mode     = 0;               // 0=Down, 1=Up, 2=Both; M.Boost hidden when 0
   bool  compBypass = false;         // per-stage audition bypasses (power dots on the

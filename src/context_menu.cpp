@@ -297,8 +297,9 @@ void SneakPeak::OnRightClick(int x, int y)
     MenuAppendSeparator(procMenu);
   }
 
-  // Dynamics
-  MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_APPLY_DYNAMICS, "Dynamics Panel");
+  // Dynamics: REAPER items (envelope) or a Standalone file (destructive, INC-D1).
+  MenuAppend(procMenu, (hasReaperItem || (hasItem && isStandalone)) ? MF_STRING : MF_GRAYED,
+             CM_APPLY_DYNAMICS, "Dynamics Panel");
   MenuAppendSeparator(procMenu);
 
   // Channel
@@ -765,7 +766,28 @@ void SneakPeak::OnContextMenuCommand(int id)
       break;
     }
     case CM_APPLY_DYNAMICS: {
-      if (!m_waveform.HasItem() || m_waveform.IsStandaloneMode()) break;
+      if (!m_waveform.HasItem()) break;
+      if (m_waveform.IsStandaloneMode()) {
+        // INC-D1: destructive-mode panel - no envelope, no P_EXT. Live and
+        // A/B are envelope concepts and stay disabled; Apply multiplies the
+        // GR curve into the buffer (see DoApplyDynamicsStandalone).
+        if (!m_dynamics.HasResults() && m_waveform.GetAudioSampleCount() > 0)
+          m_dynamics.Analyze(m_waveform.GetAudioData().data(),
+                             m_waveform.GetAudioSampleCount(),
+                             m_waveform.GetNumChannels(),
+                             m_waveform.GetSampleRate(), 0.0,
+                             m_dynamics.GetParams());
+        m_dynamicsPanel.SetStandalone(true);
+        m_dynamicsPanel.Show(m_dynamics.GetParams(), m_dynamics.GetAveragePeakDb());
+        RefreshDynamicsAvgGr();
+        RestoreDynamicsViewPrefs();
+        m_dynamicsPanel.SetLiveMode(false);   // restored Live is meaningless here
+        m_dynamicsVisible = true;
+        if (g_SetExtState) g_SetExtState("SneakPeak", "dynamics_visible", "1", true);
+        InvalidateRect(m_hwnd, nullptr, FALSE);
+        break;
+      }
+      m_dynamicsPanel.SetStandalone(false);
       // Multi-item: switch to timeline view first (dynamics needs per-item envelopes)
       if (m_waveform.IsMultiItemActive()) {
         std::vector<MediaItem*> items;

@@ -1580,6 +1580,76 @@ void SneakPeak::DoApplyLimiter()
                                  s0, s1, ramp);
 }
 
+// INC-D1: destructive Dynamics apply in STANDALONE - the classic offline
+// compressor. The engine's per-point dbAdjust (comp GR + makeup + gate +
+// de-ess: exactly what the envelope Apply writes in ITEM mode) is converted
+// to linear gain per point and interpolated per-sample into the buffer -
+// points sit ~ms apart, so linear-gain interpolation between them is
+// audibly identical to linear-dB and an order of magnitude cheaper. One
+// full undo snapshot (the whole file changes). Engine untouched: baselines
+// stay byte-identical.
+void SneakPeak::DoApplyDynamicsStandalone()
+{
+  if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  const int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+
+  auto& data = m_waveform.GetAudioData();
+  // Fresh analysis with the panel's params (knob edits keep them in sync).
+  m_dynamics.SetParams(m_dynamicsPanel.GetParams());
+  m_dynamics.Analyze(data.data(), frames, nch, sr, 0.0, m_dynamics.GetParams());
+  const std::vector<DynamicsEngine::CompressPoint> pts =
+      m_dynamics.ComputeCompression();
+  if (pts.empty()) {
+    ShowToast("Nothing to apply");
+    return;
+  }
+
+  // Per-point linear gains, then a per-sample lerp between neighbours.
+  std::vector<double> gains(pts.size());
+  for (size_t i = 0; i < pts.size(); i++)
+    gains[i] = pow(10.0, pts[i].dbAdjust / 20.0);
+
+  std::vector<double> out(data.size());
+  size_t k = 0;
+  for (int i = 0; i < frames; i++) {
+    const double t = (double)i / (double)sr;
+    while (k + 1 < pts.size() && pts[k + 1].time <= t) k++;
+    double g = gains[k];
+    if (k + 1 < pts.size() && pts[k + 1].time > pts[k].time) {
+      double a = (t - pts[k].time) / (pts[k + 1].time - pts[k].time);
+      if (a < 0.0) a = 0.0;
+      if (a > 1.0) a = 1.0;
+      g += (gains[k + 1] - gains[k]) * a;
+    }
+    for (int c = 0; c < nch; c++) out[(size_t)i * nch + c] = data[(size_t)i * nch + c] * g;
+  }
+
+  const double avgGr = m_dynamics.GetAvgGainReduction();
+  StandaloneUndoPushFull(std::move(data));   // zero-copy: old buffer -> undo (+serial bump)
+  data = std::move(out);
+
+  char buf[96];
+  snprintf(buf, sizeof(buf), "Dynamics applied (avg GR %.1f dB)", avgGr);
+  ShowToast(buf);
+  m_dirty = true;
+  UpdateTitle();
+  // The buffer changed: refresh everything that renders or caches it, and
+  // re-analyze so the curves show the processed signal.
+  m_dynamics.Analyze(data.data(), frames, nch, sr, 0.0, m_dynamics.GetParams());
+  m_dynamics.ComputeCompression();
+  RefreshDynamicsAvgGr();
+  m_previewCacheDirty = true;
+  m_osPreviewDirty = true;
+  InvalidateLimiterPreview();
+  m_waveform.Invalidate();
+  m_minimap.Invalidate();
+  m_spectral.ClearSpectrum();
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
 // INC-L2: ITEM-mode Apply = the Reverse/Normalize destructive-rewrite pattern
 // (confirm prompt, synchronous limit with title progress, write the source
 // WAV, RefreshItemSource, one REAPER undo point). NOT an envelope effect -

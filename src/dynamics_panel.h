@@ -104,6 +104,14 @@ public:
   bool LiveUndoOpen() const { return m_liveUndoOpen; }
   void SetLiveUndoOpen(bool v) { m_liveUndoOpen = v; }
 
+  // Standalone mode (v2.4 INC-D1): Apply is a destructive buffer edit; Live
+  // and A/B are envelope concepts and render disabled + ignore clicks.
+  void SetStandalone(bool s)
+  {
+    m_standalone = s;
+    if (s) { m_liveMode = false; m_bypassed = false; }
+  }
+
 private:
   enum class Tab { Compressor, Gate, DeEss, View };   // premium panel active tab
   static constexpr int NUM_SLIDERS = kDynNumParams;  // 14 since the v2.3.0 gate extension
@@ -220,6 +228,7 @@ private:
   bool m_dsListen = false;  // De-Ess Listen overlay (ephemeral, like A/B)
   bool m_liveMode = false;  // live preview: write envelope on slider change
   bool m_liveUndoOpen = false; // undo block is open for live session
+  bool m_standalone = false;   // INC-D1: destructive Apply; Live/A-B disabled
 
   // Panel dragging
   bool m_panelDragging = false;

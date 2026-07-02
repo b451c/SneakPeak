@@ -640,6 +640,7 @@ private:
   void DrawMasterWaveform(HDC hdc);
   void DrawDynamicsCurve(HDC hdc);
   void ApplyDynamicsToEnvelope();
+  void DoApplyDynamicsStandalone();  // v2.4 INC-D1: GR curve multiplied into the buffer
   void SaveDynamicsToItem();
   bool LoadDynamicsFromItem();
   void RefreshDynamicsAvgGr();   // push real avg GR into the panel after open (no makeup leap on first drag)

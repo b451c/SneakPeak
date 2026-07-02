@@ -510,9 +510,13 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       // Check if Apply was clicked
       if (m_dynamicsPanel.ApplyRequested()) {
         m_dynamicsPanel.ClearApplyRequested();
-        ApplyDynamicsToEnvelope();
-        // Save dynamics params to item P_EXT on Apply
-        SaveDynamicsToItem();
+        if (m_waveform.IsStandaloneMode()) {
+          DoApplyDynamicsStandalone();   // INC-D1: destructive buffer edit
+        } else {
+          ApplyDynamicsToEnvelope();
+          // Save dynamics params to item P_EXT on Apply
+          SaveDynamicsToItem();
+        }
       }
       // Persist Dyn/Env/GR overlay toggles as global user prefs when one changed
       if (m_dynamicsPanel.ViewPrefsChanged()) {

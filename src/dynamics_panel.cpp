@@ -504,7 +504,10 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
 
   if (L.closeBtn.contains(lx, ly)) { Hide(); return true; }
   if (L.preset.contains(lx, ly))   { m_presetMenuRequested = true; return true; }
-  if (L.abBtn.contains(lx, ly))    { m_bypassed = !m_bypassed; return true; }
+  if (L.abBtn.contains(lx, ly)) {
+    if (!m_standalone) m_bypassed = !m_bypassed;   // INC-D1: no envelope to A/B
+    return true;
+  }
   // DOWN/UP processor-mode state button (v2.3.0; A/B-style, click flips).
   // Switching TO Up defaults auto-makeup OFF once (it acts as a trim there -
   // user opts back in) and flags a one-shot hint toast when the gate is off
@@ -626,6 +629,7 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
   if (L.viewToggle[1].contains(lx, ly)) { m_showEnv = !m_showEnv; m_viewPrefsChanged = true; return true; }
   if (L.viewToggle[2].contains(lx, ly)) { m_showGR  = !m_showGR;  m_viewPrefsChanged = true; return true; }
   if (L.viewToggle[3].contains(lx, ly)) {
+    if (m_standalone) return true;               // INC-D1: no envelope to write
     m_liveMode = !m_liveMode;
     if (m_liveMode) m_applyRequested = true;     // initial apply when arming (GDI parity)
     m_viewPrefsChanged = true;                   // Live persists across sessions (user request)
@@ -736,6 +740,7 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   // Live toggle
   RECT liveR = GetLiveToggleRect(pr);
   if (x >= liveR.left && x < liveR.right && y >= liveR.top && y < liveR.bottom) {
+    if (m_standalone) return true;           // INC-D1: no envelope to write
     m_liveMode = !m_liveMode;
     if (m_liveMode) m_applyRequested = true; // initial apply when turning on
     m_viewPrefsChanged = true;               // Live persists across sessions
@@ -753,7 +758,7 @@ bool DynamicsPanel::OnMouseDown(int x, int y, RECT wr)
   // A/B bypass toggle
   RECT abR = GetABToggleRect(pr);
   if (x >= abR.left && x < abR.right && y >= abR.top && y < abR.bottom) {
-    m_bypassed = !m_bypassed;
+    if (!m_standalone) m_bypassed = !m_bypassed;   // INC-D1: no envelope to A/B
     return true;
   }
 
@@ -1499,6 +1504,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.showGR   = m_showGR;
   vm.liveMode = m_liveMode;
   vm.bypassed = m_bypassed;
+  vm.standalone = m_standalone;
   vm.rmsMode  = m_params.rmsMode;
   vm.mode     = m_params.compMode;
   vm.compBypass = m_params.compBypass;

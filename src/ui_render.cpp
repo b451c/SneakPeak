@@ -955,6 +955,7 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
 
     // A/B bypass: reflects state (amber outline + "BYP" when bypassed) so the
     // always-visible header control reads the current compare state at a glance.
+    // Standalone (INC-D1): disabled ink - there is no envelope to A/B.
     const bool byp = vm.bypassed;
     FillURound(ctx, L.abBtn, dynui::kRadiusCtrl, byp ? dynui::kSurface3 : dynui::kSurface2);
     if (byp) {
@@ -964,7 +965,8 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
                             col(dynui::kAmber));
     }
     TextCentered(ctx, gfx.fLabel, L.abBtn, byp ? "BYP" : "A/B",
-                 byp ? dynui::kAmber : dynui::kInkSecondary);
+                 vm.standalone ? dynui::kInkDisabled
+                 : byp         ? dynui::kAmber : dynui::kInkSecondary);
     TextCentered(ctx, gfx.fValue, L.closeBtn, "x", dynui::kInkMuted);
   }
   ctx.set_stroke_width(1.0);
@@ -1217,7 +1219,23 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[0], "DYN",  vm.showDyn,  dynui::kAmber,   false, 0.0);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[1], "ENV",  vm.showEnv,  dynui::kEnvCyan, false, 0.0);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[2], "GR",   vm.showGR,   dynui::kGrRed,   false, 0.0);
-    DrawTogglePill(ctx, *m_gfx, L.viewToggle[3], "LIVE", vm.liveMode, dynui::kAmber,   false, vm.livePulse);
+    if (vm.standalone) {
+      // INC-D1: no envelope to write - LIVE renders disabled (clicks no-op).
+      const URect& lr = L.viewToggle[3];
+      if (lr.w >= 1.0) {
+        FillURound(ctx, lr, dynui::kRadiusCtrl, dynui::kSurface2);
+        ctx.set_stroke_width(1.5);
+        ctx.stroke_circle(BLCircle(lr.x + 12.0, lr.y + lr.h * 0.5, 4.0),
+                          col(dynui::kInkDisabled));
+        if (m_gfx->fontsReady)
+          ctx.fill_utf8_text(BLPoint(lr.x + 24.0, lr.y + lr.h * 0.5 + 4.0),
+                             m_gfx->fLabel, "LIVE", SIZE_MAX,
+                             col(dynui::kInkDisabled));
+      }
+    } else {
+      DrawTogglePill(ctx, *m_gfx, L.viewToggle[3], "LIVE", vm.liveMode,
+                     dynui::kAmber, false, vm.livePulse);
+    }
     // A/B is NOT a View-tab pill - it lives in the header (DrawHeader).
 
     // Meter-scale dB-floor selector (View tab) + its left "SCALE" caption. Both

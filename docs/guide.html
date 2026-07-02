@@ -740,9 +740,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Dynamics -->
 <h2 id="dynamics-overview">Dynamics Processing</h2>
-<div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-set">SET</span></div>
+<div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-set">SET</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>SneakPeak includes a built-in dynamics processor that analyzes your audio and writes volume envelope points to achieve compression and gating. Instead of real-time DSP, it works offline - analyzing the audio buffer and generating precise envelope automation. This means zero CPU cost during playback.</p>
+
+<p><strong>In Standalone mode</strong> the same panel works destructively, like a classic offline compressor: there is no envelope, so Apply multiplies the computed gain curve (compressor + gate + de-esser) directly into the audio, with one undo step. Live mode and A/B are envelope concepts and render disabled there; the preview curves stay fully live. Together with the Hard Limiter this completes the standalone "podcast chain": Dynamics &gt; Hard Limiter &gt; Save.</p>
 
 <p>The dynamics engine visualizes two curves on the waveform:</p>
 <ul>
