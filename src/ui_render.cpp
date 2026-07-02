@@ -1660,8 +1660,19 @@ OneShotLayout ComputeOneShotLayout(double w, double h)
   for (int i = 0; i < 4; i++)
     L.normSeg[i] = { pad + (double)i * (segW + 4.0), segTop, segW, 26.0 };
 
-  const double footTop = segTop + 26.0 + 2.0;          // 194
-  L.footer = { 0, footTop, w, (double)dynui::kFooterH };  // bottom = 238
+  // INC-B2: SLICE segments (left) + naming pattern box (right), captioned.
+  const double capTop = segTop + 26.0 + 6.0;           // 198
+  const double rowTop = capTop + 12.0;                 // 210
+  const double sliceW = 68.0;
+  L.sliceCap = { pad, capTop, 3.0 * sliceW + 2.0 * 4.0, 10.0 };
+  for (int i = 0; i < 3; i++)
+    L.sliceSeg[i] = { pad + (double)i * (sliceW + 4.0), rowTop, sliceW, 26.0 };
+  const double patX = pad + 3.0 * sliceW + 2.0 * 4.0 + 8.0;   // 236
+  L.nameCap = { patX, capTop, w - pad - patX, 10.0 };
+  L.patternBox = { patX, rowTop, w - pad - patX, 26.0 };
+
+  const double footTop = rowTop + 26.0 + 8.0;          // 244
+  L.footer = { 0, footTop, w, (double)dynui::kFooterH };  // bottom = 288
   L.run = { w - pad - 100.0, footTop + 9.0, 100.0, 26.0 };
   return L;
 }
@@ -1712,6 +1723,28 @@ void UiCanvas::RenderOneShotPanel(HDC hdc, int x, int y, int w, int h, double dp
 
     static const char* const kNormLabels[4] = { "OFF", "PEAK", "LUFS", "TP SAFE" };
     DrawSegmentedN(ctx, gfx, L.normSeg, kNormLabels, 4, vm.normMode);
+
+    // INC-B2: slice mode + naming pattern.
+    if (gfx.fontsReady) {
+      ctx.fill_utf8_text(BLPoint(L.sliceCap.x, L.sliceCap.y + 9.0), gfx.fTick,
+                         "SLICE", SIZE_MAX, col(dynui::kInkSecondary));
+      ctx.fill_utf8_text(BLPoint(L.nameCap.x, L.nameCap.y + 9.0), gfx.fTick,
+                         "NAME", SIZE_MAX, col(dynui::kInkSecondary));
+    }
+    static const char* const kSliceLabels[3] = { "WHOLE", "REGIONS", "SILENCE" };
+    DrawSegmentedN(ctx, gfx, L.sliceSeg, kSliceLabels, 3, vm.sliceMode);
+    FillURound(ctx, L.patternBox, dynui::kRadiusCtrl,
+               vm.hover == OS_HIT_PATTERN ? dynui::kSurface3 : dynui::kSurface2);
+    if (gfx.fontsReady && vm.patternText) {
+      ctx.save();
+      ctx.clip_to_rect(BLRect(L.patternBox.x, L.patternBox.y,
+                              L.patternBox.w - 4.0, L.patternBox.h));
+      ctx.fill_utf8_text(BLPoint(L.patternBox.x + 8.0,
+                                 L.patternBox.y + L.patternBox.h * 0.5 + 4.0),
+                         gfx.fLabel, vm.patternText, SIZE_MAX,
+                         col(dynui::kInkPrimary));
+      ctx.restore();
+    }
 
     ctx.set_stroke_width(1.0);
     ctx.stroke_line(BLLine(0, L.footer.y, W, L.footer.y), col(dynui::kHairline));

@@ -912,17 +912,19 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="oneshot">One-Shot Factory</h2>
 <div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
 
-<p>Preparing game-ready one-shots (footsteps, impacts, UI sounds) is the same three steps every time: trim the silence, kill the trigger clicks with tiny edge fades, hit the loudness target. Right-click &gt; <strong>One-Shot Factory...</strong> does the whole chain in one Run:</p>
+<p>Preparing game-ready one-shots (footsteps, impacts, UI sounds) is the same three steps every time: trim the silence, kill the trigger clicks with tiny edge fades, hit the loudness target. Right-click &gt; <strong>One-Shot Factory...</strong> does the whole chain in one Run - for one file or a whole batch of variations:</p>
 
 <ul>
   <li><strong>TRIM</strong> - drop silence below the threshold (default -60 dBFS), keeping a small padding (default 10 ms) around the sound.</li>
   <li><strong>Fade In / Fade Out</strong> - edge micro-fades (defaults 5 ms / 20 ms, the industry click-killers).</li>
   <li><strong>Normalize</strong> - OFF, <strong>PEAK</strong> (dBFS), <strong>LUFS</strong> (integrated, custom target, measured by REAPER's own engine) or <strong>TP SAFE</strong> (the Hard Limiter at your dBTP ceiling - the game-asset default).</li>
+  <li><strong>SLICE</strong> - <strong>WHOLE</strong> exports the file as one asset; <strong>REGIONS</strong> makes each region a variation (with no regions, markers act as split points); <strong>SILENCE</strong> auto-splits on gaps longer than 150 ms below the trim threshold (slices under 50 ms are dropped, and each slice keeps its padding without bleeding into a neighbour). Record ten footsteps in one take, add nothing, and SILENCE finds the ten slices.</li>
+  <li><strong>NAME</strong> - the naming pattern for the written files: <code>{name}</code> = source basename, <code>{nn}</code> = 01-based zero-padded number; default <code>{name}_{nn}</code>. Click the box to edit.</li>
 </ul>
 
-<p>While the panel is open, the waveform previews the prep live: dimmed zones show what the trim will cut, amber lines mark the kept region and diagonal ramps show the edge fades - all following the knobs.</p>
+<p>While the panel is open, the waveform previews the prep live: dimmed zones show what will be cut, amber lines mark every slice that will be written and diagonal ramps show the edge fades - all following the knobs, so you can tune the threshold until the split is exactly right.</p>
 
-<p><strong>Run</strong> writes the result next to the source file as <code>{name}_01.wav</code> (existing files are never overwritten - collisions get <code>_x</code> appended). The audio loaded in the editor is not modified. Knobs work like the other premium panels; settings persist. Slicing one file into many named variations is the next step on the roadmap.</p>
+<p><strong>Run</strong> writes each slice through the full chain next to the source file (existing files are never overwritten - collisions get <code>_x</code> appended). The audio loaded in the editor is not modified. Long batches show progress in the title bar and the toast sums up, e.g. "14 files written". Knobs work like the other premium panels; settings persist.</p>
 
 <h2 id="hard-limiter">Hard Limiter (True Peak)</h2>
 <div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>

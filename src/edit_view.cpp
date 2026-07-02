@@ -2056,9 +2056,11 @@ void SneakPeak::LimiterPreviewDraftThread(
 
 
 // --- One-Shot live preview (v2.4 INC-B1 follow-up: no blind knobs) ----------
-// Recompute the trim bounds when the params or the buffer changed. The scan
-// is O(n) over the buffer; the timer tick naturally throttles it during a
-// knob drag (one scan per frame at most, and one-shots are short by nature).
+// Recompute the kept spans when the params or the buffer changed. One span
+// per slice (INC-B2): the preview shares OneShotBuildSlices/OneShotTrimBounds
+// with the exporter, so what is drawn is exactly what Run will write. The
+// scans are O(n) over the buffer; the timer tick naturally throttles them
+// during a knob drag (one pass per frame at most, one-shots are short).
 void SneakPeak::OneShotPreviewTick()
 {
   if (!m_oneShotPanel.IsVisible() || !m_waveform.IsStandaloneMode() ||
@@ -2070,34 +2072,11 @@ void SneakPeak::OneShotPreviewTick()
   m_osPreviewSerial = serial;
 
   const OneShotParams p = m_oneShotPanel.GetParams();
-  const auto& data = m_waveform.GetAudioData();
-  const int nch = m_waveform.GetNumChannels();
-  const int sr = m_waveform.GetSampleRate();
-  const int frames = m_waveform.GetAudioSampleCount();
-  m_osTrimA = -1;
-  m_osTrimB = -1;
-  if (frames > 0 && nch > 0 && sr > 0) {
-    if (p.trimEnable) {
-      const double thr = pow(10.0, p.trimThreshDb / 20.0);
-      int first = -1, last = -1;
-      for (int i = 0; i < frames; i++) {
-        bool hot = false;
-        for (int c = 0; c < nch && !hot; c++)
-          hot = fabs(data[(size_t)i * nch + c]) >= thr;
-        if (hot) {
-          if (first < 0) first = i;
-          last = i;
-        }
-      }
-      if (first >= 0) {
-        const int padFrames = (int)(p.trimPadMs * 0.001 * sr + 0.5);
-        m_osTrimA = std::max(0, first - padFrames);
-        m_osTrimB = std::min(frames, last + 1 + padFrames);
-      }
-    } else {
-      m_osTrimA = 0;
-      m_osTrimB = frames;
-    }
+  m_osSpans.clear();
+  for (const auto& s : OneShotBuildSlices(p)) {
+    int a, b;
+    if (OneShotTrimBounds(p, s.first, s.second, &a, &b))
+      m_osSpans.push_back({ a, b });
   }
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }

@@ -84,11 +84,29 @@ void OneShotPanel::SetParams(const OneShotParams& p)
 {
   m_params.trimEnable = p.trimEnable;
   m_params.normMode = (p.normMode >= 0 && p.normMode <= 3) ? p.normMode : 3;
+  m_params.sliceMode = (p.sliceMode >= 0 && p.sliceMode <= 2) ? p.sliceMode : 0;
+  SetPattern(p.pattern);
   SetValue(0, p.trimThreshDb);
   SetValue(1, p.trimPadMs);
   SetValue(2, p.fadeInMs);
   SetValue(3, p.fadeOutMs);
   SetValue(4, p.normTarget);
+}
+
+// Sanitized pattern copy: path separators would escape the output directory,
+// and an empty pattern silently degrades - both fall back / get replaced.
+void OneShotPanel::SetPattern(const char* pat)
+{
+  if (!pat || !pat[0]) {
+    snprintf(m_params.pattern, sizeof(m_params.pattern), "{name}_{nn}");
+    return;
+  }
+  size_t o = 0;
+  for (const char* s = pat; *s && o + 1 < sizeof(m_params.pattern); s++) {
+    const char c = *s;
+    m_params.pattern[o++] = (c == '/' || c == '\\' || c == ':') ? '_' : c;
+  }
+  m_params.pattern[o] = 0;
 }
 
 void OneShotPanel::Show()
@@ -153,6 +171,9 @@ int OneShotPanel::HitId(double lx, double ly) const
   if (L.trimPill.contains(lx, ly)) return OS_HIT_TRIM;
   for (int i = 0; i < 4; i++)
     if (L.normSeg[i].contains(lx, ly)) return OS_HIT_SEG0 + i;
+  for (int i = 0; i < 3; i++)
+    if (L.sliceSeg[i].contains(lx, ly)) return OS_HIT_SLICE0 + i;
+  if (L.patternBox.contains(lx, ly)) return OS_HIT_PATTERN;
   for (int i = 0; i < kOsNumParams; i++)
     if (L.knob[i].contains(lx, ly)) return OS_HIT_KNOB0 + i;
   return OS_HIT_NONE;
@@ -176,6 +197,18 @@ bool OneShotPanel::OnMouseDown(int x, int y, RECT wr)
   }
   if (hit >= OS_HIT_SEG0 && hit < OS_HIT_SEG0 + 4) {
     SetNormMode(hit - OS_HIT_SEG0);
+    return true;
+  }
+  if (hit >= OS_HIT_SLICE0 && hit < OS_HIT_SLICE0 + 3) {
+    const int mode = hit - OS_HIT_SLICE0;
+    if (mode != m_params.sliceMode) {
+      m_params.sliceMode = mode;
+      m_paramsChanged = true;
+    }
+    return true;
+  }
+  if (hit == OS_HIT_PATTERN) {
+    m_patternEditReq = true;
     return true;
   }
   if (hit >= OS_HIT_KNOB0) {
@@ -282,6 +315,8 @@ void OneShotPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   OneShotVM vm;
   vm.trimEnable = m_params.trimEnable;
   vm.normMode = m_params.normMode;
+  vm.sliceMode = m_params.sliceMode;
+  vm.patternText = m_params.pattern;
   vm.hover = m_hover;
   for (int i = 0; i < kOsNumParams; i++) {
     const OsKnobDef& def = OS_DEFS[i];

@@ -322,18 +322,29 @@ private:
   void DoSpectralHeal(double strength);  // v2.3.0 INC-5: STFT heal of time x freq selection
   void DoRepairClicks();                 // v2.3.0 INC-5: AR click repair on time selection
   void DoApplyLimiter();                 // v2.4.0 INC-L1: true-peak hard limiter apply
-  void DoRunOneShot();                   // v2.4 INC-B1: trim/fade/normalize -> WAV
+  void DoRunOneShot();                   // v2.4 INC-B1/B2: per-slice trim/fade/normalize -> WAVs
+  // INC-B2 slice helpers: the slice list for the active mode (whole file /
+  // regions-markers / silence gaps), the per-slice kept-bounds (shared by the
+  // exporter and the live preview so they can never disagree), one slice's
+  // export, and the native naming-pattern edit dialog.
+  std::vector<std::pair<int, int>> OneShotBuildSlices(const OneShotParams& p);
+  bool OneShotTrimBounds(const OneShotParams& p, int s0, int s1, int* a, int* b);
+  int  OneShotExportSlice(const OneShotParams& p, int s0, int s1,
+                          const std::string& outPath, char* note, size_t noteSz,
+                          char* err, size_t errSz);   // 1 written, 0 skip, -1 abort
+  void EditOneShotPattern();
   void SaveOneShotParams();              // os_* ExtState session defaults
   void RestoreOneShotParams();
   void SaveOneShotGeom();
   void SaveLoopLabParams();              // loop_weld_ms session default
   void RestoreLoopLabParams();           // + panel offsets
   void SaveLoopLabGeom();                // loop_off_x / loop_off_y
-  // Live prep preview (no blind knobs): trim bounds recomputed on param
+  // Live prep preview (no blind knobs): kept spans recomputed on param
   // change, drawn as dimmed cut zones + fade ramps while the panel is open.
+  // One span per slice (INC-B2) - WHOLE mode keeps the single trim span.
   void OneShotPreviewTick();
   void DrawOneShotOverlay(HDC hdc);
-  int m_osTrimA = -1, m_osTrimB = -1;   // kept region [A, B); -1 = no preview
+  std::vector<std::pair<int, int>> m_osSpans;   // kept regions [a, b); empty = no preview
   bool m_osPreviewDirty = true;
   uint64_t m_osPreviewSerial = 0;
 

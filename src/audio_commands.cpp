@@ -2044,61 +2044,196 @@ void SneakPeak::SaveLimiterGeom()
   g_SetExtState("SneakPeak", "lim_off_y", buf, true);
 }
 
-// --- One-Shot Prep (v2.4 INC-B1) ---------------------------------------------
-// RUN = trim silence -> edge micro-fades -> normalize -> write WAV next to
-// the source ({name}_01.wav, collision appends _x). The loaded buffer is
-// NEVER touched - this is an exporter. LUFS-I uses REAPER's own measurement
-// (CalculateNormalization on a temp file), Peak is a plain scan, TP-safe
-// runs the limiter engine at the target ceiling.
-void SneakPeak::DoRunOneShot()
+// --- One-Shot Prep (v2.4 INC-B1 + B2) -----------------------------------------
+// RUN = per slice: trim silence -> edge micro-fades -> normalize -> write WAV
+// next to the source (naming pattern, collision appends _x). The loaded buffer
+// is NEVER touched - this is an exporter. LUFS-I uses REAPER's own measurement
+// (CalculateNormalization on a temp file), Peak is a plain scan, TP-safe runs
+// the limiter engine at the target ceiling.
+
+// Kept bounds of one slice: the trim scan (any channel above the threshold
+// keeps the frame) + keep-padding, clamped to the slice. Shared by the
+// exporter and the live preview so what is drawn is exactly what Run writes.
+// False = nothing above the threshold in this slice.
+bool SneakPeak::OneShotTrimBounds(const OneShotParams& p, int s0, int s1,
+                                  int* a, int* b)
 {
-  if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
-  const OneShotParams p = m_oneShotPanel.GetParams();
   const auto& data = m_waveform.GetAudioData();
   const int nch = m_waveform.GetNumChannels();
   const int sr = m_waveform.GetSampleRate();
-  const int frames = m_waveform.GetAudioSampleCount();
-  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+  if (s1 <= s0 || nch <= 0 || sr <= 0) return false;
+  if (!p.trimEnable) {
+    *a = s0;
+    *b = s1;
+    return true;
+  }
+  const double thr = pow(10.0, p.trimThreshDb / 20.0);
+  int first = -1, last = -1;
+  for (int i = s0; i < s1; i++) {
+    bool hot = false;
+    for (int c = 0; c < nch && !hot; c++)
+      hot = fabs(data[(size_t)i * nch + c]) >= thr;
+    if (hot) {
+      if (first < 0) first = i;
+      last = i;
+    }
+  }
+  if (first < 0) return false;
+  const int padFrames = (int)(p.trimPadMs * 0.001 * sr + 0.5);
+  *a = std::max(s0, first - padFrames);
+  *b = std::min(s1, last + 1 + padFrames);
+  return true;
+}
 
-  // 1. Trim silence (any channel above the threshold keeps the frame).
-  int a = 0, b = frames;
-  if (p.trimEnable) {
+// Slice list for the active mode, sorted and non-overlapping. WHOLE = one
+// slice spanning the file (byte-identical to the INC-B1 behavior).
+std::vector<std::pair<int, int>> SneakPeak::OneShotBuildSlices(const OneShotParams& p)
+{
+  std::vector<std::pair<int, int>> out;
+  const int frames = m_waveform.GetAudioSampleCount();
+  const int sr = m_waveform.GetSampleRate();
+  const int nch = m_waveform.GetNumChannels();
+  if (frames <= 0 || sr <= 0 || nch <= 0) return out;
+
+  if (p.sliceMode == 1) {   // By regions/markers: regions win, markers split
+    if (!g_EnumProjectMarkers3) return out;
+    const double itemPos = m_waveform.GetItemPosition();
+    const double dur = (double)frames / sr;
+    std::vector<int> marks;
+    int idx = 0, mri = 0, color = 0;
+    bool isrgn = false;
+    double pos = 0.0, rgnend = 0.0;
+    const char* name = nullptr;
+    while (g_EnumProjectMarkers3(nullptr, idx, &isrgn, &pos, &rgnend, &name,
+                                 &mri, &color)) {
+      idx++;
+      if (isrgn) {
+        const double s = pos - itemPos, e = rgnend - itemPos;
+        if (e <= 0.0 || s >= dur) continue;
+        const int fs = std::max(0, (int)(s * sr + 0.5));
+        const int fe = std::min(frames, (int)(e * sr + 0.5));
+        if (fe > fs) out.push_back({ fs, fe });
+      } else {
+        const double t = pos - itemPos;
+        if (t > 0.0 && t < dur) marks.push_back((int)(t * sr + 0.5));
+      }
+    }
+    if (!out.empty()) {
+      std::sort(out.begin(), out.end());
+    } else if (!marks.empty()) {   // markers = split points -> N+1 spans
+      std::sort(marks.begin(), marks.end());
+      int prev = 0;
+      for (int f : marks) {
+        if (f > prev) out.push_back({ prev, f });
+        prev = f;
+      }
+      if (prev < frames) out.push_back({ prev, frames });
+    }
+    return out;
+  }
+
+  if (p.sliceMode == 2) {   // By silence: gap > 150 ms below the threshold
+    const auto& data = m_waveform.GetAudioData();
     const double thr = pow(10.0, p.trimThreshDb / 20.0);
-    int first = -1, last = -1;
+    const int gapF = (int)(0.150 * sr + 0.5);
+    const int minF = (int)(0.050 * sr + 0.5);   // min slice 50 ms
+    int spanStart = -1, lastHot = -1;
+    auto push = [&](int a, int b) {
+      if (b - a >= minF) out.push_back({ a, b });
+    };
     for (int i = 0; i < frames; i++) {
       bool hot = false;
       for (int c = 0; c < nch && !hot; c++)
         hot = fabs(data[(size_t)i * nch + c]) >= thr;
-      if (hot) {
-        if (first < 0) first = i;
-        last = i;
+      if (!hot) continue;
+      if (spanStart < 0) {
+        spanStart = i;
+      } else if (i - lastHot > gapF) {
+        push(spanStart, lastHot + 1);
+        spanStart = i;
       }
+      lastHot = i;
     }
-    if (first < 0) {
-      ShowToast("Nothing above the trim threshold - no file written");
-      return;
+    if (spanStart >= 0) push(spanStart, lastHot + 1);
+    // Give each slice its keep-padding here (the gaps are silence - padding
+    // into them is the point), capped at the midpoint to the neighbour so
+    // slices never overlap. The per-slice trim then reproduces these bounds.
+    const int padF = p.trimEnable ? (int)(p.trimPadMs * 0.001 * sr + 0.5) : 0;
+    for (size_t i = 0; i < out.size(); i++) {
+      const int loCap = i == 0 ? 0 : (out[i - 1].second + out[i].first) / 2;
+      const int hiCap = i + 1 == out.size()
+                            ? frames
+                            : (out[i].second + out[i + 1].first) / 2;
+      out[i].first = std::max(loCap, out[i].first - padF);
+      out[i].second = std::min(hiCap, out[i].second + padF);
     }
-    const int padFrames = (int)(p.trimPadMs * 0.001 * sr + 0.5);
-    a = std::max(0, first - padFrames);
-    b = std::min(frames, last + 1 + padFrames);
+    return out;
+  }
+
+  out.push_back({ 0, frames });   // Whole file
+  return out;
+}
+
+// {name} -> source basename, {nn} -> 01-based zero-padded index (width grows
+// past 99 slices). The panel sanitized path separators out of the pattern.
+static std::string ExpandOneShotPattern(const char* pat, const std::string& base,
+                                        int idx1, int count)
+{
+  int width = 2;
+  for (int c = count; c >= 100; c /= 10) width++;
+  char nn[16];
+  snprintf(nn, sizeof(nn), "%0*d", width, idx1);
+  std::string out;
+  for (const char* s = pat; *s;) {
+    if (!strncmp(s, "{name}", 6)) {
+      out += base;
+      s += 6;
+    } else if (!strncmp(s, "{nn}", 4)) {
+      out += nn;
+      s += 4;
+    } else {
+      out += *s++;
+    }
+  }
+  if (out.empty()) out = base + "_" + nn;
+  return out;
+}
+
+// One slice through the chain: trim -> fades -> normalize -> write. Returns
+// 1 = written (note = "1.23 s, peak -0.3 dBFS"), 0 = skipped (note says why,
+// toast-ready), -1 = abort the whole run (err says why).
+int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
+                                  const std::string& outPath, char* note,
+                                  size_t noteSz, char* err, size_t errSz)
+{
+  const auto& data = m_waveform.GetAudioData();
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  note[0] = 0;
+  err[0] = 0;
+
+  int a = 0, b = 0;
+  if (!OneShotTrimBounds(p, s0, s1, &a, &b)) {
+    snprintf(note, noteSz, "Nothing above the trim threshold");
+    return 0;
   }
   const int len = b - a;
   if (len < 16) {
-    ShowToast("Trimmed result too short - no file written");
-    return;
+    snprintf(note, noteSz, "Trimmed result too short");
+    return 0;
   }
 
   std::vector<double> work(data.begin() + (size_t)a * nch,
                            data.begin() + (size_t)b * nch);
 
-  // 2. Edge micro-fades (linear in v1 - the click-killers).
+  // Edge micro-fades (linear in v1 - the click-killers).
   const int inF = std::min((int)(p.fadeInMs * 0.001 * sr + 0.5), len);
   const int outF = std::min((int)(p.fadeOutMs * 0.001 * sr + 0.5), len);
   if (inF > 0) AudioOps::FadeInShaped(work.data(), inF, nch, 0);
   if (outF > 0)
     AudioOps::FadeOutShaped(work.data() + (size_t)(len - outF) * nch, outF, nch, 0);
 
-  // 3. Normalize.
+  // Normalize.
   char normNote[48] = "";
   if (p.normMode == 1) {   // Peak dBFS
     double pk = 0.0;
@@ -2131,8 +2266,8 @@ void SneakPeak::DoRunOneShot()
       }
     }
     if (!ok) {
-      ShowToast("LUFS measurement failed - no file written");
-      return;
+      snprintf(err, errSz, "LUFS measurement failed - run aborted");
+      return -1;
     }
     snprintf(normNote, sizeof(normNote), ", %.0f LUFS", p.normTarget);
   } else if (p.normMode == 3) {   // True-peak safe = the limiter engine
@@ -2140,13 +2275,35 @@ void SneakPeak::DoRunOneShot()
     lp.ceilingDb = p.normTarget;
     LimiterResult r = LimiterProcess(work.data(), len, nch, sr, lp);
     if (!r.ok) {
-      ShowToast("Limiter failed - no file written");
-      return;
+      snprintf(err, errSz, "Limiter failed - run aborted");
+      return -1;
     }
     snprintf(normNote, sizeof(normNote), ", %.1f dBTP safe", p.normTarget);
   }
 
-  // 4. Output path: {name}_01.wav next to the source; collision appends _x.
+  if (!AudioEngine::WriteWavFile(outPath, work.data(), len, nch, sr,
+                                 m_wavBitsPerSample, m_wavAudioFormat)) {
+    snprintf(err, errSz, "Write failed - check the source folder permissions");
+    return -1;
+  }
+  snprintf(note, noteSz, "%.2f s%s", (double)len / sr, normNote);
+  return 1;
+}
+
+void SneakPeak::DoRunOneShot()
+{
+  if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
+  const OneShotParams p = m_oneShotPanel.GetParams();
+
+  const std::vector<std::pair<int, int>> slices = OneShotBuildSlices(p);
+  if (slices.empty()) {
+    ShowToast(p.sliceMode == 1 ? "No regions or markers to slice by"
+              : p.sliceMode == 2 ? "No audio above the threshold to slice"
+                                 : "Nothing to export");
+    return;
+  }
+
+  // {name} = the source basename; output dir = the source's folder.
   std::string srcPath = m_waveform.GetStandaloneFilePath();
   std::string dir = ".", base = "oneshot";
   {
@@ -2157,26 +2314,74 @@ void SneakPeak::DoRunOneShot()
     if (dot != std::string::npos && dot > 0) fname = fname.substr(0, dot);
     if (!fname.empty()) base = fname;
   }
-  std::string outPath = dir + "/" + base + "_01.wav";
-  for (int tries = 0; tries < 8; tries++) {
-    FILE* probe = fopen(outPath.c_str(), "rb");
-    if (!probe) break;
-    fclose(probe);
-    outPath = outPath.substr(0, outPath.size() - 4) + "_x.wav";
-  }
 
-  if (!AudioEngine::WriteWavFile(outPath, work.data(), len, nch, sr,
-                                 m_wavBitsPerSample, m_wavAudioFormat)) {
-    ShowToast("Write failed - check the source folder permissions");
-    return;
+  const int n = (int)slices.size();
+  int written = 0, skipped = 0;
+  char note[96] = "", err[96] = "", lastName[128] = "";
+  for (int i = 0; i < n; i++) {
+    if (n > 1) {   // STA-1-style progress in the title
+      char title[128];
+      snprintf(title, sizeof(title), "SneakPeak - One-Shot %d/%d...", i + 1, n);
+      SetWindowText(m_hwnd, title);
+    }
+    const std::string name = ExpandOneShotPattern(p.pattern, base, i + 1, n);
+    std::string outPath = dir + "/" + name + ".wav";
+    for (int tries = 0; tries < 8; tries++) {   // collision -> append _x
+      FILE* probe = fopen(outPath.c_str(), "rb");
+      if (!probe) break;
+      fclose(probe);
+      outPath = outPath.substr(0, outPath.size() - 4) + "_x.wav";
+    }
+    const int r = OneShotExportSlice(p, slices[(size_t)i].first,
+                                     slices[(size_t)i].second, outPath, note,
+                                     sizeof(note), err, sizeof(err));
+    if (r > 0) {
+      written++;
+      const size_t slash = outPath.find_last_of("/\\");
+      snprintf(lastName, sizeof(lastName), "%s",
+               slash == std::string::npos ? outPath.c_str()
+                                          : outPath.c_str() + slash + 1);
+    } else if (r == 0) {
+      skipped++;
+    } else {
+      if (n > 1) UpdateTitle();
+      ShowToast(err);
+      return;
+    }
   }
-  const size_t slash = outPath.find_last_of("/\\");
-  char buf[160];
-  snprintf(buf, sizeof(buf), "Written: %s (%.2f s%s)",
-           slash == std::string::npos ? outPath.c_str()
-                                      : outPath.c_str() + slash + 1,
-           (double)len / sr, normNote);
+  if (n > 1) UpdateTitle();
+
+  char buf[192];
+  if (n == 1) {   // the INC-B1 single-file messages, preserved
+    if (written == 1)
+      snprintf(buf, sizeof(buf), "Written: %s (%s)", lastName, note);
+    else
+      snprintf(buf, sizeof(buf), "%s - no file written", note);
+  } else if (skipped > 0) {
+    snprintf(buf, sizeof(buf), "%d file%s written, %d slice%s skipped", written,
+             written == 1 ? "" : "s", skipped, skipped == 1 ? "" : "s");
+  } else {
+    snprintf(buf, sizeof(buf), "%d file%s written", written,
+             written == 1 ? "" : "s");
+  }
   ShowToast(buf);
+}
+
+// The pattern box opens REAPER's native input dialog - free-text editing in
+// the accelerator-driven premium panel is not worth the cross-platform key
+// handling risk (same call the marker edit dialog relies on).
+void SneakPeak::EditOneShotPattern()
+{
+  if (!g_GetUserInputs) return;
+  char buf[256];
+  snprintf(buf, sizeof(buf), "%s", m_oneShotPanel.GetParams().pattern);
+  // NOTE: captions_csv splits on commas - the caption must not contain any.
+  if (!g_GetUserInputs("One-Shot naming", 1, "Pattern - tokens {name} {nn}:", buf,
+                       sizeof(buf)))
+    return;
+  m_oneShotPanel.SetPattern(buf);
+  SaveOneShotParams();
+  InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
 // One-Shot session params (os_* keys, x1000-int encoding like lim_*).
@@ -2197,6 +2402,9 @@ void SneakPeak::SaveOneShotParams()
   snprintf(buf, sizeof(buf), "%d", p.normMode);
   g_SetExtState("SneakPeak", "os_norm_mode", buf, true);
   g_SetExtState("SneakPeak", "os_trim", p.trimEnable ? "1" : "0", true);
+  snprintf(buf, sizeof(buf), "%d", p.sliceMode);
+  g_SetExtState("SneakPeak", "os_slice_mode", buf, true);
+  g_SetExtState("SneakPeak", "os_pattern", p.pattern, true);
 }
 
 void SneakPeak::RestoreOneShotParams()
@@ -2222,6 +2430,10 @@ void SneakPeak::RestoreOneShotParams()
   p.normMode = (nm && nm[0]) ? atoi(nm) : 3;
   const char* tr = g_GetExtState("SneakPeak", "os_trim");
   p.trimEnable = !(tr && tr[0] == '0');
+  const char* sm = g_GetExtState("SneakPeak", "os_slice_mode");
+  p.sliceMode = (sm && sm[0]) ? atoi(sm) : 0;
+  const char* pt = g_GetExtState("SneakPeak", "os_pattern");
+  if (pt && pt[0]) snprintf(p.pattern, sizeof(p.pattern), "%s", pt);
   m_oneShotPanel.SetParams(p);
 }
 

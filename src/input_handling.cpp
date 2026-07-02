@@ -448,6 +448,8 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         DoRunOneShot();
         SaveOneShotParams();
       }
+      if (m_oneShotPanel.PatternEditRequested())
+        EditOneShotPattern();
       if (m_oneShotPanel.ParamsChanged()) {
         m_oneShotPanel.ClearParamsChanged();
         m_osPreviewDirty = true;

@@ -190,15 +190,19 @@ enum OneShotHit {
   OS_HIT_NONE  = -1,
   OS_HIT_CLOSE = 0,
   OS_HIT_RUN   = 1,
-  OS_HIT_TRIM  = 2,     // TRIM enable pill
-  OS_HIT_SEG0  = 3,     // normalize mode segments (+ 0..3)
-  OS_HIT_KNOB0 = 7,     // + knob index
+  OS_HIT_TRIM  = 2,      // TRIM enable pill
+  OS_HIT_SEG0  = 3,      // normalize mode segments (+ 0..3)
+  OS_HIT_SLICE0 = 7,     // slice mode segments (+ 0..2) (INC-B2)
+  OS_HIT_PATTERN = 10,   // naming pattern box (INC-B2)
+  OS_HIT_KNOB0 = 11,     // + knob index (keep LAST: ">= KNOB0" means knob)
 };
 
 struct OneShotVM {
   KnobVM knobs[kOsNumParams];
   bool trimEnable = true;
   int  normMode = 3;    // active segment: OFF | PEAK | LUFS | TP SAFE
+  int  sliceMode = 0;   // active segment: WHOLE | REGIONS | SILENCE (INC-B2)
+  const char* patternText = nullptr;   // naming pattern (INC-B2)
   int  hover = OS_HIT_NONE;
 };
 
@@ -207,6 +211,8 @@ struct OneShotLayout {
   URect knob[kOsNumParams];
   URect trimPill;
   URect normSeg[4];
+  URect sliceCap, nameCap;   // "SLICE" / "NAME" captions (INC-B2)
+  URect sliceSeg[3], patternBox;
   URect footer, run;
 };
 OneShotLayout ComputeOneShotLayout(double w, double h);

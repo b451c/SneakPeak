@@ -917,7 +917,7 @@ void SneakPeak::UpdateSoloState()
 void SneakPeak::DrawOneShotOverlay(HDC hdc)
 {
   if (!m_oneShotPanel.IsVisible() || !m_waveform.IsStandaloneMode() ||
-      !m_waveform.HasItem() || m_osTrimA < 0 || m_osTrimB <= m_osTrimA)
+      !m_waveform.HasItem() || m_osSpans.empty())
     return;
   const int sr = m_waveform.GetSampleRate();
   if (sr <= 0) return;
@@ -931,41 +931,48 @@ void SneakPeak::DrawOneShotOverlay(HDC hdc)
     int x = m_waveform.TimeToX((double)frame / (double)sr);
     return std::max(waveL, std::min(waveR, x));
   };
-  const int xa = xOf(m_osTrimA);
-  const int xb = xOf(m_osTrimB);
 
-  // Dim the cut zones (only when the trim actually cuts something).
-  if (p.trimEnable) {
+  // Dim everything OUTSIDE the kept spans (the spans arrive sorted). In WHOLE
+  // mode with trim off the single span covers the file - nothing dims.
+  {
     OwnedPen dimPen(PS_SOLID, 1, RGB(10, 10, 12));
     DCPenScope scope(hdc, dimPen);
-    for (int x = waveL; x < xa; x += 2) {
-      MoveToEx(hdc, x, wr.top, nullptr);
-      LineTo(hdc, x, wr.bottom);
+    int cursor = waveL;
+    auto dimTo = [&](int xEnd) {
+      for (int x = cursor; x < xEnd; x += 2) {
+        MoveToEx(hdc, x, wr.top, nullptr);
+        LineTo(hdc, x, wr.bottom);
+      }
+    };
+    for (const auto& s : m_osSpans) {
+      dimTo(xOf(s.first));
+      cursor = std::max(cursor, xOf(s.second) + 1);
     }
-    for (int x = xb + 1; x <= waveR; x += 2) {
-      MoveToEx(hdc, x, wr.top, nullptr);
-      LineTo(hdc, x, wr.bottom);
-    }
+    dimTo(waveR + 1);
   }
 
-  // Kept-region boundaries + fade ramps (diagonals over the fade spans).
+  // Per span: kept-region boundaries + fade ramps (diagonals over the fades).
   {
     OwnedPen edgePen(PS_SOLID, 2, RGB(245, 166, 35));   // premium amber
     DCPenScope scope(hdc, edgePen);
-    MoveToEx(hdc, xa, wr.top, nullptr);
-    LineTo(hdc, xa, wr.bottom);
-    MoveToEx(hdc, xb, wr.top, nullptr);
-    LineTo(hdc, xb, wr.bottom);
-
-    const int inPx = xOf(m_osTrimA + (int)(p.fadeInMs * 0.001 * sr + 0.5));
-    const int outPx = xOf(m_osTrimB - (int)(p.fadeOutMs * 0.001 * sr + 0.5));
-    if (inPx > xa) {
-      MoveToEx(hdc, xa, wr.bottom, nullptr);
-      LineTo(hdc, inPx, wr.top);
-    }
-    if (outPx < xb) {
-      MoveToEx(hdc, outPx, wr.top, nullptr);
+    for (const auto& s : m_osSpans) {
+      const int xa = xOf(s.first);
+      const int xb = xOf(s.second);
+      MoveToEx(hdc, xa, wr.top, nullptr);
+      LineTo(hdc, xa, wr.bottom);
+      MoveToEx(hdc, xb, wr.top, nullptr);
       LineTo(hdc, xb, wr.bottom);
+
+      const int inPx = xOf(s.first + (int)(p.fadeInMs * 0.001 * sr + 0.5));
+      const int outPx = xOf(s.second - (int)(p.fadeOutMs * 0.001 * sr + 0.5));
+      if (inPx > xa) {
+        MoveToEx(hdc, xa, wr.bottom, nullptr);
+        LineTo(hdc, inPx, wr.top);
+      }
+      if (outPx < xb) {
+        MoveToEx(hdc, outPx, wr.top, nullptr);
+        LineTo(hdc, xb, wr.bottom);
+      }
     }
   }
 }

@@ -89,9 +89,9 @@ constexpr int    kDefaultTickLen = 5;     // default-value notch length on the r
 constexpr int    kLimPanelW = 480;   // base size, logical px (scales with g_uiScale)
 constexpr int    kLimPanelH = 266;   // == ComputeLimiterLayout's footer bottom (keep in sync)
 
-// --- One-Shot Prep panel (premium overlay, v2.4 INC-B1) ---
+// --- One-Shot Prep panel (premium overlay, v2.4 INC-B1 + B2 slice row) ---
 constexpr int    kOsPanelW = 480;
-constexpr int    kOsPanelH = 238;    // == ComputeOneShotLayout's footer bottom (keep in sync)
+constexpr int    kOsPanelH = 288;    // == ComputeOneShotLayout's footer bottom (keep in sync)
 
 // --- Loop Lab panel (premium overlay, v2.4 INC-A5) ---
 constexpr int    kLoopPanelW = 480;
