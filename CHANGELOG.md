@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Old projects and presets load bit-identically: with the new parameters at their defaults the engine output is byte-for-byte the same as v2.2.0 (verified by an offline envelope-diff regression harness added to the repo).
 
 ### Fixed
+- **Standalone editing no longer eats memory on long files** - undo used to snapshot the ENTIRE audio buffer on every edit (a 30-minute stereo file costs ~1.4 GB per undo step). Bounded edits (Heal, Repair Clicks, Silence on a selection, selection gain) now snapshot only the touched range - megabytes instead of gigabytes - and switching between file tabs no longer copies the audio and undo history back and forth (instant now, regardless of file size). Whole-file operations keep full snapshots; undo/redo behavior is unchanged.
 - **Long files no longer freeze the window while loading** - Standalone decoding (WAV/MP3/FLAC) now runs in small timer-driven slices: the title bar shows "Loading ... N%", the interface stays fully responsive and you can keep editing whatever is open; the new tab appears when the file finishes. Short files load exactly as before.
 - **Closing an unsaved background tab with "Yes" now really saves it** - the save-before-close prompt only saved the file when the closed tab happened to be the active one; background tabs were silently closed without saving.
 

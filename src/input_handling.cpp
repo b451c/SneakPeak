@@ -1146,7 +1146,6 @@ void SneakPeak::OnMouseUp(int x, int y)
     if (wasKnobDrag && m_waveform.IsStandaloneMode() && m_gainPanel.IsStandalone()) {
       double db = m_gainPanel.GetDb();
       if (std::abs(db) > 0.01) {
-        StandaloneUndoSave(); // save state before destructive edit
         double factor = pow(10.0, db / 20.0);
         auto& data = m_waveform.GetAudioData();
         int nch = m_waveform.GetNumChannels();
@@ -1161,10 +1160,12 @@ void SneakPeak::OnMouseUp(int x, int y)
           endFrame = std::max(0, std::min(totalFrames, endFrame));
           int selFrames = endFrame - startFrame;
           if (selFrames > 0) {
+            StandaloneUndoSaveRange(startFrame, selFrames); // bounded edit (STA-2)
             int fadeFrames = std::min(sr / 100, selFrames / 2); // ~10ms crossfade
             AudioOps::GainWithCrossfade(data.data() + (size_t)startFrame * nch, selFrames, nch, factor, fadeFrames);
           }
         } else {
+          StandaloneUndoSave(); // whole-file edit: full snapshot
           AudioOps::Gain(data.data(), totalFrames, nch, factor);
         }
 

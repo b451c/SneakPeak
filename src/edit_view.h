@@ -19,12 +19,23 @@
 #include <vector>
 #include <string>
 
+// Standalone undo/redo entry (STA-2). Whole-file and length-changing edits
+// snapshot the FULL buffer; bounded selection edits (heal, click repair,
+// silence, selection gain) snapshot only the touched RANGE - orders of
+// magnitude less memory on long files (a full 30-min stereo snapshot is
+// ~1.4 GB; a 5-second heal slice is ~4 MB).
+struct StandaloneUndoEntry {
+  bool full = true;
+  int startFrame = 0;        // range entries: first frame of the slice
+  std::vector<double> data;  // full: whole buffer; range: slice (frames*nch)
+};
+
 // Standalone file state — preserved when switching tabs
 struct StandaloneFileState {
   std::string filePath;
   std::vector<double> audioData;
-  std::vector<std::vector<double>> undoStack;
-  std::vector<std::vector<double>> redoStack;
+  std::vector<StandaloneUndoEntry> undoStack;
+  std::vector<StandaloneUndoEntry> redoStack;
   int numChannels = 0;
   int sampleRate = 44100;
   int audioSampleCount = 0;
@@ -426,13 +437,17 @@ private:
 
   // Undo state
   bool m_hasUndo = false;
-  // Standalone undo/redo stacks (snapshots of audio data)
-  std::vector<std::vector<double>> m_standaloneUndoStack;
-  std::vector<std::vector<double>> m_standaloneRedoStack;
+  // Standalone undo/redo stacks (full or range snapshots - StandaloneUndoEntry)
+  std::vector<StandaloneUndoEntry> m_standaloneUndoStack;
+  std::vector<StandaloneUndoEntry> m_standaloneRedoStack;
   static const int MAX_STANDALONE_UNDO = 20;
-  void StandaloneUndoSave();
+  void StandaloneUndoSave();                              // full-buffer snapshot
+  void StandaloneUndoSaveRange(int startFrame, int numFrames); // bounded edits
   void StandaloneUndoRestore();
   void StandaloneRedoRestore();
+  // Swap `entry` with the live buffer, pushing the inverse onto `inverseStack`
+  void StandaloneApplyUndoEntry(StandaloneUndoEntry& entry,
+                                std::vector<StandaloneUndoEntry>& inverseStack);
   void StandaloneFinishRestore(const char* what); // shared undo/redo tail
 
   // Dirty indicator (destructive edit pending)

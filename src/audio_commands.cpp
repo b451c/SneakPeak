@@ -79,10 +79,69 @@ void SneakPeak::StandaloneUndoSave()
   if (data.empty()) return;
   if ((int)m_standaloneUndoStack.size() >= MAX_STANDALONE_UNDO)
     m_standaloneUndoStack.erase(m_standaloneUndoStack.begin());
-  m_standaloneUndoStack.push_back(data);
+  StandaloneUndoEntry e;
+  e.full = true;
+  e.data = data;
+  m_standaloneUndoStack.push_back(std::move(e));
   m_standaloneRedoStack.clear(); // a new edit invalidates the redo branch
   m_hasUndo = true;
   m_previewCacheDirty = true;
+}
+
+// Range snapshot (STA-2): for bounded edits that do NOT change the buffer
+// length. Only [startFrame, startFrame + numFrames) is saved - a heal on a
+// 30-min file costs megabytes instead of gigabytes per undo slot.
+void SneakPeak::StandaloneUndoSaveRange(int startFrame, int numFrames)
+{
+  const auto& data = m_waveform.GetAudioData();
+  if (data.empty()) return;
+  const int nch = std::max(1, m_waveform.GetNumChannels());
+  const int total = (int)(data.size() / (size_t)nch);
+  startFrame = std::max(0, std::min(total, startFrame));
+  numFrames = std::max(0, std::min(total - startFrame, numFrames));
+  if (numFrames <= 0) return;
+
+  if ((int)m_standaloneUndoStack.size() >= MAX_STANDALONE_UNDO)
+    m_standaloneUndoStack.erase(m_standaloneUndoStack.begin());
+  StandaloneUndoEntry e;
+  e.full = false;
+  e.startFrame = startFrame;
+  const size_t off = (size_t)startFrame * nch;
+  const size_t len = (size_t)numFrames * nch;
+  e.data.assign(data.begin() + off, data.begin() + off + len);
+  m_standaloneUndoStack.push_back(std::move(e));
+  m_standaloneRedoStack.clear();
+  m_hasUndo = true;
+  m_previewCacheDirty = true;
+}
+
+// Swap `entry` with the live buffer, pushing the exact inverse onto
+// `inverseStack` (undo pushes onto redo and vice versa). Full entries swap the
+// whole buffer; range entries swap only their slice (range edits never change
+// the buffer length by contract, the clamp is defense in depth).
+void SneakPeak::StandaloneApplyUndoEntry(StandaloneUndoEntry& entry,
+                                         std::vector<StandaloneUndoEntry>& inverseStack)
+{
+  auto& data = m_waveform.GetAudioData();
+  const int nch = std::max(1, m_waveform.GetNumChannels());
+  StandaloneUndoEntry inv;
+  if (entry.full) {
+    inv.full = true;
+    inv.data = std::move(data);
+    data = std::move(entry.data);
+  } else {
+    inv.full = false;
+    inv.startFrame = entry.startFrame;
+    size_t off = (size_t)entry.startFrame * (size_t)nch;
+    size_t len = entry.data.size();
+    if (off > data.size()) off = data.size();
+    if (off + len > data.size()) len = data.size() - off;
+    inv.data.assign(data.begin() + off, data.begin() + off + len);
+    std::copy(entry.data.begin(), entry.data.begin() + len, data.begin() + off);
+  }
+  if ((int)inverseStack.size() >= MAX_STANDALONE_UNDO)
+    inverseStack.erase(inverseStack.begin());
+  inverseStack.push_back(std::move(inv));
 }
 
 // Shared tail of standalone undo/redo: recalc duration, drop stale
@@ -116,13 +175,7 @@ void SneakPeak::StandaloneFinishRestore(const char* what)
 void SneakPeak::StandaloneUndoRestore()
 {
   if (m_standaloneUndoStack.empty()) return;
-
-  // Current state moves onto the redo stack before the swap
-  if ((int)m_standaloneRedoStack.size() >= MAX_STANDALONE_UNDO)
-    m_standaloneRedoStack.erase(m_standaloneRedoStack.begin());
-  m_standaloneRedoStack.push_back(std::move(m_waveform.GetAudioData()));
-
-  m_waveform.GetAudioData() = std::move(m_standaloneUndoStack.back());
+  StandaloneApplyUndoEntry(m_standaloneUndoStack.back(), m_standaloneRedoStack);
   m_standaloneUndoStack.pop_back();
   StandaloneFinishRestore("undo");
 }
@@ -130,14 +183,8 @@ void SneakPeak::StandaloneUndoRestore()
 void SneakPeak::StandaloneRedoRestore()
 {
   if (m_standaloneRedoStack.empty()) return;
-
-  // Current state moves back onto the undo stack (no redo clear here - only a
-  // NEW edit in StandaloneUndoSave cuts the redo branch)
-  if ((int)m_standaloneUndoStack.size() >= MAX_STANDALONE_UNDO)
-    m_standaloneUndoStack.erase(m_standaloneUndoStack.begin());
-  m_standaloneUndoStack.push_back(std::move(m_waveform.GetAudioData()));
-
-  m_waveform.GetAudioData() = std::move(m_standaloneRedoStack.back());
+  // No redo clear here - only a NEW edit in StandaloneUndoSave* cuts the branch
+  StandaloneApplyUndoEntry(m_standaloneRedoStack.back(), m_standaloneUndoStack);
   m_standaloneRedoStack.pop_back();
   StandaloneFinishRestore("redo");
 }
@@ -897,7 +944,10 @@ void SneakPeak::DoSilence()
       int endFrame = std::max(0, std::min(totalFrames, (int)(std::max(sel.startTime, sel.endTime) * sr)));
       if (endFrame <= startFrame) return;
 
-      StandaloneUndoSave();
+      // Bounded edit (STA-2): the zeroed selection plus the edge crossfades
+      // (each at most fadeFrames long) - never more than that is touched.
+      StandaloneUndoSaveRange(startFrame - fadeFrames,
+                              (endFrame - startFrame) + 2 * fadeFrames);
 
       // Zero out the selection region
       int selFrames = endFrame - startFrame;
@@ -1415,13 +1465,23 @@ void SneakPeak::DoSpectralHeal(double strength)
   int frames = m_waveform.GetAudioSampleCount();
   if (frames <= 0 || nch <= 0 || sr <= 0) return;
 
-  StandaloneUndoSave();
+  // Bounded edit (STA-2): the heal resynthesizes at most selection +- one FFT
+  // window (2048) around the selected span - snapshot only that range. The
+  // depth check below keeps the failure pop honest (a degenerate range saves
+  // nothing, so there would be nothing of ours to pop).
+  const size_t undoDepth = m_standaloneUndoStack.size();
+  {
+    int u0 = std::max(0, (int)(selStart * sr + 0.5) - 2048);
+    int u1 = std::min(frames, (int)(selEnd * sr + 0.5) + 2048);
+    StandaloneUndoSaveRange(u0, u1 - u0);
+  }
   SpectralHealResult r = StftRepairRect(data.data(), frames, nch, sr,
                                         selStart, selEnd,
                                         m_spectral.GetFreqSelLow(),
                                         m_spectral.GetFreqSelHigh(), strength);
   if (!r.ok) {
-    m_standaloneUndoStack.pop_back(); // buffer untouched - drop the slot
+    if (m_standaloneUndoStack.size() > undoDepth)
+      m_standaloneUndoStack.pop_back(); // buffer untouched - drop our slot
     m_hasUndo = !m_standaloneUndoStack.empty();
     ShowToast("Heal failed: selection too short or no surrounding context");
     return;
@@ -1459,11 +1519,20 @@ void SneakPeak::DoRepairClicks()
   int frames = m_waveform.GetAudioSampleCount();
   if (frames <= 0 || nch <= 0 || sr <= 0) return;
 
-  StandaloneUndoSave();
+  // Bounded edit (STA-2): click repair only ever modifies samples inside the
+  // selection (mask-limited) - snapshot that range with a small safety margin.
+  // Depth check keeps the failure pop honest (degenerate range saves nothing).
+  const size_t undoDepth = m_standaloneUndoStack.size();
+  {
+    int u0 = std::max(0, (int)(selStart * sr + 0.5) - 4);
+    int u1 = std::min(frames, (int)(selEnd * sr + 0.5) + 4);
+    StandaloneUndoSaveRange(u0, u1 - u0);
+  }
   ClickRepairResult r = RepairClicksAR(data.data(), frames, nch, sr,
                                        selStart, selEnd, 2.0); // K per paper
   if (!r.ok || r.samplesRepaired == 0) {
-    m_standaloneUndoStack.pop_back(); // buffer untouched - drop the slot
+    if (m_standaloneUndoStack.size() > undoDepth)
+      m_standaloneUndoStack.pop_back(); // buffer untouched - drop our slot
     m_hasUndo = !m_standaloneUndoStack.empty();
     ShowToast(r.ok ? "No clicks found in the selection"
                    : "Click repair failed: selection too short");
