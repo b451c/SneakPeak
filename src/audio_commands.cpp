@@ -2186,6 +2186,9 @@ std::vector<std::pair<int, int>> SneakPeak::OneShotBuildSlices(const OneShotPara
 
 // {name} -> source basename, {nn} -> 01-based zero-padded index (width grows
 // past 99 slices). The panel sanitized path separators out of the pattern.
+// Unrecognized {tokens} degrade gracefully: leftover braces are stripped, so
+// a mistyped "{test}_{01}" writes "test_01.wav", never literal braces (user
+// report 2026-07-02).
 static std::string ExpandOneShotPattern(const char* pat, const std::string& base,
                                         int idx1, int count)
 {
@@ -2201,6 +2204,8 @@ static std::string ExpandOneShotPattern(const char* pat, const std::string& base
     } else if (!strncmp(s, "{nn}", 4)) {
       out += nn;
       s += 4;
+    } else if (*s == '{' || *s == '}') {
+      s++;   // unknown token braces never reach the filename
     } else {
       out += *s++;
     }
@@ -2329,12 +2334,25 @@ void SneakPeak::DoRunOneShot()
       SetWindowText(m_hwnd, title);
     }
     const std::string name = ExpandOneShotPattern(p.pattern, base, i + 1, n);
+    // Collision -> numbered suffix (name_2.wav, name_3.wav, ...): repeated
+    // runs stay readable instead of growing _x chains (user report).
     std::string outPath = dir + "/" + name + ".wav";
-    for (int tries = 0; tries < 8; tries++) {   // collision -> append _x
+    for (int suffix = 2;; suffix++) {
       FILE* probe = fopen(outPath.c_str(), "rb");
-      if (!probe) break;
+      if (!probe) break;   // free - use it
       fclose(probe);
-      outPath = outPath.substr(0, outPath.size() - 4) + "_x.wav";
+      if (suffix > 99) {   // never overwrite; give up honestly
+        outPath.clear();
+        break;
+      }
+      char sfx[16];
+      snprintf(sfx, sizeof(sfx), "_%d", suffix);
+      outPath = dir + "/" + name + sfx + ".wav";
+    }
+    if (outPath.empty()) {
+      snprintf(note, sizeof(note), "Output names exhausted");
+      skipped++;
+      continue;
     }
     const int r = OneShotExportSlice(p, slices[(size_t)i].first,
                                      slices[(size_t)i].second, outPath, note,
