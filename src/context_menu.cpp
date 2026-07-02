@@ -141,6 +141,9 @@ void SneakPeak::OnRightClick(int x, int y)
         MenuAppend(shapeMenu, MF_STRING | (ptShape == 4 ? MF_CHECKED : 0), CM_ENV_SHAPE_FAST_END,"Fast end");
         MenuAppend(shapeMenu, MF_STRING | (ptShape == 5 ? MF_CHECKED : 0), CM_ENV_SHAPE_BEZIER, "Bezier");
         MenuAppendSeparator(shapeMenu);
+        // T2-1: back to the neutral curve (only meaningful on a tensioned bezier)
+        MenuAppend(shapeMenu, (ptShape == 5 && ptTension != 0.0) ? MF_STRING : MF_GRAYED,
+                   CM_ENV_RESET_TENSION, "Reset curvature");
         MenuAppend(shapeMenu, MF_STRING, CM_ENV_DELETE_POINT, "Delete point");
 
         POINT pt = { x, y };
@@ -768,6 +771,20 @@ void SneakPeak::OnContextMenuCommand(int id)
       if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
       g_SetEnvelopePoint(env, m_envDragPointIdx, nullptr, nullptr, &newShape, nullptr, nullptr, &noSort);
       if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Change envelope shape", -1);
+      if (g_UpdateArrange) g_UpdateArrange();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    }
+    case CM_ENV_RESET_TENSION: {
+      if (m_envDragPointIdx < 0 || !m_envDragEnv || !g_SetEnvelopePoint) break;
+      TrackEnvelope* env = m_envDragEnv;
+      if (!g_CountEnvelopePoints || m_envDragPointIdx >= g_CountEnvelopePoints(env)) break;
+      double zero = 0.0;
+      bool noSort = true;
+      if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+      g_SetEnvelopePoint(env, m_envDragPointIdx, nullptr, nullptr, nullptr, &zero,
+                         nullptr, &noSort);
+      if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Reset envelope curvature", -1);
       if (g_UpdateArrange) g_UpdateArrange();
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;

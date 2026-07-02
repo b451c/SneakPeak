@@ -100,6 +100,18 @@ void SneakPeak::OnPaint(HDC hdc)
         (!m_dynamicsPanel.IsVisible() || m_dynamicsPanel.GetShowDyn());
     if (showDyn)
       DrawDynamicsCurve(hdc);
+    // T2-1: live tension readout beside the cursor during a curvature drag
+    if (m_envTensionDragging) {
+      char tbuf[16];
+      snprintf(tbuf, sizeof(tbuf), "%+.2f", m_envTensionCur);
+      SetBkMode(hdc, TRANSPARENT);
+      SetTextColor(hdc, RGB(0, 200, 255));
+      HFONT oldF = (HFONT)SelectObject(hdc, g_fonts.normal10);
+      RECT tr = { m_lastMouseX + 14, m_lastMouseY - 18,
+                  m_lastMouseX + 90, m_lastMouseY - 2 };
+      DrawTextUTF8(hdc, tbuf, -1, &tr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+      SelectObject(hdc, oldF);
+    }
 #ifndef SNEAKPEAK_BLEND2D_PANEL
     m_dynamicsPanel.Draw(hdc, m_waveformRect);
 #endif

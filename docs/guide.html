@@ -703,10 +703,13 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="key"><kbd>Drag</kbd> point</div><div class="desc">Move point (or all selected points)</div>
   <div class="key"><kbd>Double-click</kbd> point</div><div class="desc">Delete point</div>
   <div class="key"><kbd>Delete</kbd> / <kbd>E</kbd></div><div class="desc">Delete all selected points</div>
-  <div class="key"><kbd>Right-click</kbd> point</div><div class="desc">Curve shape menu (6 shapes) + delete option</div>
+  <div class="key"><kbd>Right-click</kbd> point</div><div class="desc">Curve shape menu (6 shapes), reset curvature, delete option</div>
+  <div class="key"><kbd>Alt</kbd>+<kbd>Drag</kbd> on segment</div><div class="desc">Edit the segment's curvature (bezier tension; Cmd = fine mode)</div>
 </div>
 
 <p>Available curve shapes: Linear, Square, Slow start/end, Fast start, Fast end, Bezier. The shape controls interpolation between the clicked point and the next point.</p>
+
+<p><strong>Curvature editing:</strong> hold <kbd>Alt</kbd> and drag vertically on a segment to bend it - from "fast then gentle" to "hold then dive" (tension -1..+1, live readout at the cursor, <kbd>Cmd</kbd> for fine control). A linear segment becomes Bezier automatically on the first curvature drag. Right-click the segment's left point and choose <em>Reset curvature</em> to return to the neutral curve. Curves render identically in SneakPeak and the REAPER arrange view.</p>
 
 <h2 id="envelope-freehand">Freehand Drawing</h2>
 

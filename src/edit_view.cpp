@@ -574,6 +574,8 @@ void SneakPeak::LoadSelectedItem()
   // Clear stale envelope drag state (item may have changed)
   m_envDragEnv = nullptr;
   m_envDragPointIdx = -1;
+  m_envTensionDragging = false;
+  m_envTensionPtIdx = -1;
 
   int selCount = g_CountSelectedMediaItems(nullptr);
   DBG("[SneakPeak] LoadSelectedItem: count=%d firstSel=%p isTimeline=%d isTrackView=%d\n",

@@ -157,6 +157,7 @@ enum ContextMenuID {
   CM_SPECTRAL_HEAL_LAST = CM_SPECTRAL_HEAL_BASE + 4,
   CM_REPAIR_CLICKS,                                    // AR click repair on the time selection
   CM_REDO,                                             // Ctrl+Shift+Z / Ctrl+Y
+  CM_ENV_RESET_TENSION,                                // T2-1: reset bezier curvature to 0
   CM_LAST // sentinel -- keep last
 };
 
@@ -328,6 +329,13 @@ private:
   WaveformSelection m_pendingSelRestore = {}; // selection to restore after guarded reload
   bool m_dragging = false;
   int m_envDragGrabDy = 0; // env point drag: point screen Y - cursor Y at grab
+  // T2-1 (#51): Alt+drag on an envelope segment edits its bezier tension.
+  bool m_envTensionDragging = false;
+  int m_envTensionPtIdx = -1;    // owning LEFT point of the dragged segment
+  double m_envTensionStart = 0.0; // tension at mouse-down
+  double m_envTensionCur = 0.0;   // live value (cursor readout)
+  int m_envTensionStartY = 0;
+  int m_envTensionDir = 1;        // sign(v1 - v2): drag up = bulge toward v1
   bool m_scrollbarDragging = false;
   bool m_mmbPanning = false;   // middle-mouse horizontal pan (#61)
   int m_mmbLastX = 0;          // last cursor X during the MMB pan

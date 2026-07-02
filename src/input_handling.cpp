@@ -708,6 +708,39 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             double lineGain = g_ScaleFromEnvelopeMode(scalingMode, rawVal);
             int lineY = m_waveform.EnvYToGainY(lineGain, scalingMode);
             if (abs(y - lineY) <= SP(20)) {
+              // T2-1 (#51): Alt+drag ON the line = edit the segment's bezier
+              // tension (REAPER's own curvature modifier). Precedence: within
+              // this +-SP(20) line zone Alt belongs to the envelope - outside
+              // it, Alt+click keeps its existing meanings (drag-export inside
+              // a selection, snap-to-segment in timeline/SET/multi-item).
+              bool altCurve = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+              if (altCurve && g_GetEnvelopePointByTime && g_GetEnvelopePoint &&
+                  g_SetEnvelopePoint && g_CountEnvelopePoints) {
+                int owner = g_GetEnvelopePointByTime(env, ei.envTime);
+                int cnt2 = g_CountEnvelopePoints(env);
+                if (owner >= 0 && owner < cnt2 - 1) { // segment needs a right neighbor
+                  double pt = 0, pv = 0, ptn = 0; int psh = 0; bool psl = false;
+                  g_GetEnvelopePoint(env, owner, &pt, &pv, &psh, &ptn, &psl);
+                  double nt = 0, nv = 0, ntn = 0; int nsh = 0; bool nsl = false;
+                  g_GetEnvelopePoint(env, owner + 1, &nt, &nv, &nsh, &ntn, &nsl);
+                  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+                  if (psh != 5) { // promote to bezier (keep tension) - REAPER behavior
+                    int shape5 = 5; bool noSortP = true;
+                    g_SetEnvelopePoint(env, owner, nullptr, nullptr, &shape5,
+                                       nullptr, nullptr, &noSortP);
+                  }
+                  m_envTensionDragging = true;
+                  m_envTensionPtIdx = owner;
+                  m_envTensionStart = ptn;
+                  m_envTensionCur = ptn;
+                  m_envTensionStartY = y;
+                  m_envTensionDir = (pv >= nv) ? 1 : -1; // drag up bulges the curve up
+                  m_envDragEnv = env; // stale-pointer safety: cleared in LoadSelectedItem
+                  SetCapture(m_hwnd);
+                  InvalidateRect(m_hwnd, nullptr, FALSE);
+                  return;
+                }
+              }
               // Use evaluated envelope value (not pixel-derived) to avoid precision loss
               double newRawVal = rawVal;
               bool cmdDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -1114,6 +1147,13 @@ void SneakPeak::OnMouseUp(int x, int y)
     if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Freehand envelope drawing", -1);
     if (g_UpdateArrange) g_UpdateArrange();
     m_envDragPointIdx = -1;
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+  if (m_envTensionDragging) { // T2-1: end of a curvature drag (time untouched - no re-sort)
+    m_envTensionDragging = false;
+    ReleaseCapture();
+    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Edit envelope curvature", -1);
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
@@ -1652,6 +1692,24 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
   }
 
   // Envelope point dragging (moves all selected points by delta, clamped to neighbors)
+  if (m_envTensionDragging && m_envDragEnv && g_SetEnvelopePoint &&
+      g_CountEnvelopePoints && m_envTensionPtIdx < g_CountEnvelopePoints(m_envDragEnv)) {
+    // T2-1: full tension throw over SP(150) px of vertical travel; Cmd = 0.2x
+    // fine. Time never changes, so noSort=true is always valid here.
+    double fine = ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) ? 0.2 : 1.0;
+    double t = m_envTensionStart +
+      (double)m_envTensionDir * ((double)(m_envTensionStartY - y) / (double)SP(150)) * fine;
+    t = std::max(-1.0, std::min(1.0, t));
+    m_envTensionCur = t;
+    int shape5 = 5;
+    bool noSort = true;
+    g_SetEnvelopePoint(m_envDragEnv, m_envTensionPtIdx, nullptr, nullptr,
+                       &shape5, &t, nullptr, &noSort);
+    if (g_UpdateArrange) g_UpdateArrange();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
   if (m_envDragging && m_envDragPointIdx >= 0 && m_waveform.HasItem()) {
     TrackEnvelope* env = m_envDragEnv;
     if (env && g_SetEnvelopePoint && g_GetEnvelopePoint && g_CountEnvelopePoints &&
