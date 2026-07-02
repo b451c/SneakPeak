@@ -906,13 +906,13 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Enable <strong>Master Output</strong> from the meter context menu to read levels from the master track instead of the current item. This lets you monitor the master bus while editing individual items.</p>
 
-<h3>Hide RMS / Hide Meters</h3>
+<h3>Waveform style / Hide Meters</h3>
 
-<p>Two View menu toggles let you minimize the UI when you want more waveform area:</p>
+<p>Two Settings panel controls (VIEW section) let you simplify the display when you want more waveform area:</p>
 
 <ul>
-  <li><strong>Show RMS</strong> (default on) - when off, waveforms show the peak outline only. Useful on dense stereo material where the RMS fill obscures detail.</li>
-  <li><strong>Show Meters</strong> (default on) - when off, the entire bottom panel (meters + info) collapses to zero height and the waveform expands into that space. The scrollbar stays at the bottom.</li>
+  <li><strong>Waveform style</strong> - <strong>Detailed</strong> (default) draws the peak waveform with a darker RMS band inside it; <strong>Simple</strong> draws a single-colour waveform (peaks only). Useful on dense stereo material where the RMS fill obscures detail, or if the two-tone look is not to your taste. Red/amber clip marking is drawn in both styles.</li>
+  <li><strong>Meters</strong> (default on) - when off, the entire bottom panel (meters + info) collapses to zero height and the waveform expands into that space. The scrollbar stays at the bottom.</li>
 </ul>
 
 <p>Both settings persist across REAPER sessions via ExtState.</p>
@@ -985,7 +985,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Ruler</strong> - Relative / Absolute / Bars &amp; Beats.</li>
   <li><strong>Meters</strong> - Peak / RMS / VU ballistics, plus the Master Output source toggle.</li>
-  <li><strong>View</strong> - Meters, RMS overlay, Snap to Zero-Crossing, Minimap, and the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor).</li>
+  <li><strong>View</strong> - Meters, Snap to Zero-Crossing, Minimap, the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor), and the <strong>Waveform style</strong> (Detailed = peak + RMS band, Simple = single-colour peaks).</li>
 </ul>
 
 <p>The Dynamics panel follows the global scale too, multiplied by its own corner resize grip, so it grows with the rest of the UI while staying independently adjustable.</p>

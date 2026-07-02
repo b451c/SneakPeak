@@ -75,11 +75,12 @@ int SettingsPanel::HitId(double lx, double ly) const
   for (int i = 0; i < 3; ++i)
     if (L.meterSeg[i].contains(lx, ly)) return SET_HIT_METER0 + i;
   if (L.viewToggle[0].contains(lx, ly)) return SET_HIT_VIEW_METERS;
-  if (L.viewToggle[1].contains(lx, ly)) return SET_HIT_VIEW_RMS;
-  if (L.viewToggle[2].contains(lx, ly)) return SET_HIT_VIEW_SNAP;
-  if (L.viewToggle[3].contains(lx, ly)) return SET_HIT_VIEW_MINIMAP;
+  if (L.viewToggle[1].contains(lx, ly)) return SET_HIT_VIEW_SNAP;
+  if (L.viewToggle[2].contains(lx, ly)) return SET_HIT_VIEW_MINIMAP;
   if (L.zoomSeg[0].contains(lx, ly))    return SET_HIT_VIEW_ZOOM0;
   if (L.zoomSeg[1].contains(lx, ly))    return SET_HIT_VIEW_ZOOM1;
+  if (L.waveSeg[0].contains(lx, ly))    return SET_HIT_VIEW_WAVE0;
+  if (L.waveSeg[1].contains(lx, ly))    return SET_HIT_VIEW_WAVE1;
   return SET_HIT_NONE;
 }
 
@@ -134,7 +135,7 @@ bool SettingsPanel::OnMouseDown(int x, int y, RECT wr)
   // Migrated preferences: report the control id; the host runs its CM_* handler
   // (single behavior path for the panel and the OFF-build menu).
   const int hit = HitId(lx, ly);
-  if (hit >= SET_HIT_RULER0 && hit <= SET_HIT_VIEW_ZOOM1) {
+  if (hit >= SET_HIT_RULER0 && hit <= SET_HIT_VIEW_WAVE1) {
     m_prefClicked = hit;
     return true;
   }

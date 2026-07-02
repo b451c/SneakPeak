@@ -153,12 +153,15 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           case SET_HIT_METER1:       cmd = CM_METER_RMS;            break;
           case SET_HIT_METER2:       cmd = CM_METER_VU;             break;
           case SET_HIT_VIEW_METERS:  cmd = CM_SHOW_METERS;          break;
-          case SET_HIT_VIEW_RMS:     cmd = CM_SHOW_RMS;             break;
           case SET_HIT_VIEW_SNAP:    cmd = CM_SNAP_ZERO;            break;
           case SET_HIT_VIEW_MINIMAP: cmd = CM_MINIMAP;              break;
           // Zoom-center is a 2-way selector: only toggle when the clicked side differs.
           case SET_HIT_VIEW_ZOOM0:   if (m_zoomOnEditCursor)  cmd = CM_ZOOM_CENTER; break;
           case SET_HIT_VIEW_ZOOM1:   if (!m_zoomOnEditCursor) cmd = CM_ZOOM_CENTER; break;
+          // Waveform style (#83) is the RMS-band state worn as a 2-way selector:
+          // Detailed = RMS band on, Simple = single-colour peaks (CM_SHOW_RMS toggles).
+          case SET_HIT_VIEW_WAVE0:   if (!m_waveform.GetShowRMS()) cmd = CM_SHOW_RMS; break;
+          case SET_HIT_VIEW_WAVE1:   if (m_waveform.GetShowRMS())  cmd = CM_SHOW_RMS; break;
         }
         if (cmd) OnContextMenuCommand(cmd);
       }

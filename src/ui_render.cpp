@@ -1301,14 +1301,16 @@ SettingsLayout ComputeSettingsLayout(double w, double h)
   y += 20.0;
   const double pillW = (w - 2.0 * pad - 8.0) / 2.0;
   L.viewToggle[0] = { pad, y, pillW, 26.0 };                  // METERS
-  L.viewToggle[1] = { pad + pillW + 8.0, y, pillW, 26.0 };    // RMS
+  L.viewToggle[1] = { pad + pillW + 8.0, y, pillW, 26.0 };    // SNAP TO ZERO
   y += 32.0;
-  L.viewToggle[2] = { pad, y, pillW, 26.0 };                  // SNAP TO ZERO
-  L.viewToggle[3] = { pad + pillW + 8.0, y, pillW, 26.0 };    // MINIMAP
+  L.viewToggle[2] = { pad, y, pillW, 26.0 };                  // MINIMAP
   y += 32.0;
   L.zoomSeg[0] = { pad, y, pillW, 26.0 };                     // ZOOM: MOUSE
   L.zoomSeg[1] = { pad + pillW + 8.0, y, pillW, 26.0 };       // ZOOM: CURSOR
-  // final y + 26 + 16 bottom pad == kSettingsH (474) - keep in sync with ui_theme.h
+  y += 32.0;
+  L.waveSeg[0] = { pad, y, pillW, 26.0 };                     // WAVEFORM: DETAILED
+  L.waveSeg[1] = { pad + pillW + 8.0, y, pillW, 26.0 };       // WAVEFORM: SIMPLE
+  // final y + 26 + 16 bottom pad == kSettingsH (506) - keep in sync with ui_theme.h
   return L;
 }
 
@@ -1438,14 +1440,17 @@ void UiCanvas::RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double d
     // VIEW: independent display toggles
     sectionCaption(L.viewCaption, "VIEW");
     DrawTogglePill(ctx, gfx, L.viewToggle[0], "METERS",       vm.prefs.showMeters, dynui::kAmber, false, 0.0);
-    DrawTogglePill(ctx, gfx, L.viewToggle[1], "RMS",          vm.prefs.showRMS,    dynui::kAmber, false, 0.0);
-    DrawTogglePill(ctx, gfx, L.viewToggle[2], "SNAP TO ZERO", vm.prefs.snapZero,   dynui::kAmber, false, 0.0);
-    DrawTogglePill(ctx, gfx, L.viewToggle[3], "MINIMAP",      vm.prefs.minimap,    dynui::kAmber, false, 0.0);
+    DrawTogglePill(ctx, gfx, L.viewToggle[1], "SNAP TO ZERO", vm.prefs.snapZero,   dynui::kAmber, false, 0.0);
+    DrawTogglePill(ctx, gfx, L.viewToggle[2], "MINIMAP",      vm.prefs.minimap,    dynui::kAmber, false, 0.0);
     // Wheel-zoom center (#83): a 2-way selector, mouse position vs edit cursor.
     // "EDIT CURSOR" spelled out (REAPER's own term) - bare "CURSOR" reads as the
     // mouse pointer, the exact ambiguity this option exists to resolve.
     DrawSegmented2(ctx, gfx, L.zoomSeg[0], L.zoomSeg[1], "ZOOM: MOUSE", "ZOOM: EDIT CURSOR",
                    vm.prefs.zoomOnCursor);
+    // Waveform style (#83 single-colour ask): Detailed = peak + darker RMS band,
+    // Simple = the peak pen only. Same state as the OFF-build "Show RMS" menu item.
+    DrawSegmented2(ctx, gfx, L.waveSeg[0], L.waveSeg[1], "WAVEFORM: DETAILED",
+                   "WAVEFORM: SIMPLE", !vm.prefs.showRMS);
 
     if (ctx.end() != BL_SUCCESS) return;
   }
