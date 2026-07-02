@@ -186,6 +186,30 @@ else()
   )
 endif()
 
+# --- v2.4.0 INC-L0: offline true-peak limiter harness ---
+# Pure-DSP test binary (no REAPER/SWELL/Blend2D deps). Ceiling/passthrough/
+# invariant assertions are machine-independent (exit code); the %.17g dump
+# baseline is machine-local like dyn_regression. Run via
+# tests/run_limiter_test.sh (or "record" to re-baseline intentionally).
+add_executable(limiter_test
+  tests/limiter_test.cpp
+  src/limiter_engine.cpp
+)
+target_include_directories(limiter_test PRIVATE src)
+target_compile_definitions(limiter_test PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+)
+if(MSVC)
+  target_compile_options(limiter_test PRIVATE /W3)
+else()
+  target_compile_options(limiter_test PRIVATE
+    -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
+    -Wshadow
+    -Wconversion -Wno-sign-conversion
+    -fsigned-char
+  )
+endif()
+
 if(APPLE)
   set_target_properties(reaper_sneakpeak PROPERTIES
     SUFFIX ".dylib"
