@@ -197,6 +197,10 @@ private:
   void OnMouseDownWaveform(int x, int y, WPARAM wParam);
   void OnMiddleDown(int x, int y);   // middle-mouse pan start (#61)
   int  HitSelectionEdge(int x, int y);  // selection edge under cursor: 0 none, 1 start, 2 end (#64)
+  // Spectral marquee edge grips (bitmask; corners = two bits set)
+  enum { GRIP_T_START = 1, GRIP_T_END = 2, GRIP_F_LOW = 4, GRIP_F_HIGH = 8 };
+  int  HitMarqueeEdge(int x, int y, int chTop, int chH);
+  void SpectralChannelAt(int y, int& chTop, int& chH); // channel band under y
   void OnMouseUp(int x, int y);
   void OnMouseMove(int x, int y, WPARAM wParam);
   void OnMouseWheel(int x, int y, int delta, WPARAM wParam);

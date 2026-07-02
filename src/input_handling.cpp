@@ -438,14 +438,8 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   // Spectral area — time selection + frequency band selection
   if (m_spectralVisible && y >= m_spectralRect.top && y < m_spectralRect.bottom) {
     if (m_waveform.HasItem()) {
-      int specH = m_spectralRect.bottom - m_spectralRect.top;
-      int nch = m_waveform.GetNumChannels();
-      int chSep = (nch > 1) ? SP(CHANNEL_SEPARATOR_HEIGHT) : 0;
-      int chH = (nch > 1) ? (specH - chSep) / 2 : specH;
-      // Determine which channel was clicked
-      int chTop = m_spectralRect.top;
-      if (nch > 1 && y >= m_spectralRect.top + chH + chSep)
-        chTop = m_spectralRect.top + chH + chSep;
+      int chTop, chH;
+      SpectralChannelAt(y, chTop, chH);
 
       // Alt+click = frequency band selection
       bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
@@ -458,6 +452,37 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         SetCapture(m_hwnd);
         InvalidateRect(m_hwnd, nullptr, FALSE);
         return;
+      }
+
+      // Marquee edge grips: grab an edge/corner of the rectangle to fine-tune
+      // it (the cursor already shows the resize arrows). Each axis re-anchors
+      // on its opposite edge and rides the existing marquee drag flags
+      // (time = m_dragging, freq = m_spectralFreqDragging), so move/up/sync
+      // behave exactly like a fresh marquee drag.
+      if (!(wParam & MK_SHIFT)) {
+        const int grip = HitMarqueeEdge(x, y, chTop, chH);
+        if (grip) {
+          if (grip & (GRIP_T_START | GRIP_T_END)) {
+            WaveformSelection sel = m_waveform.GetSelection();
+            const double s = std::min(sel.startTime, sel.endTime);
+            const double e = std::max(sel.startTime, sel.endTime);
+            m_waveform.StartSelection((grip & GRIP_T_START) ? e : s);
+            m_waveform.UpdateSelection(m_waveform.XToTime(x));
+            m_dragging = true;
+          }
+          if (grip & (GRIP_F_LOW | GRIP_F_HIGH)) {
+            const double anchor = (grip & GRIP_F_LOW) ? m_spectral.GetFreqSelHigh()
+                                                      : m_spectral.GetFreqSelLow();
+            m_spectral.StartFreqSelection(anchor);
+            m_spectral.UpdateFreqSelection(m_spectral.YToFreq(y, chTop, chH));
+            m_spectralFreqDragging = true;
+            m_spectralFreqDragChTop = chTop;
+            m_spectralFreqDragChH = chH;
+          }
+          SetCapture(m_hwnd);
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+          return;
+        }
       }
 
       // Normal click+drag = marquee: time selection AND frequency band in one
@@ -860,6 +885,50 @@ void SneakPeak::OnMiddleDown(int x, int y)
   m_mmbLastX = x;
   SetCapture(m_hwnd);
   SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
+}
+
+// Which spectral channel band (top pixel + height) is under y. Mirrors the
+// layout math used across the spectral view (stereo = two stacked bands).
+void SneakPeak::SpectralChannelAt(int y, int& chTop, int& chH)
+{
+  int specH = m_spectralRect.bottom - m_spectralRect.top;
+  int nch = m_waveform.GetNumChannels();
+  int chSep = (nch > 1) ? SP(CHANNEL_SEPARATOR_HEIGHT) : 0;
+  chH = (nch > 1) ? (specH - chSep) / 2 : specH;
+  chTop = m_spectralRect.top;
+  if (nch > 1 && y >= m_spectralRect.top + chH + chSep)
+    chTop = m_spectralRect.top + chH + chSep;
+}
+
+// Marquee edge grip under the cursor (0 = none; corners set two bits). Edge
+// zone = +/-SPmin(4) px like the waveform edge resize (#64); the nearer edge
+// wins when both are in reach, so tiny rectangles stay adjustable.
+int SneakPeak::HitMarqueeEdge(int x, int y, int chTop, int chH)
+{
+  if (!m_waveform.HasSelection() || !m_spectral.HasFreqSelection()) return 0;
+  WaveformSelection sel = m_waveform.GetSelection();
+  const double s = std::min(sel.startTime, sel.endTime);
+  const double e = std::max(sel.startTime, sel.endTime);
+  if (e <= s) return 0;
+  const int sx = m_waveform.TimeToX(s);
+  const int ex = m_waveform.TimeToX(e);
+  const int yHi = m_spectral.FreqToY(m_spectral.GetFreqSelHigh(), chTop, chH); // top
+  const int yLo = m_spectral.FreqToY(m_spectral.GetFreqSelLow(), chTop, chH);  // bottom
+  const int zone = SPmin(4);
+  int grip = 0;
+  if (y >= yHi - zone && y <= yLo + zone) {
+    const int ds = abs(x - sx), de = abs(x - ex);
+    if (ds <= zone && de <= zone) grip |= (ds <= de) ? GRIP_T_START : GRIP_T_END;
+    else if (ds <= zone) grip |= GRIP_T_START;
+    else if (de <= zone) grip |= GRIP_T_END;
+  }
+  if (x >= sx - zone && x <= ex + zone) {
+    const int dh = abs(y - yHi), dl = abs(y - yLo);
+    if (dh <= zone && dl <= zone) grip |= (dh <= dl) ? GRIP_F_HIGH : GRIP_F_LOW;
+    else if (dh <= zone) grip |= GRIP_F_HIGH;
+    else if (dl <= zone) grip |= GRIP_F_LOW;
+  }
+  return grip;
 }
 
 // #64: which selection edge is under the cursor in the waveform area (0 = none,
@@ -1803,6 +1872,25 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       // #64: selection edge resize affordance
       else if (HitSelectionEdge(x, y) != 0) {
         cur = LoadCursor(nullptr, IDC_SIZEWE);
+      }
+    }
+    // Spectral area: marquee edge/corner grip affordance
+    else if (m_spectralVisible && y >= m_spectralRect.top &&
+             y < m_spectralRect.bottom && m_waveform.HasItem()) {
+      int chTop, chH;
+      SpectralChannelAt(y, chTop, chH);
+      const int grip = HitMarqueeEdge(x, y, chTop, chH);
+      const bool onTime = (grip & (GRIP_T_START | GRIP_T_END)) != 0;
+      const bool onFreq = (grip & (GRIP_F_LOW | GRIP_F_HIGH)) != 0;
+      if (onTime && onFreq) {
+        // Corner orientation: left+top / right+bottom = NWSE, the others NESW
+        const bool nwse = ((grip & GRIP_T_START) && (grip & GRIP_F_HIGH)) ||
+                          ((grip & GRIP_T_END) && (grip & GRIP_F_LOW));
+        cur = LoadCursor(nullptr, nwse ? IDC_SIZENWSE : IDC_SIZENESW);
+      } else if (onTime) {
+        cur = LoadCursor(nullptr, IDC_SIZEWE);
+      } else if (onFreq) {
+        cur = LoadCursor(nullptr, IDC_SIZENS);
       }
     }
     // Markers in ruler

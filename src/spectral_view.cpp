@@ -326,10 +326,10 @@ void SpectralView::RenderView(const WaveformView& waveform)
           bool freqDown = (bSpanEnd - b0) >= 2; // row spans 2+ bins
 
           float val;
-          if (timeDown || freqDown) {
-            // Downsampling on either axis: take the MAX over the covered
-            // column x bin block (peak-preserving, like the waveform peaks
-            // path) so narrow clicks / thin tones stay visible zoomed out.
+          if (timeDown) {
+            // Time downsampling: take the MAX over the covered column x bin
+            // block (peak-preserving, like the waveform peaks path) so narrow
+            // clicks / thin tones stay visible zoomed out.
             unsigned char mx = 0;
             int bHi = std::max(b0, bSpanEnd);
             for (int c = sc0; c <= scEnd; c++) {
@@ -338,6 +338,18 @@ void SpectralView::RenderView(const WaveformView& waveform)
               for (int b = b0; b <= bHi; b++) mx = std::max(mx, colp[b]);
             }
             val = (float)mx;
+          } else if (freqDown) {
+            // Zoomed in but the row spans 2+ bins (upper log-scale region):
+            // vertical peak per column + horizontal lerp between the two hop
+            // columns - peak-true in frequency WITHOUT the hard column edges
+            // a plain block max produces when a pixel sits between columns.
+            int bHi = std::max(b0, bSpanEnd);
+            unsigned char m0 = 0, m1 = 0;
+            for (int b = b0; b <= bHi; b++) {
+              m0 = std::max(m0, col0[b]);
+              m1 = std::max(m1, col1[b]);
+            }
+            val = (float)m0 * (1.0f - hFrac) + (float)m1 * hFrac;
           } else {
             // Zoom-in: bilinear interpolation (smooth, unchanged behavior)
             float vf = binFrac[py];
