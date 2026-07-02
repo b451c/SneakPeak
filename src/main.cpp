@@ -342,24 +342,28 @@ static void pollSelectionTimer()
   int count = g_CountSelectedMediaItems(nullptr);
   MediaItem* item = (count > 0) ? g_GetSelectedMediaItem(nullptr, 0) : nullptr;
 
-  // In standalone mode, only exit when user selects items in REAPER
-  if (g_sneakPeak->IsStandaloneMode()) {
-    if (count <= 0) return; // no items selected — stay in standalone
-    // Items selected — save standalone state before switching to REAPER
-    g_sneakPeak->SaveCurrentStandaloneState();
-    // The save MOVED the active buffer out (STA-2) - the view MUST be replaced
-    // before the next paint, even when the user clicked the SAME item that was
-    // loaded before standalone. Reset the change detector so the load below
-    // always fires (it used to skip, painting a moved-out buffer -> crash).
-    g_lastSelectedItem = nullptr;
-    g_lastSelectedCount = 0;
-    // Fall through to load them (exits standalone via ClearItem)
-  }
-
   // Validate cached pointer — item may have been deleted
   if (g_lastSelectedItem && ValidatePtr2 &&
       !ValidatePtr2(nullptr, (void*)g_lastSelectedItem, "MediaItem*"))
     g_lastSelectedItem = nullptr;
+
+  // In standalone mode, exit ONLY when the user actively CHANGES the item
+  // selection in REAPER. The leftover selection (the item loaded before
+  // entering standalone usually stays selected) must neither yank us out of
+  // standalone on every tick nor touch the buffers: SaveCurrentStandaloneState
+  // MOVES the active audio out (STA-2), so it may only run when the load
+  // below immediately replaces the view (the invariant; a moved-out buffer
+  // painted once as a crash, and the buffered save also wiped the tab's audio).
+  if (g_sneakPeak->IsStandaloneMode()) {
+    if (count <= 0) return; // no items selected — stay in standalone
+    if (item == g_lastSelectedItem && count == g_lastSelectedCount)
+      return;               // unchanged leftover selection — stay in standalone
+    g_sneakPeak->SaveCurrentStandaloneState();
+    g_lastSelectedItem = item;
+    g_lastSelectedCount = count;
+    g_sneakPeak->LoadSelectedItem();   // ALWAYS replaces the view
+    return;
+  }
 
   if (item != g_lastSelectedItem || count != g_lastSelectedCount) {
     g_lastSelectedItem = item;

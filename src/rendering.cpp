@@ -211,6 +211,32 @@ void SneakPeak::DrawModeBar(HDC hdc)
   int xPos = SP(6);
   int yMid = m_modeBarRect.top + h / 2;
 
+  // Tab type marker: every tab carries the same shape/colour language as the
+  // mode indicator - blue diamond = ITEM (REAPER item), orange dot =
+  // standalone file - so "what is what" reads at a glance (user feedback).
+  auto drawTabMarker = [&](const RECT& tabR, bool reaperTab) {
+    int cx = tabR.left + SP(9), cy = yMid;
+    if (reaperTab) {
+      COLORREF c = g_theme.modeBarReaperAccent;
+      HBRUSH br = CreateSolidBrush(c);
+      POINT d[4] = { {cx, cy - SP(3)}, {cx + SP(3), cy}, {cx, cy + SP(3)}, {cx - SP(3), cy} };
+      HPEN p = CreatePen(PS_SOLID, 1, c);
+      HPEN pp = (HPEN)SelectObject(hdc, p);
+      HBRUSH pb = (HBRUSH)SelectObject(hdc, br);
+      Polygon(hdc, d, 4);
+      SelectObject(hdc, pp);
+      SelectObject(hdc, pb);
+      DeleteObject(p);
+      DeleteObject(br);
+    } else {
+      HBRUSH br = CreateSolidBrush(g_theme.modeBarStandaloneAccent);
+      RECT dot = { cx - SP(3), cy - SP(3), cx + SP(3), cy + SP(4) };
+      FillRect(hdc, &dot, br);
+      DeleteObject(br);
+    }
+  };
+  const int markerW = SP(12);   // marker zone before the tab text
+
   bool isStandalone = m_waveform.IsStandaloneMode() || !m_standaloneFiles.empty();
   bool isReaper = m_waveform.HasItem() && !m_waveform.IsStandaloneMode();
   bool isEmpty = !m_waveform.HasItem() && m_standaloneFiles.empty();
@@ -303,22 +329,20 @@ void SneakPeak::DrawModeBar(HDC hdc)
 
     // ITEM pseudo-tab (if we have standalone files and we're in REAPER mode, or for switching back)
     if (isReaper && !m_standaloneFiles.empty()) {
-      // Active ITEM tab
+      // Active ITEM tab - labeled with the take/item NAME only. (This used to
+      // reuse GetItemTitle, the WINDOW-title builder, so the tab read
+      // "SneakPeak: name" and looked like a second mystery file.)
       char reaperLabel[256] = "ITEM";
-      if (m_waveform.HasItem()) {
-        const char* fp = m_waveform.GetStandaloneFilePath().c_str();
-        if (fp[0]) {
-          snprintf(reaperLabel, sizeof(reaperLabel), "%s", FileNameFromPath(fp));
-        } else {
-          // Get item name from waveform
-          char buf[256];
-          GetItemTitle(buf, sizeof(buf));
-          if (buf[0]) snprintf(reaperLabel, sizeof(reaperLabel), "%s", buf);
-        }
+      if (m_waveform.HasItem() && g_GetActiveTake && g_GetSetMediaItemTakeInfo_String) {
+        MediaItem_Take* take = g_GetActiveTake(m_waveform.GetItem());
+        char nameBuf[256] = {};
+        if (take && g_GetSetMediaItemTakeInfo_String(take, "P_NAME", nameBuf, false) &&
+            nameBuf[0])
+          snprintf(reaperLabel, sizeof(reaperLabel), "%s", nameBuf);
       }
       RECT tsR = { 0, 0, 300, 20 };
       DrawTextUTF8(hdc, reaperLabel, -1, &tsR, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
-      int tw = std::min((int)(tsR.right - tsR.left) + SP(12), SP(MODE_TAB_MAX_W));
+      int tw = std::min((int)(tsR.right - tsR.left) + SP(12) + markerW, SP(MODE_TAB_MAX_W));
 
       bool hovTab = (m_modeBarHover == (int)m_modeBarTabs.size());
       RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
@@ -335,8 +359,9 @@ void SneakPeak::DrawModeBar(HDC hdc)
       SelectObject(hdc, ulPrev);
       DeleteObject(ulPen);
 
+      drawTabMarker(tabR, true);
       SetTextColor(hdc, RGB(220, 220, 220));
-      RECT textR = { tabR.left + SP(6), tabR.top, tabR.right - SP(6), tabR.bottom };
+      RECT textR = { tabR.left + SP(6) + markerW, tabR.top, tabR.right - SP(6), tabR.bottom };
       DrawTextUTF8(hdc, reaperLabel, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 
       ModeBarTab mbt;
@@ -363,7 +388,8 @@ void SneakPeak::DrawModeBar(HDC hdc)
       DrawTextUTF8(hdc, label, -1, &tsR2, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
       bool isActive = (m_waveform.IsStandaloneMode() && i == m_activeFileIdx);
       int closeW = isActive ? SP(MODE_TAB_CLOSE_SIZE) : 0;
-      int tw = std::min((int)(tsR2.right - tsR2.left) + SP(12) + closeW, SP(MODE_TAB_MAX_W));
+      int tw = std::min((int)(tsR2.right - tsR2.left) + SP(12) + markerW + closeW,
+                        SP(MODE_TAB_MAX_W));
       if (xPos + tw > tabAreaRight) tw = tabAreaRight - xPos;
       if (tw < SP(20)) break;
 
@@ -386,9 +412,10 @@ void SneakPeak::DrawModeBar(HDC hdc)
         DeleteObject(ulPen);
       }
 
+      drawTabMarker(tabR, false);
       SetTextColor(hdc, (isActive || hovTab) ? RGB(220, 220, 220) : g_theme.modeBarText);
       int textRight = tabR.right - SP(4) - closeW;
-      RECT textR = { tabR.left + SP(6), tabR.top, textRight, tabR.bottom };
+      RECT textR = { tabR.left + SP(6) + markerW, tabR.top, textRight, tabR.bottom };
       DrawTextUTF8(hdc, label, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 
       // Close button on active tab
@@ -419,7 +446,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
         const char* rl = "ITEM";
         RECT tsR3 = { 0, 0, 300, 20 };
         DrawTextUTF8(hdc, rl, -1, &tsR3, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
-        int tw = std::min((int)(tsR3.right - tsR3.left) + SP(12), SP(MODE_TAB_MAX_W));
+        int tw = std::min((int)(tsR3.right - tsR3.left) + SP(12) + markerW, SP(MODE_TAB_MAX_W));
         if (xPos + tw <= tabAreaRight) {
           bool hovTab = (m_modeBarHover == (int)m_modeBarTabs.size());
           RECT tabR = { xPos, m_modeBarRect.top + 1, xPos + tw, m_modeBarRect.bottom - 1 };
@@ -428,8 +455,9 @@ void SneakPeak::DrawModeBar(HDC hdc)
           FillRect(hdc, &tabR, tabBg);
           DeleteObject(tabBg);
 
+          drawTabMarker(tabR, true);
           SetTextColor(hdc, g_theme.modeBarReaperAccent);
-          RECT textR = { tabR.left + SP(6), tabR.top, tabR.right - SP(4), tabR.bottom };
+          RECT textR = { tabR.left + SP(6) + markerW, tabR.top, tabR.right - SP(4), tabR.bottom };
           DrawTextUTF8(hdc, rl, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
           ModeBarTab mbt;
