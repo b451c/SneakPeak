@@ -237,6 +237,24 @@ void SneakPeak::DrawModeBar(HDC hdc)
   };
   const int markerW = SP(12);   // marker zone before the tab text
 
+  // REAPER-tab label, shared by BOTH mode-bar variants so the tab reads
+  // identically from ITEM and STANDALONE mode (user feedback): the take name
+  // of the loaded/selected item, "N ITEMS" for a multi-selection, else "ITEM".
+  auto reaperTabLabel = [&](char* buf, size_t n) {
+    int selCount = g_CountSelectedMediaItems ? g_CountSelectedMediaItems(nullptr) : 0;
+    if (selCount > 1) { snprintf(buf, n, "%d ITEMS", selCount); return; }
+    MediaItem* item = m_waveform.GetItem();
+    if (!item && selCount > 0 && g_GetSelectedMediaItem)
+      item = g_GetSelectedMediaItem(nullptr, 0);
+    MediaItem_Take* take = (item && g_GetActiveTake) ? g_GetActiveTake(item) : nullptr;
+    char nameBuf[256] = {};
+    if (take && g_GetSetMediaItemTakeInfo_String &&
+        g_GetSetMediaItemTakeInfo_String(take, "P_NAME", nameBuf, false) && nameBuf[0])
+      snprintf(buf, n, "%s", nameBuf);
+    else
+      snprintf(buf, n, "ITEM");
+  };
+
   bool isStandalone = m_waveform.IsStandaloneMode() || !m_standaloneFiles.empty();
   bool isReaper = m_waveform.HasItem() && !m_waveform.IsStandaloneMode();
   bool isEmpty = !m_waveform.HasItem() && m_standaloneFiles.empty();
@@ -332,14 +350,8 @@ void SneakPeak::DrawModeBar(HDC hdc)
       // Active ITEM tab - labeled with the take/item NAME only. (This used to
       // reuse GetItemTitle, the WINDOW-title builder, so the tab read
       // "SneakPeak: name" and looked like a second mystery file.)
-      char reaperLabel[256] = "ITEM";
-      if (m_waveform.HasItem() && g_GetActiveTake && g_GetSetMediaItemTakeInfo_String) {
-        MediaItem_Take* take = g_GetActiveTake(m_waveform.GetItem());
-        char nameBuf[256] = {};
-        if (take && g_GetSetMediaItemTakeInfo_String(take, "P_NAME", nameBuf, false) &&
-            nameBuf[0])
-          snprintf(reaperLabel, sizeof(reaperLabel), "%s", nameBuf);
-      }
+      char reaperLabel[256];
+      reaperTabLabel(reaperLabel, sizeof(reaperLabel));
       RECT tsR = { 0, 0, 300, 20 };
       DrawTextUTF8(hdc, reaperLabel, -1, &tsR, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
       int tw = std::min((int)(tsR.right - tsR.left) + SP(12) + markerW, SP(MODE_TAB_MAX_W));
@@ -443,7 +455,11 @@ void SneakPeak::DrawModeBar(HDC hdc)
     if (!isReaper && !m_standaloneFiles.empty()) {
       // Check if there's a REAPER item available
       if (g_CountSelectedMediaItems && g_CountSelectedMediaItems(nullptr) > 0) {
-        const char* rl = "ITEM";
+        // Same label as the ITEM-mode variant (take name / "N ITEMS" / "ITEM"),
+        // same inactive-tab styling as the standalone tabs - the blue diamond
+        // marker alone says the type.
+        char rl[256];
+        reaperTabLabel(rl, sizeof(rl));
         RECT tsR3 = { 0, 0, 300, 20 };
         DrawTextUTF8(hdc, rl, -1, &tsR3, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
         int tw = std::min((int)(tsR3.right - tsR3.left) + SP(12) + markerW, SP(MODE_TAB_MAX_W));
@@ -456,9 +472,9 @@ void SneakPeak::DrawModeBar(HDC hdc)
           DeleteObject(tabBg);
 
           drawTabMarker(tabR, true);
-          SetTextColor(hdc, g_theme.modeBarReaperAccent);
+          SetTextColor(hdc, hovTab ? RGB(220, 220, 220) : g_theme.modeBarText);
           RECT textR = { tabR.left + SP(6) + markerW, tabR.top, tabR.right - SP(4), tabR.bottom };
-          DrawTextUTF8(hdc, rl, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+          DrawTextUTF8(hdc, rl, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 
           ModeBarTab mbt;
           mbt.rect = tabR;
