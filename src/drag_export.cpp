@@ -21,6 +21,7 @@
 // WIN32_LEAN_AND_MEAN strips OLE - pull it in explicitly (see win32_utf8_unit.c).
 #include <ole2.h>
 #include <shobjidl.h>
+#include <shlguid.h>   // BHID_* bind-handler GUIDs (resolved via uuid.lib)
 
 namespace {
 // Minimal IDropSource: default cursors, cancel on ESC, drop on button release.

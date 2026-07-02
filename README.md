@@ -66,11 +66,12 @@ SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timelin
 
 ### Interface & Scaling (new in v2.2)
 - **Global UI scale (80-200%)** - the entire interface scales from one slider: fonts, toolbar, ruler, meters, panels, and every click target. First run auto-detects your system DPI (Windows display scaling, Linux GDK scale).
-- **Settings panel** - gear icon in the mode bar: UI scale with live preview, density presets (Compact / Comfortable / Spacious), Fit to Window, and the Ruler / Meters / View preferences.
+- **Settings panel** - gear icon in the mode bar: UI scale with live preview, density presets (Compact / Comfortable / Spacious), Fit to Window, and the Ruler / Meters / View preferences - including hide-ruler and the Detailed/Simple waveform style (new in v2.3).
 - **Premium rendering** - anti-aliased, DPI-crisp Dynamics panel, Settings panel, gain knob, L/R meters and toasts.
 
 ### Waveform Display
 - **Precision waveform rendering** - Peak + RMS display with dB scale and zero-crossing line.
+- **Waveform style: Detailed / Simple** (new in v2.3) - Detailed keeps the darker RMS band inside the peak waveform; Simple draws single-colour peaks only. Clip marking is drawn in both styles.
 - **Truthful clip display** - red marks real clipping (source flat-tops, or over-0dB in destructive Standalone mode); amber marks over-0dB warnings in REAPER's float contexts where nothing has clipped yet. A dark-red 0dB reference line appears when zoomed out vertically.
 - **Deep zoom** - Horizontal and vertical zoom with scroll wheel, toolbar buttons, and keyboard. Zoom to fit, zoom to selection. Zoom anchors on the mouse position or the edit cursor (Settings > View).
 - **Minimap** - Resizable overview bar showing the full item waveform. Click to navigate, drag to scroll.
@@ -81,22 +82,28 @@ SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timelin
 - **Precision selection** - Click and drag to select audio regions. Shift+click to extend. Double-click to select all.
 - **Cut / Copy / Paste** - Full clipboard support with sample-accurate editing.
 - **Normalize** - Peak normalization to 0 dB, plus LUFS normalization (-14 / -16 LUFS).
-- **Fades** - Drag fade handles with continuous curvature control (horizontal = length, vertical = curve shape). 7 base shapes with smooth curvature matching REAPER's native D_FADEINDIR.
+- **Fades** - Drag fade handles with continuous curvature control (horizontal = length, vertical = curve shape). 7 base shapes with smooth curvature matching REAPER's native D_FADEINDIR. Scroll on a handle to nudge the length (Cmd = 1 ms steps), Shift+drag for a 1/4-speed fine trim (new in v2.3).
+- **Slip content** (new in v2.3) - Alt+drag outside the selection in ITEM mode slides the take's source under the item (live arrange update, source-bound clamp, one undo point per slip).
 - **Reverse** - Reverse selection or full item.
 - **Gain adjustment** - Interactive gain knob (+24 to -60 dB) with fine-adjust mode (Cmd+drag). Scroll wheel on knob for +/-0.5 dB. Quick +3/-3 dB from context menu.
 - **DC offset removal** - One-click DC bias correction.
 - **Silence / Insert silence** - Zero out selection or insert silence at cursor.
 - **Snap to zero-crossing** - Intelligent selection boundaries at zero-crossing points.
-- **Undo** - Full REAPER undo integration. Independent 20-level undo stack in standalone mode.
+- **Undo / Redo** - Full REAPER undo integration, with redo (Ctrl+Shift+Z / Ctrl+Y, new in v2.3). Independent 20-level undo + redo stacks in standalone mode; bounded edits snapshot only the touched range, so long files stay light.
+- **Bindable toolbar actions** (new in v2.3) - every toolbar command is a named REAPER action: assign any shortcut in the Action List.
 
 ### Dynamics Processing
 Right-click > Process > Dynamics Panel. SneakPeak auto-activates the take volume envelope if it isn't already enabled (no manual setup). Analyzes audio and writes volume envelope automation - zero CPU cost during playback.
 - **Built-in compressor** - Industry-standard gain-smoothing architecture (ratio, threshold, soft knee, attack, release, auto makeup gain). Matches FabFilter Pro-C / Waves / ReaComp.
-- **Noise gate** - Post-compression gate for breath reduction in speech/podcast. Threshold, range, hold parameters.
+- **Upward compression + BOTH mode** (new in v2.3) - a DOWN/UP/BOTH switch: lift quiet material toward the threshold (with an M.Boost cap and a gate-coupled floor), or run the single-pass leveler that tames loud and lifts quiet at once, with the knee acting as a leave-alone band.
+- **Extended ratio** (new in v2.3) - 1:1 through Inf:1 (true limiting, with a detent) and into over-compression (negative ratios).
+- **Noise gate** - a full downward expander (reworked in v2.3): ratio 1-10:1, hysteresis band against chatter, exposed attack/release, floors down to -90 dB threshold / -80 dB range, an Off detent.
+- **Wideband de-esser** (new in v2.3) - DE-ESS tab with a band-pass / high-pass detector driving a third gain-reduction stage, a hard reduction cap, and a LISTEN lane that paints every span the de-esser bites.
+- **Per-stage bypass** (new in v2.3) - power dots on the COMP and GATE tabs audition each stage in real time, alongside the whole-chain A/B.
 - **Lookahead** - 0-20ms transient detection without latency cost.
-- **10-slider dynamics panel** - Inline control surface with real-time preview. Any slider change instantly updates the compression curves on the waveform.
-- **Live mode** - Real-time envelope writing as you drag sliders. Waveform updates instantly, no Apply needed.
-- **6 built-in presets** - Default, Gentle Leveling, Voice/Podcast, Broadcast, De-breath, Music Bus.
+- **Tabbed control panel** - anti-aliased COMP / GATE / DE-ESS / View tabs with knobs, transfer plot and GR meter; every change updates the curves on the waveform in real time, and double-clicking a knob lets you type an exact value.
+- **Live mode** - Real-time envelope writing as you drag knobs. Waveform updates instantly, no Apply needed.
+- **8 built-in presets** - Default, Gentle Leveling, Voice/Podcast, Broadcast, De-breath, Music Bus, Upward Leveling, De-Ess Vocal.
 - **Per-item persistence** - Settings auto-saved via P_EXT, auto-loaded when reopening.
 - **GR meter + shading** - Gain reduction visualization in panel and on waveform.
 - **A/B bypass** - Instant before/after comparison (audio + visual).
@@ -110,11 +117,13 @@ Enable via right-click > View > Show Volume Envelope. SneakPeak auto-activates t
 - **Freehand drawing** - Cmd+drag on envelope line to draw points continuously.
 - **Selection rectangle** - Cmd+drag on empty area for rectangle selection.
 - **Dense point interaction** - Reveal rectangle for managing >100 points after Apply Dynamics.
+- **Curved envelopes** (new in v2.3) - Alt+drag a segment to bend it (bezier tension with a live readout); "Reset curvature" in the point menu. Renders 1:1 with the REAPER arrange view.
 - **Works in all modes** - ITEM, Timeline, and SET modes via per-segment envelope lookup.
 
 ### Spectral Analysis
-- **Real-time spectrogram** - Async FFT computation (2048-point) with magma color scheme.
-- **Frequency selection** - Alt+drag to select frequency bands for visual isolation.
+- **Real-time spectrogram** - Threaded FFT computation with channel-pair packing (roughly 10x faster on stereo, new in v2.3) and peak-preserving zoom-out, magma color scheme.
+- **Spectral Repair (Standalone)** (new in v2.3) - drag a time x frequency rectangle and Heal Selection (Replace or gentler Attenuate strengths, iterative), or run Repair Clicks on a time selection (autoregressive detection + interpolation, sample-accurate). Destructive edits with full undo.
+- **Marquee selection** (new in v2.3) - one-gesture time x frequency rectangle with a frosted interior and resizable edge/corner grips; Alt+drag still selects a full-width band; Shift+click extends in time.
 - **Per-channel display** - Stereo spectral view with stacked channels.
 
 ### Timeline View
@@ -157,10 +166,11 @@ Select items on one track, press T to enter. Gaps collapse into a continuous wav
 ### Standalone File Mode
 Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully destructive editing with independent undo.
 - **Drag & drop** files directly into SneakPeak for offline editing.
+- **Long-file friendly** (new in v2.3) - loading runs in timer slices with a progress title (the UI stays responsive), bounded edits snapshot only the touched range, and tab switches are instant regardless of file size.
 - **Multiple file tabs** - Up to 8 files open simultaneously with independent undo stacks.
 - **Smart Save** - Ctrl+S with overwrite confirmation for WAV, auto `_edit.wav` for MP3/FLAC. Ctrl+Shift+S for Save As.
 - **Replace Source in REAPER Timeline** - Right-click > Replace Source in REAPER Timeline after editing: one click saves the file and swaps `P_SOURCE` on every project take that references the original path. Immediate arrange redraw.
-- **Drag-export** - Drag files to REAPER timeline. Clean files use original (no copy), dirty files auto-save first. Selections export as named WAV.
+- **Drag-export** - Drag files to REAPER timeline. Clean files use original (no copy), dirty files auto-save first. Selections export as named WAV. Works on all platforms (the Windows hand-off was missing before v2.3).
 
 ### Markers
 - **Add markers** at cursor position (M key).
@@ -181,7 +191,7 @@ Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully d
 - **REAPER markers** - Full integration with REAPER's project markers.
 - **Persistent settings** - All preferences (meter mode, view mode, minimap, snap, dock state, RMS/meter visibility) survive REAPER restarts.
 - **Check for updates** - Click the version label in the mode bar to query the latest release on GitHub.
-- **Hide RMS / hide meters** - View menu toggles to show peak-only waveforms or give the waveform the full vertical space.
+- **Declutter toggles** - Settings > View can hide the ruler and the meters, and switch the waveform to the single-colour Simple style, giving the waveform the full window.
 
 ---
 
@@ -197,6 +207,7 @@ Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully d
 | Previous marker | `Shift+Tab` |
 | Select all | `Ctrl/Cmd+A` |
 | Undo | `Ctrl/Cmd+Z` |
+| Redo | `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y` |
 | Cut | `Ctrl/Cmd+X` |
 | Copy | `Ctrl/Cmd+C` |
 | Paste | `Ctrl/Cmd+V` |
