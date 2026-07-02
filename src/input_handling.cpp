@@ -1661,10 +1661,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     m_loopDrag = 0;
     ReleaseCapture();
     // A running audition follows the new region (stop + start = one rebuild).
-    if (m_previewActive && m_previewLoop) {
-      StandaloneCleanupPreview();
-      StandaloneAuditionLoop();
-    }
+    RestartLoopAudition();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 }

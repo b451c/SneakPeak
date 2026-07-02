@@ -184,6 +184,7 @@ enum ContextMenuID {
   CM_FIND_LOOP_POINTS,                                 // INC-A2: NCC candidate finder
   CM_WELD_LOOP,                                        // INC-A3: crossfade the seam
   CM_LOOP_WRITE_SMPL,                                  // INC-A4: write smpl on save (check)
+  CM_AUDITION_SEAM,                                    // seam-only audition (toggle)
   CM_LAST // sentinel -- keep last
 };
 
@@ -469,6 +470,9 @@ private:
   void BakePendingFades();
   void StandalonePlayStop();
   void StandaloneAuditionLoop();                       // Loop Lab: gapless region toggle
+  void StandaloneAuditionSeam();                       // seam-only: tail+wrap+head+gap
+  void RestartLoopAudition();                          // re-arm after loop edits
+  std::vector<double> StandaloneFadedCopy();           // buffer + pending fades
   void DoWeldLoop(double crossfadeMs);                 // INC-A3: equal-power seam bake
   bool StandaloneWritePreviewFile(int startFrame, int endFrame);
   bool StandaloneStartPreviewPlayback(double curpos, bool loopFlag, double displayOffset);
@@ -556,6 +560,14 @@ private:
   // absolute waveform time for the playhead/meters.
   bool   m_previewLoop = false;
   double m_previewLoopOffset = 0.0;
+  // Seam audition: the temp WAV is tail + head + 250 ms gap; the playhead
+  // needs a piecewise map back to absolute time (MapPreviewPos).
+  bool   m_previewSeam = false;
+  double m_previewSeamPre = 0.0;     // tail length (s)
+  double m_previewSeamPost = 0.0;    // head length (s)
+  double m_previewSeamTailT0 = 0.0;  // absolute time of the tail start
+  double m_previewSeamHeadT0 = 0.0;  // absolute time of the head start
+  double MapPreviewPos(double pos) const;
   int    m_previewCacheStart = 0;    // frame range the cached temp WAV holds
   int    m_previewCacheEnd = -1;
   PCM_source* m_previewSrc = nullptr;

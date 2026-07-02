@@ -649,6 +649,7 @@ void SneakPeak::StandaloneCleanupPreview()
   m_previewActive = false;
   m_previewLoop = false;
   m_previewLoopOffset = 0.0;
+  m_previewSeam = false;
 }
 
 // Write [startFrame, endFrame) of the current buffer to the preview temp WAV
@@ -669,23 +670,8 @@ bool SneakPeak::StandaloneWritePreviewFile(int startFrame, int endFrame)
       m_previewCacheStart == startFrame && m_previewCacheEnd == endFrame)
     return true;
 
-  std::vector<double> previewData = m_waveform.GetAudioData(); // copy
+  std::vector<double> previewData = StandaloneFadedCopy();
   if (previewData.empty()) return false;
-
-  // Apply pending non-destructive fade to preview copy
-  auto sf = m_waveform.GetStandaloneFade();
-  if (sf.fadeInLen >= 0.001) {
-    int fadeFrames = std::min((int)(sf.fadeInLen * sr), frames);
-    if (fadeFrames > 0)
-      AudioOps::FadeInShaped(previewData.data(), fadeFrames, nch, sf.fadeInShape);
-  }
-  if (sf.fadeOutLen >= 0.001) {
-    int fadeFrames = std::min((int)(sf.fadeOutLen * sr), frames);
-    if (fadeFrames > 0) {
-      int fs0 = frames - fadeFrames;
-      AudioOps::FadeOutShaped(previewData.data() + (size_t)fs0 * nch, fadeFrames, nch, sf.fadeOutShape);
-    }
-  }
 
   // Slice the requested range (whole file = no-op)
   if (startFrame > 0 || endFrame < frames) {
@@ -833,10 +819,7 @@ void SneakPeak::DoWeldLoop(double crossfadeMs)
   m_spectral.ClearSpectrum();
   InvalidateLimiterPreview();
   // A running audition replays the welded seam right away.
-  if (m_previewActive && m_previewLoop) {
-    StandaloneCleanupPreview();
-    StandaloneAuditionLoop();
-  }
+  RestartLoopAudition();
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
@@ -902,6 +885,127 @@ void SneakPeak::LoopFindTick()
     ShowToast(buf);
   }
   InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+// Full-buffer copy with the pending non-destructive fades applied - what the
+// preview should sound like. Shared by the range preview and the seam composer.
+std::vector<double> SneakPeak::StandaloneFadedCopy()
+{
+  std::vector<double> previewData = m_waveform.GetAudioData(); // copy
+  if (previewData.empty()) return previewData;
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  const int frames = m_waveform.GetAudioSampleCount();
+  if (nch <= 0 || sr <= 0 || frames <= 0) return previewData;
+
+  auto sf = m_waveform.GetStandaloneFade();
+  if (sf.fadeInLen >= 0.001) {
+    int fadeFrames = std::min((int)(sf.fadeInLen * sr), frames);
+    if (fadeFrames > 0)
+      AudioOps::FadeInShaped(previewData.data(), fadeFrames, nch, sf.fadeInShape);
+  }
+  if (sf.fadeOutLen >= 0.001) {
+    int fadeFrames = std::min((int)(sf.fadeOutLen * sr), frames);
+    if (fadeFrames > 0) {
+      int fs0 = frames - fadeFrames;
+      AudioOps::FadeOutShaped(previewData.data() + (size_t)fs0 * nch, fadeFrames, nch, sf.fadeOutShape);
+    }
+  }
+  return previewData;
+}
+
+// Map the preview register's file-relative curpos back to absolute waveform
+// time: whole-file plays are 1:1, a loop audition adds the region offset, a
+// seam audition is piecewise (tail -> head -> parked during the gap).
+double SneakPeak::MapPreviewPos(double pos) const
+{
+  if (m_previewSeam) {
+    if (pos < m_previewSeamPre) return m_previewSeamTailT0 + pos;
+    const double h = pos - m_previewSeamPre;
+    if (h < m_previewSeamPost) return m_previewSeamHeadT0 + h;
+    return m_previewSeamHeadT0 + m_previewSeamPost;   // 250 ms gap: park
+  }
+  return pos + m_previewLoopOffset;
+}
+
+// Seam-only audition (user ask: on a LONG loop, hearing the wrap should not
+// cost a full pass). The temp WAV is: last <=2 s of the loop + the true
+// seam + first <=2 s + 250 ms of silence, looped - the wrap plays every few
+// seconds and the gap cleanly separates passes (no fake second seam).
+void SneakPeak::StandaloneAuditionSeam()
+{
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
+
+  if (m_previewActive && m_previewSeam) {   // toggle off
+    StandaloneCleanupPreview();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+  if (!m_waveform.HasLoop()) return;
+  if (!g_PCM_Source_CreateFromFile || !g_PlayPreview) return;
+  if (m_previewActive) StandaloneCleanupPreview();
+
+  const int frames = m_waveform.GetAudioSampleCount();
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+  const int s = std::max(0, std::min(frames, m_waveform.GetLoopStart()));
+  const int e = std::max(s, std::min(frames, m_waveform.GetLoopEnd()));
+  const int loopLen = e - s;
+  if (loopLen < 64) {
+    ShowToast("Loop region too short to audition");
+    return;
+  }
+
+  const int pre = std::min(2 * sr, loopLen);    // tail before the seam
+  const int post = std::min(2 * sr, loopLen);   // head after the wrap
+  const int gap = sr / 4;                       // 250 ms pass separator
+
+  std::vector<double> faded = StandaloneFadedCopy();
+  if (faded.empty()) return;
+  std::vector<double> seam;
+  seam.reserve((size_t)(pre + post + gap) * (size_t)nch);
+  seam.insert(seam.end(), faded.begin() + (size_t)(e - pre) * nch,
+              faded.begin() + (size_t)e * nch);
+  seam.insert(seam.end(), faded.begin() + (size_t)s * nch,
+              faded.begin() + (size_t)(s + post) * nch);
+  seam.insert(seam.end(), (size_t)gap * (size_t)nch, 0.0);
+
+  if (!m_previewTempPath.empty()) remove(m_previewTempPath.c_str());
+  {
+    const char* tmpDir = getenv("TMPDIR");
+    if (!tmpDir) tmpDir = "/tmp";
+    char tmpPath[512];
+    snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_preview_%d.wav", tmpDir, (int)getpid());
+    if (AudioEngine::WriteWavFile(tmpPath, seam.data(), pre + post + gap, nch,
+                                  sr, m_wavBitsPerSample, m_wavAudioFormat))
+      m_previewTempPath = tmpPath;
+    else
+      m_previewTempPath.clear();
+  }
+  if (m_previewTempPath.empty()) return;
+  m_previewCacheStart = -3;   // seam file never matches a range request:
+  m_previewCacheEnd = -3;     // the next normal/loop play rebuilds
+
+  if (StandaloneStartPreviewPlayback(0.0, true, 0.0)) {
+    m_previewSeam = true;
+    m_previewSeamPre = (double)pre / sr;
+    m_previewSeamPost = (double)post / sr;
+    m_previewSeamTailT0 = (double)(e - pre) / sr;
+    m_previewSeamHeadT0 = (double)s / sr;
+  }
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+// Re-arm the running audition after a loop edit (bracket drag, weld, new
+// region) - it keeps the MODE the user chose (full loop vs seam-only).
+void SneakPeak::RestartLoopAudition()
+{
+  if (!(m_previewActive && m_previewLoop)) return;
+  const bool seam = m_previewSeam;
+  StandaloneCleanupPreview();
+  if (seam) StandaloneAuditionSeam();
+  else StandaloneAuditionLoop();
 }
 
 // Loop Lab (v2.4 INC-A1): gapless audition of the loop region. The temp WAV

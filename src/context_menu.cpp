@@ -456,6 +456,9 @@ void SneakPeak::OnRightClick(int x, int y)
       UINT audFlags = hasLoop ? MF_STRING : MF_GRAYED;
       if (m_previewActive && m_previewLoop) audFlags |= MF_CHECKED;
       MenuAppend(loopMenu, audFlags, CM_AUDITION_LOOP, "Audition Loop");
+      UINT seamFlags = hasLoop ? MF_STRING : MF_GRAYED;
+      if (m_previewActive && m_previewSeam) seamFlags |= MF_CHECKED;
+      MenuAppend(loopMenu, seamFlags, CM_AUDITION_SEAM, "Audition Seam");
       MenuAppend(loopMenu, hasLoop ? MF_STRING : MF_GRAYED, CM_WELD_LOOP,
                  "Weld Loop (Crossfade)...");
       MenuAppend(loopMenu, hasLoop ? MF_STRING : MF_GRAYED, CM_CLEAR_LOOP, "Clear Loop");
@@ -800,15 +803,15 @@ void SneakPeak::OnContextMenuCommand(int id)
       snprintf(buf, sizeof(buf), "Loop set (%.2f s)", (double)(s1 - s0) / sr);
       ShowToast(buf);
       // A running audition follows the new region.
-      if (m_previewActive && m_previewLoop) {
-        StandaloneCleanupPreview();
-        StandaloneAuditionLoop();
-      }
+      RestartLoopAudition();
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     }
     case CM_AUDITION_LOOP:
       StandaloneAuditionLoop();
+      break;
+    case CM_AUDITION_SEAM:
+      StandaloneAuditionSeam();
       break;
     case CM_FIND_LOOP_POINTS:
       StartLoopFind();
