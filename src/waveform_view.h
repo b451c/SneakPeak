@@ -131,6 +131,16 @@ public:
   // Snap to zero-crossing
   void SetSnapToZero(bool snap) { m_snapToZero = snap; }
   bool GetSnapToZero() const { return m_snapToZero; }
+  // Public wrapper for the loop-bracket drag (SnapToZeroCrossing is private).
+  double SnapTimeToZeroCrossing(double time) const { return SnapToZeroCrossing(time); }
+
+  // Loop Lab (v2.4 INC-A1): loop region in FRAMES, -1/-1 = none. Standalone
+  // only; joins the SaveCurrentStandaloneState/Restore move pair like fades.
+  bool HasLoop() const { return m_loopStartFrame >= 0 && m_loopEndFrame > m_loopStartFrame; }
+  int  GetLoopStart() const { return m_loopStartFrame; }
+  int  GetLoopEnd() const { return m_loopEndFrame; }
+  void SetLoop(int startFrame, int endFrame) { m_loopStartFrame = startFrame; m_loopEndFrame = endFrame; }
+  void ClearLoop() { m_loopStartFrame = -1; m_loopEndFrame = -1; }
 
   // Volume envelope overlay + editing
   bool GetShowVolumeEnvelope() const { return m_envShowVolume; }
@@ -297,6 +307,10 @@ private:
   WaveformSelection m_selection;
   bool m_selecting = false;
   bool m_snapToZero = false;
+
+  // Loop Lab region (v2.4 INC-A1), frames; -1 = none. Standalone-only state.
+  int m_loopStartFrame = -1;
+  int m_loopEndFrame = -1;
 
   // Peaks cache (computed from m_audioData, no API calls)
   std::vector<double> m_peakMax;

@@ -198,6 +198,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="nav-group">
     <div class="nav-group-title">Features</div>
     <a href="#spectral" class="nav-link">Spectral View</a>
+    <a href="#loop-lab" class="nav-link">Loop Lab</a>
     <a href="#hard-limiter" class="nav-link">Hard Limiter</a>
     <a href="#multi-item" class="nav-link">Multi-Item View</a>
     <a href="#metering" class="nav-link">Metering</a>
@@ -885,6 +886,22 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <div class="warning">
   <strong>Standalone only (v1)</strong>
   Spectral Repair works in Standalone mode. For a REAPER item, edit a saved copy and use Replace Source in REAPER Timeline - direct ITEM-mode repair is a planned follow-up. Healing v1 works horizontally (across time); vertical and pattern modes are follow-ups too.
+</div>
+
+<h2 id="loop-lab">Loop Lab (Seamless Loops)</h2>
+<div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
+
+<p>Building seamless loops (ambiences, engines, UI hums) for game engines and samplers starts with finding the right region and <em>hearing</em> the seam. In Standalone mode, select the part that should loop and right-click &gt; <strong>Loop &gt; Set Loop From Selection</strong>: yellow brackets and a strip mark the loop region on the ruler (with the ruler hidden they sit on the waveform top, like markers).</p>
+
+<ul>
+  <li><strong>Drag a bracket</strong> to fine-tune either end - snap-to-zero-crossing applies when enabled in Settings.</li>
+  <li><strong>Loop &gt; Audition Loop</strong> plays the region wrapping seamlessly from end back to start - if the seam clicks or thumps, you will hear it exactly as a game engine would play it. The audition follows bracket drags and loops until you stop it (the menu again, or <kbd>Space</kbd>).</li>
+  <li><strong>Loop &gt; Clear Loop</strong> removes the region. The loop is remembered per file tab.</li>
+</ul>
+
+<div class="tip">
+  <strong>Coming next in v2.4</strong>
+  Automatic loop-point finding (candidate seams ranked by waveform continuity), crossfade welding of the seam, and writing standard <code>smpl</code> loop points into saved WAVs so Unity/FMOD/Wwise and samplers read the loop natively.
 </div>
 
 <h2 id="hard-limiter">Hard Limiter (True Peak)</h2>

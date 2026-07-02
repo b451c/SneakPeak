@@ -146,6 +146,7 @@ void SneakPeak::OnPaint(HDC hdc)
     }
   }
   if (m_markers.GetShowMarkers()) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
+  DrawLoopRegion(hdc);   // Loop Lab brackets + strip (gates itself)
 #ifndef SNEAKPEAK_BLEND2D_PANEL
   // GDI gain panel (OFF build only - the premium build draws it in OnPaintOverlay)
   if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect, m_waveform.HasSelection());
@@ -871,6 +872,65 @@ void SneakPeak::UpdateSoloState()
   for (auto* tr : tracks) {
     int* pSolo = (int*)g_GetSetMediaTrackInfo(tr, "I_SOLO", nullptr);
     if (pSolo && *pSolo != 0) { m_trackSoloed = true; break; }
+  }
+}
+
+// Loop Lab (v2.4 INC-A1): the loop region - a tinted strip along the ruler
+// line, bracket glyphs at both ends and dim guide lines down the waveform.
+// Anchored at m_rulerRect.top, which structurally collapses onto the waveform
+// top when the ruler is hidden (the marker convention). Yellow: a hue outside
+// the six locked mode accents and the four data-layer colours.
+void SneakPeak::DrawLoopRegion(HDC hdc)
+{
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasLoop()) return;
+  const int sr = m_waveform.GetSampleRate();
+  if (sr <= 0) return;
+  RECT wr = m_waveform.GetRect();
+  const int waveL = wr.left;
+  const int waveR = wr.right - SP(DB_SCALE_WIDTH);
+  const double t0 = (double)m_waveform.GetLoopStart() / (double)sr;
+  const double t1 = (double)m_waveform.GetLoopEnd() / (double)sr;
+  int x0 = m_waveform.TimeToX(t0);
+  int x1 = m_waveform.TimeToX(t1);
+  if (x1 < waveL || x0 > waveR) return;   // fully off-screen
+  const bool startVisible = x0 >= waveL && x0 <= waveR;
+  const bool endVisible = x1 >= waveL && x1 <= waveR;
+  x0 = std::max(waveL, std::min(waveR, x0));
+  x1 = std::max(waveL, std::min(waveR, x1));
+
+  const COLORREF loopBright = RGB(240, 210, 70);
+  const COLORREF loopDim = RGB(120, 105, 35);
+  const int top = m_rulerRect.top;
+
+  // tinted strip along the ruler line
+  {
+    HBRUSH strip = CreateSolidBrush(loopDim);
+    RECT r = { x0, top, std::max(x1, x0 + 1), top + SPmin(4) };
+    FillRect(hdc, &r, strip);
+    DeleteObject(strip);
+  }
+  // dim guide lines down the waveform + bright brackets at the ruler
+  {
+    OwnedPen dimPen(PS_SOLID, 1, loopDim);
+    {
+      DCPenScope scope(hdc, dimPen);
+      if (startVisible) { MoveToEx(hdc, x0, top, nullptr); LineTo(hdc, x0, wr.bottom); }
+      if (endVisible)   { MoveToEx(hdc, x1, top, nullptr); LineTo(hdc, x1, wr.bottom); }
+    }
+    OwnedPen brightPen(PS_SOLID, 2, loopBright);
+    DCPenScope scope(hdc, brightPen);
+    const int bh = SP(14);   // bracket height
+    const int bw = SP(5);    // bracket foot, points INTO the loop
+    if (startVisible) {
+      MoveToEx(hdc, x0, top, nullptr);      LineTo(hdc, x0, top + bh);
+      MoveToEx(hdc, x0, top + 1, nullptr);  LineTo(hdc, x0 + bw, top + 1);
+      MoveToEx(hdc, x0, top + bh - 1, nullptr); LineTo(hdc, x0 + bw, top + bh - 1);
+    }
+    if (endVisible) {
+      MoveToEx(hdc, x1, top, nullptr);      LineTo(hdc, x1, top + bh);
+      MoveToEx(hdc, x1, top + 1, nullptr);  LineTo(hdc, x1 - bw, top + 1);
+      MoveToEx(hdc, x1, top + bh - 1, nullptr); LineTo(hdc, x1 - bw, top + bh - 1);
+    }
   }
 }
 

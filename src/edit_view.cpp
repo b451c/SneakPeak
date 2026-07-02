@@ -905,7 +905,7 @@ void SneakPeak::UpdatePlaybackFollow()
   // Standalone preview: follow playhead (independent of REAPER transport)
   if (m_previewActive && m_previewReg && m_waveform.IsStandaloneMode()) {
     auto* reg = (preview_register_t*)m_previewReg;
-    double pos = reg->curpos;
+    double pos = reg->curpos + m_previewLoopOffset; // loop audition: region-relative
     double viewStart = m_waveform.GetViewStart();
     double viewEnd = m_waveform.GetViewEnd();
     if (pos >= 0.0 && pos <= m_waveform.GetItemDuration() &&
@@ -1095,9 +1095,10 @@ void SneakPeak::UpdateItemState()
       double pos = reg->curpos;
       pthread_mutex_unlock(&reg->mutex);
 #endif
+      pos += m_previewLoopOffset;   // loop audition: curpos is region-relative
       double dur = m_waveform.GetItemDuration();
-      if (pos >= dur) {
-        // Preview finished
+      if (!m_previewLoop && pos >= dur) {
+        // Preview finished (a looping audition wraps and never finishes)
         DBG("[SneakPeak] Preview finished: pos=%.3f dur=%.3f\n", pos, dur);
         StandaloneCleanupPreview();
       } else {
@@ -1144,7 +1145,8 @@ void SneakPeak::UpdateItemState()
         double playPos = 0.0;
         if (playing) {
           if (preview) {
-            playPos = ((preview_register_t*)m_previewReg)->curpos;
+            playPos = ((preview_register_t*)m_previewReg)->curpos +
+                      m_previewLoopOffset;   // loop audition: region-relative
           } else {
             // GetPlayPosition is the LATENCY-COMPENSATED position (the audio being
             // HEARD right now) - the right anchor for a meter; Position2 runs ahead.

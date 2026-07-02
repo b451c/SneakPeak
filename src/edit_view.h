@@ -53,6 +53,8 @@ struct StandaloneFileState {
   WaveformSelection selection;
   bool dirty = false;
   WaveformView::StandaloneFade fade;
+  int loopStartFrame = -1;          // Loop Lab region (v2.4 INC-A1), frames
+  int loopEndFrame = -1;
   std::string savedPath;            // where file was last saved (empty = never saved)
   bool overwriteConfirmed = false;  // user confirmed overwrite of original WAV
 };
@@ -174,6 +176,10 @@ enum ContextMenuID {
   CM_LIM_USER_PRESET_LAST = CM_LIM_USER_PRESET_BASE + 32,
   CM_LIM_DEL_PRESET_BASE,                              // + MAX_USER_PRESETS delete entries
   CM_LIM_DEL_PRESET_LAST = CM_LIM_DEL_PRESET_BASE + 32,
+  // Loop Lab (v2.4 INC-A1) - standalone loop region.
+  CM_LOOP_FROM_SELECTION,                              // set loop from the time selection
+  CM_AUDITION_LOOP,                                    // gapless region preview (toggle)
+  CM_CLEAR_LOOP,
   CM_LAST // sentinel -- keep last
 };
 
@@ -458,6 +464,9 @@ private:
   void SaveStandaloneFileAs();
   void BakePendingFades();
   void StandalonePlayStop();
+  void StandaloneAuditionLoop();                       // Loop Lab: gapless region toggle
+  bool StandaloneWritePreviewFile(int startFrame, int endFrame);
+  bool StandaloneStartPreviewPlayback(double curpos, bool loopFlag, double displayOffset);
   void StandaloneCleanupPreview();
   std::string m_savedPath;           // last saved path (empty = never saved)
   bool m_overwriteConfirmed = false; // confirmed overwrite of original WAV
@@ -537,6 +546,13 @@ private:
   bool m_previewActive = false;
   bool m_previewCacheDirty = true; // true when temp WAV needs rewrite
   void* m_previewReg = nullptr; // preview_register_t* (opaque to avoid header dep)
+  // Loop Lab audition (v2.4 INC-A1): the temp WAV holds JUST the loop region
+  // and the preview register loops it natively; offset maps curpos back to
+  // absolute waveform time for the playhead/meters.
+  bool   m_previewLoop = false;
+  double m_previewLoopOffset = 0.0;
+  int    m_previewCacheStart = 0;    // frame range the cached temp WAV holds
+  int    m_previewCacheEnd = -1;
   PCM_source* m_previewSrc = nullptr;
   std::string m_previewTempPath;
 
@@ -593,6 +609,8 @@ private:
   void RestoreLimiterParams();           // (first run -> preset 0) + panel offsets
   void SaveLimiterGeom();                // lim_off_x / lim_off_y
   void DrawLimiterOverlay(HDC hdc);      // top-anchored GR band + trace (GDI pass)
+  void DrawLoopRegion(HDC hdc);          // Loop Lab brackets + tinted ruler strip
+  int m_loopDrag = 0;                    // bracket drag: 0 none, 1 start, 2 end
   void MarkLimiterParamsChanged();       // debounce tick + gen bump + pending "..."
   void InvalidateLimiterPreview();       // buffer changed (apply/undo/load)
   void LimiterPreviewTick();             // OnTimer: draft/full launch + finish pump

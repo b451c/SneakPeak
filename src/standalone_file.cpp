@@ -60,6 +60,8 @@ void SneakPeak::SaveCurrentStandaloneState()
   fs.selection = m_waveform.GetSelection();
   fs.dirty = m_dirty;
   fs.fade = m_waveform.GetStandaloneFade();
+  fs.loopStartFrame = m_waveform.GetLoopStart();
+  fs.loopEndFrame = m_waveform.GetLoopEnd();
   fs.savedPath = m_savedPath;
   fs.overwriteConfirmed = m_overwriteConfirmed;
 
@@ -84,6 +86,7 @@ void SneakPeak::RestoreStandaloneState(int idx)
   m_waveform.SetCursorTime(fs.cursorTime);
   m_waveform.SetSelection(fs.selection);
   m_waveform.SetStandaloneFade(fs.fade);
+  m_waveform.SetLoop(fs.loopStartFrame, fs.loopEndFrame);
   m_waveform.Invalidate();
 
   m_standaloneUndoStack = std::move(fs.undoStack);
@@ -181,6 +184,7 @@ void SneakPeak::LoadStandaloneFile(const char* path)
   m_standaloneRedoStack.clear();
   m_waveform.ClearStandaloneFade();
   m_waveform.ClearStandaloneGain();
+  m_waveform.ClearLoop();
 
   std::string spath(path);
   DBG("[SneakPeak] LoadStandaloneFile: %s\n", path);
@@ -345,6 +349,7 @@ void SneakPeak::FinishStandaloneLoad()
   m_standaloneRedoStack.clear();
   m_waveform.ClearStandaloneFade();
   m_waveform.ClearStandaloneGain();
+  m_waveform.ClearLoop();
 
   const WavInfo info = m_stdLoad.info;
   const std::string spath = m_stdLoad.path;
@@ -356,6 +361,7 @@ void SneakPeak::FinishStandaloneLoad()
   m_waveform.SetViewDuration(dur);
   m_waveform.SetCursorTime(0.0);
   m_waveform.ClearSelection();
+  m_waveform.ClearLoop();
   AudioEngine::AbortStream(m_stdLoad); // samples were moved out; closes the rest
 
   m_wavBitsPerSample = info.bitsPerSample;
@@ -610,6 +616,116 @@ void SneakPeak::StandaloneCleanupPreview()
   }
   // Keep temp file for cache (reused on next play if audio unchanged)
   m_previewActive = false;
+  m_previewLoop = false;
+  m_previewLoopOffset = 0.0;
+}
+
+// Write [startFrame, endFrame) of the current buffer to the preview temp WAV
+// (non-destructive fades applied at their whole-file positions first). The
+// rewrite is skipped when audio, fades AND the requested range are unchanged;
+// a range change alone invalidates the cache (Loop Lab auditions a region).
+bool SneakPeak::StandaloneWritePreviewFile(int startFrame, int endFrame)
+{
+  int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
+  int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return false;
+  startFrame = std::max(0, std::min(frames, startFrame));
+  endFrame = std::max(startFrame, std::min(frames, endFrame));
+  if (endFrame - startFrame <= 0) return false;
+
+  if (!m_previewCacheDirty && !m_previewTempPath.empty() &&
+      m_previewCacheStart == startFrame && m_previewCacheEnd == endFrame)
+    return true;
+
+  std::vector<double> previewData = m_waveform.GetAudioData(); // copy
+  if (previewData.empty()) return false;
+
+  // Apply pending non-destructive fade to preview copy
+  auto sf = m_waveform.GetStandaloneFade();
+  if (sf.fadeInLen >= 0.001) {
+    int fadeFrames = std::min((int)(sf.fadeInLen * sr), frames);
+    if (fadeFrames > 0)
+      AudioOps::FadeInShaped(previewData.data(), fadeFrames, nch, sf.fadeInShape);
+  }
+  if (sf.fadeOutLen >= 0.001) {
+    int fadeFrames = std::min((int)(sf.fadeOutLen * sr), frames);
+    if (fadeFrames > 0) {
+      int fs0 = frames - fadeFrames;
+      AudioOps::FadeOutShaped(previewData.data() + (size_t)fs0 * nch, fadeFrames, nch, sf.fadeOutShape);
+    }
+  }
+
+  // Slice the requested range (whole file = no-op)
+  if (startFrame > 0 || endFrame < frames) {
+    previewData.erase(previewData.begin() + (size_t)endFrame * nch, previewData.end());
+    previewData.erase(previewData.begin(), previewData.begin() + (size_t)startFrame * nch);
+  }
+
+  // Clean up old temp file
+  if (!m_previewTempPath.empty()) remove(m_previewTempPath.c_str());
+
+  // Preview is temporary — always use temp dir (file deleted after playback)
+  {
+    const char* tmpDir = getenv("TMPDIR");
+    if (!tmpDir) tmpDir = "/tmp";
+    char tmpPath[512];
+    snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_preview_%d.wav", tmpDir, (int)getpid());
+    if (AudioEngine::WriteWavFile(tmpPath, previewData.data(), endFrame - startFrame,
+                                  nch, sr, m_wavBitsPerSample, m_wavAudioFormat))
+      m_previewTempPath = tmpPath;
+    else
+      m_previewTempPath.clear();
+  }
+  if (m_previewTempPath.empty()) return false;
+  m_previewCacheDirty = false;
+  m_previewCacheStart = startFrame;
+  m_previewCacheEnd = endFrame;
+  return true;
+}
+
+// Create the PCM source + preview register for the current temp WAV and start
+// playback. loopFlag = REAPER's native gapless wrap over the whole source
+// (Loop Lab writes just the region, so the wrap IS the loop). displayOffset
+// maps the register's 0-based curpos back to absolute waveform time.
+bool SneakPeak::StandaloneStartPreviewPlayback(double curpos, bool loopFlag,
+                                               double displayOffset)
+{
+  PCM_source* src = g_PCM_Source_CreateFromFile(m_previewTempPath.c_str());
+  if (!src) return false;
+
+  auto* reg = new preview_register_t();
+  memset(reg, 0, sizeof(*reg));
+#ifdef _WIN32
+  InitializeCriticalSection(&reg->cs);
+#else
+  pthread_mutex_init(&reg->mutex, nullptr);
+#endif
+  reg->src = src;
+  reg->m_out_chan = 0;
+  reg->loop = loopFlag;
+  reg->volume = 1.0;
+  reg->curpos = curpos;
+
+  if (g_PlayPreview(reg)) {
+    m_previewReg = reg;
+    m_previewSrc = src;
+    m_previewActive = true;
+    m_previewLoop = loopFlag;
+    m_previewLoopOffset = displayOffset;
+    DBG("[SneakPeak] Standalone preview started at %.3f (loop=%d, src=%p, len=%.3f)\n",
+        curpos, loopFlag ? 1 : 0, (void*)src, src->GetLength());
+    return true;
+  }
+#ifdef _WIN32
+  DeleteCriticalSection(&reg->cs);
+#else
+  pthread_mutex_destroy(&reg->mutex);
+#endif
+  delete reg;
+  delete src;
+  DBG("[SneakPeak] Standalone preview FAILED to start\n");
+  return false;
 }
 
 void SneakPeak::StandalonePlayStop()
@@ -623,65 +739,7 @@ void SneakPeak::StandalonePlayStop()
   }
 
   if (!g_PCM_Source_CreateFromFile || !g_PlayPreview) return;
-
-  int nch = m_waveform.GetNumChannels();
-  int sr = m_waveform.GetSampleRate();
-  int frames = m_waveform.GetAudioSampleCount();
-  if (frames <= 0) return;
-
-  // Only rewrite temp WAV if audio/fade changed since last write
-  if (m_previewCacheDirty || m_previewTempPath.empty()) {
-    std::vector<double> previewData = m_waveform.GetAudioData(); // copy
-    if (previewData.empty()) return;
-
-    // Apply pending non-destructive fade to preview copy
-    auto sf = m_waveform.GetStandaloneFade();
-    if (sf.fadeInLen >= 0.001) {
-      int fadeFrames = std::min((int)(sf.fadeInLen * sr), frames);
-      if (fadeFrames > 0)
-        AudioOps::FadeInShaped(previewData.data(), fadeFrames, nch, sf.fadeInShape);
-    }
-    if (sf.fadeOutLen >= 0.001) {
-      int fadeFrames = std::min((int)(sf.fadeOutLen * sr), frames);
-      if (fadeFrames > 0) {
-        int startFrame = frames - fadeFrames;
-        AudioOps::FadeOutShaped(previewData.data() + (size_t)startFrame * nch, fadeFrames, nch, sf.fadeOutShape);
-      }
-    }
-
-    // Clean up old temp file
-    if (!m_previewTempPath.empty()) remove(m_previewTempPath.c_str());
-
-    // Preview is temporary — always use temp dir (file deleted after playback)
-    {
-      const char* tmpDir = getenv("TMPDIR");
-      if (!tmpDir) tmpDir = "/tmp";
-      char tmpPath[512];
-      snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_preview_%d.wav", tmpDir, (int)getpid());
-      if (AudioEngine::WriteWavFile(tmpPath, previewData.data(), frames, nch, sr,
-                                     m_wavBitsPerSample, m_wavAudioFormat))
-        m_previewTempPath = tmpPath;
-      else
-        m_previewTempPath.clear();
-    }
-    if (m_previewTempPath.empty()) return;
-    m_previewCacheDirty = false;
-  }
-
-  PCM_source* src = g_PCM_Source_CreateFromFile(m_previewTempPath.c_str());
-  if (!src) return;
-
-  auto* reg = new preview_register_t();
-  memset(reg, 0, sizeof(*reg));
-#ifdef _WIN32
-  InitializeCriticalSection(&reg->cs);
-#else
-  pthread_mutex_init(&reg->mutex, nullptr);
-#endif
-  reg->src = src;
-  reg->m_out_chan = 0;
-  reg->loop = false;
-  reg->volume = 1.0;
+  if (!StandaloneWritePreviewFile(0, m_waveform.GetAudioSampleCount())) return;
 
   // Start from selection start (if any), otherwise cursor position
   double startTime = 0.0;
@@ -693,24 +751,39 @@ void SneakPeak::StandalonePlayStop()
   }
   if (startTime < 0.0) startTime = 0.0;
   if (startTime >= m_waveform.GetItemDuration()) startTime = 0.0;
-  reg->curpos = startTime;
 
-  if (g_PlayPreview(reg)) {
-    m_previewReg = reg;
-    m_previewSrc = src;
-    m_previewActive = true;
-    DBG("[SneakPeak] Standalone preview started at %.3f (src=%p, nch=%d, sr=%.0f, len=%.3f)\n",
-        startTime, (void*)src, src->GetNumChannels(), src->GetSampleRate(), src->GetLength());
-  } else {
-#ifdef _WIN32
-    DeleteCriticalSection(&reg->cs);
-#else
-    pthread_mutex_destroy(&reg->mutex);
-#endif
-    delete reg;
-    delete src;
-    DBG("[SneakPeak] Standalone preview FAILED to start\n");
+  StandaloneStartPreviewPlayback(startTime, false, 0.0);
+}
+
+// Loop Lab (v2.4 INC-A1): gapless audition of the loop region. The temp WAV
+// holds JUST the region and the preview register loops it natively - the
+// wrap is seamless by construction. Toggle semantics like StandalonePlayStop.
+void SneakPeak::StandaloneAuditionLoop()
+{
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
+
+  if (m_previewActive && m_previewLoop) {   // already auditioning: stop
+    StandaloneCleanupPreview();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
   }
+  if (!m_waveform.HasLoop()) return;
+  if (!g_PCM_Source_CreateFromFile || !g_PlayPreview) return;
+  if (m_previewActive) StandaloneCleanupPreview();   // switch normal -> loop
+
+  const int frames = m_waveform.GetAudioSampleCount();
+  const int sr = m_waveform.GetSampleRate();
+  if (frames <= 0 || sr <= 0) return;
+  const int s = std::max(0, std::min(frames, m_waveform.GetLoopStart()));
+  const int e = std::max(s, std::min(frames, m_waveform.GetLoopEnd()));
+  if (e - s < 64) {
+    ShowToast("Loop region too short to audition");
+    return;
+  }
+
+  if (!StandaloneWritePreviewFile(s, e)) return;
+  StandaloneStartPreviewPlayback(0.0, true, (double)s / (double)sr);
+  InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
 // --- Replace Source in REAPER Timeline ---

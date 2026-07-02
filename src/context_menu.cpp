@@ -444,6 +444,19 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppendSubmenu(menu, supportMenu, "Support");
   if (m_waveform.IsStandaloneMode()) {
     MenuAppendSeparator(menu);
+    // Loop Lab (v2.4 INC-A1): loop region + gapless audition; Find/Weld/smpl
+    // arrive in INC-A2..A4.
+    {
+      HMENU loopMenu = CreatePopupMenu();
+      const bool hasLoop = m_waveform.HasLoop();
+      MenuAppend(loopMenu, hasSel ? MF_STRING : MF_GRAYED, CM_LOOP_FROM_SELECTION,
+                 "Set Loop From Selection");
+      UINT audFlags = hasLoop ? MF_STRING : MF_GRAYED;
+      if (m_previewActive && m_previewLoop) audFlags |= MF_CHECKED;
+      MenuAppend(loopMenu, audFlags, CM_AUDITION_LOOP, "Audition Loop");
+      MenuAppend(loopMenu, hasLoop ? MF_STRING : MF_GRAYED, CM_CLEAR_LOOP, "Clear Loop");
+      MenuAppendSubmenu(menu, loopMenu, "Loop");
+    }
     MenuAppend(menu, MF_STRING, CM_REPLACE_SOURCE, "Replace Source in REAPER Timeline");
   }
   MenuAppendSeparator(menu);
@@ -761,6 +774,40 @@ void SneakPeak::OnContextMenuCommand(int id)
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     }
+    case CM_LOOP_FROM_SELECTION: {
+      if (!m_waveform.IsStandaloneMode() || !m_waveform.HasSelection()) break;
+      const int sr = m_waveform.GetSampleRate();
+      const int frames = m_waveform.GetAudioSampleCount();
+      if (sr <= 0 || frames <= 0) break;
+      WaveformSelection sel = m_waveform.GetSelection();
+      const double a = std::min(sel.startTime, sel.endTime);
+      const double b = std::max(sel.startTime, sel.endTime);
+      int s0 = std::max(0, std::min(frames, (int)(a * sr + 0.5)));
+      int s1 = std::max(s0, std::min(frames, (int)(b * sr + 0.5)));
+      if (s1 - s0 < 64) {
+        ShowToast("Selection too short for a loop");
+        break;
+      }
+      m_waveform.SetLoop(s0, s1);
+      char buf[64];
+      snprintf(buf, sizeof(buf), "Loop set (%.2f s)", (double)(s1 - s0) / sr);
+      ShowToast(buf);
+      // A running audition follows the new region.
+      if (m_previewActive && m_previewLoop) {
+        StandaloneCleanupPreview();
+        StandaloneAuditionLoop();
+      }
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    }
+    case CM_AUDITION_LOOP:
+      StandaloneAuditionLoop();
+      break;
+    case CM_CLEAR_LOOP:
+      if (m_previewActive && m_previewLoop) StandaloneCleanupPreview();
+      m_waveform.ClearLoop();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
     case CM_LIM_SAVE_PRESET:
       AddLimUserPreset();
       InvalidateRect(m_hwnd, nullptr, FALSE);   // preset box may show the new name

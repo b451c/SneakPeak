@@ -329,6 +329,23 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
   if (y >= m_rulerRect.top && y < m_rulerRect.bottom) {
     if (m_waveform.HasItem()) {
+      // Loop brackets (v2.4 INC-A1) win over a coincident marker: they are the
+      // finer target and only exist in standalone mode with a loop set.
+      if (m_waveform.IsStandaloneMode() && m_waveform.HasLoop()) {
+        const int sr = m_waveform.GetSampleRate();
+        if (sr > 0) {
+          const int xs = m_waveform.TimeToX((double)m_waveform.GetLoopStart() / sr);
+          const int xe = m_waveform.TimeToX((double)m_waveform.GetLoopEnd() / sr);
+          const int tol = SPmin(5);
+          const int hit = (x >= xs - tol && x <= xs + tol) ? 1
+                        : (x >= xe - tol && x <= xe + tol) ? 2 : 0;
+          if (hit) {
+            m_loopDrag = hit;
+            SetCapture(m_hwnd);
+            return;
+          }
+        }
+      }
       // Check if clicking on a marker — start drag
       int markerIdx = m_markers.HitTestMarker(x, m_waveform, SPmin(5));
       if (markerIdx >= 0) {
@@ -1628,6 +1645,16 @@ void SneakPeak::OnMouseUp(int x, int y)
     ReleaseCapture();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
+  if (m_loopDrag) {
+    m_loopDrag = 0;
+    ReleaseCapture();
+    // A running audition follows the new region (stop + start = one rebuild).
+    if (m_previewActive && m_previewLoop) {
+      StandaloneCleanupPreview();
+      StandaloneAuditionLoop();
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
 }
 
 void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
@@ -2047,6 +2074,25 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
+  if (m_loopDrag && m_waveform.IsStandaloneMode()) {
+    const int sr = m_waveform.GetSampleRate();
+    const int frames = m_waveform.GetAudioSampleCount();
+    if (sr > 0 && frames > 0) {
+      double t = m_waveform.XToTime(x);
+      if (m_waveform.GetSnapToZero()) t = m_waveform.SnapTimeToZeroCrossing(t);
+      int f = (int)(t * sr + 0.5);
+      f = std::max(0, std::min(frames, f));
+      const int kMinLoop = 64;   // frames; brackets can never cross
+      if (m_loopDrag == 1)
+        m_waveform.SetLoop(std::min(f, m_waveform.GetLoopEnd() - kMinLoop),
+                           m_waveform.GetLoopEnd());
+      else
+        m_waveform.SetLoop(m_waveform.GetLoopStart(),
+                           std::max(f, m_waveform.GetLoopStart() + kMinLoop));
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+  }
+
   if (m_scrollbarDragging && m_waveform.HasItem()) {
     int sw = m_scrollbarRect.right - m_scrollbarRect.left;
     if (sw > 0) {
@@ -2156,9 +2202,20 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         cur = LoadCursor(nullptr, IDC_SIZENS);
       }
     }
-    // Markers in ruler
+    // Markers + loop brackets in ruler
     else if (y >= m_rulerRect.top && y < m_rulerRect.bottom && m_waveform.HasItem()) {
-      if (m_markers.HitTestMarker(x, m_waveform, SPmin(5)) >= 0) {
+      bool onLoopBracket = false;
+      if (m_waveform.IsStandaloneMode() && m_waveform.HasLoop()) {
+        const int sr = m_waveform.GetSampleRate();
+        if (sr > 0) {
+          const int xs = m_waveform.TimeToX((double)m_waveform.GetLoopStart() / sr);
+          const int xe = m_waveform.TimeToX((double)m_waveform.GetLoopEnd() / sr);
+          const int tol = SPmin(5);
+          onLoopBracket = (x >= xs - tol && x <= xs + tol) ||
+                          (x >= xe - tol && x <= xe + tol);
+        }
+      }
+      if (onLoopBracket || m_markers.HitTestMarker(x, m_waveform, SPmin(5)) >= 0) {
         cur = LoadCursor(nullptr, IDC_SIZEWE);
       }
     }
