@@ -60,6 +60,8 @@ int main()
     std::vector<LoopCandidate> found =
         FindLoopCandidates(buf.data(), n, kNch, kSr, 5);
     Check(!found.empty(), "periodic signal yields candidates");
+    Check(!found.empty() && !found[0].texture,
+          "tonal material scores in waveform mode (not texture)");
     if (!found.empty()) {
       const LoopCandidate& c = found[0];
       char what[160];
@@ -78,8 +80,10 @@ int main()
     }
   }
 
-  // Noise fixture: no repeating structure - the 0.5 NCC floor must hold
-  // (30 ms windows of independent noise correlate at ~0.1 worst-case).
+  // Noise fixture: no repeating WAVEFORM structure, so tier 1 (NCC floor)
+  // must find nothing - but stationary noise is the ideal TEXTURE loop
+  // (identical spectrum and level everywhere), so the fallback must fire
+  // and flag its candidates.
   {
     const int n = kSr * 5;
     Lcg lcg;
@@ -91,10 +95,23 @@ int main()
     }
     std::vector<LoopCandidate> found =
         FindLoopCandidates(buf.data(), n, kNch, kSr, 5);
-    char what[96];
-    snprintf(what, sizeof(what), "white noise yields no candidates (got %d)",
-             (int)found.size());
-    Check(found.empty(), what);
+    Check(!found.empty() && found[0].texture,
+          "stationary noise yields TEXTURE candidates (ambience fallback)");
+    if (!found.empty()) {
+      char what[96];
+      snprintf(what, sizeof(what),
+               "texture score is high on stationary material (got %.3f)",
+               found[0].score);
+      Check(found[0].score > 0.7, what);
+    }
+  }
+
+  // Silence: nothing to loop - both tiers must decline.
+  {
+    const int n = kSr * 5;
+    std::vector<double> buf((size_t)n * kNch, 0.0);
+    Check(FindLoopCandidates(buf.data(), n, kNch, kSr, 5).empty(),
+          "silence yields no candidates");
   }
 
   // Loop Weld (INC-A3): equal-power seam crossfade.

@@ -96,6 +96,30 @@ std::vector<double> SpectrumBefore(const std::vector<double>& mono, int at)
   return mag;
 }
 
+// Averaged magnitude spectrum over the ~1 s BEFORE `at` (up to 8 Hann
+// windows, unit-norm). A single 1024-window estimate is itself noise (each
+// bin Rayleigh-distributed): two independent windows of the SAME stationary
+// texture only reach ~0.6 similarity. Averaging drops the estimator variance
+// so the texture score measures the timbre, not the snapshot.
+std::vector<double> SpectrumAvgBefore(const std::vector<double>& mono, int at,
+                                      int sampleRate)
+{
+  const int longW = std::min(at, sampleRate);
+  if (longW <= kFftN) return SpectrumBefore(mono, at);
+  const int K = 8;
+  const int step = (longW - kFftN) / (K - 1);
+  std::vector<double> acc((size_t)(kFftN / 2), 0.0);
+  for (int k = 0; k < K; k++) {
+    const std::vector<double> m = SpectrumBefore(mono, at - (K - 1 - k) * step);
+    for (size_t i = 0; i < acc.size(); i++) acc[i] += m[i];
+  }
+  double energy = 0.0;
+  for (double v : acc) energy += v * v;
+  const double inv = energy > 1e-24 ? 1.0 / std::sqrt(energy) : 0.0;
+  for (double& v : acc) v *= inv;
+  return acc;
+}
+
 double SpectralDistance(const std::vector<double>& a, const std::vector<double>& b)
 {
   double d = 0.0;
@@ -157,7 +181,7 @@ std::vector<LoopCandidate> FindLoopCandidates(const double* audio,
   if (starts.empty() || ends.empty()) return out;
 
   // Pass 1: NCC over all length-valid pairs; keep everything above the floor.
-  struct Scored { int s, e; double ncc; double score; };
+  struct Scored { int s, e; double ncc; double score; bool tex; };
   std::vector<Scored> pool;
   for (int s : starts)
     for (int e : ends) {
@@ -165,21 +189,71 @@ std::vector<LoopCandidate> FindLoopCandidates(const double* audio,
       if (len < lenMin || len > lenMax) continue;
       const double ncc = NccBefore(mono, s, e, w);
       if (ncc < 0.5) continue;   // plan floor: reject weak continuations
-      pool.push_back({ s, e, ncc, ncc });
+      pool.push_back({ s, e, ncc, ncc, false });
     }
+
+  if (!pool.empty()) {
+    // Pass 2: spectral tie-break on the strongest survivors only (the FFT is
+    // the expensive part; NCC ordering is already roughly right).
+    std::sort(pool.begin(), pool.end(),
+              [](const Scored& a, const Scored& b) { return a.ncc > b.ncc; });
+    const size_t refine = std::min(pool.size(), (size_t)200);
+    for (size_t i = 0; i < refine; i++) {
+      const std::vector<double> sa = SpectrumBefore(mono, pool[i].s);
+      const std::vector<double> se = SpectrumBefore(mono, pool[i].e);
+      pool[i].score = pool[i].ncc - 0.25 * SpectralDistance(sa, se);
+    }
+    pool.resize(refine);
+  } else {
+    // TEXTURE fallback: stochastic ambiences (birds, rain, wind) never
+    // correlate at the sample level - the honest waveform answer is "none",
+    // but the game-audio practice is: cut where the texture is STATISTICALLY
+    // the same and weld the seam. Score = spectral similarity, penalized for
+    // a level mismatch and for cutting mid-transient (a chirp under the
+    // knife); silence is excluded (looping silence is meaningless).
+    struct PointFeat {
+      std::vector<double> spec;
+      double rmsLong = 0.0, rmsShort = 0.0;
+    };
+    auto features = [&](int at) {
+      PointFeat f;
+      f.spec = SpectrumAvgBefore(mono, at, sampleRate);
+      const int longW = std::min(at, sampleRate);       // 1 s before the point
+      const int shortW = std::min(at, w);               // the 30 ms window
+      double accL = 0.0, accS = 0.0;
+      for (int i = at - longW; i < at; i++) accL += mono[(size_t)i] * mono[(size_t)i];
+      for (int i = at - shortW; i < at; i++) accS += mono[(size_t)i] * mono[(size_t)i];
+      f.rmsLong = longW > 0 ? std::sqrt(accL / longW) : 0.0;
+      f.rmsShort = shortW > 0 ? std::sqrt(accS / shortW) : 0.0;
+      return f;
+    };
+    std::vector<PointFeat> fs, fe;
+    fs.reserve(starts.size());
+    fe.reserve(ends.size());
+    for (int s : starts) fs.push_back(features(s));
+    for (int e : ends) fe.push_back(features(e));
+
+    for (size_t i = 0; i < starts.size(); i++)
+      for (size_t j = 0; j < ends.size(); j++) {
+        const int s = starts[i], e = ends[j];
+        const int len = e - s;
+        if (len < lenMin || len > lenMax) continue;
+        const PointFeat& a = fs[i];
+        const PointFeat& b = fe[j];
+        if (a.rmsLong < 1e-6 || b.rmsLong < 1e-6) continue;   // silence
+        const double sim = 1.0 - SpectralDistance(a.spec, b.spec) /
+                                     std::sqrt(2.0);           // 0..1
+        const double lvl = std::fabs(a.rmsLong - b.rmsLong) /
+                           std::max(a.rmsLong, b.rmsLong);     // 0..1
+        const double trans = std::max(
+            0.0, std::max(a.rmsShort / a.rmsLong, b.rmsShort / b.rmsLong) - 1.3);
+        const double score = sim * (1.0 - 0.5 * lvl) / (1.0 + trans);
+        if (score < 0.5) continue;
+        pool.push_back({ s, e, score, score, true });
+      }
+  }
   if (pool.empty()) return out;
 
-  // Pass 2: spectral tie-break on the strongest survivors only (the FFT is
-  // the expensive part; NCC ordering is already roughly right).
-  std::sort(pool.begin(), pool.end(),
-            [](const Scored& a, const Scored& b) { return a.ncc > b.ncc; });
-  const size_t refine = std::min(pool.size(), (size_t)200);
-  for (size_t i = 0; i < refine; i++) {
-    const std::vector<double> sa = SpectrumBefore(mono, pool[i].s);
-    const std::vector<double> se = SpectrumBefore(mono, pool[i].e);
-    pool[i].score = pool[i].ncc - 0.25 * SpectralDistance(sa, se);
-  }
-  pool.resize(refine);
   std::sort(pool.begin(), pool.end(),
             [](const Scored& a, const Scored& b) { return a.score > b.score; });
 
@@ -195,7 +269,7 @@ std::vector<LoopCandidate> FindLoopCandidates(const double* audio,
         break;
       }
     if (dup) continue;
-    out.push_back({ c.s, c.e, c.score });
+    out.push_back({ c.s, c.e, c.score, c.tex });
     if ((int)out.size() >= maxCandidates) break;
   }
   return out;

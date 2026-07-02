@@ -876,7 +876,16 @@ void SneakPeak::LoopFindTick()
   m_loopCandidates = std::move(m_loopFindResult);
   m_loopFindResult.clear();
   if (m_loopCandidates.empty()) {
-    ShowToast("No clean loop points found (NCC floor 0.5)");
+    ShowToast("No loop points found (too short or silent)");
+  } else if (m_loopCandidates[0].texture) {
+    // Stochastic material (ambience): perceptual-continuity picks - the seam
+    // wants a Weld crossfade after choosing.
+    char buf[80];
+    snprintf(buf, sizeof(buf),
+             "%d texture candidate%s - click a pin, then Weld the seam",
+             (int)m_loopCandidates.size(),
+             m_loopCandidates.size() == 1 ? "" : "s");
+    ShowToast(buf);
   } else {
     char buf[64];
     snprintf(buf, sizeof(buf), "%d loop candidate%s - click a pin",
