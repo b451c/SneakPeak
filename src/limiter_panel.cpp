@@ -4,6 +4,7 @@
 #include "ui_theme.h"
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // Knob table (SLIDER_DEFS pattern). Ceiling's unit swaps dBTP/dBFS with the
@@ -112,6 +113,52 @@ void LimiterPanel::ApplyPreset(int idx)
   m_params = g_limiterPresets[idx].params;
   m_presetIdx = idx;
   m_paramsChanged = true;
+}
+
+void LimiterPanel::SetUserPresetName(const char* name)
+{
+  std::snprintf(m_userName, sizeof(m_userName), "%s", name ? name : "");
+  m_presetIdx = m_userName[0] ? -2 : -1;
+}
+
+// --- Locale-safe params serialization (user-preset blob) -----------------------
+// Same key=value shape as the dynamics preset strings, but values are x1000
+// integers (the lim_* ExtState convention) so a comma decimal locale can
+// never corrupt a round-trip. Key collision check: none of g/c/a/h/re/tp/lk
+// appears as a substring of another key followed by '='.
+
+void LimiterParamsToString(const LimiterParams& p, char* buf, int bufSize)
+{
+  std::snprintf(buf, (size_t)bufSize, "g=%d c=%d a=%d h=%d re=%d tp=%d lk=%d",
+                (int)std::lround(p.gainDb * 1000.0),
+                (int)std::lround(p.ceilingDb * 1000.0),
+                (int)std::lround(p.attackMs * 1000.0),
+                (int)std::lround(p.holdMs * 1000.0),
+                (int)std::lround(p.releaseMs * 1000.0),
+                p.truePeak ? 1 : 0, p.link ? 1 : 0);
+}
+
+bool LimiterParamsFromString(const char* str, LimiterParams& out)
+{
+  if (!str || !str[0]) return false;
+  out = LimiterParams{};   // absent keys keep the defaults
+  auto rd = [&](const char* key, double& val) {
+    char search[8];
+    std::snprintf(search, sizeof(search), "%s=", key);
+    const char* p = strstr(str, search);
+    if (p) val = (double)atoi(p + strlen(search)) / 1000.0;
+  };
+  rd("g", out.gainDb);
+  rd("c", out.ceilingDb);
+  rd("a", out.attackMs);
+  rd("h", out.holdMs);
+  rd("re", out.releaseMs);
+  double tp = 1000.0, lk = 1000.0;
+  rd("tp", tp);
+  rd("lk", lk);
+  out.truePeak = tp >= 0.0005;   // x1000-decoded booleans: 1 -> 0.001
+  out.link = lk >= 0.0005;
+  return true;
 }
 
 // --- Lifecycle / geometry ------------------------------------------------------
@@ -405,7 +452,9 @@ void LimiterPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
 
   LimiterVM vm;
   vm.presetName = (m_presetIdx >= 0 && m_presetIdx < kLimPresetCount)
-                      ? g_limiterPresets[m_presetIdx].name : nullptr;
+                      ? g_limiterPresets[m_presetIdx].name
+                      : (m_presetIdx == -2 && m_userName[0]) ? m_userName
+                                                             : nullptr;
   vm.truePeak = m_params.truePeak;
   vm.link = m_params.link;
   vm.showLink = !m_mono;

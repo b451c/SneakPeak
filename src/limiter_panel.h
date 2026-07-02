@@ -17,13 +17,19 @@
 #include "ui_render.h"
 #include "limiter_engine.h"
 
-// Factory presets (plan C7). No user presets in v1.
+// Factory presets (plan C7); user presets live in ExtState (host-managed).
 struct LimiterPreset {
   const char* name;
   LimiterParams params;
 };
 constexpr int kLimPresetCount = 4;
 extern const LimiterPreset g_limiterPresets[kLimPresetCount];
+
+// Locale-safe LimiterParams serialization for the user-preset blob: values
+// stored x1000 as integers (never %f/atof - a comma locale breaks those),
+// bools as 0/1. Absent keys keep the field defaults (forward-compatible).
+void LimiterParamsToString(const LimiterParams& p, char* buf, int bufSize);
+bool LimiterParamsFromString(const char* str, LimiterParams& out);
 
 class LimiterPanel {
 public:
@@ -60,6 +66,9 @@ public:
   void SetParams(const LimiterParams& p);   // clamps each field to its knob range
   void ApplyPreset(int idx);
   int  GetPresetIdx() const { return m_presetIdx; }
+  // A loaded USER preset shows its name in the preset box (any knob change
+  // clears it back to "Preset", exactly like the factory-name behavior).
+  void SetUserPresetName(const char* name);
   RECT GetPresetButtonRect(RECT waveformRect) const;  // screen coords (menu anchor)
 
   void SetMono(bool mono) { m_mono = mono; }
@@ -92,7 +101,8 @@ private:
 
   bool m_visible = false;
   LimiterParams m_params;
-  int  m_presetIdx = 0;          // defaults == preset 0 ("Game Asset -1 dBTP")
+  int  m_presetIdx = 0;          // 0..3 factory; -2 user preset (m_userName); -1 custom
+  char m_userName[64] = { 0 };   // loaded user-preset name (valid when idx == -2)
   bool m_mono = false;
 
   int  m_offsetX = 0, m_offsetY = 0;   // panel-drag offsets (persisted by host)

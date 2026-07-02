@@ -2044,6 +2044,88 @@ void SneakPeak::SaveLimiterGeom()
   g_SetExtState("SneakPeak", "lim_off_y", buf, true);
 }
 
+// --- Limiter user presets (v2.4.0; same blob shape as the dynamics set) -----
+// One ExtState blob "lim_user_presets": lines of "name\tparamsStr", params =
+// LimiterParamsToString (locale-safe x1000 ints). Names sanitized of \t/\n.
+
+std::vector<DynUserPreset> SneakPeak::LoadLimUserPresets()
+{
+  std::vector<DynUserPreset> out;
+  if (!g_GetExtState) return out;
+  const char* blob = g_GetExtState("SneakPeak", "lim_user_presets");
+  if (!blob || !blob[0]) return out;
+  std::string s(blob);
+  size_t pos = 0;
+  while (pos < s.size() && (int)out.size() < MAX_USER_PRESETS) {
+    size_t nl = s.find('\n', pos);
+    std::string line = s.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+    pos = (nl == std::string::npos) ? s.size() : nl + 1;
+    size_t tab = line.find('\t');
+    if (tab == std::string::npos || tab == 0) continue;
+    out.push_back({ line.substr(0, tab), line.substr(tab + 1) });
+  }
+  return out;
+}
+
+void SneakPeak::SaveLimUserPresets(const std::vector<DynUserPreset>& list)
+{
+  if (!g_SetExtState) return;
+  std::string blob;
+  for (const auto& p : list) {
+    blob += p.name;  blob += '\t';  blob += p.params;  blob += '\n';
+  }
+  g_SetExtState("SneakPeak", "lim_user_presets", blob.c_str(), true);
+}
+
+void SneakPeak::AddLimUserPreset()
+{
+  if (!g_GetUserInputs) return;
+  char name[128] = "My Preset";
+  if (!g_GetUserInputs("Save Limiter Preset", 1, "Preset name:", name, sizeof(name)))
+    return;  // cancelled
+  std::string n(name);
+  for (char& c : n) if (c == '\t' || c == '\n' || c == '\r') c = ' ';
+  size_t a = n.find_first_not_of(' '), b = n.find_last_not_of(' ');
+  if (a == std::string::npos) return;
+  n = n.substr(a, b - a + 1);
+
+  char params[128];
+  LimiterParamsToString(m_limiterPanel.GetParams(), params, sizeof(params));
+
+  auto list = LoadLimUserPresets();
+  bool replaced = false;
+  for (auto& p : list)
+    if (p.name == n) { p.params = params; replaced = true; break; }  // overwrite by name
+  if (!replaced) {
+    if ((int)list.size() >= MAX_USER_PRESETS) {
+      ShowToast("Preset list is full (32) - delete one first");
+      return;
+    }
+    list.push_back({ n, params });
+  }
+  SaveLimUserPresets(list);
+  m_limiterPanel.SetUserPresetName(n.c_str());   // the box shows what you saved
+}
+
+bool SneakPeak::ApplyLimUserPreset(int idx)
+{
+  auto list = LoadLimUserPresets();
+  if (idx < 0 || idx >= (int)list.size()) return false;
+  LimiterParams p;
+  if (!LimiterParamsFromString(list[idx].params.c_str(), p)) return false;
+  m_limiterPanel.SetParams(p);   // clamps to the knob ranges
+  m_limiterPanel.SetUserPresetName(list[idx].name.c_str());
+  return true;
+}
+
+void SneakPeak::DeleteLimUserPreset(int idx)
+{
+  auto list = LoadLimUserPresets();
+  if (idx < 0 || idx >= (int)list.size()) return;
+  list.erase(list.begin() + idx);
+  SaveLimUserPresets(list);
+}
+
 // --- User dynamics presets (global, persisted in ExtState) ------------------
 // Stored as one blob: each preset is "name\tparamsStr", presets separated by '\n'.
 // Names are sanitized to contain neither '\t' nor '\n'; the params string is the

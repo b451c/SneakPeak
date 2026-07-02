@@ -169,6 +169,11 @@ enum ContextMenuID {
   CM_APPLY_LIMITER,                                    // open the HARD LIMITER panel
   CM_LIM_PRESET_BASE,                                  // + kLimPresetCount factory presets
   CM_LIM_PRESET_LAST = CM_LIM_PRESET_BASE + 4,
+  CM_LIM_SAVE_PRESET,                                  // "Save preset as..."
+  CM_LIM_USER_PRESET_BASE,                             // + MAX_USER_PRESETS apply entries
+  CM_LIM_USER_PRESET_LAST = CM_LIM_USER_PRESET_BASE + 32,
+  CM_LIM_DEL_PRESET_BASE,                              // + MAX_USER_PRESETS delete entries
+  CM_LIM_DEL_PRESET_LAST = CM_LIM_DEL_PRESET_BASE + 32,
   CM_LAST // sentinel -- keep last
 };
 
@@ -637,6 +642,14 @@ private:
   bool m_limPrevValid = false;
   bool m_limPrevDirty = false;                   // params/buffer changed since compute
   DWORD m_limPrevChangeTick = 0;                 // debounce reference (~150 ms)
+
+  // Limiter user presets (v2.4.0; parallel to the dynamics set below, blob
+  // key lim_user_presets, locale-safe LimiterParamsToString payload).
+  std::vector<DynUserPreset> LoadLimUserPresets();
+  void SaveLimUserPresets(const std::vector<DynUserPreset>& list);
+  void AddLimUserPreset();                       // prompt for a name, save panel params
+  bool ApplyLimUserPreset(int idx);              // load into the panel (+ name in the box)
+  void DeleteLimUserPreset(int idx);
 
   std::vector<DynUserPreset> LoadUserPresets();  // parse user presets from ExtState
   void SaveUserPresets(const std::vector<DynUserPreset>& list);

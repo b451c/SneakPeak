@@ -119,6 +119,24 @@ void SneakPeak::ShowLimiterPresetMenu()
   for (int i = 0; i < kLimPresetCount; i++)
     MenuAppend(presetMenu, MF_STRING, CM_LIM_PRESET_BASE + (unsigned)i,
                g_limiterPresets[i].name);
+
+  std::vector<DynUserPreset> userPresets = LoadLimUserPresets();
+  if (!userPresets.empty()) {
+    MenuAppendSeparator(presetMenu);
+    for (size_t i = 0; i < userPresets.size(); i++)
+      MenuAppend(presetMenu, MF_STRING, CM_LIM_USER_PRESET_BASE + (unsigned)i,
+                 userPresets[i].name.c_str());
+  }
+  MenuAppendSeparator(presetMenu);
+  MenuAppend(presetMenu, MF_STRING, CM_LIM_SAVE_PRESET, "Save preset as...");
+  if (!userPresets.empty()) {
+    HMENU delMenu = CreatePopupMenu();
+    for (size_t i = 0; i < userPresets.size(); i++)
+      MenuAppend(delMenu, MF_STRING, CM_LIM_DEL_PRESET_BASE + (unsigned)i,
+                 userPresets[i].name.c_str());
+    MenuAppendSubmenu(presetMenu, delMenu, "Delete preset");
+  }
+
   RECT pbr = m_limiterPanel.GetPresetButtonRect(m_waveformRect);
   POINT pt = { pbr.left, pbr.bottom + 2 };
   ClientToScreen(m_hwnd, &pt);
@@ -743,6 +761,10 @@ void SneakPeak::OnContextMenuCommand(int id)
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     }
+    case CM_LIM_SAVE_PRESET:
+      AddLimUserPreset();
+      InvalidateRect(m_hwnd, nullptr, FALSE);   // preset box may show the new name
+      break;
     case CM_APPLY_LIMITER: {
       if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) break;
       RestoreLimiterParams();   // lim_* session defaults (first run -> preset 0)
@@ -896,6 +918,17 @@ void SneakPeak::OnContextMenuCommand(int id)
         MarkLimiterParamsChanged();   // debounced preview recompute
         SaveLimiterParams();
         InvalidateRect(m_hwnd, nullptr, FALSE);
+      } else if (id >= CM_LIM_USER_PRESET_BASE &&
+                 id < CM_LIM_USER_PRESET_BASE + MAX_USER_PRESETS) {
+        if (ApplyLimUserPreset(id - CM_LIM_USER_PRESET_BASE)) {
+          m_limiterPanel.ClearParamsChanged();
+          MarkLimiterParamsChanged();
+          SaveLimiterParams();
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+        }
+      } else if (id >= CM_LIM_DEL_PRESET_BASE &&
+                 id < CM_LIM_DEL_PRESET_BASE + MAX_USER_PRESETS) {
+        DeleteLimUserPreset(id - CM_LIM_DEL_PRESET_BASE);
       }
       if (applied) {
         // Same re-analysis + Live path as a knob drag, so the curve/GR update at once.
