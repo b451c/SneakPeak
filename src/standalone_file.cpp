@@ -33,15 +33,21 @@
 
 // --- Standalone file mode ---
 
+// MOVES the active buffer + undo/redo stacks into the tab entry (STA-2: a tab
+// switch used to deep-copy gigabytes both ways on long files). INVARIANT: the
+// caller replaces the active view right after - RestoreStandaloneState, a new
+// tab install, or leaving standalone (LoadSelectedItem) - every call site is
+// audited for this. While a tab is ACTIVE its entry holds no audio/stacks; the
+// authoritative state lives in m_waveform + m_standalone*Stacks.
 void SneakPeak::SaveCurrentStandaloneState()
 {
   if (m_activeFileIdx < 0 || m_activeFileIdx >= (int)m_standaloneFiles.size()) return;
   if (!m_waveform.IsStandaloneMode()) return;
 
   auto& fs = m_standaloneFiles[m_activeFileIdx];
-  fs.audioData = m_waveform.GetAudioData(); // copy
-  fs.undoStack = m_standaloneUndoStack;
-  fs.redoStack = m_standaloneRedoStack;
+  fs.audioData = std::move(m_waveform.GetAudioData());
+  fs.undoStack = std::move(m_standaloneUndoStack);
+  fs.redoStack = std::move(m_standaloneRedoStack);
   fs.numChannels = m_waveform.GetNumChannels();
   fs.sampleRate = m_waveform.GetSampleRate();
   fs.audioSampleCount = m_waveform.GetAudioSampleCount();
@@ -67,11 +73,12 @@ void SneakPeak::RestoreStandaloneState(int idx)
   StandaloneCleanupPreview();
 
   auto& fs = m_standaloneFiles[idx];
-  // Move audio data into waveform (we'll copy it back on save)
-  std::vector<double> audioCopy = fs.audioData;
-  m_waveform.RestoreFromMemory(fs.filePath, std::move(audioCopy),
+  // MOVE the tab's audio into the waveform (SaveCurrentStandaloneState moves
+  // it back on the next switch - see the invariant there). No copies.
+  m_waveform.RestoreFromMemory(fs.filePath, std::move(fs.audioData),
                                 fs.numChannels, fs.sampleRate, fs.audioSampleCount,
                                 fs.bitsPerSample, fs.audioFormat, fs.itemDuration);
+  fs.audioData.clear();
   m_waveform.SetViewStart(fs.viewStartTime);
   m_waveform.SetViewDuration(fs.viewDuration);
   m_waveform.SetCursorTime(fs.cursorTime);
@@ -79,8 +86,10 @@ void SneakPeak::RestoreStandaloneState(int idx)
   m_waveform.SetStandaloneFade(fs.fade);
   m_waveform.Invalidate();
 
-  m_standaloneUndoStack = fs.undoStack;
-  m_standaloneRedoStack = fs.redoStack;
+  m_standaloneUndoStack = std::move(fs.undoStack);
+  m_standaloneRedoStack = std::move(fs.redoStack);
+  fs.undoStack.clear();
+  fs.redoStack.clear();
   m_dirty = fs.dirty;
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_wavBitsPerSample = fs.bitsPerSample;
@@ -266,11 +275,13 @@ void SneakPeak::EvictStandaloneTabIfFull()
 }
 
 // Create + activate the tab entry for the audio currently in the waveform.
+// Per the SaveCurrentStandaloneState invariant the ACTIVE tab's entry holds no
+// audio/stacks (they live in the members), so only metadata is recorded here -
+// no buffer copy at install.
 void SneakPeak::InstallStandaloneTab(const std::string& spath)
 {
   StandaloneFileState fs;
   fs.filePath = spath;
-  fs.audioData = m_waveform.GetAudioData();
   fs.numChannels = m_waveform.GetNumChannels();
   fs.sampleRate = m_waveform.GetSampleRate();
   fs.audioSampleCount = m_waveform.GetAudioSampleCount();
