@@ -355,6 +355,14 @@ private:
   bool m_fadeDragFine = false;
   bool m_fadeWheelUndoOpen = false; // wheel-nudge undo block; closed by OnTimer after idle
   DWORD m_fadeWheelLastTick = 0;
+
+  // Slip content (T2-2e, forum #51): Alt+drag in plain ITEM mode slides the
+  // take source under the item (D_STARTOFFS). Anchor-based like the fade drag.
+  bool m_slipDragging = false;
+  int m_slipStartX = 0;
+  double m_slipStartOffs = 0.0;
+  double m_slipPlayrate = 1.0;
+  double m_slipMaxOffs = 0.0;       // srcLen - itemLen*playrate (non-looped clamp)
   bool m_standaloneFadeDrag = false; // true when dragging standalone fade handle
 
   // Envelope point dragging + freehand drawing

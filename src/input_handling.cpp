@@ -913,6 +913,38 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
         }
       }
 
+      // Slip content (forum #51): Alt+drag OUTSIDE the selection in plain ITEM
+      // mode slides the take's source under the item (D_STARTOFFS), REAPER's
+      // "move contents" edit. v1 scope: single item, non-looped source; the
+      // arrange updates live, the in-window waveform reloads once at release.
+      // Alt collisions all handled above and win by order: envelope-line zone =
+      // curvature, inside selection = immediate drag export, SET/timeline/multi
+      // = segment snap. A looped source falls through to normal selection.
+      if (altHeld && !(wParam & MK_SHIFT) &&
+          !m_waveform.IsStandaloneMode() && !m_waveform.IsMultiItem() &&
+          !m_masterMode && m_waveform.GetItem() && m_waveform.GetTake() &&
+          g_GetSetMediaItemTakeInfo && g_GetMediaItemInfo_Value &&
+          g_GetMediaItemTake_Source) {
+        MediaItem* item = m_waveform.GetItem();
+        MediaItem_Take* take = m_waveform.GetTake();
+        bool looped = g_GetMediaItemInfo_Value(item, "B_LOOPSRC") > 0.5;
+        PCM_source* src = g_GetMediaItemTake_Source(take);
+        double srcLen = src ? src->GetLength() : 0.0;
+        double* pOff = (double*)g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", nullptr);
+        if (!looped && srcLen > 0.0 && pOff) {
+          double* pRate = (double*)g_GetSetMediaItemTakeInfo(take, "D_PLAYRATE", nullptr);
+          double itemLen = g_GetMediaItemInfo_Value(item, "D_LENGTH");
+          m_slipDragging = true;
+          m_slipStartX = x;
+          m_slipStartOffs = *pOff;
+          m_slipPlayrate = (pRate && *pRate > 0.0) ? *pRate : 1.0;
+          m_slipMaxOffs = std::max(0.0, srcLen - itemLen * m_slipPlayrate);
+          SetCapture(m_hwnd);
+          if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+          return;
+        }
+      }
+
       // Clicking on waveform (not on envelope point) deselects envelope point
       m_envDragPointIdx = -1;
 
@@ -1175,6 +1207,22 @@ void SneakPeak::OnMouseUp(int x, int y)
     if (m_envDragEnv && g_Envelope_SortPoints) g_Envelope_SortPoints(m_envDragEnv);
     if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Move envelope point", -1);
     if (g_UpdateArrange) g_UpdateArrange();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+  if (m_slipDragging) {
+    m_slipDragging = false;
+    ReleaseCapture();
+    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Slip item contents", -1);
+    // One reload at release: the in-window waveform now shows the new source
+    // window (the arrange tracked the slip live during the drag). Same calls
+    // as the external-change poll path.
+    if (m_waveform.HasItem()) {
+      m_waveform.ReloadAfterExternalChange();
+      m_spectral.ClearSpectrum();
+      m_spectral.Invalidate();
+      m_minimap.Invalidate();
+    }
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
@@ -1780,6 +1828,31 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     }
     m_lastMouseX = x;
     m_lastMouseY = y;
+    return;
+  }
+
+  if (m_slipDragging && m_waveform.HasItem()) {
+    MediaItem* item = m_waveform.GetItem();
+    MediaItem_Take* take = m_waveform.GetTake();
+    if (item && take && g_GetSetMediaItemTakeInfo) {
+      // Dragging content RIGHT reveals EARLIER source: the offset decreases.
+      double dt = m_waveform.XToTime(x) - m_waveform.XToTime(m_slipStartX);
+      double off = m_slipStartOffs - dt * m_slipPlayrate;
+      off = std::max(0.0, std::min(off, m_slipMaxOffs));
+      g_GetSetMediaItemTakeInfo(take, "D_STARTOFFS", &off);
+      // Live arrange refresh - the v2.1.1 RefreshItemSource precedent: Linux
+      // needs UpdateItemInProject for the arrange peaks to actually move.
+      if (g_UpdateItemInProject) g_UpdateItemInProject(item);
+      if (g_UpdateArrange) g_UpdateArrange();
+      // Keep the external-change poll quiet during our own writes; the view
+      // reloads once at mouse-up.
+      m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
+      char msg[64];
+      double shifted = -(off - m_slipStartOffs) / m_slipPlayrate;  // content shift as seen
+      snprintf(msg, sizeof(msg), "Slip: %+.3f s", shifted);
+      ShowToast(msg);
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
 

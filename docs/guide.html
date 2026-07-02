@@ -444,6 +444,12 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Additional processing is available from the right-click context menu: LUFS normalization (-14 / -16), reverse, DC offset removal, and silence.</p>
 
+<h3>Slip content (move source under the item)</h3>
+
+<p>Hold <kbd>Option</kbd>/<kbd>Alt</kbd> and drag on the waveform <em>outside a selection</em> in plain ITEM mode to slide the take's source audio under the item - REAPER's "move item contents" edit without leaving the editor. The REAPER arrange updates live and a toast shows the slip amount; the SneakPeak waveform refreshes when you release. Each slip is a single undo point.</p>
+
+<p>Scope notes: slip works on single items with non-looped sources. Inside a selection, <kbd>Option</kbd>+drag keeps its drag-export meaning; in SET / Timeline / Multi-item views it keeps segment-snap; on the envelope line it edits curvature.</p>
+
 <h2 id="fades">Fades</h2>
 <div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-standalone">STANDALONE</span></div>
 
@@ -1079,6 +1085,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Drag fade handle</td><td>Top corners</td><td>Adjust fade length (H) and curve (V)</td></tr>
     <tr><td>Shift + Drag fade handle</td><td>Top corners</td><td>Fine fade length (1/4 speed)</td></tr>
     <tr><td>Scroll</td><td>Fade handle</td><td>Nudge fade length (5%/notch, Cmd = 1 ms)</td></tr>
+    <tr><td>Option + Drag</td><td>Waveform, outside selection (ITEM mode)</td><td>Slip content (move source under item)</td></tr>
     <tr><td>Click</td><td>Minimap</td><td>Center view</td></tr>
     <tr><td>Drag</td><td>Minimap</td><td>Scroll view</td></tr>
     <tr><td>Drag top edge</td><td>Minimap</td><td>Resize height</td></tr>
