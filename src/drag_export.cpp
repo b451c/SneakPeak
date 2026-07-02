@@ -17,6 +17,37 @@
 #include <cmath>
 #include <algorithm>
 
+#ifdef _WIN32
+// WIN32_LEAN_AND_MEAN strips OLE - pull it in explicitly (see win32_utf8_unit.c).
+#include <ole2.h>
+#include <shobjidl.h>
+
+namespace {
+// Minimal IDropSource: default cursors, cancel on ESC, drop on button release.
+class Win32DropSource : public IDropSource {
+  LONG m_ref = 1;
+public:
+  STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+    if (riid == IID_IUnknown || riid == IID_IDropSource) { *ppv = this; AddRef(); return S_OK; }
+    *ppv = nullptr;
+    return E_NOINTERFACE;
+  }
+  STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_ref); }
+  STDMETHODIMP_(ULONG) Release() override {
+    LONG r = InterlockedDecrement(&m_ref);
+    if (!r) delete this;
+    return (ULONG)r;
+  }
+  STDMETHODIMP QueryContinueDrag(BOOL fEscapePressed, DWORD grfKeyState) override {
+    if (fEscapePressed) return DRAGDROP_S_CANCEL;
+    if (!(grfKeyState & (MK_LBUTTON | MK_RBUTTON))) return DRAGDROP_S_DROP;
+    return S_OK;
+  }
+  STDMETHODIMP GiveFeedback(DWORD) override { return DRAGDROP_S_USEDEFAULTCURSORS; }
+};
+}  // namespace
+#endif
+
 // --- Drag & Drop Export ---
 
 void SneakPeak::CleanupDragTemp()
@@ -203,7 +234,33 @@ void SneakPeak::InitiateDragExport()
   }
 
   // Initiate drag
-#ifndef _WIN32
+#ifdef _WIN32
+  // OLE file drag - SWELL_InitiateDragDropOfFileList is mac/Linux-only, so
+  // Windows used to produce the temp WAV and then silently drop nothing
+  // (forum #83's platform). Shell-built IDataObject for the file + minimal
+  // IDropSource; DoDragDrop runs its own modal loop, so release our capture.
+  {
+    static HRESULT s_oleInit = OleInitialize(nullptr);  // S_OK/S_FALSE both fine
+    (void)s_oleInit;
+    wchar_t wpath[1024] = {};
+    if (MultiByteToWideChar(CP_UTF8, 0, m_dragTempPath.c_str(), -1,
+                            wpath, (int)(sizeof(wpath) / sizeof(wpath[0]))) > 0) {
+      IShellItem* si = nullptr;
+      if (SUCCEEDED(SHCreateItemFromParsingName(wpath, nullptr, IID_PPV_ARGS(&si))) && si) {
+        IDataObject* dobj = nullptr;
+        if (SUCCEEDED(si->BindToHandler(nullptr, BHID_DataObject, IID_PPV_ARGS(&dobj))) && dobj) {
+          ReleaseCapture();
+          Win32DropSource* dsrc = new Win32DropSource();
+          DWORD effect = 0;
+          DoDragDrop(dobj, dsrc, DROPEFFECT_COPY, &effect);
+          dsrc->Release();
+          dobj->Release();
+        }
+        si->Release();
+      }
+    }
+  }
+#else
   RECT dragRect = { m_dragStartX - 5, m_dragStartY - 5,
                     m_dragStartX + 5, m_dragStartY + 5 };
   const char* files[] = { m_dragTempPath.c_str() };

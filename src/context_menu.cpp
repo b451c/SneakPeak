@@ -279,7 +279,7 @@ void SneakPeak::OnRightClick(int x, int y)
   // Markers submenu
   HMENU markerMenu = CreatePopupMenu();
   MenuAppend(markerMenu, hasItem ? MF_STRING : MF_GRAYED, CM_ADD_MARKER, "Add Marker at Cursor\tM");
-  MenuAppend(markerMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_ADD_REGION, "Add Region from Selection");
+  MenuAppend(markerMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_ADD_REGION, "Add Region from Selection\tShift+M");
   m_markers.SetRightClickMarkerIdx(m_markers.HitTestMarker(x, m_waveform));
   MenuAppend(markerMenu, (m_markers.GetRightClickMarkerIdx() >= 0) ? MF_STRING : MF_GRAYED, CM_EDIT_MARKER, "Edit Marker...");
   MenuAppend(markerMenu, (m_markers.GetRightClickMarkerIdx() >= 0) ? MF_STRING : MF_GRAYED, CM_DELETE_MARKER, "Delete Marker");
