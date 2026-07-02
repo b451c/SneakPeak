@@ -826,13 +826,25 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
 
   const double fMid = L.footer.y + L.footer.h * 0.5;
   L.apply = { pad, fMid - 12.0, 84.0, 24.0 };
-  // 4 tabs since INC-3 (COMP/GATE/DE-ESS/VIEW): segW 86 -> 64 keeps the pill's
-  // total width byte-identical (262), so Apply / Peak-RMS gap math is untouched.
-  const double segW = 64.0, segGap = 2.0;
-  const double pillW = 4.0 * segW + 3.0 * segGap;
+  // 4 tabs since INC-3 (COMP/GATE/DE-ESS/VIEW), PROPORTIONAL widths: the pills
+  // carry different content (a 20 px dot zone on the first three, labels of 4
+  // to 6 characters), so equal quarters cramp DE-ESS while VIEW wastes space.
+  // Each pill gets its content width; the total (256 + gaps) stays inside the
+  // old 262 px budget so the footer composition is unchanged. Layout must stay
+  // font-independent (shared with hit-testing), hence static widths with >=4px
+  // slack per label at the fTab metrics.
+  static const double kTabW[4] = { 60.0, 58.0, 80.0, 52.0 };
+  const double segGap = 2.0;
+  double pillW = 3.0 * segGap;
+  for (int i = 0; i < 4; ++i) pillW += kTabW[i];
   const double pillX = w - pad - pillW;
-  for (int i = 0; i < 4; ++i)
-    L.tabSeg[i] = { pillX + (double)i * (segW + segGap), fMid - 12.0, segW, 24.0 };
+  {
+    double tx = pillX;
+    for (int i = 0; i < 4; ++i) {
+      L.tabSeg[i] = { tx, fMid - 12.0, kTabW[i], 24.0 };
+      tx += kTabW[i] + segGap;
+    }
+  }
   // Stage-power dots (v2.3.0 INC-4): a small toggle INSIDE the COMP, GATE and
   // DE-ESS pills (left edge; the rest of the pill still switches tabs) -
   // visible in every layout mode, tied visually to its stage. COMP/GATE dots
@@ -979,12 +991,13 @@ static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L,
   }
   // labels: the destination tab is amber immediately; the fill catches up
   // underneath. Pills with a power dot (COMP/GATE/DE-ESS) center their label
-  // in the area RIGHT of the dot zone - at the 4-tab segment width (64 px) a
-  // full-width center puts the dot on top of the first letter.
+  // in the area RIGHT of the dot zone so dot and text never collide; the pill
+  // widths are proportional to content (see ComputeDynLayout), so every label
+  // keeps real margins.
   if (gfx.fontsReady)
     for (int i = 0; i < 4; ++i) {
       URect t = L.tabSeg[i];
-      if (i < 3) { t.x += 18.0; t.w -= 20.0; }
+      if (i < 3) { t.x += 19.0; t.w -= 22.0; }
       TextCentered(ctx, gfx.fTab, t, labels[i],
                    i == activeTab ? dynui::kAmber : dynui::kInkSecondary);
     }
