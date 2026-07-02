@@ -17,7 +17,6 @@
 
 #include <cmath>
 #include <cstddef>
-#include <deque>
 #include <vector>
 
 namespace {
@@ -86,22 +85,34 @@ void TpPeakPerFrame(const double* audio, int numFrames, int numChannels,
 // --- Sliding minimum over a trailing window (Lemire monotonic wedge) -------
 // Same result as Signalsmith's PeakHold with min ordering; O(1) amortized.
 // Pre-history counts as 1.0 (no reduction), which falls out for free because
-// every pushed value is <= 1.
+// every pushed value is <= 1. Backed by a preallocated power-of-2 ring (a
+// std::deque here cost ~2x the whole chain in the knob-drag draft path);
+// same comparisons and evictions as the deque version, bit-identical output.
 class SlidingMin {
 public:
   void Init(int window)
   {
     m_window = window > 1 ? window : 1;
+    size_t cap = 2;
+    while (cap < (size_t)m_window + 1) cap <<= 1;
+    m_mask = cap - 1;
+    m_q.assign(cap, Entry{ 0, 0.0 });
+    m_head = 0;
+    m_count = 0;
     m_idx = 0;
-    m_q.clear();
   }
   double Push(double v)
   {
-    while (!m_q.empty() && m_q.back().value >= v) m_q.pop_back();
-    m_q.push_back({ m_idx, v });
-    if (m_q.front().index <= m_idx - (long long)m_window) m_q.pop_front();
+    while (m_count > 0 && m_q[(m_head + m_count - 1) & m_mask].value >= v)
+      m_count--;
+    m_q[(m_head + m_count) & m_mask] = { m_idx, v };
+    m_count++;
+    if (m_q[m_head & m_mask].index <= m_idx - (long long)m_window) {
+      m_head++;
+      m_count--;
+    }
     m_idx++;
-    return m_q.front().value;
+    return m_q[m_head & m_mask].value;
   }
 
 private:
@@ -111,7 +122,10 @@ private:
   };
   int m_window = 1;
   long long m_idx = 0;
-  std::deque<Entry> m_q;
+  std::vector<Entry> m_q;
+  size_t m_mask = 1;
+  size_t m_head = 0;
+  size_t m_count = 0;
 };
 
 // --- Running-sum box filter, exact re-sum on every wrap (no FP drift) ------
