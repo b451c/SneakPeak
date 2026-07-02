@@ -147,6 +147,7 @@ void SneakPeak::OnPaint(HDC hdc)
   }
   if (m_markers.GetShowMarkers()) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
   DrawLoopRegion(hdc);   // Loop Lab brackets + strip (gates itself)
+  DrawLoopPins(hdc);     // INC-A2 candidate pins (gates itself)
 #ifndef SNEAKPEAK_BLEND2D_PANEL
   // GDI gain panel (OFF build only - the premium build draws it in OnPaintOverlay)
   if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect, m_waveform.HasSelection());
@@ -932,6 +933,36 @@ void SneakPeak::DrawLoopRegion(HDC hdc)
       MoveToEx(hdc, x1, top + bh - 1, nullptr); LineTo(hdc, x1 - bw, top + bh - 1);
     }
   }
+}
+
+// Loop Lab finder pins (INC-A2): numbered flags at each candidate's start.
+// Click = set the loop + audition. Geometry mirrored by HitTestLoopPin.
+void SneakPeak::DrawLoopPins(HDC hdc)
+{
+  if (!m_waveform.IsStandaloneMode() || m_loopCandidates.empty()) return;
+  const int sr = m_waveform.GetSampleRate();
+  if (sr <= 0) return;
+  RECT wr = m_waveform.GetRect();
+  const int waveL = wr.left;
+  const int waveR = wr.right - SP(DB_SCALE_WIDTH);
+  const int top = m_rulerRect.top;
+  const int pinW = SP(13), pinH = SP(14);
+
+  HBRUSH bg = CreateSolidBrush(RGB(240, 210, 70));
+  SetBkMode(hdc, TRANSPARENT);
+  SetTextColor(hdc, RGB(20, 20, 20));
+  HFONT oldF = (HFONT)SelectObject(hdc, g_fonts.normal10);
+  for (size_t i = 0; i < m_loopCandidates.size(); i++) {
+    const int px = m_waveform.TimeToX((double)m_loopCandidates[i].startFrame / sr);
+    if (px < waveL || px > waveR) continue;
+    RECT r = { px + 2, top + SP(2), px + 2 + pinW, top + SP(2) + pinH };
+    FillRect(hdc, &r, bg);
+    char num[4];
+    snprintf(num, sizeof(num), "%d", (int)i + 1);
+    DrawTextUTF8(hdc, num, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  }
+  SelectObject(hdc, oldF);
+  DeleteObject(bg);
 }
 
 // v2.4.0 INC-L1: limiter gain-reduction preview - a top-anchored red band

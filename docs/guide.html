@@ -896,12 +896,13 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Drag a bracket</strong> to fine-tune either end - snap-to-zero-crossing applies when enabled in Settings.</li>
   <li><strong>Loop &gt; Audition Loop</strong> plays the region wrapping seamlessly from end back to start - if the seam clicks or thumps, you will hear it exactly as a game engine would play it. The audition follows bracket drags and loops until you stop it (the menu again, or <kbd>Space</kbd>).</li>
+  <li><strong>Loop &gt; Find Loop Points</strong> scans the file in the background for seam candidates (loop endpoints on rising zero crossings, ranked by how well the loop's tail continues into its head, with a timbre check as tie-break). The top 5 appear as <strong>numbered yellow pins</strong> on the ruler - click a pin to set the loop and audition it immediately. On material with no repeating structure, "no clean loop points found" is the honest answer.</li>
   <li><strong>Loop &gt; Clear Loop</strong> removes the region. The loop is remembered per file tab.</li>
 </ul>
 
 <div class="tip">
   <strong>Coming next in v2.4</strong>
-  Automatic loop-point finding (candidate seams ranked by waveform continuity), crossfade welding of the seam, and writing standard <code>smpl</code> loop points into saved WAVs so Unity/FMOD/Wwise and samplers read the loop natively.
+  Crossfade welding of the seam and writing standard <code>smpl</code> loop points into saved WAVs so Unity/FMOD/Wwise and samplers read the loop natively.
 </div>
 
 <h2 id="hard-limiter">Hard Limiter (True Peak)</h2>

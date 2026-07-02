@@ -106,6 +106,7 @@ void SneakPeak::RestoreStandaloneState(int idx)
   m_spectral.Invalidate();
   m_minimap.Invalidate();
   InvalidateLimiterPreview();   // the GR preview belongs to the previous buffer
+  m_loopCandidates.clear();     // finder pins are transient proposals
   m_standaloneBufferSerial++;   // a pending background apply must not swap in here
 
   if (m_hwnd) {
@@ -377,6 +378,7 @@ void SneakPeak::FinishStandaloneLoad()
   m_spectral.Invalidate();
   m_minimap.Invalidate();
   InvalidateLimiterPreview();   // the GR preview belongs to the previous buffer
+  m_loopCandidates.clear();     // finder pins are transient proposals
   m_standaloneBufferSerial++;   // a pending background apply must not swap in here
 
   InstallStandaloneTab(spath);
@@ -753,6 +755,70 @@ void SneakPeak::StandalonePlayStop()
   if (startTime >= m_waveform.GetItemDuration()) startTime = 0.0;
 
   StandaloneStartPreviewPlayback(startTime, false, 0.0);
+}
+
+// Loop Lab finder (v2.4 INC-A2): score loop-point candidates on a worker
+// (NCC of the pre-end vs pre-start windows + spectral tie-break; the module
+// doc in loop_finder.h has the math). Results land as numbered pins.
+void SneakPeak::StartLoopFind()
+{
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
+  if (m_loopFindBusy.load()) {
+    ShowToast("Loop finder is already running...");
+    return;
+  }
+  const int frames = m_waveform.GetAudioSampleCount();
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+  if (frames < sr + sr / 5) {   // finder needs at least ~1.2 s of material
+    ShowToast("File too short for loop finding");
+    return;
+  }
+  if (m_loopFindThread.joinable()) m_loopFindThread.join();
+  m_loopFindDone.store(false);
+  m_loopFindBusy.store(true);
+  ShowToast("Finding loop points...");
+  std::vector<double> copy = m_waveform.GetAudioData();
+  m_loopFindThread = std::thread(&SneakPeak::LoopFindThread, this,
+                                 std::move(copy), frames, nch, sr,
+                                 m_standaloneBufferSerial.load());
+}
+
+void SneakPeak::LoopFindThread(std::vector<double> audio, int frames, int nch,
+                               int sr, uint64_t serial)
+{
+  std::vector<LoopCandidate> found =
+      FindLoopCandidates(audio.data(), frames, nch, sr, 5);
+  m_loopFindResult = std::move(found);   // read on the main thread after Done
+  m_loopFindSerial = serial;
+  m_loopFindDone.store(true);            // busy clears in the tick
+}
+
+// OnTimer: publish finished finder results (worker cannot touch the UI).
+void SneakPeak::LoopFindTick()
+{
+  if (!m_loopFindBusy.load() || !m_loopFindDone.load()) return;
+  m_loopFindDone.store(false);
+  if (m_loopFindThread.joinable()) m_loopFindThread.join();
+  m_loopFindBusy.store(false);
+  if (m_loopFindSerial != m_standaloneBufferSerial.load() ||
+      !m_waveform.IsStandaloneMode()) {
+    ShowToast("Loop finder result discarded - audio changed");
+    return;
+  }
+  m_loopCandidates = std::move(m_loopFindResult);
+  m_loopFindResult.clear();
+  if (m_loopCandidates.empty()) {
+    ShowToast("No clean loop points found (NCC floor 0.5)");
+  } else {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%d loop candidate%s - click a pin",
+             (int)m_loopCandidates.size(),
+             m_loopCandidates.size() == 1 ? "" : "s");
+    ShowToast(buf);
+  }
+  InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
 // Loop Lab (v2.4 INC-A1): gapless audition of the loop region. The temp WAV

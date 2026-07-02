@@ -329,6 +329,18 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
 
   if (y >= m_rulerRect.top && y < m_rulerRect.bottom) {
     if (m_waveform.HasItem()) {
+      // Loop candidate pins (INC-A2): click = set the loop + audition it.
+      {
+        const int pin = HitTestLoopPin(x, y);
+        if (pin >= 0) {
+          m_waveform.SetLoop(m_loopCandidates[(size_t)pin].startFrame,
+                             m_loopCandidates[(size_t)pin].endFrame);
+          if (m_previewActive) StandaloneCleanupPreview();
+          StandaloneAuditionLoop();
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+          return;
+        }
+      }
       // Loop brackets (v2.4 INC-A1) win over a coincident marker: they are the
       // finer target and only exist in standalone mode with a loop set.
       if (m_waveform.IsStandaloneMode() && m_waveform.HasLoop()) {
@@ -2453,6 +2465,22 @@ void SneakPeak::ReanalyzeDynamicsAfterEdit()
 // Route one key (from the SWS accelerator) to the open inline value editor. A commit
 // that changes the value re-analyses like a knob change; otherwise we just repaint
 // (the editor text changed, or it closed via ESC/empty commit).
+// Loop pin under the point (INC-A2), or -1. Geometry mirrors DrawLoopPins.
+int SneakPeak::HitTestLoopPin(int x, int y) const
+{
+  if (!m_waveform.IsStandaloneMode() || m_loopCandidates.empty()) return -1;
+  const int sr = m_waveform.GetSampleRate();
+  if (sr <= 0) return -1;
+  const int top = m_rulerRect.top;
+  const int pinW = SP(13), pinH = SP(14);
+  if (y < top + SP(2) || y > top + SP(2) + pinH) return -1;
+  for (size_t i = 0; i < m_loopCandidates.size(); i++) {
+    const int px = m_waveform.TimeToX((double)m_loopCandidates[i].startFrame / sr);
+    if (x >= px + 2 && x <= px + 2 + pinW) return (int)i;
+  }
+  return -1;
+}
+
 // Route one key to the limiter panel's inline editor (SWS accelerator path).
 // A commit that changes the value debounces a preview recompute like a knob.
 void SneakPeak::HandleLimiterEditKey(WPARAM key)

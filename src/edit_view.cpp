@@ -766,6 +766,8 @@ void SneakPeak::OnTimer()
   LimiterPreviewTick();
   // Background limiter apply: title progress + result swap on completion.
   LimiterApplyTick();
+  // Loop finder: publish finished candidates (INC-A2).
+  LoopFindTick();
 
   // Incremental standalone load (STA-1): one ~20 ms decode slice per tick.
   StepStandaloneLoad();
@@ -1536,6 +1538,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         m_limApplyCancel.store(true);
         m_limApplyThread.join();
       }
+      if (m_loopFindThread.joinable()) m_loopFindThread.join();
       KillTimer(m_hwnd, TIMER_REFRESH);
       return 0;
   }

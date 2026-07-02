@@ -16,6 +16,7 @@
 #include "dynamics_panel.h"
 #include "settings_panel.h"
 #include "limiter_panel.h"
+#include "loop_finder.h"
 #include "ui_render.h"
 #include <atomic>
 #include <memory>
@@ -180,6 +181,7 @@ enum ContextMenuID {
   CM_LOOP_FROM_SELECTION,                              // set loop from the time selection
   CM_AUDITION_LOOP,                                    // gapless region preview (toggle)
   CM_CLEAR_LOOP,
+  CM_FIND_LOOP_POINTS,                                 // INC-A2: NCC candidate finder
   CM_LAST // sentinel -- keep last
 };
 
@@ -611,6 +613,21 @@ private:
   void DrawLimiterOverlay(HDC hdc);      // top-anchored GR band + trace (GDI pass)
   void DrawLoopRegion(HDC hdc);          // Loop Lab brackets + tinted ruler strip
   int m_loopDrag = 0;                    // bracket drag: 0 none, 1 start, 2 end
+  // Loop Lab finder (INC-A2): a worker scores loop-point candidates on a COPY
+  // of the buffer (NCC + spectral tie-break); the results render as numbered
+  // pins on the ruler - click a pin to set the loop and start the audition.
+  void StartLoopFind();
+  void LoopFindThread(std::vector<double> audio, int frames, int nch, int sr,
+                      uint64_t serial);
+  void LoopFindTick();
+  void DrawLoopPins(HDC hdc);
+  int HitTestLoopPin(int x, int y) const;   // -1 = none
+  std::thread m_loopFindThread;
+  std::atomic<bool> m_loopFindBusy{ false };
+  std::atomic<bool> m_loopFindDone{ false };
+  std::vector<LoopCandidate> m_loopFindResult;  // worker-written, read after Done
+  uint64_t m_loopFindSerial = 0;                // buffer identity at launch
+  std::vector<LoopCandidate> m_loopCandidates;  // pins on display (transient)
   void MarkLimiterParamsChanged();       // debounce tick + gen bump + pending "..."
   void InvalidateLimiterPreview();       // buffer changed (apply/undo/load)
   void LimiterPreviewTick();             // OnTimer: draft/full launch + finish pump

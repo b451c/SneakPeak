@@ -94,6 +94,7 @@ add_library(reaper_sneakpeak SHARED
   src/settings_panel.cpp
   src/limiter_engine.cpp
   src/limiter_panel.cpp
+  src/loop_finder.cpp
   src/ui_render.cpp
   ${SNEAKPEAK_FONT_GEN}
 )
@@ -205,6 +206,28 @@ if(MSVC)
   target_compile_options(limiter_test PRIVATE /W3)
 else()
   target_compile_options(limiter_test PRIVATE
+    -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
+    -Wshadow
+    -Wconversion -Wno-sign-conversion
+    -fsigned-char
+  )
+endif()
+
+# --- v2.4.0 INC-A2: offline loop-finder correctness check ---
+# Pure-DSP test binary (no REAPER/SWELL/Blend2D deps), machine-independent
+# assertions like spectral_repair_test. Run via tests/run_loop_finder_test.sh.
+add_executable(loop_finder_test
+  tests/loop_finder_test.cpp
+  src/loop_finder.cpp
+)
+target_include_directories(loop_finder_test PRIVATE src)
+target_compile_definitions(loop_finder_test PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+)
+if(MSVC)
+  target_compile_options(loop_finder_test PRIVATE /W3)
+else()
+  target_compile_options(loop_finder_test PRIVATE
     -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
     -Wshadow
     -Wconversion -Wno-sign-conversion

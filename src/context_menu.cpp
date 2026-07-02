@@ -451,6 +451,8 @@ void SneakPeak::OnRightClick(int x, int y)
       const bool hasLoop = m_waveform.HasLoop();
       MenuAppend(loopMenu, hasSel ? MF_STRING : MF_GRAYED, CM_LOOP_FROM_SELECTION,
                  "Set Loop From Selection");
+      MenuAppend(loopMenu, m_loopFindBusy.load() ? MF_GRAYED : MF_STRING,
+                 CM_FIND_LOOP_POINTS, "Find Loop Points");
       UINT audFlags = hasLoop ? MF_STRING : MF_GRAYED;
       if (m_previewActive && m_previewLoop) audFlags |= MF_CHECKED;
       MenuAppend(loopMenu, audFlags, CM_AUDITION_LOOP, "Audition Loop");
@@ -802,6 +804,9 @@ void SneakPeak::OnContextMenuCommand(int id)
     }
     case CM_AUDITION_LOOP:
       StandaloneAuditionLoop();
+      break;
+    case CM_FIND_LOOP_POINTS:
+      StartLoopFind();
       break;
     case CM_CLEAR_LOOP:
       if (m_previewActive && m_previewLoop) StandaloneCleanupPreview();
