@@ -841,6 +841,22 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   Spectral view is not available in multi-item or SET mode. It applies to one item at a time.
 </div>
 
+<h3>Spectral Repair (Standalone mode)</h3>
+
+<p>In Standalone mode the spectral selection becomes an editing tool. Make a time selection in the waveform, <kbd>Alt</kbd>-drag a frequency band in the spectral view, then right-click:</p>
+
+<ul>
+  <li><strong>Process &gt; Heal Selection</strong> - rebuilds the selected time x frequency rectangle from the audio around it (per-frequency interpolation across the selection). <strong>Replace (100%)</strong> fully replaces the region toward the surrounding context; the <strong>Attenuate</strong> strengths (75/50/25%) pull it down more gently. Healing only ever reduces energy, so content quieter than its surroundings is left alone - and re-applying iteratively is normal. Requires both a time selection and a frequency band; limited to 10 s selections.</li>
+  <li><strong>Process &gt; Repair Clicks in Selection</strong> - detects and removes clicks and pops inside the time selection with sample accuracy (autoregressive detection and interpolation; no frequency band needed). Bursts longer than 23 ms are skipped and reported. Limited to 4 s selections.</li>
+</ul>
+
+<p>Both are destructive edits to the loaded audio in memory: undo with <kbd>Ctrl+Z</kbd>, and nothing touches the disk until you save. A toast reports what was healed or repaired, and the spectrogram recomputes automatically.</p>
+
+<div class="warning">
+  <strong>Standalone only (v1)</strong>
+  Spectral Repair works in Standalone mode. For a REAPER item, edit a saved copy and use Replace Source in REAPER Timeline - direct ITEM-mode repair is a planned follow-up. Healing v1 works horizontally (across time); vertical and pattern modes are follow-ups too.
+</div>
+
 <h2 id="multi-item">Multi-Item View</h2>
 <div class="modes"><span class="mode mode-reaper">REAPER</span></div>
 
