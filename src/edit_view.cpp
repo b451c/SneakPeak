@@ -1855,6 +1855,12 @@ void SneakPeak::LimiterPreviewTick()
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
   if (!m_limiterPanel.IsVisible()) return;
+  // While the full pass crunches a long file, tick the "N%" readout (drafts
+  // are too fast to need this; stats-pending only shows on the full path).
+  if (m_limPrevComputing.load() && !m_limPrevDraftRunning) {
+    m_limiterPanel.SetStatsPending(true, m_limPrevPct.load());
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
   // The limiter edits the standalone buffer only: leaving standalone mode
   // closes the panel (it would otherwise float inert over ITEM mode).
   if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) {
@@ -1919,22 +1925,33 @@ void SneakPeak::StartLimiterPreview()
   if (frames <= 0 || nch <= 0 || sr <= 0) return;
   if (m_limPrevThread.joinable()) m_limPrevThread.join();  // finished (guarded by !computing)
   m_limPrevComputing.store(true);
+  m_limPrevDraftRunning = false;
+  m_limPrevPct.store(0);
   m_limiterPanel.SetStatsPending(true);
   const uint64_t gen = m_limPrevGen.load();
+  const uint64_t serial = m_standaloneBufferSerial.load();
   std::vector<double> copy = m_waveform.GetAudioData();
   m_limPrevThread = std::thread(&SneakPeak::LimiterPreviewThread, this,
                                 std::move(copy), frames, nch, sr,
-                                m_limiterPanel.GetParams(), gen);
+                                m_limiterPanel.GetParams(), gen, serial);
 }
 
 void SneakPeak::LimiterPreviewThread(std::vector<double> audio, int frames,
                                      int nch, int sr, LimiterParams p,
-                                     uint64_t gen)
+                                     uint64_t gen, uint64_t bufSerial)
 {
+  // Progress -> panel readouts ("N%"). The envelope pass is ~80% of the work
+  // (the apply-to-copy + out measure below have no hook); never cancels.
+  LimiterProgress prog;
+  prog.user = this;
+  prog.fn = [](void* user, double frac) -> bool {
+    ((SneakPeak*)user)->m_limPrevPct.store((int)(frac * 80.0 + 0.5));
+    return true;
+  };
   std::vector<double> env;
   std::vector<double> peaks;  // pre-gain detector peaks -> the draft cache
   LimiterResult r = LimiterComputeEnvelope(audio.data(), frames, nch, sr, p,
-                                           env, 0, nullptr, &peaks);
+                                           env, 0, nullptr, &peaks, &prog);
   const int chains = (p.link || nch == 1) ? 1 : nch;
   if (r.ok) {
     // Honest OUT readout: apply the envelope to our copy and re-measure with
@@ -1950,17 +1967,23 @@ void SneakPeak::LimiterPreviewThread(std::vector<double> audio, int frames,
   std::vector<float> dec = DecimateEnvMin(env, frames, chains);
   {
     std::lock_guard<std::mutex> lock(m_limPrevMutex);
+    // The peak cache depends only on the buffer + truePeak/link - NEVER on
+    // the knobs - so store it whenever the buffer is unchanged, even if the
+    // params (gen) moved mid-flight. Gating it on gen starved the draft path
+    // forever under active knob motion (every full pass finished "stale",
+    // the cache never warmed, the readouts sat at "..." - user report).
+    if (r.ok && bufSerial == m_standaloneBufferSerial.load()) {
+      m_limPeakCache = std::make_shared<const std::vector<double>>(std::move(peaks));
+      m_limPeakCacheFrames = frames;
+      m_limPeakCacheChains = chains;
+      m_limPeakCacheTP = p.truePeak;
+    }
     if (gen == m_limPrevGen.load() && r.ok) {
       m_limPrevEnvMin = std::move(dec);
       m_limPrevResult = r;
       m_limPrevFrames = frames;
       m_limPrevValid = true;
       m_limPrevDraft = false;
-      // Warm the draft cache: knob moves now re-run only the cheap chain.
-      m_limPeakCache = std::make_shared<const std::vector<double>>(std::move(peaks));
-      m_limPeakCacheFrames = frames;
-      m_limPeakCacheChains = chains;
-      m_limPeakCacheTP = p.truePeak;
     }
   }
   m_limPrevComputing.store(false);
@@ -1984,6 +2007,7 @@ void SneakPeak::StartLimiterPreviewDraft()
   }
   if (m_limPrevThread.joinable()) m_limPrevThread.join();
   m_limPrevComputing.store(true);
+  m_limPrevDraftRunning = true;
   const uint64_t gen = m_limPrevGen.load();
   m_limPrevThread = std::thread(&SneakPeak::LimiterPreviewDraftThread, this,
                                 std::move(peaks), frames, chains, sr,

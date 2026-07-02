@@ -67,10 +67,15 @@ public:
   int  GetPanelOffsetX() const { return m_offsetX; }
   int  GetPanelOffsetY() const { return m_offsetY; }
 
-  // Preview stats from the host worker -> readouts; pending renders "...".
+  // Preview stats from the host worker -> readouts; pending renders "..." (or
+  // "N%" while the full pass reports progress - podcast-length files).
   // outPending: draft result (no output measure yet) - OUT alone shows "...".
   void SetPreviewStats(double inDb, double outDb, double grDb, bool outPending);
-  void SetStatsPending(bool pending) { m_statsPending = pending; }
+  void SetStatsPending(bool pending, int pct = -1)
+  {
+    m_statsPending = pending;
+    m_statsPct = pending ? pct : -1;
+  }
 
 private:
   double EffScale(RECT waveformRect) const;  // g_uiScale, fit-clamped to the rect
@@ -102,6 +107,7 @@ private:
 
   double m_inDb = -999.0, m_outDb = -999.0, m_grDb = 0.0;
   bool m_statsValid = false, m_statsPending = false, m_outPending = false;
+  int m_statsPct = -1;   // full-pass progress while pending (-1 = plain "...")
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   char m_inText[24] = { 0 }, m_outText[24] = { 0 }, m_grText[24] = { 0 };
 #endif

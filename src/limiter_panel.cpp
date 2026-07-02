@@ -426,7 +426,10 @@ void LimiterPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
 
   const char* peakUnit = m_params.truePeak ? "dBTP" : "dBFS";
   if (m_statsPending) {
-    std::snprintf(m_inText, sizeof(m_inText), "...");
+    if (m_statsPct >= 0)
+      std::snprintf(m_inText, sizeof(m_inText), "%d%%", m_statsPct);
+    else
+      std::snprintf(m_inText, sizeof(m_inText), "...");
     std::snprintf(m_outText, sizeof(m_outText), "...");
     std::snprintf(m_grText, sizeof(m_grText), "...");
     vm.grNorm = 0.0;

@@ -485,8 +485,10 @@ private:
   void StandaloneUndoPushFull(std::vector<double>&& oldData); // zero-copy full slot
   void StandaloneUndoSaveRange(int startFrame, int numFrames); // bounded edits
   // Bumped on every standalone buffer mutation (edit/undo/redo/tab/load): the
-  // background limiter apply swaps its result in only if this is unchanged.
-  uint64_t m_standaloneBufferSerial = 0;
+  // background limiter apply swaps its result in only if this is unchanged,
+  // and the preview worker gates its peak-cache store on it (atomic: read
+  // from the worker at handoff).
+  std::atomic<uint64_t> m_standaloneBufferSerial{ 0 };
   void StandaloneUndoRestore();
   void StandaloneRedoRestore();
   // Swap `entry` with the live buffer, pushing the inverse onto `inverseStack`
@@ -591,7 +593,10 @@ private:
   void LimiterPreviewTick();             // OnTimer: draft/full launch + finish pump
   void StartLimiterPreview();            // FULL: detection + refinement + OUT measure
   void LimiterPreviewThread(std::vector<double> audio, int frames, int nch,
-                            int sr, LimiterParams p, uint64_t gen);
+                            int sr, LimiterParams p, uint64_t gen,
+                            uint64_t bufSerial);
+  std::atomic<int> m_limPrevPct{ 0 };    // full-pass progress -> panel readouts
+  bool m_limPrevDraftRunning = false;    // in-flight worker is a draft (main thread)
   // DRAFT path (live knob response): the expensive detector peaks depend only
   // on the buffer + truePeak/link, so they are cached once by the full pass
   // and knob changes re-run just the cheap envelope chain - no debounce, the
