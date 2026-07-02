@@ -216,7 +216,10 @@ bool LimiterPanel::OnMouseDown(int x, int y, RECT wr)
 
   if (L.closeBtn.contains(lx, ly)) { Hide(); return true; }
   if (L.preset.contains(lx, ly))   { m_presetMenuReq = true; return true; }
-  if (L.apply.contains(lx, ly))    { m_applyRequested = true; return true; }
+  if (L.apply.contains(lx, ly)) {
+    if (m_applyPct < 0) m_applyRequested = true;   // ignored while running
+    return true;
+  }
   if (L.tpPill.contains(lx, ly)) {
     m_params.truePeak = !m_params.truePeak;
     m_paramsChanged = true;
@@ -450,6 +453,7 @@ void LimiterPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.inText = m_inText;
   vm.outText = m_outText;
   vm.grText = m_grText;
+  vm.applyPct = m_applyPct;
 
   m_canvas.RenderLimiterPanel(hdc, pr.left, pr.top, pr.right - pr.left,
                               pr.bottom - pr.top, dpr, vm);

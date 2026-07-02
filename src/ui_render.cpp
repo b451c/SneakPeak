@@ -1600,13 +1600,28 @@ void UiCanvas::RenderLimiterPanel(HDC hdc, int x, int y, int w, int h, double dp
                                       L.grMeter.h, 4.0), g);
     }
 
-    // footer + APPLY
+    // footer + APPLY. While the background apply runs, the button becomes a
+    // progress bar (track + amber fill + "N%") - the user is looking HERE,
+    // not at the window title (which a docked window does not even have).
     ctx.set_stroke_width(1.0);
     ctx.stroke_line(BLLine(0, L.footer.y, W, L.footer.y), col(dynui::kHairline));
-    FillURound(ctx, L.apply, dynui::kRadiusCtrl,
-               vm.hover == LIM_HIT_APPLY ? dynui::kAmberGlow : dynui::kAmber);
-    if (gfx.fontsReady)
-      TextCentered(ctx, gfx.fValue, L.apply, "Apply", dynui::kSurface0);
+    if (vm.applyPct >= 0) {
+      FillURound(ctx, L.apply, dynui::kRadiusCtrl, dynui::kSurface2);
+      const double fw = L.apply.w * (double)(vm.applyPct > 100 ? 100 : vm.applyPct) / 100.0;
+      if (fw > 1.0)
+        ctx.fill_round_rect(BLRoundRect(L.apply.x, L.apply.y, fw, L.apply.h,
+                                        dynui::kRadiusCtrl), col(dynui::kAmber));
+      if (gfx.fontsReady) {
+        char pct[8];
+        std::snprintf(pct, sizeof(pct), "%d%%", vm.applyPct > 100 ? 100 : vm.applyPct);
+        TextCentered(ctx, gfx.fValue, L.apply, pct, dynui::kInkPrimary);
+      }
+    } else {
+      FillURound(ctx, L.apply, dynui::kRadiusCtrl,
+                 vm.hover == LIM_HIT_APPLY ? dynui::kAmberGlow : dynui::kAmber);
+      if (gfx.fontsReady)
+        TextCentered(ctx, gfx.fValue, L.apply, "Apply", dynui::kSurface0);
+    }
   }
   presentSurface(hdc, x, y, w, h, devW, devH);
 }

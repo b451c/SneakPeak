@@ -166,6 +166,8 @@ struct LimiterVM {
   const char* outText = nullptr;
   const char* grText = nullptr;
   int hover = LIM_HIT_NONE;
+  int applyPct = -1;                 // >= 0: Apply runs in the background -
+                                     // the button becomes a progress bar
 };
 
 // Computed geometry in base kLimPanelW x kLimPanelH coords - the single source

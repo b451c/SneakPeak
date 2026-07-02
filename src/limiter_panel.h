@@ -67,6 +67,11 @@ public:
   int  GetPanelOffsetX() const { return m_offsetX; }
   int  GetPanelOffsetY() const { return m_offsetY; }
 
+  // Background Apply progress: >= 0 turns the Apply button into a progress
+  // bar (the user watches the panel, not the window title); -1 = idle.
+  void SetApplyProgress(int pct) { m_applyPct = pct; }
+  bool IsApplyBusy() const { return m_applyPct >= 0; }
+
   // Preview stats from the host worker -> readouts; pending renders "..." (or
   // "N%" while the full pass reports progress - podcast-length files).
   // outPending: draft result (no output measure yet) - OUT alone shows "...".
@@ -108,6 +113,7 @@ private:
   double m_inDb = -999.0, m_outDb = -999.0, m_grDb = 0.0;
   bool m_statsValid = false, m_statsPending = false, m_outPending = false;
   int m_statsPct = -1;   // full-pass progress while pending (-1 = plain "...")
+  int m_applyPct = -1;   // background-apply progress (-1 = idle)
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   char m_inText[24] = { 0 }, m_outText[24] = { 0 }, m_grText[24] = { 0 };
 #endif

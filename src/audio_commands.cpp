@@ -1570,6 +1570,8 @@ void SneakPeak::DoApplyLimiter()
   m_limApplyPct.store(0);
   m_limApplyDone.store(false);
   m_limApplyBusy.store(true);
+  m_limiterPanel.SetApplyProgress(0);   // Apply button becomes the progress bar
+  InvalidateRect(m_hwnd, nullptr, FALSE);
   m_limApplyThread = std::thread(&SneakPeak::LimiterApplyThread, this, nch, sr,
                                  s0, s1, ramp);
 }
@@ -1594,6 +1596,10 @@ void SneakPeak::LimiterApplyTick()
 {
   if (!m_limApplyBusy.load()) return;
   if (!m_limApplyDone.load()) {
+    // Progress where the user is looking: the panel's Apply button. The
+    // title is a secondary cue (docked windows have no title bar at all).
+    m_limiterPanel.SetApplyProgress(m_limApplyPct.load());
+    InvalidateRect(m_hwnd, nullptr, FALSE);
     if (m_hwnd) {
       char t[64];
       snprintf(t, sizeof(t), "SneakPeak: Limiting... %d%%", m_limApplyPct.load());
@@ -1604,6 +1610,7 @@ void SneakPeak::LimiterApplyTick()
   m_limApplyDone.store(false);
   if (m_limApplyThread.joinable()) m_limApplyThread.join();
   m_limApplyBusy.store(false);
+  m_limiterPanel.SetApplyProgress(-1);   // button back to "Apply"
 
   const LimiterResult r = m_limApplyResult;
   const LimiterParams p = m_limApplyParams;
