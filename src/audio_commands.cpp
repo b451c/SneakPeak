@@ -2184,33 +2184,62 @@ std::vector<std::pair<int, int>> SneakPeak::OneShotBuildSlices(const OneShotPara
   return out;
 }
 
-// {name} -> source basename, {nn} -> 01-based zero-padded index (width grows
-// past 99 slices). The panel sanitized path separators out of the pattern.
-// Unrecognized {tokens} degrade gracefully: leftover braces are stripped, so
-// a mistyped "{test}_{01}" writes "test_01.wav", never literal braces (user
-// report 2026-07-02).
+// {name} -> source basename. Counter tokens: {nn}/{n}/{nnn} (01-based) OR any
+// digit token - {01} numbers from 01, {001} pads to three digits, {5} starts
+// at 5 (users reach for {01} first; it must just work - user report
+// 2026-07-02). Padding = the token's length, widened so the LAST file in the
+// batch still sorts correctly (001..150, never 01..99,100). Unknown tokens
+// keep their text ({test} -> "test") - literal braces never reach a filename.
 static std::string ExpandOneShotPattern(const char* pat, const std::string& base,
                                         int idx1, int count)
 {
-  int width = 2;
-  for (int c = count; c >= 100; c /= 10) width++;
-  char nn[16];
-  snprintf(nn, sizeof(nn), "%0*d", width, idx1);
+  auto digitsOf = [](int v) {
+    int d = 1;
+    while (v >= 10) { v /= 10; d++; }
+    return d;
+  };
   std::string out;
-  for (const char* s = pat; *s;) {
-    if (!strncmp(s, "{name}", 6)) {
-      out += base;
-      s += 6;
-    } else if (!strncmp(s, "{nn}", 4)) {
-      out += nn;
-      s += 4;
-    } else if (*s == '{' || *s == '}') {
-      s++;   // unknown token braces never reach the filename
-    } else {
+  const char* s = pat;
+  while (*s) {
+    if (*s != '{') {
       out += *s++;
+      continue;
+    }
+    const char* e = strchr(s + 1, '}');
+    if (!e) {   // stray '{': drop it, keep the rest
+      s++;
+      continue;
+    }
+    const std::string tok(s + 1, (size_t)(e - s - 1));
+    s = e + 1;
+    if (tok == "name") {
+      out += base;
+      continue;
+    }
+    bool allN = !tok.empty(), allDigit = !tok.empty();
+    for (char c : tok) {
+      if (c != 'n') allN = false;
+      if (c < '0' || c > '9') allDigit = false;
+    }
+    char nn[16];
+    if (allN && tok.size() <= 6) {
+      const int w = std::max((int)tok.size(), digitsOf(count));
+      snprintf(nn, sizeof(nn), "%0*d", w, idx1);
+      out += nn;
+    } else if (allDigit && tok.size() <= 6) {
+      const int start = atoi(tok.c_str());
+      const int w = std::max((int)tok.size(), digitsOf(start + count - 1));
+      snprintf(nn, sizeof(nn), "%0*d", w, start + idx1 - 1);
+      out += nn;
+    } else {
+      out += tok;   // unknown token: keep its text, braces never leak
     }
   }
-  if (out.empty()) out = base + "_" + nn;
+  if (out.empty()) {
+    char nn[16];
+    snprintf(nn, sizeof(nn), "%0*d", std::max(2, digitsOf(count)), idx1);
+    out = base + "_" + nn;
+  }
   return out;
 }
 
@@ -2433,8 +2462,8 @@ void SneakPeak::EditOneShotPattern()
   char buf[256];
   snprintf(buf, sizeof(buf), "%s", m_oneShotPanel.GetParams().pattern);
   // NOTE: captions_csv splits on commas - the caption must not contain any.
-  if (!g_GetUserInputs("One-Shot naming", 1, "Pattern - tokens {name} {nn}:", buf,
-                       sizeof(buf)))
+  if (!g_GetUserInputs("One-Shot naming", 1, "Pattern - tokens {name} {nn} {01}:",
+                       buf, sizeof(buf)))
     return;
   m_oneShotPanel.SetPattern(buf);
   SaveOneShotParams();

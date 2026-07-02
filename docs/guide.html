@@ -919,7 +919,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Fade In / Fade Out</strong> - edge micro-fades (defaults 5 ms / 20 ms, the industry click-killers).</li>
   <li><strong>Normalize</strong> - OFF, <strong>PEAK</strong> (dBFS), <strong>LUFS</strong> (integrated, custom target, measured by REAPER's own engine) or <strong>TP SAFE</strong> (the Hard Limiter at your dBTP ceiling - the game-asset default).</li>
   <li><strong>SLICE</strong> - <strong>WHOLE</strong> exports the file as one asset; <strong>REGIONS</strong> makes each region a variation (with no regions, markers act as split points); <strong>SILENCE</strong> auto-splits on gaps longer than 150 ms below the trim threshold (slices under 50 ms are dropped, and each slice keeps its padding without bleeding into a neighbour). Record ten footsteps in one take, add nothing, and SILENCE finds the ten slices.</li>
-  <li><strong>NAME</strong> - the naming pattern for the written files: <code>{name}</code> = source basename, <code>{nn}</code> = 01-based zero-padded number; default <code>{name}_{nn}</code>. Click the box to edit.</li>
+  <li><strong>NAME</strong> - the naming pattern for the written files: <code>{name}</code> = source basename, <code>{nn}</code> = 01-based zero-padded number; default <code>{name}_{nn}</code>. Any digit token works too: <code>{01}</code> numbers from 01, <code>{001}</code> pads to three digits, <code>{5}</code> starts at 5. Click the box to edit.</li>
 </ul>
 
 <p>While the panel is open, the waveform previews the prep live: dimmed zones show what will be cut, amber lines mark every slice that will be written and diagonal ramps show the edge fades - all following the knobs, so you can tune the threshold until the split is exactly right.</p>
