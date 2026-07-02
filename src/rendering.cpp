@@ -117,23 +117,19 @@ void SneakPeak::OnPaint(HDC hdc)
     m_dynamicsPanel.Draw(hdc, m_waveformRect);
 #endif
     // (premium panel drawn in OnPaintOverlay on the real window DC)
-    // Envelope selection rectangle overlay (hatched semi-transparent fill + cyan border)
+    // Envelope selection rectangle overlay: frosted translucent interior
+    // (the spectral-marquee treatment; replaces the old hatched-lines fake)
+    // + cyan border. Clamped to the waveform rect - the drag can leave it.
     if (m_envRectSelecting) {
       int rx1 = std::min(m_envRectStartX, m_envRectEndX);
       int ry1 = std::min(m_envRectStartY, m_envRectEndY);
       int rx2 = std::max(m_envRectStartX, m_envRectEndX);
       int ry2 = std::max(m_envRectStartY, m_envRectEndY);
-      // Vertical lines fill per 3 pixels (fake transparency)
-      {
-        HPEN tintPen = CreatePen(PS_SOLID, 1, RGB(0, 80, 100));
-        HPEN oldP = (HPEN)SelectObject(hdc, tintPen);
-        for (int px = rx1; px <= rx2; px += 3) {
-          MoveToEx(hdc, px, ry1, nullptr);
-          LineTo(hdc, px, ry2);
-        }
-        SelectObject(hdc, oldP);
-        DeleteObject(tintPen);
-      }
+      int cx1 = std::max(rx1, (int)m_waveformRect.left);
+      int cy1 = std::max(ry1, (int)m_waveformRect.top);
+      int cx2 = std::min(rx2, (int)m_waveformRect.right);
+      int cy2 = std::min(ry2, (int)m_waveformRect.bottom);
+      DrawFrostedRect(hdc, cx1, cy1, cx2, cy2, 40);  // ~16% toward white
       // Cyan border
       HPEN rectPen = CreatePen(PS_SOLID, 1, g_theme.volumeEnvelope);
       HPEN oldPen = (HPEN)SelectObject(hdc, rectPen);

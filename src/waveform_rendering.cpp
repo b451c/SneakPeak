@@ -1405,15 +1405,8 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
     if (rvX2 > rvX1) {
       int yTop = m_rect.top + 2;
       int yBot = m_rect.bottom - 2;
-      // Subtle hatched background (sparse vertical lines)
-      {
-        OwnedPen tintPen(PS_SOLID, 1, RGB(0, 45, 60));
-        DCPenScope tScope(hdc, tintPen);
-        for (int px = rvX1; px <= rvX2; px += 6) {
-          MoveToEx(hdc, px, yTop, nullptr);
-          LineTo(hdc, px, yBot);
-        }
-      }
+      // Subtle frosted background (translucent, replaces the old sparse hatch)
+      DrawFrostedRect(hdc, rvX1, yTop, rvX2, yBot, 20);  // ~8% toward white
       // Boundary lines (brighter)
       OwnedPen bndPen(PS_SOLID, 1, RGB(0, 130, 160));
       DCPenScope bScope(hdc, bndPen);

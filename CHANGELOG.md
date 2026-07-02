@@ -31,6 +31,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **"Did You Know?" guide section** (forum #80/#84, mb945) - the user guide now opens its reference part with the ten most-missed features, headlined by where destructive editing lives (the right-click processing entries and the drop-a-file-onto-the-window Standalone editor).
 - Old projects and presets load bit-identically: with the new parameters at their defaults the engine output is byte-for-byte the same as v2.2.0 (verified by an offline envelope-diff regression harness added to the repo).
 
+### Changed
+- **Envelope selection rectangle looks like a selection now** - the Cmd+drag rectangle (and the dense-envelope reveal band) draws a frosted translucent interior, the same treatment as the spectral marquee, instead of the old hatched vertical lines.
+
 ### Fixed
 - **Drag export now works on Windows** - dragging a selection (or a standalone file) out of the SneakPeak window did everything except the actual drag on Windows: the export WAV was written, then nothing followed (the drop hand-off only existed for macOS/Linux). Windows now hands the file to the OS drag as well, so dropping onto the REAPER timeline or Explorer works on all platforms.
 - The "Add Region from Selection" context-menu entry now shows its Shift+M shortcut.

@@ -129,3 +129,64 @@ private:
   HDC m_hdc;
   HPEN m_old;
 };
+
+// Frosted translucent rectangle: read the already-painted pixels back from the
+// paint buffer, brighten them toward white by alpha/256, and write them back -
+// true translucency without AlphaBlend (which SWELL does not provide). The same
+// Audition-class treatment as the spectral marquee haze (WhitenPx in
+// spectral_view.cpp): channel-order agnostic (all three color bytes get the
+// same whitening), and stride-safe - the scratch context is allocated at a
+// multiple-of-8 width so stride == alloc width on every backend (forum #65).
+// Callers pass coordinates already clamped to the painted buffer.
+inline void DrawFrostedRect(HDC hdc, int x1, int y1, int x2, int y2, unsigned int alpha)
+{
+  int w = x2 - x1, h = y2 - y1;
+  if (w <= 0 || h <= 0) return;
+  const int allocW = (w + 7) & ~7;
+
+  auto whiten = [&](unsigned int* fbuf) {
+    for (int y = 0; y < h; y++) {
+      unsigned int* row = fbuf + (size_t)y * (size_t)allocW;
+      for (int x = 0; x < w; x++) {
+        unsigned int c = row[x];
+        unsigned int r = c & 0xFFu, g = (c >> 8) & 0xFFu, b = (c >> 16) & 0xFFu;
+        r += ((255u - r) * alpha) >> 8;
+        g += ((255u - g) * alpha) >> 8;
+        b += ((255u - b) * alpha) >> 8;
+        row[x] = (c & 0xFF000000u) | (b << 16) | (g << 8) | r;
+      }
+    }
+  };
+
+#ifdef _WIN32
+  BITMAPINFO bmi = {};
+  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bmi.bmiHeader.biWidth = allocW;
+  bmi.bmiHeader.biHeight = -h;   // top-down
+  bmi.bmiHeader.biPlanes = 1;
+  bmi.bmiHeader.biBitCount = 32;
+  bmi.bmiHeader.biCompression = BI_RGB;
+  void* bits = nullptr;
+  HBITMAP bmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  if (!bmp) return;
+  HDC mem = CreateCompatibleDC(hdc);
+  if (!mem) { DeleteObject(bmp); return; }
+  HBITMAP oldBmp = (HBITMAP)SelectObject(mem, bmp);
+  BitBlt(mem, 0, 0, w, h, hdc, x1, y1, SRCCOPY);
+  whiten((unsigned int*)bits);
+  BitBlt(hdc, x1, y1, w, h, mem, 0, 0, SRCCOPY);
+  SelectObject(mem, oldBmp);
+  DeleteDC(mem);
+  DeleteObject(bmp);
+#else
+  HDC mem = SWELL_CreateMemContext(hdc, allocW, h);
+  if (!mem) return;
+  BitBlt(mem, 0, 0, w, h, hdc, x1, y1, SRCCOPY);
+  unsigned int* fbuf = (unsigned int*)SWELL_GetCtxFrameBuffer(mem);
+  if (fbuf) {
+    whiten(fbuf);
+    BitBlt(hdc, x1, y1, w, h, mem, 0, 0, SRCCOPY);
+  }
+  SWELL_DeleteGfxContext(mem);
+#endif
+}
