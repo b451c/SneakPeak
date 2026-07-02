@@ -64,6 +64,15 @@ static void MenuAppendSubmenu(HMENU menu, HMENU submenu, const char* str)
 static const double kUiScalePresets[] = { 0.80, 0.90, 1.00, 1.10, 1.25, 1.50, 1.75, 2.00 };
 static const int    kUiScalePresetCount = (int)(sizeof(kUiScalePresets) / sizeof(kUiScalePresets[0]));
 
+// Heal strength presets (v2.3.0 INC-5): CM_SPECTRAL_HEAL_BASE + i maps back to
+// this array, so build + dispatch share one source. 100% = full replace toward
+// the surrounding context; lower = attenuate (kickoff decision: one strength
+// axis, no separate Attenuate/Replace mode).
+static const double kHealStrengths[] = { 1.0, 0.75, 0.5, 0.25 };
+static const char* const kHealStrengthLabels[] =
+    { "Replace (100%)", "Attenuate 75%", "Attenuate 50%", "Attenuate 25%" };
+static const int kHealStrengthCount = (int)(sizeof(kHealStrengths) / sizeof(kHealStrengths[0]));
+
 // Dynamics Preset dropdown: factory presets, then the user's saved presets, then
 // "Save preset as..." and a "Delete preset" submenu. User presets live globally in
 // ExtState (see LoadUserPresets/AddUserPreset). The parent menu owns its submenu, so
@@ -226,6 +235,22 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_REVERSE, "Reverse");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_DC_REMOVE, "DC Offset Remove");
   MenuAppendSeparator(procMenu);
+
+  // Spectral Repair (v2.3.0 INC-5): standalone destructive v1, shown only with
+  // the spectral view open. Heal = the time x frequency rectangle; clicks = the
+  // time selection. Both live in spectral_repair.cpp (pure DSP).
+  if (m_spectralVisible) {
+    bool canHeal = isStandalone && hasSel && m_spectral.HasFreqSelection();
+    bool canClicks = isStandalone && hasSel;
+    HMENU healMenu = CreatePopupMenu();
+    for (int i = 0; i < kHealStrengthCount; i++)
+      MenuAppend(healMenu, canHeal ? MF_STRING : MF_GRAYED,
+                 CM_SPECTRAL_HEAL_BASE + (unsigned)i, kHealStrengthLabels[i]);
+    MenuAppendSubmenu(procMenu, healMenu, "Heal Selection");
+    MenuAppend(procMenu, canClicks ? MF_STRING : MF_GRAYED, CM_REPAIR_CLICKS,
+               "Repair Clicks in Selection");
+    MenuAppendSeparator(procMenu);
+  }
 
   // Dynamics
   MenuAppend(procMenu, hasReaperItem ? MF_STRING : MF_GRAYED, CM_APPLY_DYNAMICS, "Dynamics Panel");
@@ -788,6 +813,8 @@ void SneakPeak::OnContextMenuCommand(int id)
         ApplyUiScale(kUiScalePresets[id - CM_UI_SCALE_PRESET_BASE]);  // relayout + repaint
         SaveUiScale();
         MarkUiScaleUserSet();
+      } else if (id >= CM_SPECTRAL_HEAL_BASE && id < CM_SPECTRAL_HEAL_BASE + kHealStrengthCount) {
+        DoSpectralHeal(kHealStrengths[id - CM_SPECTRAL_HEAL_BASE]);
       }
       if (applied) {
         // Same re-analysis + Live path as a knob drag, so the curve/GR update at once.
@@ -808,6 +835,9 @@ void SneakPeak::OnContextMenuCommand(int id)
       }
       break;
     }
+    case CM_REPAIR_CLICKS:
+      DoRepairClicks();
+      break;
     case CM_REPLACE_SOURCE:
       DoReplaceSourceInTimeline();
       break;

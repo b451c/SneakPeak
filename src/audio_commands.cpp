@@ -10,6 +10,7 @@
 #include "edit_view.h"
 #include "audio_engine.h"
 #include "audio_ops.h"
+#include "spectral_repair.h"
 #include "debug.h"
 #include "reaper_plugin.h"
 #include "ui_theme.h"   // dynui::kMeterFloorDefaultSel (meter-floor pref migration)
@@ -1332,6 +1333,102 @@ void SneakPeak::DoNormalizeLUFS(double targetLufs)
   snprintf(desc, sizeof(desc), "SneakPeak: Normalize to %.0f LUFS", targetLufs);
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
 
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+// --- Spectral Repair (v2.3.0 INC-5): standalone destructive v1 ---
+// Both commands operate on the in-memory standalone buffer with a
+// StandaloneUndoSave snapshot first; the DSP lives in spectral_repair.cpp.
+// The spectrogram recomputes async on the next paint after ClearSpectrum().
+
+void SneakPeak::DoSpectralHeal(double strength)
+{
+  if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
+  if (!m_waveform.HasSelection() || !m_spectral.HasFreqSelection()) return;
+
+  WaveformSelection sel = m_waveform.GetSelection();
+  double selStart = std::min(sel.startTime, sel.endTime);
+  double selEnd = std::max(sel.startTime, sel.endTime);
+  if (selEnd - selStart > SPECTRAL_HEAL_MAX_SEC) {
+    ShowToast("Heal is limited to 10 s selections");
+    return;
+  }
+
+  auto& data = m_waveform.GetAudioData();
+  int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
+  int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+
+  StandaloneUndoSave();
+  SpectralHealResult r = StftRepairRect(data.data(), frames, nch, sr,
+                                        selStart, selEnd,
+                                        m_spectral.GetFreqSelLow(),
+                                        m_spectral.GetFreqSelHigh(), strength);
+  if (!r.ok) {
+    m_standaloneUndoStack.pop_back(); // buffer untouched - drop the slot
+    m_hasUndo = !m_standaloneUndoStack.empty();
+    ShowToast("Heal failed: selection too short or no surrounding context");
+    return;
+  }
+
+  char buf[96];
+  double atten = (fabs(r.avgAttenDb) < 0.05) ? 0.0 : r.avgAttenDb; // no '-0.0'
+  snprintf(buf, sizeof(buf), "Healed selection (avg %.1f dB in band)", atten);
+  ShowToast(buf);
+
+  m_dirty = true;
+  UpdateTitle();
+  m_waveform.Invalidate();
+  m_minimap.Invalidate();
+  m_spectral.ClearSpectrum();
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+void SneakPeak::DoRepairClicks()
+{
+  if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
+  if (!m_waveform.HasSelection()) return;
+
+  WaveformSelection sel = m_waveform.GetSelection();
+  double selStart = std::min(sel.startTime, sel.endTime);
+  double selEnd = std::max(sel.startTime, sel.endTime);
+  if (selEnd - selStart > CLICK_REPAIR_MAX_SEC) {
+    ShowToast("Click repair is limited to 4 s selections");
+    return;
+  }
+
+  auto& data = m_waveform.GetAudioData();
+  int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
+  int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+
+  StandaloneUndoSave();
+  ClickRepairResult r = RepairClicksAR(data.data(), frames, nch, sr,
+                                       selStart, selEnd, 2.0); // K per paper
+  if (!r.ok || r.samplesRepaired == 0) {
+    m_standaloneUndoStack.pop_back(); // buffer untouched - drop the slot
+    m_hasUndo = !m_standaloneUndoStack.empty();
+    ShowToast(r.ok ? "No clicks found in the selection"
+                   : "Click repair failed: selection too short");
+    return;
+  }
+
+  char buf[96];
+  if (r.clicksSkipped > 0)
+    snprintf(buf, sizeof(buf), "Repaired %d click%s (%d skipped: over 23 ms)",
+             r.clicksRepaired, r.clicksRepaired == 1 ? "" : "s", r.clicksSkipped);
+  else
+    snprintf(buf, sizeof(buf), "Repaired %d click%s",
+             r.clicksRepaired, r.clicksRepaired == 1 ? "" : "s");
+  ShowToast(buf);
+
+  m_dirty = true;
+  UpdateTitle();
+  m_waveform.Invalidate();
+  m_minimap.Invalidate();
+  m_spectral.ClearSpectrum();
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 

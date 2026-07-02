@@ -139,6 +139,10 @@ enum ContextMenuID {
   CM_UI_SCALE_PRESET_LAST = CM_UI_SCALE_PRESET_BASE + 16,
   CM_ZOOM_CENTER,                                      // toggle wheel-zoom center: mouse <-> edit cursor (#83)
   CM_SETTINGS,                                         // open the premium Settings panel
+  // Spectral Repair (v2.3.0 INC-5) - standalone destructive, spectral view only.
+  CM_SPECTRAL_HEAL_BASE,                               // + strength presets (see context_menu.cpp)
+  CM_SPECTRAL_HEAL_LAST = CM_SPECTRAL_HEAL_BASE + 4,
+  CM_REPAIR_CLICKS,                                    // AR click repair on the time selection
   CM_LAST // sentinel -- keep last
 };
 
@@ -261,6 +265,8 @@ private:
   void DoGain(double factor);
   void DoDCRemove();
   void DoNormalizeLUFS(double targetLufs = -14.0);
+  void DoSpectralHeal(double strength);  // v2.3.0 INC-5: STFT heal of time x freq selection
+  void DoRepairClicks();                 // v2.3.0 INC-5: AR click repair on time selection
 
   // Navigation
   void NavigateToMarker(bool forward);

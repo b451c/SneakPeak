@@ -89,6 +89,7 @@ add_library(reaper_sneakpeak SHARED
   src/multi_item_view.cpp
   src/dynamics_engine.cpp
   src/dynamics_panel.cpp
+  src/spectral_repair.cpp
   src/settings_panel.cpp
   src/ui_render.cpp
   ${SNEAKPEAK_FONT_GEN}
