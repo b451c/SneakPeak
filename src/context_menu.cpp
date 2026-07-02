@@ -444,8 +444,15 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppendSubmenu(menu, supportMenu, "Support");
   if (m_waveform.IsStandaloneMode()) {
     MenuAppendSeparator(menu);
-    // Loop Lab (v2.4 INC-A1): loop region + gapless audition; Find/Weld/smpl
-    // arrive in INC-A2..A4.
+    // Loop Lab (v2.4 INC-A5): in the premium build the Loop submenu collapses
+    // to the panel entry (the menu is an ENTRY POINT, the panel is where work
+    // happens) + Set From Selection as a direct item. The OFF build keeps the
+    // full command submenu (INC-A1..A4) - same behavior, menu-driven.
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+    MenuAppend(menu, MF_STRING, CM_LOOP_LAB, "Loop Lab...");
+    MenuAppend(menu, hasSel ? MF_STRING : MF_GRAYED, CM_LOOP_FROM_SELECTION,
+               "Set Loop From Selection");
+#else
     {
       HMENU loopMenu = CreatePopupMenu();
       const bool hasLoop = m_waveform.HasLoop();
@@ -467,6 +474,7 @@ void SneakPeak::OnRightClick(int x, int y)
                  CM_LOOP_WRITE_SMPL, "Write Loop Points On Save");
       MenuAppendSubmenu(menu, loopMenu, "Loop");
     }
+#endif
 #ifdef SNEAKPEAK_BLEND2D_PANEL
     MenuAppend(menu, MF_STRING, CM_ONESHOT_FACTORY, "One-Shot Factory...");
 #endif
@@ -821,6 +829,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       RestoreOneShotParams();
       m_oneShotPanel.Show();
       m_osPreviewDirty = true;   // trim/fade preview from the first frame
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_LOOP_LAB:
+      if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) break;
+      RestoreLoopLabParams();
+      m_loopLabPanel.Show();
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_FIND_LOOP_POINTS:

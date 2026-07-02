@@ -1723,6 +1723,206 @@ void UiCanvas::RenderOneShotPanel(HDC hdc, int x, int y, int w, int h, double dp
   presentSurface(hdc, x, y, w, h, devW, devH);
 }
 
+// --- Loop Lab panel (v2.4 INC-A5) --------------------------------------------
+
+// Base-coord geometry; footer bottom MUST equal dynui::kLoopPanelH.
+LoopLabLayout ComputeLoopLabLayout(double w, double h)
+{
+  (void)h;
+  LoopLabLayout L;
+  const double pad = (double)dynui::kPanelPad;
+  L.header = { 0, 0, w, (double)dynui::kHeaderH };
+  L.closeBtn = { w - pad - 18.0, L.header.h * 0.5 - 9.0, 18.0, 18.0 };
+
+  // START | END | LENGTH timecode readouts (limiter readout-cell pattern).
+  const double colGap = 8.0;
+  const double cellW = (w - 2.0 * pad - 2.0 * colGap) / 3.0;
+  const double readTop = L.header.h + 10.0;                       // 54
+  L.readStart = { pad, readTop, cellW, 30.0 };
+  L.readEnd   = { pad + (cellW + colGap), readTop, cellW, 30.0 };
+  L.readLen   = { pad + 2.0 * (cellW + colGap), readTop, cellW, 30.0 };
+
+  // Candidate list: caption + kLoopLabMaxRows click rows.
+  const double capTop = readTop + 30.0 + 8.0;                     // 92
+  L.listCaption = { pad, capTop, w - 2.0 * pad, 14.0 };
+  const double listTop = capTop + 18.0;                           // 110
+  for (int i = 0; i < kLoopLabMaxRows; i++)
+    L.row[i] = { pad, listTop + (double)i * 25.0, w - 2.0 * pad, 22.0 };
+
+  // Transport pills, then the action button row.
+  const double transTop =
+      listTop + (double)(kLoopLabMaxRows - 1) * 25.0 + 22.0 + 8.0; // 240
+  L.playLoop = { pad, transTop, 140.0, 26.0 };
+  L.playSeam = { pad + 148.0, transTop, 140.0, 26.0 };
+
+  const double actTop = transTop + 34.0;                          // 274
+  L.findBtn   = { pad, actTop, 72.0, 26.0 };
+  L.weldBtn   = { 96.0, actTop, 64.0, 26.0 };
+  L.weldMs    = { 164.0, actTop, 56.0, 26.0 };
+  L.setSelBtn = { 228.0, actTop, 160.0, 26.0 };
+  L.clearBtn  = { w - pad - 68.0, actTop, 68.0, 26.0 };
+
+  const double footTop = actTop + 26.0 + 8.0;                     // 308
+  L.footer = { 0, footTop, w, (double)dynui::kFooterH };  // bottom = 352
+  L.smplPill = { pad, footTop + 9.0, 196.0, 26.0 };
+  return L;
+}
+
+void UiCanvas::RenderLoopLabPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                                  const LoopLabVM& vm)
+{
+  if (!hdc || w < 8 || h < 8) return;
+  if (dpr < 1.0) dpr = 1.0;
+  const int devW = (int)std::lround((double)w * dpr);
+  const int devH = (int)std::lround((double)h * dpr);
+  if (!prepareSurface(hdc, devW, devH)) return;
+  {
+    BLContext ctx;
+    if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
+    ctx.clear_all();
+    ctx.scale((double)devW / (double)dynui::kLoopPanelW,
+              (double)devH / (double)dynui::kLoopPanelH);
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+    const Gfx& gfx = *m_gfx;
+    const double W = (double)dynui::kLoopPanelW, H = (double)dynui::kLoopPanelH;
+
+    {
+      BLGradient bg(BLLinearGradientValues(0, 0, 0, H));
+      bg.add_stop(0.0, col(dynui::kSurface1));
+      bg.add_stop(1.0, col(dynui::kSurface0));
+      ctx.fill_round_rect(BLRoundRect(0, 0, W, H, dynui::kRadiusPanel), bg);
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_round_rect(BLRoundRect(0.5, 0.5, W - 1, H - 1, dynui::kRadiusPanel),
+                            col(dynui::kHairline));
+    }
+
+    const LoopLabLayout L = ComputeLoopLabLayout(W, H);
+
+    if (gfx.fontsReady) {
+      ctx.fill_utf8_text(BLPoint(dynui::kPanelPad, L.header.h * 0.5 + 5.0), gfx.fValue,
+                         "LOOP LAB", SIZE_MAX, col(dynui::kInkPrimary));
+      TextCentered(ctx, gfx.fValue, L.closeBtn, "x",
+                   vm.hover == LL_HIT_CLOSE ? dynui::kInkPrimary : dynui::kInkMuted);
+    }
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_line(BLLine(0, L.header.h, W, L.header.h), col(dynui::kHairline));
+
+    // START | END | LENGTH readouts ("-" when no loop).
+    if (gfx.fontsReady) {
+      auto readout = [&](const URect& r, const char* cap, const char* val) {
+        ctx.fill_utf8_text(BLPoint(r.x, r.y + 10.0), gfx.fLabel, cap, SIZE_MAX,
+                           col(dynui::kInkSecondary));
+        ctx.fill_utf8_text(BLPoint(r.x, r.y + 27.0), gfx.fValue,
+                           val ? val : "-", SIZE_MAX,
+                           col(val ? dynui::kInkPrimary : dynui::kInkMuted));
+      };
+      readout(L.readStart, "START", vm.startText);
+      readout(L.readEnd, "END", vm.endText);
+      readout(L.readLen, "LENGTH", vm.lenText);
+    }
+
+    // Candidate list: caption, then rows (or the empty-state hint).
+    if (gfx.fontsReady)
+      ctx.fill_utf8_text(BLPoint(L.listCaption.x, L.listCaption.y + 10.0), gfx.fLabel,
+                         "CANDIDATES", SIZE_MAX, col(dynui::kInkSecondary));
+    if (vm.numRows <= 0) {
+      const URect empty = { L.row[0].x, L.row[0].y, L.row[0].w,
+                            L.row[kLoopLabMaxRows - 1].y + L.row[0].h - L.row[0].y };
+      FillURound(ctx, empty, dynui::kRadiusCtrl, dynui::kSurface1);
+      if (gfx.fontsReady)
+        TextCentered(ctx, gfx.fLabel, empty,
+                     vm.findBusy ? "Scanning..." : "Run Find to scan",
+                     dynui::kInkMuted);
+    } else {
+      for (int i = 0; i < vm.numRows && i < kLoopLabMaxRows; i++) {
+        const URect& r = L.row[i];
+        const bool hov = vm.hover == LL_HIT_ROW0 + i;
+        FillURound(ctx, r, dynui::kRadiusCtrl,
+                   (vm.rowActive[i] || hov) ? dynui::kSurface3 : dynui::kSurface2);
+        if (vm.rowActive[i]) {
+          ctx.set_stroke_width(1.0);
+          ctx.stroke_round_rect(BLRoundRect(r.x + 0.5, r.y + 0.5, r.w - 1.0,
+                                            r.h - 1.0, dynui::kRadiusCtrl),
+                                col(dynui::kAmber));
+        }
+        if (gfx.fontsReady && vm.rowText[i]) {
+          ctx.fill_utf8_text(BLPoint(r.x + 10.0, r.y + r.h * 0.5 + 4.0), gfx.fLabel,
+                             vm.rowText[i], SIZE_MAX,
+                             col(vm.rowActive[i] ? dynui::kInkPrimary
+                                                 : dynui::kInkSecondary));
+          if (vm.rowTexture[i]) {
+            // Texture-tier candidate: perceptual continuity, weld after picking.
+            const char* tag = "TEX";
+            const double tw = TextWidth(gfx.fLabel, tag);
+            ctx.fill_utf8_text(BLPoint(r.x + r.w - tw - 10.0, r.y + r.h * 0.5 + 4.0),
+                               gfx.fLabel, tag, SIZE_MAX, col(dynui::kGateViolet));
+          }
+        }
+      }
+    }
+
+    // Transport pills (checked while the audition runs; dimmed without a loop).
+    auto pill = [&](const URect& r, const char* label, bool on, bool enabled) {
+      if (enabled) {
+        DrawTogglePill(ctx, gfx, r, label, on, dynui::kAmber, false, 0.0);
+      } else {
+        FillURound(ctx, r, dynui::kRadiusCtrl, dynui::kSurface2);
+        ctx.set_stroke_width(1.5);
+        ctx.stroke_circle(BLCircle(r.x + 12.0, r.y + r.h * 0.5, 4.0),
+                          col(dynui::kInkDisabled));
+        if (gfx.fontsReady)
+          ctx.fill_utf8_text(BLPoint(r.x + 24.0, r.y + r.h * 0.5 + 4.0), gfx.fLabel,
+                             label, SIZE_MAX, col(dynui::kInkDisabled));
+      }
+    };
+    pill(L.playLoop, "PLAY LOOP", vm.playLoopOn, vm.hasLoop);
+    pill(L.playSeam, "PLAY SEAM", vm.playSeamOn, vm.hasLoop);
+
+    // Action buttons. FIND is the hero (amber, like Run/Apply); the rest are
+    // quiet surface buttons; disabled = surface + disabled ink.
+    auto button = [&](const URect& r, const char* label, bool enabled, int hitId) {
+      const bool hov = vm.hover == hitId;
+      if (enabled) {
+        FillURound(ctx, r, dynui::kRadiusCtrl, hov ? dynui::kSurface3 : dynui::kSurface2);
+        if (gfx.fontsReady)
+          TextCentered(ctx, gfx.fLabel, r, label,
+                       hov ? dynui::kInkPrimary : dynui::kInkSecondary);
+      } else {
+        FillURound(ctx, r, dynui::kRadiusCtrl, dynui::kSurface2);
+        if (gfx.fontsReady)
+          TextCentered(ctx, gfx.fLabel, r, label, dynui::kInkDisabled);
+      }
+    };
+    if (vm.findBusy) {
+      FillURound(ctx, L.findBtn, dynui::kRadiusCtrl, dynui::kSurface2);
+      if (gfx.fontsReady)
+        TextCentered(ctx, gfx.fLabel, L.findBtn, "SCAN...", dynui::kInkMuted);
+    } else {
+      FillURound(ctx, L.findBtn, dynui::kRadiusCtrl,
+                 vm.hover == LL_HIT_FIND ? dynui::kAmberGlow : dynui::kAmber);
+      if (gfx.fontsReady)
+        TextCentered(ctx, gfx.fLabel, L.findBtn, "FIND", dynui::kSurface0);
+    }
+    button(L.weldBtn, "WELD", vm.hasLoop, LL_HIT_WELD);
+    {
+      const bool hov = vm.hover == LL_HIT_WELD_MS || vm.weldDragging;
+      FillURound(ctx, L.weldMs, dynui::kRadiusCtrl,
+                 hov ? dynui::kSurface3 : dynui::kSurface2);
+      if (gfx.fontsReady && vm.weldText)
+        TextCentered(ctx, gfx.fTab, L.weldMs, vm.weldText, dynui::kInkPrimary);
+    }
+    button(L.setSelBtn, "SET FROM SELECTION", vm.hasSelection, LL_HIT_SET_SEL);
+    button(L.clearBtn, "CLEAR", vm.hasLoop, LL_HIT_CLEAR);
+
+    // Footer: WRITE SMPL ON SAVE pill.
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_line(BLLine(0, L.footer.y, W, L.footer.y), col(dynui::kHairline));
+    DrawTogglePill(ctx, gfx, L.smplPill, "WRITE SMPL ON SAVE", vm.writeSmpl,
+                   dynui::kAmber, false, 0.0);
+  }
+  presentSurface(hdc, x, y, w, h, devW, devH);
+}
+
 void UiCanvas::RenderGainPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                                const GainVM& vm)
 {

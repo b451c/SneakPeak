@@ -51,6 +51,37 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
   m_limiterPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
   // Premium ONE-SHOT PREP panel (v2.4 INC-B1).
   m_oneShotPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
+  // Premium LOOP LAB panel (v2.4 INC-A5): the host owns all loop state; a
+  // fresh snapshot is handed to the panel each paint.
+  if (m_loopLabPanel.IsVisible()) {
+    LoopLabState st;
+    const int sr = m_waveform.GetSampleRate();
+    st.hasLoop = m_waveform.HasLoop() && sr > 0;
+    if (st.hasLoop) {
+      st.startSec = (double)m_waveform.GetLoopStart() / sr;
+      st.endSec = (double)m_waveform.GetLoopEnd() / sr;
+    }
+    st.hasSelection = m_waveform.HasSelection();
+    st.playLoopOn = m_previewActive && m_previewLoop;
+    st.playSeamOn = m_previewActive && m_previewSeam;
+    st.findBusy = m_loopFindBusy.load();
+    st.writeSmpl = m_writeLoopOnSave;
+    if (sr > 0) {
+      st.numRows = (int)m_loopCandidates.size();
+      if (st.numRows > kLoopLabMaxRows) st.numRows = kLoopLabMaxRows;
+      for (int i = 0; i < st.numRows; i++) {
+        const LoopCandidate& c = m_loopCandidates[(size_t)i];
+        st.rows[i].startSec = (double)c.startFrame / sr;
+        st.rows[i].endSec = (double)c.endFrame / sr;
+        st.rows[i].score = c.score;
+        st.rows[i].texture = c.texture;
+        st.rows[i].active = st.hasLoop &&
+                            c.startFrame == m_waveform.GetLoopStart() &&
+                            c.endFrame == m_waveform.GetLoopEnd();
+      }
+    }
+    m_loopLabPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), st);
+  }
   // Premium gain knob (above dynamics, below settings/toast per the z-order spec).
   // Same HasItem gate as the GDI path had in OnPaint.
   if (m_waveform.HasItem())

@@ -775,6 +775,11 @@ void SneakPeak::OnTimer()
     m_oneShotPanel.Hide();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
+  // Loop Lab is standalone-only too: close on mode exit (INC-A5).
+  if (m_loopLabPanel.IsVisible() && !m_waveform.IsStandaloneMode()) {
+    m_loopLabPanel.Hide();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
   OneShotPreviewTick();
 
   // Incremental standalone load (STA-1): one ~20 ms decode slice per tick.

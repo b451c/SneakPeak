@@ -458,6 +458,44 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
     return;
   }
 
+  // Loop Lab panel interaction (v2.4 INC-A5). Actions route through the SAME
+  // CM_* handlers as the (OFF-build) Loop menu - one behavior path, no drift;
+  // WELD goes straight to DoWeldLoop with the panel's ms (the menu's type-in
+  // dialog is exactly what the panel replaces).
+  if (m_loopLabPanel.IsVisible() && m_loopLabPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_loopLabPanel.OnMouseDown(x, y, m_waveformRect)) {
+      if (m_loopLabPanel.IsDragging())
+        SetCapture(m_hwnd);
+      const int row = m_loopLabPanel.CandidateClicked();
+      if (row >= 0 && row < (int)m_loopCandidates.size()) {
+        // Same behavior as clicking the candidate's ruler pin.
+        m_waveform.SetLoop(m_loopCandidates[(size_t)row].startFrame,
+                           m_loopCandidates[(size_t)row].endFrame);
+        if (m_previewActive) StandaloneCleanupPreview();
+        StandaloneAuditionLoop();
+      }
+      switch (m_loopLabPanel.ActionClicked()) {
+        case LL_HIT_FIND:      OnContextMenuCommand(CM_FIND_LOOP_POINTS); break;
+        case LL_HIT_PLAY_LOOP: OnContextMenuCommand(CM_AUDITION_LOOP); break;
+        case LL_HIT_PLAY_SEAM: OnContextMenuCommand(CM_AUDITION_SEAM); break;
+        case LL_HIT_SET_SEL:   OnContextMenuCommand(CM_LOOP_FROM_SELECTION); break;
+        case LL_HIT_CLEAR:     OnContextMenuCommand(CM_CLEAR_LOOP); break;
+        case LL_HIT_SMPL:      OnContextMenuCommand(CM_LOOP_WRITE_SMPL); break;
+        case LL_HIT_WELD:
+          if (m_waveform.IsStandaloneMode() && m_waveform.HasLoop())
+            DoWeldLoop((double)m_loopLabPanel.GetWeldMs());
+          break;
+        default: break;
+      }
+      if (m_loopLabPanel.ParamsChanged()) {   // weld-ms Cmd-reset
+        m_loopLabPanel.ClearParamsChanged();
+        SaveLoopLabParams();
+      }
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    return;
+  }
+
   // Dynamics panel interaction
   if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
     bool wasLiveUndo = m_dynamicsPanel.LiveUndoOpen();
@@ -1266,6 +1304,17 @@ void SneakPeak::OnMouseUp(int x, int y)
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
+  if (m_loopLabPanel.IsDragging()) {
+    m_loopLabPanel.OnMouseUp();
+    if (m_loopLabPanel.GeomChanged()) {
+      m_loopLabPanel.ClearGeomChanged();
+      SaveLoopLabGeom();
+    }
+    SaveLoopLabParams();
+    ReleaseCapture();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
   if (m_limiterPanel.IsDragging()) {
     m_limiterPanel.OnMouseUp();
     if (m_limiterPanel.GeomChanged()) {   // panel drag: persist offsets
@@ -2070,6 +2119,11 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
+  if (m_loopLabPanel.IsDragging()) {
+    m_loopLabPanel.OnMouseMove(x, y, m_waveformRect);
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+
   if (m_limiterPanel.IsDragging()) {
     m_limiterPanel.OnMouseMove(x, y, m_waveformRect);
     if (m_limiterPanel.ParamsChanged()) {   // knob drag: debounce the preview
@@ -2290,6 +2344,8 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     InvalidateRect(m_hwnd, nullptr, FALSE);
   if (m_oneShotPanel.IsVisible() && m_oneShotPanel.OnHover(x, y, m_waveformRect))
     InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_loopLabPanel.IsVisible() && m_loopLabPanel.OnHover(x, y, m_waveformRect))
+    InvalidateRect(m_hwnd, nullptr, FALSE);
 #endif
 
   m_lastMouseX = x;
@@ -2316,6 +2372,17 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
         m_oneShotPanel.ParamsChanged()) {
       m_oneShotPanel.ClearParamsChanged();
       m_osPreviewDirty = true;
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+  // Scroll over the weld-ms box = nudge the crossfade length; consume the
+  // wheel anywhere over the panel so the waveform underneath does not zoom.
+  if (m_loopLabPanel.IsVisible() && m_loopLabPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_loopLabPanel.OnMouseWheel(x, y, steps, cmd, m_waveformRect) &&
+        m_loopLabPanel.ParamsChanged()) {
+      m_loopLabPanel.ClearParamsChanged();
+      SaveLoopLabParams();
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;

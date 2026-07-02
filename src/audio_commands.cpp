@@ -2235,6 +2235,36 @@ void SneakPeak::SaveOneShotGeom()
   g_SetExtState("SneakPeak", "os_off_y", buf, true);
 }
 
+// Loop Lab session state (v2.4 INC-A5): weld crossfade ms + panel offsets.
+void SneakPeak::SaveLoopLabParams()
+{
+  if (!g_SetExtState) return;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", m_loopLabPanel.GetWeldMs());
+  g_SetExtState("SneakPeak", "loop_weld_ms", buf, true);
+}
+
+void SneakPeak::RestoreLoopLabParams()
+{
+  if (!g_GetExtState) return;
+  const char* ox = g_GetExtState("SneakPeak", "loop_off_x");
+  const char* oy = g_GetExtState("SneakPeak", "loop_off_y");
+  m_loopLabPanel.SetPanelOffset(ox && ox[0] ? atoi(ox) : 0,
+                                oy && oy[0] ? atoi(oy) : 0);
+  const char* w = g_GetExtState("SneakPeak", "loop_weld_ms");
+  if (w && w[0]) m_loopLabPanel.SetWeldMs(atoi(w));
+}
+
+void SneakPeak::SaveLoopLabGeom()
+{
+  if (!g_SetExtState) return;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", m_loopLabPanel.GetPanelOffsetX());
+  g_SetExtState("SneakPeak", "loop_off_x", buf, true);
+  snprintf(buf, sizeof(buf), "%d", m_loopLabPanel.GetPanelOffsetY());
+  g_SetExtState("SneakPeak", "loop_off_y", buf, true);
+}
+
 // --- Limiter user presets (v2.4.0; same blob shape as the dynamics set) -----
 // One ExtState blob "lim_user_presets": lines of "name\tparamsStr", params =
 // LimiterParamsToString (locale-safe x1000 ints). Names sanitized of \t/\n.

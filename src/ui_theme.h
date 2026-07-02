@@ -93,6 +93,10 @@ constexpr int    kLimPanelH = 266;   // == ComputeLimiterLayout's footer bottom 
 constexpr int    kOsPanelW = 480;
 constexpr int    kOsPanelH = 238;    // == ComputeOneShotLayout's footer bottom (keep in sync)
 
+// --- Loop Lab panel (premium overlay, v2.4 INC-A5) ---
+constexpr int    kLoopPanelW = 480;
+constexpr int    kLoopPanelH = 352;  // == ComputeLoopLabLayout's footer bottom (keep in sync)
+
 // --- Settings panel (premium Settings overlay, v2.2.0) ---
 constexpr int    kSettingsW = 320;   // base size, logical px (scales with g_uiScale)
 constexpr int    kSettingsH = 538;   // == ComputeSettingsLayout's final y + bottom pad (keep in sync)

@@ -211,6 +211,55 @@ struct OneShotLayout {
 };
 OneShotLayout ComputeOneShotLayout(double w, double h);
 
+// --- Loop Lab panel (premium overlay, v2.4 INC-A5) ---------------------------
+
+constexpr int kLoopLabMaxRows = 5;   // == FindLoopCandidates' default maxCandidates
+
+enum LoopLabHit {
+  LL_HIT_NONE      = -1,
+  LL_HIT_CLOSE     = 0,
+  LL_HIT_PLAY_LOOP = 1,   // transport pills (toggle; checked while running)
+  LL_HIT_PLAY_SEAM = 2,
+  LL_HIT_FIND      = 3,   // action buttons
+  LL_HIT_WELD      = 4,
+  LL_HIT_WELD_MS   = 5,   // crossfade length value box (drag / wheel / Cmd-reset)
+  LL_HIT_SET_SEL   = 6,
+  LL_HIT_CLEAR     = 7,
+  LL_HIT_SMPL      = 8,   // WRITE SMPL ON SAVE pill
+  LL_HIT_ROW0      = 9,   // + candidate row index
+};
+
+// View-model for RenderLoopLabPanel - pure data, built by LoopLabPanel each
+// paint from the host's live loop state. Strings point into panel-owned stack
+// buffers (valid for the paint only).
+struct LoopLabVM {
+  const char* startText = nullptr;   // null -> "-" (no loop set)
+  const char* endText   = nullptr;
+  const char* lenText   = nullptr;
+  const char* rowText[kLoopLabMaxRows] = {};
+  bool rowTexture[kLoopLabMaxRows] = {};   // texture-tier candidate -> TEX tag
+  bool rowActive[kLoopLabMaxRows] = {};    // row == the current loop -> highlight
+  int  numRows = 0;                        // 0 -> "Run Find to scan" empty state
+  bool hasLoop = false, hasSelection = false;
+  bool playLoopOn = false, playSeamOn = false;
+  bool findBusy = false, writeSmpl = true;
+  const char* weldText = nullptr;    // "50 ms"
+  int  hover = LL_HIT_NONE;
+  bool weldDragging = false;
+};
+
+// Computed geometry in base kLoopPanelW x kLoopPanelH coords - the single source
+// for BOTH the renderer and LoopLabPanel hit-testing (draw == hit by construction).
+struct LoopLabLayout {
+  URect header, closeBtn;
+  URect readStart, readEnd, readLen;   // START | END | LENGTH timecode readouts
+  URect listCaption, row[kLoopLabMaxRows];
+  URect playLoop, playSeam;            // transport pills
+  URect findBtn, weldBtn, weldMs, setSelBtn, clearBtn;
+  URect footer, smplPill;
+};
+LoopLabLayout ComputeLoopLabLayout(double w, double h);
+
 // --- Settings panel (premium Settings overlay, v2.2.0) -----------------------
 
 // Hit ids shared by the panel's hit-testing and the renderer's hover styling, so
@@ -346,6 +395,11 @@ public:
   // TRIM pill + normalize-mode segments + RUN. Same flow as RenderPanel.
   void RenderOneShotPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                           const OneShotVM& vm);
+
+  // Render the premium Loop Lab panel (v2.4 INC-A5): loop readouts + candidate
+  // list + transport pills + FIND/WELD/SET/CLEAR + smpl pill. Same flow.
+  void RenderLoopLabPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                          const LoopLabVM& vm);
 
   // Render the premium gain knob overlay (v2.2.0 Inc D): 110x32 base, knob +
   // active arc + dB readout + close. Crisp on HiDPI like the other panels.

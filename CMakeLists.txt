@@ -95,6 +95,7 @@ add_library(reaper_sneakpeak SHARED
   src/limiter_engine.cpp
   src/limiter_panel.cpp
   src/oneshot_panel.cpp
+  src/looplab_panel.cpp
   src/loop_finder.cpp
   src/wav_smpl.cpp
   src/ui_render.cpp

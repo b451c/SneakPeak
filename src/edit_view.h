@@ -17,6 +17,7 @@
 #include "settings_panel.h"
 #include "limiter_panel.h"
 #include "loop_finder.h"
+#include "looplab_panel.h"
 #include "oneshot_panel.h"
 #include "ui_render.h"
 #include <atomic>
@@ -187,6 +188,7 @@ enum ContextMenuID {
   CM_LOOP_WRITE_SMPL,                                  // INC-A4: write smpl on save (check)
   CM_AUDITION_SEAM,                                    // seam-only audition (toggle)
   CM_ONESHOT_FACTORY,                                  // INC-B1: open the prep panel
+  CM_LOOP_LAB,                                         // INC-A5: open the Loop Lab panel
   CM_LAST // sentinel -- keep last
 };
 
@@ -324,6 +326,9 @@ private:
   void SaveOneShotParams();              // os_* ExtState session defaults
   void RestoreOneShotParams();
   void SaveOneShotGeom();
+  void SaveLoopLabParams();              // loop_weld_ms session default
+  void RestoreLoopLabParams();           // + panel offsets
+  void SaveLoopLabGeom();                // loop_off_x / loop_off_y
   // Live prep preview (no blind knobs): trim bounds recomputed on param
   // change, drawn as dimmed cut zones + fade ramps while the panel is open.
   void OneShotPreviewTick();
@@ -438,6 +443,7 @@ private:
   SettingsPanel m_settingsPanel;  // premium Settings overlay (UI scale; migrated prefs next)
   LimiterPanel m_limiterPanel;    // premium HARD LIMITER overlay (v2.4.0 INC-L1)
   OneShotPanel m_oneShotPanel;    // premium ONE-SHOT PREP overlay (v2.4 INC-B1)
+  LoopLabPanel m_loopLabPanel;    // premium LOOP LAB overlay (v2.4 INC-A5)
   RECT m_gearRect = {};           // settings gear in the mode bar (premium build only)
   bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;
