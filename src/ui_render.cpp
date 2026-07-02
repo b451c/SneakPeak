@@ -977,11 +977,17 @@ static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L,
     FillURound(ctx, s, dynui::kRadiusCtrl, dynui::kSurface3);
     ctx.fill_rect(BLRect(s.x + 6.0, s.y + s.h - 2.0, s.w - 12.0, 2.0), col(dynui::kAmber));
   }
-  // labels: the destination tab is amber immediately; the fill catches up underneath
+  // labels: the destination tab is amber immediately; the fill catches up
+  // underneath. Pills with a power dot (COMP/GATE/DE-ESS) center their label
+  // in the area RIGHT of the dot zone - at the 4-tab segment width (64 px) a
+  // full-width center puts the dot on top of the first letter.
   if (gfx.fontsReady)
-    for (int i = 0; i < 4; ++i)
-      TextCentered(ctx, gfx.fTab, L.tabSeg[i], labels[i],
+    for (int i = 0; i < 4; ++i) {
+      URect t = L.tabSeg[i];
+      if (i < 3) { t.x += 18.0; t.w -= 20.0; }
+      TextCentered(ctx, gfx.fTab, t, labels[i],
                    i == activeTab ? dynui::kAmber : dynui::kInkSecondary);
+    }
   // Stage-power dots: filled amber ring = stage active, hollow grey = off. The
   // COMP/GATE dots are the ephemeral bypasses (INC-4); the DE-ESS dot is the
   // PERSISTED dsEnable param (the stage ships disabled) - same visual language,
