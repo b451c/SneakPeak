@@ -1533,7 +1533,11 @@ void SneakPeak::DoSpectralHeal(double strength)
 // envelope handoff ramps at the edges.
 void SneakPeak::DoApplyLimiter()
 {
-  if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
+  if (!SingleBufferModeOk()) return;
+  if (!m_waveform.IsStandaloneMode()) {   // INC-L2: destructive-rewrite path
+    DoApplyLimiterItem();
+    return;
+  }
   if (m_limApplyBusy.load()) {
     ShowToast("Limiter is already running...");
     return;
@@ -1574,6 +1578,97 @@ void SneakPeak::DoApplyLimiter()
   InvalidateRect(m_hwnd, nullptr, FALSE);
   m_limApplyThread = std::thread(&SneakPeak::LimiterApplyThread, this, nch, sr,
                                  s0, s1, ramp);
+}
+
+// INC-L2: ITEM-mode Apply = the Reverse/Normalize destructive-rewrite pattern
+// (confirm prompt, synchronous limit with title progress, write the source
+// WAV, RefreshItemSource, one REAPER undo point). NOT an envelope effect -
+// locked decision: a dBTP ceiling needs per-sample gain. The limiter runs on
+// a COPY first, so a cancelled/no-op pass never touches the file or creates
+// an undo point.
+void SneakPeak::DoApplyLimiterItem()
+{
+  if (!SingleBufferModeOk() || m_waveform.IsStandaloneMode()) return;
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  const int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+
+  // WAV sources only - refuse BEFORE the prompt and the compute, not after
+  // (WriteAndRefresh would otherwise reject a buffer we already limited).
+  {
+    const std::string path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+    std::string ext;
+    const size_t dot = path.find_last_of('.');
+    if (dot != std::string::npos) ext = path.substr(dot + 1);
+    for (auto& c : ext) c = (char)tolower((unsigned char)c);
+    if (ext != "wav" && ext != "wave") {
+      MessageBox(m_hwnd,
+                 "Destructive editing only supports WAV files.\nConvert source to WAV first.",
+                 "SneakPeak", MB_OK | MB_ICONWARNING);
+      return;
+    }
+  }
+
+  int s0, s1;
+  GetSelectionSampleRange(s0, s1);   // full range when no selection
+  if (s1 - s0 < 64) {
+    ShowToast("Selection too short to limit");
+    return;
+  }
+  const bool partial = s0 > 0 || s1 < frames;
+  const int ramp = partial ? (int)(0.020 * sr + 0.5) : 0;
+
+  int ret = MessageBox(m_hwnd,
+    "Hard Limiter modifies the audio file on disk. Continue?",
+    "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
+  if (ret != IDYES) return;
+
+  const LimiterParams p = m_limiterPanel.GetParams();
+  std::vector<double> out = m_waveform.GetAudioData();
+  LimiterProgress prog;
+  prog.user = this;
+  prog.fn = [](void* user, double frac) -> bool {
+    SneakPeak* self = (SneakPeak*)user;
+    if (self->m_hwnd) {
+      char t[64];
+      snprintf(t, sizeof(t), "SneakPeak: Limiting... %d%%",
+               (int)(frac * 100.0 + 0.5));
+      SetWindowText(self->m_hwnd, t);
+    }
+    return true;   // synchronous: no cancel path
+  };
+  const LimiterResult r =
+      LimiterProcess(out.data() + (size_t)s0 * (size_t)nch, s1 - s0, nch, sr,
+                     p, ramp, &prog);
+  UpdateTitle();
+  if (!r.ok) {
+    ShowToast("Limiter failed: empty buffer");
+    return;
+  }
+  if (p.gainDb == 0.0 && r.maxGainReductionDb == 0.0) {
+    ShowToast("Nothing above the ceiling - audio unchanged");
+    return;
+  }
+
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+  UndoSave();
+  m_waveform.GetAudioData() = std::move(out);
+  WriteAndRefresh();
+  if (g_Undo_EndBlock2)
+    g_Undo_EndBlock2(nullptr, "SneakPeak: Hard Limiter (destructive)", -1);
+  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+
+  char buf[96];
+  snprintf(buf, sizeof(buf), "Limited: out %.1f %s, max GR %.1f dB",
+           r.outputPeakDb, p.truePeak ? "dBTP" : "dBFS", r.maxGainReductionDb);
+  ShowToast(buf);
+  m_waveform.Invalidate();
+  m_minimap.Invalidate();
+  m_spectral.ClearSpectrum();
+  InvalidateLimiterPreview();   // recompute the GR band for the limited buffer
+  InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
 void SneakPeak::LimiterApplyThread(int nch, int sr, int s0, int s1, int ramp)
@@ -2051,10 +2146,11 @@ void SneakPeak::SaveLimiterGeom()
 // (CalculateNormalization on a temp file), Peak is a plain scan, TP-safe runs
 // the limiter engine at the target ceiling.
 
-// One-Shot eligibility (INC-B3): the chain runs on the single loaded buffer,
-// so Standalone and plain ITEM mode qualify - SET/timeline/multi-item
-// (segmented buffers) and master mode do not.
-bool SneakPeak::OneShotModeOk() const
+// Single-buffer eligibility (INC-B3/L2): the One-Shot Factory, Edit Copy and
+// the Hard Limiter all operate on the single loaded buffer, so Standalone and
+// plain ITEM mode qualify - SET/timeline/multi-item (segmented buffers) and
+// master mode do not.
+bool SneakPeak::SingleBufferModeOk() const
 {
   if (!m_waveform.HasItem() || m_masterMode) return false;
   if (m_waveform.IsStandaloneMode()) return true;
@@ -2341,7 +2437,7 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
 
 void SneakPeak::DoRunOneShot()
 {
-  if (!OneShotModeOk()) return;
+  if (!SingleBufferModeOk()) return;
   const OneShotParams p = m_oneShotPanel.GetParams();
 
   const std::vector<std::pair<int, int>> slices = OneShotBuildSlices(p);
@@ -2449,7 +2545,7 @@ bool SneakPeak::OneShotSourceParts(std::string* dir, std::string* base)
 // cross-platform path the Support links use (SWELL maps it on macOS/Linux).
 void SneakPeak::OpenOneShotFolder()
 {
-  if (!OneShotModeOk()) return;
+  if (!SingleBufferModeOk()) return;
   std::string dir, base;
   if (!OneShotSourceParts(&dir, &base)) {
     ShowToast("Item source has no file on disk - no export folder");
@@ -2466,7 +2562,7 @@ void SneakPeak::OpenOneShotFolder()
 // Source in REAPER Timeline closes the round trip afterwards.
 void SneakPeak::DoEditCopyStandalone()
 {
-  if (!OneShotModeOk() || m_waveform.IsStandaloneMode()) return;
+  if (!SingleBufferModeOk() || m_waveform.IsStandaloneMode()) return;
   const auto& data = m_waveform.GetAudioData();
   const int nch = m_waveform.GetNumChannels();
   const int sr = m_waveform.GetSampleRate();

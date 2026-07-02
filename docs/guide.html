@@ -928,11 +928,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p><strong>Run</strong> writes each slice through the full chain next to the source file (existing files are never overwritten - collisions get a numbered suffix <code>_2</code>, <code>_3</code>, ...). Unrecognized <code>{tokens}</code> in the pattern degrade gracefully: the braces are stripped, so a mistyped <code>{test}_{01}</code> still writes a clean <code>test_01.wav</code>. The audio loaded in the editor is not modified. Long batches show progress in the title bar and the toast sums up, e.g. "14 files written". <strong>OPEN FOLDER</strong> reveals the export destination in your file manager - no hunting for where the batch landed. Knobs work like the other premium panels; settings persist.</p>
 
 <h2 id="hard-limiter">Hard Limiter (True Peak)</h2>
-<div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
+<div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>A transparent lookahead brickwall limiter for final asset loudness - push a sound effect or a mixed file into a hard ceiling that is guaranteed on <strong>true peaks</strong> (inter-sample peaks measured BS.1770-style), not just sample values. Game platforms commonly require assets to stay at or below <strong>-1 dBTP</strong>; this is the tool for that last step.</p>
 
-<p>Open it in Standalone mode via right-click &gt; <strong>Process &gt; Hard Limiter...</strong> The panel gives you:</p>
+<p>Open it via right-click &gt; <strong>Process &gt; Hard Limiter...</strong> - on a Standalone file or directly on a selected timeline item (plain ITEM mode). In ITEM mode Apply follows the same destructive rules as Reverse: after a confirm prompt the item's source WAV is rewritten on disk (every item referencing it updates; WAV sources only) and the edit is one REAPER undo point - the panel footer shows a standing "APPLY REWRITES THE SOURCE FILE" note as a reminder. The panel gives you:</p>
 
 <ul>
   <li><strong>Gain</strong> (0 to +24 dB) - how hard you push into the ceiling.</li>

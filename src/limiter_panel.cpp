@@ -503,6 +503,7 @@ void LimiterPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.outText = m_outText;
   vm.grText = m_grText;
   vm.applyPct = m_applyPct;
+  vm.itemDestructive = m_itemMode;
 
   m_canvas.RenderLimiterPanel(hdc, pr.left, pr.top, pr.right - pr.left,
                               pr.bottom - pr.top, dpr, vm);

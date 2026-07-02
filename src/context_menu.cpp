@@ -274,9 +274,9 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_REVERSE, "Reverse");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_DC_REMOVE, "DC Offset Remove");
 #ifdef SNEAKPEAK_BLEND2D_PANEL
-  // True-peak hard limiter (v2.4.0 INC-L1): standalone destructive, premium
-  // panel. Grayed (not hidden) outside standalone mode for discoverability.
-  MenuAppend(procMenu, (hasItem && isStandalone) ? MF_STRING : MF_GRAYED,
+  // True-peak hard limiter (v2.4.0 INC-L1 + L2): destructive, Standalone or
+  // plain ITEM mode. Grayed (not hidden) elsewhere for discoverability.
+  MenuAppend(procMenu, SingleBufferModeOk() ? MF_STRING : MF_GRAYED,
              CM_APPLY_LIMITER, "Hard Limiter...");
 #endif
   MenuAppendSeparator(procMenu);
@@ -479,7 +479,7 @@ void SneakPeak::OnRightClick(int x, int y)
   // ITEM-mode file tools (INC-B3/B4): design on the timeline -> select the
   // item -> Factory exports assets / Edit Copy bridges into the standalone
   // tools (Loop Lab, Spectral Repair, Hard Limiter).
-  if (OneShotModeOk() && !m_waveform.IsStandaloneMode()) {
+  if (SingleBufferModeOk() && !m_waveform.IsStandaloneMode()) {
     MenuAppendSeparator(menu);
 #ifdef SNEAKPEAK_BLEND2D_PANEL
     MenuAppend(menu, MF_STRING, CM_ONESHOT_FACTORY, "One-Shot Factory...");
@@ -837,7 +837,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       StandaloneAuditionSeam();
       break;
     case CM_ONESHOT_FACTORY:
-      if (!OneShotModeOk()) break;
+      if (!SingleBufferModeOk()) break;
       RestoreOneShotParams();
       m_oneShotPanel.Show();
       m_osPreviewDirty = true;   // trim/fade preview from the first frame
@@ -884,9 +884,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       InvalidateRect(m_hwnd, nullptr, FALSE);   // preset box may show the new name
       break;
     case CM_APPLY_LIMITER: {
-      if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) break;
+      if (!SingleBufferModeOk()) break;
       RestoreLimiterParams();   // lim_* session defaults (first run -> preset 0)
       m_limiterPanel.SetMono(m_waveform.GetNumChannels() < 2);
+      // ITEM mode (INC-L2): the panel carries a destructive-apply note (the
+      // mode cannot change while open - the tick auto-closes on mode exit).
+      m_limiterPanel.SetItemMode(!m_waveform.IsStandaloneMode());
       m_limiterPanel.Show();
       MarkLimiterParamsChanged();   // kick the first preview compute
       InvalidateRect(m_hwnd, nullptr, FALSE);

@@ -72,6 +72,10 @@ public:
   RECT GetPresetButtonRect(RECT waveformRect) const;  // screen coords (menu anchor)
 
   void SetMono(bool mono) { m_mono = mono; }
+  // ITEM mode (INC-L2): Apply rewrites the item's source file on disk - the
+  // panel shows a footer note so the destructive reality is visible BEFORE
+  // the Apply confirm prompt.
+  void SetItemMode(bool item) { m_itemMode = item; }
   void SetPanelOffset(int ox, int oy) { m_offsetX = ox; m_offsetY = oy; }
   int  GetPanelOffsetX() const { return m_offsetX; }
   int  GetPanelOffsetY() const { return m_offsetY; }
@@ -104,6 +108,7 @@ private:
   int  m_presetIdx = 0;          // 0..3 factory; -2 user preset (m_userName); -1 custom
   char m_userName[64] = { 0 };   // loaded user-preset name (valid when idx == -2)
   bool m_mono = false;
+  bool m_itemMode = false;       // INC-L2: destructive-apply footer note
 
   int  m_offsetX = 0, m_offsetY = 0;   // panel-drag offsets (persisted by host)
   int  m_dragKnob = -1, m_dragLastY = 0;

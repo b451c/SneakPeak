@@ -1605,6 +1605,13 @@ void UiCanvas::RenderLimiterPanel(HDC hdc, int x, int y, int w, int h, double dp
     // not at the window title (which a docked window does not even have).
     ctx.set_stroke_width(1.0);
     ctx.stroke_line(BLLine(0, L.footer.y, W, L.footer.y), col(dynui::kHairline));
+    // ITEM mode (INC-L2): the destructive reality, visible BEFORE the Apply
+    // confirm prompt - Apply rewrites the item's source file on disk.
+    if (vm.itemDestructive && gfx.fontsReady)
+      ctx.fill_utf8_text(
+          BLPoint(dynui::kPanelPad, L.footer.y + L.footer.h * 0.5 + 4.0),
+          gfx.fLabel, "APPLY REWRITES THE SOURCE FILE", SIZE_MAX,
+          col(dynui::kInkSecondary));
     if (vm.applyPct >= 0) {
       FillURound(ctx, L.apply, dynui::kRadiusCtrl, dynui::kSurface2);
       const double fw = L.apply.w * (double)(vm.applyPct > 100 ? 100 : vm.applyPct) / 100.0;

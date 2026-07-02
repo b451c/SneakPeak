@@ -916,7 +916,7 @@ void SneakPeak::UpdateSoloState()
 // show where the edge micro-fades land. No more working blind.
 void SneakPeak::DrawOneShotOverlay(HDC hdc)
 {
-  if (!m_oneShotPanel.IsVisible() || !OneShotModeOk() || m_osSpans.empty())
+  if (!m_oneShotPanel.IsVisible() || !SingleBufferModeOk() || m_osSpans.empty())
     return;
   const int sr = m_waveform.GetSampleRate();
   if (sr <= 0) return;
@@ -1071,8 +1071,7 @@ void SneakPeak::DrawLoopPins(HDC hdc)
 // columns like the dynamics GR shading. Scale: 12 dB of reduction = full band.
 void SneakPeak::DrawLimiterOverlay(HDC hdc)
 {
-  if (!m_limiterPanel.IsVisible() || !m_waveform.IsStandaloneMode() ||
-      !m_waveform.HasItem())
+  if (!m_limiterPanel.IsVisible() || !SingleBufferModeOk())
     return;
   std::lock_guard<std::mutex> lock(m_limPrevMutex);
   if (!m_limPrevValid || m_limPrevEnvMin.empty()) return;

@@ -582,9 +582,10 @@ void SneakPeak::LoadSelectedItem()
   m_envDragPointIdx = -1;
   m_envTensionDragging = false;
   m_envTensionPtIdx = -1;
-  // ITEM-mode One-Shot preview (INC-B3): the buffer serial only tracks
-  // standalone mutations, so an item switch must mark the preview dirty here.
+  // ITEM-mode previews (INC-B3/L2): the buffer serial only tracks standalone
+  // mutations, so an item switch must invalidate them here.
   m_osPreviewDirty = true;
+  InvalidateLimiterPreview();
 
   int selCount = g_CountSelectedMediaItems(nullptr);
   DBG("[SneakPeak] LoadSelectedItem: count=%d firstSel=%p isTimeline=%d isTrackView=%d\n",
@@ -775,7 +776,7 @@ void SneakPeak::OnTimer()
   LoopFindTick();
   // One-Shot Prep needs the single loaded buffer (Standalone or plain ITEM
   // mode, INC-B3): close when the mode stops qualifying.
-  if (m_oneShotPanel.IsVisible() && !OneShotModeOk()) {
+  if (m_oneShotPanel.IsVisible() && !SingleBufferModeOk()) {
     m_oneShotPanel.Hide();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
@@ -1883,9 +1884,9 @@ void SneakPeak::LimiterPreviewTick()
     m_limiterPanel.SetStatsPending(true, m_limPrevPct.load());
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
-  // The limiter edits the standalone buffer only: leaving standalone mode
-  // closes the panel (it would otherwise float inert over ITEM mode).
-  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) {
+  // The limiter needs the single loaded buffer (Standalone or plain ITEM
+  // mode, INC-L2): close the panel when the mode stops qualifying.
+  if (!SingleBufferModeOk()) {
     m_limiterPanel.Hide();
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
@@ -2067,7 +2068,7 @@ void SneakPeak::LimiterPreviewDraftThread(
 // during a knob drag (one pass per frame at most, one-shots are short).
 void SneakPeak::OneShotPreviewTick()
 {
-  if (!m_oneShotPanel.IsVisible() || !OneShotModeOk()) return;
+  if (!m_oneShotPanel.IsVisible() || !SingleBufferModeOk()) return;
   const uint64_t serial = m_standaloneBufferSerial.load();
   if (!m_osPreviewDirty && serial == m_osPreviewSerial) return;
   m_osPreviewDirty = false;

@@ -168,6 +168,8 @@ struct LimiterVM {
   int hover = LIM_HIT_NONE;
   int applyPct = -1;                 // >= 0: Apply runs in the background -
                                      // the button becomes a progress bar
+  bool itemDestructive = false;      // INC-L2: footer note - Apply rewrites
+                                     // the item's source file on disk
 };
 
 // Computed geometry in base kLimPanelW x kLimPanelH coords - the single source
