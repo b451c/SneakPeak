@@ -1,6 +1,7 @@
 // dynamics_engine.cpp — Professional dynamics processor
 // Standard compressor: threshold + ratio + soft knee + attack/release + makeup
 #include "dynamics_engine.h"
+#include "deess_engine.h"
 #include <algorithm>
 #include <cstring>
 #include <cstdlib>
@@ -27,6 +28,11 @@ const DynamicsPreset g_dynamicsPresets[PRESET_COUNT] = {
   // -6 hyst) so the boosted floor never pumps noise; auto-makeup OFF (Up
   // convention: makeup acts as a trim, user opts in). 21 positional values.
   { "Upward Leveling", { -100.0, 2.0, 12.0, 0.0, false, 20.0, 150.0, 0.0, true, 5.0, -50.0, -40.0, 50.0, -60.0, 6.0, 2.0, -6.0, 2.0, 100.0, true, 8.0 } },
+  // v2.3.0 INC-3: Voice/Podcast compressor + wideband de-esser at the research
+  // defaults (6 kHz BP, 4:1, -10 dB range, 1/60 ms - all NSDMI, only dsEnable
+  // is set). 24 positional values: 21 as above + the two ephemeral bypasses
+  // (false, positional necessity - never serialized) + dsEnable.
+  { "De-Ess Vocal", { -24.0, 4.0, 6.0, 0.0, true, 5.0, 80.0, 5.0, true, 5.0, -45.0, -18.0, 80.0, -60.0, 6.0, 2.0, -6.0, 2.0, 100.0, 0, 8.0, false, false, true } },
 };
 
 // --- P_EXT serialization ---
@@ -38,14 +44,24 @@ const DynamicsPreset g_dynamicsPresets[PRESET_COUNT] = {
 
 void DynamicsParamsToString(const DynamicsParams& p, char* buf, int bufSize)
 {
+  // ds* collision analysis (v2.3.0 INC-3, per the invariant above): every ds
+  // key is appended AFTER all legacy keys, so the embedded legacy patterns
+  // ("t=" in "dst=", "r=" in "dsr=", "a=" in "dsa=", "m=" in "dsm=", "re=" in
+  // "dsre=") always strstr-match their legacy occurrence first - in BOTH this
+  // parser and old binaries reading new strings (graceful ignore). Within the
+  // ds family no key's "X=" pattern occurs inside another ds key ("dsre="
+  // contains "dsr"+"e", never "dsr="), so ds-vs-ds order is also safe.
   snprintf(buf, bufSize,
     "t=%.1f r=%.1f k=%.1f m=%.1f am=%d a=%.1f re=%.1f la=%.1f rms=%d "
-    "gt=%.1f gr=%.1f gh=%.1f gx=%.1f ghy=%.1f gat=%.1f gre=%.1f up=%d mb=%.1f",
+    "gt=%.1f gr=%.1f gh=%.1f gx=%.1f ghy=%.1f gat=%.1f gre=%.1f up=%d mb=%.1f "
+    "dse=%d dsm=%d dsf=%.0f dsq=%.2f dst=%.1f dsr=%.1f dsx=%.1f dsa=%.1f dsre=%.1f",
     p.threshold, p.ratio, p.kneeDb, p.makeupDb, p.autoMakeup ? 1 : 0,
     p.attackMs, p.releaseMs, p.lookaheadMs, p.rmsMode ? 1 : 0,
     p.gateThreshDb, p.gateRangeDb, p.gateHoldMs,
     p.gateRatio, p.gateHystDb, p.gateAttackMs, p.gateReleaseMs,
-    p.compMode, p.maxBoostDb);
+    p.compMode, p.maxBoostDb,
+    p.dsEnable ? 1 : 0, p.dsMode, p.dsFreqHz, p.dsQ, p.dsThreshDb,
+    p.dsRatio, p.dsRangeDb, p.dsAttackMs, p.dsReleaseMs);
 }
 
 bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
@@ -84,6 +100,20 @@ bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
   out.compMode = (int)(up + 0.5);
   if (out.compMode < 0 || out.compMode > 2) out.compMode = 0;
   readKey("mb", out.maxBoostDb);
+  // v2.3.0 INC-3 de-esser - absent in old strings -> NSDMI defaults (off).
+  // Collision analysis at ToString: legacy patterns embedded in ds keys always
+  // match their legacy occurrence first.
+  double dse = 0.0, dsm = 0.0;
+  readKey("dse", dse); out.dsEnable = (dse > 0.5);
+  readKey("dsm", dsm);
+  out.dsMode = (dsm > 0.5) ? DEESS_MODE_HIGHPASS : DEESS_MODE_BANDPASS;
+  readKey("dsf", out.dsFreqHz);
+  readKey("dsq", out.dsQ);
+  readKey("dst", out.dsThreshDb);
+  readKey("dsr", out.dsRatio);
+  readKey("dsx", out.dsRangeDb);
+  readKey("dsa", out.dsAttackMs);
+  readKey("dsre", out.dsReleaseMs);
   return true;
 }
 
@@ -109,6 +139,41 @@ void DynamicsEngine::Analyze(const double* audioData, int numFrames, int numChan
   m_avgPeakDb = 20.0 * log10(std::max(meanLinear, EPSILON)) + itemVolDb;
 
   BuildEnvelope(itemVolDb, params);
+
+  // De-esser band trace (v2.3.0 INC-3). Cache-keyed: Live re-analyzes on every
+  // knob tick, but the trace depends only on the audio and (mode, f0, Q) -
+  // threshold/ratio/attack/release tweaks reuse it (load-bearing for Live
+  // CPU). The sparse FNV-1a content hash catches same-length destructive
+  // edits (e.g. normalize) that the dimensions alone would miss.
+  if (params.dsEnable) {
+    BandTraceKey key;
+    key.numFrames = numFrames;
+    key.numChannels = numChannels;
+    key.sampleRate = sampleRate;
+    key.mode = params.dsMode;
+    key.freqHz = params.dsFreqHz;
+    key.q = params.dsQ;
+    unsigned long long h = 1469598103934665603ULL;
+    const size_t totalSamples = (size_t)numFrames * (size_t)std::max(1, numChannels);
+    for (size_t i = 0; i < totalSamples; i += 4096) {
+      unsigned long long bits;
+      memcpy(&bits, &audioData[i], sizeof(bits));
+      h = (h ^ bits) * 1099511628211ULL;
+    }
+    key.contentHash = h;
+
+    if (!(key == m_bandKey) || m_bandPeaks.size() != m_rawPeaks.size()) {
+      DeEssBandTrace(audioData, numFrames, numChannels, sampleRate, STEP_SIZE,
+                     params.dsMode, params.dsFreqHz, params.dsQ, m_bandPeaks);
+      m_bandKey = key;
+    }
+
+    // Auto-threshold reference: mean band level (mirrors m_avgPeakDb).
+    double sum = 0.0;
+    for (double v : m_bandPeaks) sum += v;
+    double mean = m_bandPeaks.empty() ? 0.0 : sum / (double)m_bandPeaks.size();
+    m_avgBandDb = 20.0 * log10(std::max(mean, EPSILON)) + itemVolDb;
+  }
 }
 
 // Stage 1: Collect peaks from audio buffer in 1ms windows
@@ -353,6 +418,54 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   // would explode the output (v2.3 addendum: cap auto-makeup in that zone).
   if (slope < -1.0 && makeup > 24.0) makeup = 24.0;
 
+  // De-ess pass (v2.3.0 INC-3): the band-filtered sidechain (m_bandPeaks,
+  // 1:1 with the results grid) drives a third GR component with its own gain
+  // computer and attack/release smoothing; dB GRs sum because the envelope
+  // multiplies linearly. De-ess reduction is deliberate signal shaping, so it
+  // does NOT feed auto-makeup (m_avgGR stays comp-only) and the gate keeps
+  // detecting on rawDb + compGR (a band event and a silence detector are
+  // orthogonal - research_v230 "De-esser").
+  std::vector<double> dsGRs;
+  m_avgDsGR = 0.0;
+  const bool dsOn = m_params.dsEnable && m_bandPeaks.size() == m_results.size();
+  if (dsOn) {
+    dsGRs.resize((size_t)n);
+    const double dsThresh = GetDeEssThreshold();
+    const double dsSlope = 1.0 / std::max(1.0, m_params.dsRatio) - 1.0;
+    // Small fixed soft knee: sibilance wants decisive engagement, but a hard
+    // corner modulates audibly right at the threshold. No knob (research
+    // param table) - 2 dB engineering constant, C1 like the comp knee.
+    const double dsKnee = 2.0, dsHalfKnee = dsKnee / 2.0;
+    const double dsRange = std::min(0.0, m_params.dsRangeDb);
+    const double dsAtt = (m_params.dsAttackMs > 0.0)
+      ? exp(-dt / (m_params.dsAttackMs / 1000.0)) : 0.0;
+    const double dsRel = (m_params.dsReleaseMs > 0.0)
+      ? exp(-dt / (m_params.dsReleaseMs / 1000.0)) : 0.0;
+    double smoothDsGR = 0.0, dsSum = 0.0;
+    int dsCount = 0;
+    for (int i = 0; i < n; i++) {
+      double bandDb =
+        20.0 * log10(std::max(m_bandPeaks[(size_t)i], EPSILON)) + m_itemVolDb;
+      double overshoot = bandDb - dsThresh;
+      double g = 0.0;
+      if (overshoot > -dsHalfKnee && overshoot < dsHalfKnee) {
+        double x = overshoot + dsHalfKnee;
+        g = dsSlope * x * x / (2.0 * dsKnee);
+      } else if (overshoot >= dsHalfKnee) {
+        g = dsSlope * overshoot;
+      }
+      g = std::max(g, dsRange); // range clamp: wideband ducking stays polite
+      // Attack = more reduction (sibilant onset), release = recovery.
+      if (g < smoothDsGR)
+        smoothDsGR = dsAtt * smoothDsGR + (1.0 - dsAtt) * g;
+      else
+        smoothDsGR = dsRel * smoothDsGR + (1.0 - dsRel) * g;
+      dsGRs[(size_t)i] = smoothDsGR;
+      if (smoothDsGR < -0.01) { dsSum += smoothDsGR; dsCount++; }
+    }
+    m_avgDsGR = (dsCount > 0) ? dsSum / (double)dsCount : 0.0;
+  }
+
   // Frame-0 seeding: start open if the item begins at/above the close
   // threshold (prevents chopping items that start mid-word). Below it the
   // gate starts closed - identical to the legacy hold-exhausted start state.
@@ -414,6 +527,8 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
 
       totalGR = compGR + smoothGateGR;
     }
+
+    if (dsOn) totalGR += dsGRs[(size_t)i]; // third component (de-ess)
 
     pt.smoothedGR = totalGR;
     out.push_back({pt.time, totalGR + makeup});

@@ -115,6 +115,33 @@ Signal BuildRampSignal()
   return sig;
 }
 
+// Sibilant voice program (v2.3.0 INC-3): low "vowel" body with 6.5 kHz "S"
+// bursts on and between vowels - exercises the band detector (BP and HP), the
+// range clamp, Auto threshold and ds attack/release; the body alone must not
+// trigger the de-esser.
+Signal BuildSibilantSignal()
+{
+  Signal sig{"sibilant", {}};
+  Lcg lcg;
+  AppendSilence(sig, 0.3);
+  AppendTone(sig, 0.8, 400.0, 0.25, 0.25);   // vowel body ~ -12 dB
+  AppendTone(sig, 0.15, 6500.0, 0.3, 0.3);   // hard S ~ -10.5 dB
+  AppendTone(sig, 0.6, 400.0, 0.25, 0.25);   // vowel
+  AppendTone(sig, 0.12, 6500.0, 0.12, 0.12); // soft S ~ -18 dB
+  // Vowel + S together: the band detector must fire on the overlay while the
+  // wideband body level barely moves.
+  int n = SamplesFor(0.5);
+  for (int i = 0; i < n; i++) {
+    double t = (double)i / (double)kSampleRate;
+    sig.Push(0.25 * sin(2.0 * kPi * 400.0 * t) +
+             0.2 * sin(2.0 * kPi * 6500.0 * t));
+  }
+  AppendTone(sig, 0.6, 400.0, 0.25, 0.002, true); // decay
+  AppendNoise(sig, 0.4, 0.003, lcg);              // breath bed
+  AppendSilence(sig, 0.3);
+  return sig;
+}
+
 // FNV-1a 64-bit over formatted text — one line per curve point. Catches any
 // numeric drift in the full (pre-RDP) curve without dumping ~8k lines each.
 struct Fnv {
@@ -167,6 +194,19 @@ void RunScenario(const Scenario& sc, const Signal& sig)
   printf("full: n=%d hash=%016llx grhash=%016llx\n",
          (int)curve.size(),
          (unsigned long long)curveHash.h, (unsigned long long)grHash.h);
+
+  // De-ess diagnostics (v2.3.0 INC-3) - printed only when the scenario enables
+  // the de-esser, so every legacy block stays byte-identical.
+  if (sc.params.dsEnable) {
+    Fnv bandHash;
+    for (double v : engine.GetBandPeaks()) {
+      snprintf(line, sizeof(line), "%.17g\n", v);
+      bandHash.Add(line);
+    }
+    printf("deess: avgDsGR=%.17g dsThresh=%.17g bandN=%d bandhash=%016llx\n",
+           engine.GetAvgDeEssGR(), engine.GetDeEssThreshold(),
+           (int)engine.GetBandPeaks().size(), (unsigned long long)bandHash.h);
+  }
 
   printf("simplified: n=%d\n", (int)simplified.size());
   for (const auto& cp : simplified)
@@ -255,6 +295,35 @@ int main()
   for (const auto& sig : signals)
     for (const auto& sc : scenarios)
       RunScenario(sc, sig);
+
+  // v2.3.0 INC-3 de-esser: dedicated sibilant program, run ONLY against the
+  // ds scenarios to keep the dump focused. Positional field order appends
+  // (after compBypass, gateBypass): dsEnable, dsMode, dsFreqHz, dsQ,
+  // dsThreshDb, dsRatio, dsRangeDb, dsAttackMs, dsReleaseMs.
+  Signal sib = BuildSibilantSignal();
+  std::vector<Scenario> dsScenarios;
+  dsScenarios.push_back({"deess-bp-solo", // ds alone: comp 1:1, gate off
+    { 0.0, 1.0, 0.0, 0.0, false, 10.0, 100.0, 0.0, false, 5.0,
+      -100.0, -20.0, 50.0, -60.0, 6.0,
+      2.0, 0.0, 2.0, 100.0, 0, 8.0, false, false,
+      true, 0, 6000.0, 2.0, -30.0, 4.0, -10.0, 1.0, 60.0 }, 0.0});
+  dsScenarios.push_back({"deess-hp-clamp", // HP cascade + tight range clamp
+    { 0.0, 1.0, 0.0, 0.0, false, 10.0, 100.0, 0.0, false, 5.0,
+      -100.0, -20.0, 50.0, -60.0, 6.0,
+      2.0, 0.0, 2.0, 100.0, 0, 8.0, false, false,
+      true, 1, 5000.0, 2.0, -45.0, 10.0, -6.0, 0.5, 40.0 }, 0.0});
+  dsScenarios.push_back({"deess-auto-thresh", // -100 sentinel = band Auto
+    { 0.0, 1.0, 0.0, 0.0, false, 10.0, 100.0, 0.0, false, 5.0,
+      -100.0, -20.0, 50.0, -60.0, 6.0,
+      2.0, 0.0, 2.0, 100.0, 0, 8.0, false, false,
+      true, 0, 6000.0, 3.0, -100.0, 6.0, -12.0, 1.0, 60.0 }, 0.0});
+  dsScenarios.push_back({"deess-full-chain", // comp + gate + ds summation
+    { -24.0, 4.0, 6.0, 0.0, true, 5.0, 80.0, 5.0, true, 5.0,
+      -45.0, -18.0, 80.0, -60.0, 6.0,
+      2.0, -6.0, 2.0, 100.0, 0, 8.0, false, false,
+      true, 0, 6000.0, 2.0, -30.0, 4.0, -10.0, 1.0, 60.0 }, -3.0});
+  for (const auto& sc : dsScenarios)
+    RunScenario(sc, sib);
 
   return 0;
 }

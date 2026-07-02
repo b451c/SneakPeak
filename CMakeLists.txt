@@ -88,6 +88,7 @@ add_library(reaper_sneakpeak SHARED
   src/minimap_view.cpp
   src/multi_item_view.cpp
   src/dynamics_engine.cpp
+  src/deess_engine.cpp
   src/dynamics_panel.cpp
   src/spectral_repair.cpp
   src/settings_panel.cpp
@@ -144,6 +145,7 @@ endif()
 add_executable(dyn_regression
   tests/dyn_regression.cpp
   src/dynamics_engine.cpp
+  src/deess_engine.cpp
 )
 target_include_directories(dyn_regression PRIVATE src)
 target_compile_definitions(dyn_regression PRIVATE

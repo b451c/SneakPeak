@@ -56,6 +56,23 @@ struct DynamicsParams {
   // pass (and with it the Up-mode boost floor).
   bool compBypass = false;
   bool gateBypass = false;
+
+  // De-esser (v2.3.0 INC-3) - same append-at-end rule as above. WIDEBAND
+  // topology: a band-filtered sidechain (deess_engine) measures the sibilance
+  // band and drives a third GR pass; the whole signal ducks via the take
+  // volume envelope (classic broadband de-esser - honest docs: NOT a dynamic
+  // EQ). Defaults per research_v230 "De-esser" (Wikipedia ranges + Calf/LSP
+  // behavior): 6 kHz straddles male/female sibilance, -10 dB range clamp is
+  // the manual-guidance sweet spot, 1 ms attack is one analysis frame.
+  bool dsEnable = false;
+  int dsMode = 0;            // 0 = band-pass, 1 = high-pass (Butterworth 24 dB/oct)
+  double dsFreqHz = 6000.0;  // detector center/corner, 2-16 kHz (log knob)
+  double dsQ = 2.0;          // band-pass width (Q 0.5-8; ignored in HP mode)
+  double dsThreshDb = -30.0; // band-level threshold, dB (-100 sentinel = Auto)
+  double dsRatio = 4.0;      // 1..20 (classic only - no Inf/over-comp here)
+  double dsRangeDb = -10.0;  // max reduction clamp, dB (0..-24)
+  double dsAttackMs = 1.0;   // 0.5-10 ms
+  double dsReleaseMs = 60.0; // 20-200 ms (shorter than comp: spare the next vowel)
 };
 
 enum { COMP_MODE_DOWN = 0, COMP_MODE_UP = 1, COMP_MODE_BOTH = 2 };
@@ -97,7 +114,8 @@ enum {
   PRESET_BROADCAST,
   PRESET_DEBREATH,
   PRESET_MUSIC_BUS,
-  PRESET_UPWARD,     // v2.3.0: upward leveling (Up mode showcase)
+  PRESET_UPWARD,      // v2.3.0: upward leveling (Up mode showcase)
+  PRESET_DEESS_VOCAL, // v2.3.0 INC-3: Voice/Podcast comp + wideband de-esser
   PRESET_COUNT
 };
 
@@ -136,6 +154,14 @@ public:
   // Average gain reduction from last ComputeCompression (for GR meter, auto-makeup)
   double GetAvgGainReduction() const { return m_avgGR; }
 
+  // De-esser (v2.3.0 INC-3): average ds-only reduction (panel meter) and the
+  // band trace (Listen overlay). Both valid after Analyze + ComputeCompression
+  // with dsEnable on.
+  double GetAvgDeEssGR() const { return m_avgDsGR; }
+  const std::vector<double>& GetBandPeaks() const { return m_bandPeaks; }
+  double GetDeEssThreshold() const
+  { return (m_params.dsThreshDb <= -99.0) ? m_avgBandDb : m_params.dsThreshDb; }
+
   // Ramer-Douglas-Peucker curve simplification
   static std::vector<CompressPoint> SimplifyCurve(const std::vector<CompressPoint>& pts,
                                                   double epsilonDb);
@@ -156,4 +182,25 @@ private:
   double m_avgGR = 0.0;
   double m_itemVolDb = 0.0; // cached for ComputeCompression (gain smoothing needs raw dB)
   DynamicsParams m_params;
+
+  // De-esser band trace (v2.3.0 INC-3), cached across Analyze calls: Live
+  // re-analyzes on every knob tick, but the trace depends only on the audio
+  // and (mode, f0, Q) - threshold/ratio/attack/release tweaks reuse it. The
+  // key includes a sparse content hash so same-length destructive edits
+  // (e.g. normalize) still invalidate it.
+  struct BandTraceKey {
+    int numFrames = -1, numChannels = 0, sampleRate = 0, mode = 0;
+    double freqHz = 0.0, q = 0.0;
+    unsigned long long contentHash = 0;
+    bool operator==(const BandTraceKey& o) const
+    {
+      return numFrames == o.numFrames && numChannels == o.numChannels &&
+             sampleRate == o.sampleRate && mode == o.mode &&
+             freqHz == o.freqHz && q == o.q && contentHash == o.contentHash;
+    }
+  };
+  BandTraceKey m_bandKey;
+  std::vector<double> m_bandPeaks;
+  double m_avgBandDb = -60.0; // mean band level (dB, incl item vol) for Auto threshold
+  double m_avgDsGR = 0.0;
 };
