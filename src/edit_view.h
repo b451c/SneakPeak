@@ -17,6 +17,7 @@
 #include "settings_panel.h"
 #include "limiter_panel.h"
 #include "loop_finder.h"
+#include "oneshot_panel.h"
 #include "ui_render.h"
 #include <atomic>
 #include <memory>
@@ -185,6 +186,7 @@ enum ContextMenuID {
   CM_WELD_LOOP,                                        // INC-A3: crossfade the seam
   CM_LOOP_WRITE_SMPL,                                  // INC-A4: write smpl on save (check)
   CM_AUDITION_SEAM,                                    // seam-only audition (toggle)
+  CM_ONESHOT_FACTORY,                                  // INC-B1: open the prep panel
   CM_LAST // sentinel -- keep last
 };
 
@@ -318,6 +320,10 @@ private:
   void DoSpectralHeal(double strength);  // v2.3.0 INC-5: STFT heal of time x freq selection
   void DoRepairClicks();                 // v2.3.0 INC-5: AR click repair on time selection
   void DoApplyLimiter();                 // v2.4.0 INC-L1: true-peak hard limiter apply
+  void DoRunOneShot();                   // v2.4 INC-B1: trim/fade/normalize -> WAV
+  void SaveOneShotParams();              // os_* ExtState session defaults
+  void RestoreOneShotParams();
+  void SaveOneShotGeom();
 
   // Navigation
   void NavigateToMarker(bool forward);
@@ -424,6 +430,7 @@ private:
   DynamicsPanel m_dynamicsPanel;
   SettingsPanel m_settingsPanel;  // premium Settings overlay (UI scale; migrated prefs next)
   LimiterPanel m_limiterPanel;    // premium HARD LIMITER overlay (v2.4.0 INC-L1)
+  OneShotPanel m_oneShotPanel;    // premium ONE-SHOT PREP overlay (v2.4 INC-B1)
   RECT m_gearRect = {};           // settings gear in the mode bar (premium build only)
   bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;

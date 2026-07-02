@@ -467,6 +467,9 @@ void SneakPeak::OnRightClick(int x, int y)
                  CM_LOOP_WRITE_SMPL, "Write Loop Points On Save");
       MenuAppendSubmenu(menu, loopMenu, "Loop");
     }
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+    MenuAppend(menu, MF_STRING, CM_ONESHOT_FACTORY, "One-Shot Factory...");
+#endif
     MenuAppend(menu, MF_STRING, CM_REPLACE_SOURCE, "Replace Source in REAPER Timeline");
   }
   MenuAppendSeparator(menu);
@@ -812,6 +815,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       break;
     case CM_AUDITION_SEAM:
       StandaloneAuditionSeam();
+      break;
+    case CM_ONESHOT_FACTORY:
+      if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) break;
+      RestoreOneShotParams();
+      m_oneShotPanel.Show();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_FIND_LOOP_POINTS:
       StartLoopFind();

@@ -770,6 +770,11 @@ void SneakPeak::OnTimer()
   LimiterApplyTick();
   // Loop finder: publish finished candidates (INC-A2).
   LoopFindTick();
+  // One-Shot Prep edits the standalone buffer's file only: close on mode exit.
+  if (m_oneShotPanel.IsVisible() && !m_waveform.IsStandaloneMode()) {
+    m_oneShotPanel.Hide();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
 
   // Incremental standalone load (STA-1): one ~20 ms decode slice per tick.
   StepStandaloneLoad();

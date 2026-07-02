@@ -182,6 +182,35 @@ struct LimiterLayout {
 };
 LimiterLayout ComputeLimiterLayout(double w, double h);
 
+// --- One-Shot Prep panel (premium overlay, v2.4 INC-B1) ----------------------
+
+constexpr int kOsNumParams = 5;   // TrimThr, Pad, FadeIn, FadeOut, Target
+
+enum OneShotHit {
+  OS_HIT_NONE  = -1,
+  OS_HIT_CLOSE = 0,
+  OS_HIT_RUN   = 1,
+  OS_HIT_TRIM  = 2,     // TRIM enable pill
+  OS_HIT_SEG0  = 3,     // normalize mode segments (+ 0..3)
+  OS_HIT_KNOB0 = 7,     // + knob index
+};
+
+struct OneShotVM {
+  KnobVM knobs[kOsNumParams];
+  bool trimEnable = true;
+  int  normMode = 3;    // active segment: OFF | PEAK | LUFS | TP SAFE
+  int  hover = OS_HIT_NONE;
+};
+
+struct OneShotLayout {
+  URect header, closeBtn;
+  URect knob[kOsNumParams];
+  URect trimPill;
+  URect normSeg[4];
+  URect footer, run;
+};
+OneShotLayout ComputeOneShotLayout(double w, double h);
+
 // --- Settings panel (premium Settings overlay, v2.2.0) -----------------------
 
 // Hit ids shared by the panel's hit-testing and the renderer's hover styling, so
@@ -312,6 +341,11 @@ public:
   // pills + peak/GR readouts + GR strip + Apply. Same flow as RenderPanel.
   void RenderLimiterPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                           const LimiterVM& vm);
+
+  // Render the premium One-Shot Prep panel (v2.4 INC-B1): trim/fade knobs +
+  // TRIM pill + normalize-mode segments + RUN. Same flow as RenderPanel.
+  void RenderOneShotPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                          const OneShotVM& vm);
 
   // Render the premium gain knob overlay (v2.2.0 Inc D): 110x32 base, knob +
   // active arc + dB readout + close. Crisp on HiDPI like the other panels.

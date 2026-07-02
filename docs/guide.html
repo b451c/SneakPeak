@@ -199,6 +199,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <div class="nav-group-title">Features</div>
     <a href="#spectral" class="nav-link">Spectral View</a>
     <a href="#loop-lab" class="nav-link">Loop Lab</a>
+    <a href="#oneshot" class="nav-link">One-Shot Factory</a>
     <a href="#hard-limiter" class="nav-link">Hard Limiter</a>
     <a href="#multi-item" class="nav-link">Multi-Item View</a>
     <a href="#metering" class="nav-link">Metering</a>
@@ -907,6 +908,19 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <strong>Metadata note</strong>
   SneakPeak's save rebuilds the WAV from the audio in memory, so metadata chunks from the original file (bext, iXML) are not carried over - only the audio, and the <code>smpl</code> loop when enabled.
 </div>
+
+<h2 id="oneshot">One-Shot Factory</h2>
+<div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
+
+<p>Preparing game-ready one-shots (footsteps, impacts, UI sounds) is the same three steps every time: trim the silence, kill the trigger clicks with tiny edge fades, hit the loudness target. Right-click &gt; <strong>One-Shot Factory...</strong> does the whole chain in one Run:</p>
+
+<ul>
+  <li><strong>TRIM</strong> - drop silence below the threshold (default -60 dBFS), keeping a small padding (default 10 ms) around the sound.</li>
+  <li><strong>Fade In / Fade Out</strong> - edge micro-fades (defaults 5 ms / 20 ms, the industry click-killers).</li>
+  <li><strong>Normalize</strong> - OFF, <strong>PEAK</strong> (dBFS), <strong>LUFS</strong> (integrated, custom target, measured by REAPER's own engine) or <strong>TP SAFE</strong> (the Hard Limiter at your dBTP ceiling - the game-asset default).</li>
+</ul>
+
+<p><strong>Run</strong> writes the result next to the source file as <code>{name}_01.wav</code> (existing files are never overwritten - collisions get <code>_x</code> appended). The audio loaded in the editor is not modified. Knobs work like the other premium panels; settings persist. Slicing one file into many named variations is the next step on the roadmap.</p>
 
 <h2 id="hard-limiter">Hard Limiter (True Peak)</h2>
 <div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>

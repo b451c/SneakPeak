@@ -2044,6 +2044,197 @@ void SneakPeak::SaveLimiterGeom()
   g_SetExtState("SneakPeak", "lim_off_y", buf, true);
 }
 
+// --- One-Shot Prep (v2.4 INC-B1) ---------------------------------------------
+// RUN = trim silence -> edge micro-fades -> normalize -> write WAV next to
+// the source ({name}_01.wav, collision appends _x). The loaded buffer is
+// NEVER touched - this is an exporter. LUFS-I uses REAPER's own measurement
+// (CalculateNormalization on a temp file), Peak is a plain scan, TP-safe
+// runs the limiter engine at the target ceiling.
+void SneakPeak::DoRunOneShot()
+{
+  if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
+  const OneShotParams p = m_oneShotPanel.GetParams();
+  const auto& data = m_waveform.GetAudioData();
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  const int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+
+  // 1. Trim silence (any channel above the threshold keeps the frame).
+  int a = 0, b = frames;
+  if (p.trimEnable) {
+    const double thr = pow(10.0, p.trimThreshDb / 20.0);
+    int first = -1, last = -1;
+    for (int i = 0; i < frames; i++) {
+      bool hot = false;
+      for (int c = 0; c < nch && !hot; c++)
+        hot = fabs(data[(size_t)i * nch + c]) >= thr;
+      if (hot) {
+        if (first < 0) first = i;
+        last = i;
+      }
+    }
+    if (first < 0) {
+      ShowToast("Nothing above the trim threshold - no file written");
+      return;
+    }
+    const int padFrames = (int)(p.trimPadMs * 0.001 * sr + 0.5);
+    a = std::max(0, first - padFrames);
+    b = std::min(frames, last + 1 + padFrames);
+  }
+  const int len = b - a;
+  if (len < 16) {
+    ShowToast("Trimmed result too short - no file written");
+    return;
+  }
+
+  std::vector<double> work(data.begin() + (size_t)a * nch,
+                           data.begin() + (size_t)b * nch);
+
+  // 2. Edge micro-fades (linear in v1 - the click-killers).
+  const int inF = std::min((int)(p.fadeInMs * 0.001 * sr + 0.5), len);
+  const int outF = std::min((int)(p.fadeOutMs * 0.001 * sr + 0.5), len);
+  if (inF > 0) AudioOps::FadeInShaped(work.data(), inF, nch, 0);
+  if (outF > 0)
+    AudioOps::FadeOutShaped(work.data() + (size_t)(len - outF) * nch, outF, nch, 0);
+
+  // 3. Normalize.
+  char normNote[48] = "";
+  if (p.normMode == 1) {   // Peak dBFS
+    double pk = 0.0;
+    for (double v : work) pk = std::max(pk, fabs(v));
+    if (pk > 1e-9) {
+      const double g = pow(10.0, p.normTarget / 20.0) / pk;
+      for (double& v : work) v *= g;
+      snprintf(normNote, sizeof(normNote), ", peak %.1f dBFS", p.normTarget);
+    }
+  } else if (p.normMode == 2) {   // LUFS-I via REAPER's own measurement
+    bool ok = false;
+    if (g_PCM_Source_CreateFromFile && g_CalculateNormalization) {
+      const char* tmpDir = getenv("TMPDIR");
+      if (!tmpDir) tmpDir = "/tmp";
+      char tmpPath[512];
+      snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_oneshot_%d.wav", tmpDir,
+               (int)getpid());
+      if (AudioEngine::WriteWavFile(tmpPath, work.data(), len, nch, sr, 32, 3)) {
+        if (PCM_source* src = g_PCM_Source_CreateFromFile(tmpPath)) {
+          const double gainDb =
+              g_CalculateNormalization(src, 0, p.normTarget, 0.0, 0.0);
+          delete src;
+          const double g = pow(10.0, gainDb / 20.0);
+          if (g > 0.001 && g < 100.0) {
+            for (double& v : work) v *= g;
+            ok = true;
+          }
+        }
+        remove(tmpPath);
+      }
+    }
+    if (!ok) {
+      ShowToast("LUFS measurement failed - no file written");
+      return;
+    }
+    snprintf(normNote, sizeof(normNote), ", %.0f LUFS", p.normTarget);
+  } else if (p.normMode == 3) {   // True-peak safe = the limiter engine
+    LimiterParams lp;
+    lp.ceilingDb = p.normTarget;
+    LimiterResult r = LimiterProcess(work.data(), len, nch, sr, lp);
+    if (!r.ok) {
+      ShowToast("Limiter failed - no file written");
+      return;
+    }
+    snprintf(normNote, sizeof(normNote), ", %.1f dBTP safe", p.normTarget);
+  }
+
+  // 4. Output path: {name}_01.wav next to the source; collision appends _x.
+  std::string srcPath = m_waveform.GetStandaloneFilePath();
+  std::string dir = ".", base = "oneshot";
+  {
+    const size_t slash = srcPath.find_last_of("/\\");
+    std::string fname = slash == std::string::npos ? srcPath : srcPath.substr(slash + 1);
+    if (slash != std::string::npos) dir = srcPath.substr(0, slash);
+    const size_t dot = fname.find_last_of('.');
+    if (dot != std::string::npos && dot > 0) fname = fname.substr(0, dot);
+    if (!fname.empty()) base = fname;
+  }
+  std::string outPath = dir + "/" + base + "_01.wav";
+  for (int tries = 0; tries < 8; tries++) {
+    FILE* probe = fopen(outPath.c_str(), "rb");
+    if (!probe) break;
+    fclose(probe);
+    outPath = outPath.substr(0, outPath.size() - 4) + "_x.wav";
+  }
+
+  if (!AudioEngine::WriteWavFile(outPath, work.data(), len, nch, sr,
+                                 m_wavBitsPerSample, m_wavAudioFormat)) {
+    ShowToast("Write failed - check the source folder permissions");
+    return;
+  }
+  const size_t slash = outPath.find_last_of("/\\");
+  char buf[160];
+  snprintf(buf, sizeof(buf), "Written: %s (%.2f s%s)",
+           slash == std::string::npos ? outPath.c_str()
+                                      : outPath.c_str() + slash + 1,
+           (double)len / sr, normNote);
+  ShowToast(buf);
+}
+
+// One-Shot session params (os_* keys, x1000-int encoding like lim_*).
+void SneakPeak::SaveOneShotParams()
+{
+  if (!g_SetExtState) return;
+  const OneShotParams& p = m_oneShotPanel.GetParams();
+  char buf[16];
+  auto wr = [&](const char* key, double v) {
+    snprintf(buf, sizeof(buf), "%d", (int)std::lround(v * 1000.0));
+    g_SetExtState("SneakPeak", key, buf, true);
+  };
+  wr("os_trim_thr", p.trimThreshDb);
+  wr("os_pad", p.trimPadMs);
+  wr("os_fade_in", p.fadeInMs);
+  wr("os_fade_out", p.fadeOutMs);
+  wr("os_target", p.normTarget);
+  snprintf(buf, sizeof(buf), "%d", p.normMode);
+  g_SetExtState("SneakPeak", "os_norm_mode", buf, true);
+  g_SetExtState("SneakPeak", "os_trim", p.trimEnable ? "1" : "0", true);
+}
+
+void SneakPeak::RestoreOneShotParams()
+{
+  if (!g_GetExtState) return;
+  const char* ox = g_GetExtState("SneakPeak", "os_off_x");
+  const char* oy = g_GetExtState("SneakPeak", "os_off_y");
+  m_oneShotPanel.SetPanelOffset(ox && ox[0] ? atoi(ox) : 0,
+                                oy && oy[0] ? atoi(oy) : 0);
+  const char* probe = g_GetExtState("SneakPeak", "os_trim_thr");
+  if (!probe || !probe[0]) return;   // first run: keep the plan defaults
+  auto rd = [&](const char* key, double def) {
+    const char* v = g_GetExtState("SneakPeak", key);
+    return (v && v[0]) ? (double)atoi(v) / 1000.0 : def;
+  };
+  OneShotParams p;
+  p.trimThreshDb = rd("os_trim_thr", -60.0);
+  p.trimPadMs = rd("os_pad", 10.0);
+  p.fadeInMs = rd("os_fade_in", 5.0);
+  p.fadeOutMs = rd("os_fade_out", 20.0);
+  p.normTarget = rd("os_target", -1.0);
+  const char* nm = g_GetExtState("SneakPeak", "os_norm_mode");
+  p.normMode = (nm && nm[0]) ? atoi(nm) : 3;
+  const char* tr = g_GetExtState("SneakPeak", "os_trim");
+  p.trimEnable = !(tr && tr[0] == '0');
+  m_oneShotPanel.SetParams(p);
+}
+
+void SneakPeak::SaveOneShotGeom()
+{
+  if (!g_SetExtState) return;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", m_oneShotPanel.GetPanelOffsetX());
+  g_SetExtState("SneakPeak", "os_off_x", buf, true);
+  snprintf(buf, sizeof(buf), "%d", m_oneShotPanel.GetPanelOffsetY());
+  g_SetExtState("SneakPeak", "os_off_y", buf, true);
+}
+
 // --- Limiter user presets (v2.4.0; same blob shape as the dynamics set) -----
 // One ExtState blob "lim_user_presets": lines of "name\tparamsStr", params =
 // LimiterParamsToString (locale-safe x1000 ints). Names sanitized of \t/\n.

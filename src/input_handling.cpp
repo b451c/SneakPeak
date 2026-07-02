@@ -439,6 +439,24 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
     return;
   }
 
+  // One-Shot Prep panel interaction (v2.4 INC-B1)
+  if (m_oneShotPanel.IsVisible() && m_oneShotPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_oneShotPanel.OnMouseDown(x, y, m_waveformRect)) {
+      if (m_oneShotPanel.IsDragging())
+        SetCapture(m_hwnd);
+      if (m_oneShotPanel.RunRequested()) {
+        DoRunOneShot();
+        SaveOneShotParams();
+      }
+      if (m_oneShotPanel.ParamsChanged()) {
+        m_oneShotPanel.ClearParamsChanged();
+        SaveOneShotParams();
+      }
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    }
+    return;
+  }
+
   // Dynamics panel interaction
   if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
     bool wasLiveUndo = m_dynamicsPanel.LiveUndoOpen();
@@ -1232,6 +1250,17 @@ void SneakPeak::OnMouseUp(int x, int y)
       SaveUiScale();
       MarkUiScaleUserSet();
     }
+    ReleaseCapture();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+  if (m_oneShotPanel.IsDragging()) {
+    m_oneShotPanel.OnMouseUp();
+    if (m_oneShotPanel.GeomChanged()) {
+      m_oneShotPanel.ClearGeomChanged();
+      SaveOneShotGeom();
+    }
+    SaveOneShotParams();
     ReleaseCapture();
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
@@ -2031,6 +2060,12 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
+  if (m_oneShotPanel.IsDragging()) {
+    m_oneShotPanel.OnMouseMove(x, y, m_waveformRect);
+    if (m_oneShotPanel.ParamsChanged()) m_oneShotPanel.ClearParamsChanged();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+
   if (m_limiterPanel.IsDragging()) {
     m_limiterPanel.OnMouseMove(x, y, m_waveformRect);
     if (m_limiterPanel.ParamsChanged()) {   // knob drag: debounce the preview
@@ -2249,6 +2284,8 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     InvalidateRect(m_hwnd, nullptr, FALSE);
   if (m_limiterPanel.IsVisible() && m_limiterPanel.OnHover(x, y, m_waveformRect))
     InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_oneShotPanel.IsVisible() && m_oneShotPanel.OnHover(x, y, m_waveformRect))
+    InvalidateRect(m_hwnd, nullptr, FALSE);
 #endif
 
   m_lastMouseX = x;
@@ -2270,6 +2307,13 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   // zoom/pan while the user aims at the panel's controls.
   if (m_settingsPanel.IsVisible() && m_settingsPanel.HitTest(x, y, m_waveformRect))
     return;
+  if (m_oneShotPanel.IsVisible() && m_oneShotPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_oneShotPanel.OnMouseWheel(x, y, steps, cmd, m_waveformRect) &&
+        m_oneShotPanel.ParamsChanged())
+      m_oneShotPanel.ClearParamsChanged();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
   // Scroll over a limiter knob = nudge its value; consume the wheel anywhere
   // over the panel so the waveform underneath does not zoom/pan.
   if (m_limiterPanel.IsVisible() && m_limiterPanel.HitTest(x, y, m_waveformRect)) {

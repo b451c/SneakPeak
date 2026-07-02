@@ -1626,6 +1626,103 @@ void UiCanvas::RenderLimiterPanel(HDC hdc, int x, int y, int w, int h, double dp
   presentSurface(hdc, x, y, w, h, devW, devH);
 }
 
+// --- One-Shot Prep panel (v2.4 INC-B1) ---------------------------------------
+
+// Base-coord geometry; footer bottom MUST equal dynui::kOsPanelH.
+OneShotLayout ComputeOneShotLayout(double w, double h)
+{
+  (void)h;
+  OneShotLayout L;
+  const double pad = (double)dynui::kPanelPad;
+  L.header = { 0, 0, w, (double)dynui::kHeaderH };
+  L.closeBtn = { w - pad - 18.0, L.header.h * 0.5 - 9.0, 18.0, 18.0 };
+
+  const double colGap = 8.0;
+  const double cellW = (w - 2.0 * pad - 2.0 * colGap) / 3.0;
+  const double cellH = 52.0;
+  const double gridTop = L.header.h + 10.0;
+  auto cell = [&](int c, int r) -> URect {
+    return { pad + (double)c * (cellW + colGap), gridTop + (double)r * cellH,
+             cellW, cellH };
+  };
+  L.knob[0] = cell(0, 0);   // Trim Thr
+  L.knob[1] = cell(1, 0);   // Pad
+  {
+    const URect c = cell(2, 0);
+    L.trimPill = { c.x, c.y + (c.h - 20.0) * 0.5, c.w, 20.0 };
+  }
+  L.knob[2] = cell(0, 1);   // Fade In
+  L.knob[3] = cell(1, 1);   // Fade Out
+  L.knob[4] = cell(2, 1);   // Target
+
+  const double segTop = gridTop + 2.0 * cellH + 8.0;   // 166
+  const double segW = (w - 2.0 * pad - 3.0 * 4.0) / 4.0;
+  for (int i = 0; i < 4; i++)
+    L.normSeg[i] = { pad + (double)i * (segW + 4.0), segTop, segW, 26.0 };
+
+  const double footTop = segTop + 26.0 + 2.0;          // 194
+  L.footer = { 0, footTop, w, (double)dynui::kFooterH };  // bottom = 238
+  L.run = { w - pad - 100.0, footTop + 9.0, 100.0, 26.0 };
+  return L;
+}
+
+void UiCanvas::RenderOneShotPanel(HDC hdc, int x, int y, int w, int h, double dpr,
+                                  const OneShotVM& vm)
+{
+  if (!hdc || w < 8 || h < 8) return;
+  if (dpr < 1.0) dpr = 1.0;
+  const int devW = (int)std::lround((double)w * dpr);
+  const int devH = (int)std::lround((double)h * dpr);
+  if (!prepareSurface(hdc, devW, devH)) return;
+  {
+    BLContext ctx;
+    if (ctx.begin(m_gfx->img) != BL_SUCCESS) return;
+    ctx.clear_all();
+    ctx.scale((double)devW / (double)dynui::kOsPanelW,
+              (double)devH / (double)dynui::kOsPanelH);
+    ctx.set_comp_op(BL_COMP_OP_SRC_OVER);
+    const Gfx& gfx = *m_gfx;
+    const double W = (double)dynui::kOsPanelW, H = (double)dynui::kOsPanelH;
+
+    {
+      BLGradient bg(BLLinearGradientValues(0, 0, 0, H));
+      bg.add_stop(0.0, col(dynui::kSurface1));
+      bg.add_stop(1.0, col(dynui::kSurface0));
+      ctx.fill_round_rect(BLRoundRect(0, 0, W, H, dynui::kRadiusPanel), bg);
+      ctx.set_stroke_width(1.0);
+      ctx.stroke_round_rect(BLRoundRect(0.5, 0.5, W - 1, H - 1, dynui::kRadiusPanel),
+                            col(dynui::kHairline));
+    }
+
+    const OneShotLayout L = ComputeOneShotLayout(W, H);
+
+    if (gfx.fontsReady) {
+      ctx.fill_utf8_text(BLPoint(dynui::kPanelPad, L.header.h * 0.5 + 5.0), gfx.fValue,
+                         "ONE-SHOT PREP", SIZE_MAX, col(dynui::kInkPrimary));
+      TextCentered(ctx, gfx.fValue, L.closeBtn, "x",
+                   vm.hover == OS_HIT_CLOSE ? dynui::kInkPrimary : dynui::kInkMuted);
+    }
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_line(BLLine(0, L.header.h, W, L.header.h), col(dynui::kHairline));
+
+    for (int i = 0; i < kOsNumParams; i++)
+      DrawKnob(ctx, gfx, L.knob[i], vm.knobs[i]);
+    DrawTogglePill(ctx, gfx, L.trimPill, "TRIM", vm.trimEnable, dynui::kAmber,
+                   false, 0.0);
+
+    static const char* const kNormLabels[4] = { "OFF", "PEAK", "LUFS", "TP SAFE" };
+    DrawSegmentedN(ctx, gfx, L.normSeg, kNormLabels, 4, vm.normMode);
+
+    ctx.set_stroke_width(1.0);
+    ctx.stroke_line(BLLine(0, L.footer.y, W, L.footer.y), col(dynui::kHairline));
+    FillURound(ctx, L.run, dynui::kRadiusCtrl,
+               vm.hover == OS_HIT_RUN ? dynui::kAmberGlow : dynui::kAmber);
+    if (gfx.fontsReady)
+      TextCentered(ctx, gfx.fValue, L.run, "Run", dynui::kSurface0);
+  }
+  presentSurface(hdc, x, y, w, h, devW, devH);
+}
+
 void UiCanvas::RenderGainPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                                const GainVM& vm)
 {

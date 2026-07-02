@@ -49,6 +49,8 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
   m_dynamicsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
   // Premium HARD LIMITER panel (v2.4.0 INC-L1) - same layer as dynamics.
   m_limiterPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
+  // Premium ONE-SHOT PREP panel (v2.4 INC-B1).
+  m_oneShotPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
   // Premium gain knob (above dynamics, below settings/toast per the z-order spec).
   // Same HasItem gate as the GDI path had in OnPaint.
   if (m_waveform.HasItem())
