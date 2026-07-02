@@ -863,6 +863,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>A draggable splitter between the waveform and spectrogram lets you adjust the space distribution (15% to 85%).</p>
 
+<p><strong>Frequency grid and scale:</strong> faint horizontal reference lines run across the spectrogram at the labeled frequencies, so you can place a sound (hum at 50 Hz, sibilance around 6-8 kHz) at a glance. Settings &gt; View &gt; <strong>Spectral: Hz / Notes</strong> switches the scale and the grid between Hz labels and note names (A0-A9 octaves, with A4 = 440 Hz as the bold reference) - handy for identifying the pitch of a tone or resonance before healing it.</p>
+
 <div class="warning">
   <strong>Single-item only</strong>
   Spectral view is not available in multi-item or SET mode. It applies to one item at a time.
@@ -996,7 +998,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Ruler</strong> - Relative / Absolute / Bars &amp; Beats.</li>
   <li><strong>Meters</strong> - Peak / RMS / VU ballistics, plus the Master Output source toggle.</li>
-  <li><strong>View</strong> - Meters, Ruler (hide for extra waveform height; markers fall back onto the waveform), Snap to Zero-Crossing, Minimap, the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor), and the <strong>Waveform style</strong> (Detailed = peak + RMS band, Simple = single-colour peaks).</li>
+  <li><strong>View</strong> - Meters, Ruler (hide for extra waveform height; markers fall back onto the waveform), Snap to Zero-Crossing, Minimap, the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor), the <strong>Waveform style</strong> (Detailed = peak + RMS band, Simple = single-colour peaks), and the <strong>Spectral scale</strong> (Hz or note names).</li>
 </ul>
 
 <p>The Dynamics panel follows the global scale too, multiplied by its own corner resize grip, so it grows with the rest of the UI while staying independently adjustable.</p>

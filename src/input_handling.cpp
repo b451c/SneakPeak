@@ -166,6 +166,9 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           // Detailed = RMS band on, Simple = single-colour peaks (CM_SHOW_RMS toggles).
           case SET_HIT_VIEW_WAVE0:   if (!m_waveform.GetShowRMS()) cmd = CM_SHOW_RMS; break;
           case SET_HIT_VIEW_WAVE1:   if (m_waveform.GetShowRMS())  cmd = CM_SHOW_RMS; break;
+          // Spectral scale (#88): Hz vs note names, same 2-way pattern.
+          case SET_HIT_VIEW_SPEC0:   if (m_spectral.GetNoteScale())  cmd = CM_SPECTRAL_NOTES; break;
+          case SET_HIT_VIEW_SPEC1:   if (!m_spectral.GetNoteScale()) cmd = CM_SPECTRAL_NOTES; break;
         }
         if (cmd) OnContextMenuCommand(cmd);
       }

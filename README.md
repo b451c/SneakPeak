@@ -124,6 +124,7 @@ Enable via right-click > View > Show Volume Envelope. SneakPeak auto-activates t
 - **Real-time spectrogram** - Threaded FFT computation with channel-pair packing (roughly 10x faster on stereo, new in v2.3) and peak-preserving zoom-out, magma color scheme.
 - **Spectral Repair (Standalone)** (new in v2.3) - drag a time x frequency rectangle and Heal Selection (Replace or gentler Attenuate strengths, iterative), or run Repair Clicks on a time selection (autoregressive detection + interpolation, sample-accurate). Destructive edits with full undo.
 - **Marquee selection** (new in v2.3) - one-gesture time x frequency rectangle with a frosted interior and resizable edge/corner grips; Alt+drag still selects a full-width band; Shift+click extends in time.
+- **Frequency grid + Hz/Notes scale** (new in v2.3) - faint reference lines across the spectrogram at the labeled frequencies; switch the scale between Hz and note names (A0-A9, A4 = 440 Hz) in Settings.
 - **Per-channel display** - Stereo spectral view with stacked channels.
 
 ### Timeline View

@@ -70,6 +70,7 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
     sp.snapZero        = m_waveform.GetSnapToZero();
     sp.minimap         = m_minimapVisible;
     sp.zoomOnCursor    = m_zoomOnEditCursor;
+    sp.spectralNotes   = m_spectral.GetNoteScale();
     m_settingsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), sp);
   }
 #endif

@@ -1311,7 +1311,10 @@ SettingsLayout ComputeSettingsLayout(double w, double h)
   y += 32.0;
   L.waveSeg[0] = { pad, y, pillW, 26.0 };                     // WAVEFORM: DETAILED
   L.waveSeg[1] = { pad + pillW + 8.0, y, pillW, 26.0 };       // WAVEFORM: SIMPLE
-  // final y + 26 + 16 bottom pad == kSettingsH (506) - keep in sync with ui_theme.h
+  y += 32.0;
+  L.specSeg[0] = { pad, y, pillW, 26.0 };                     // SPECTRAL: HZ
+  L.specSeg[1] = { pad + pillW + 8.0, y, pillW, 26.0 };       // SPECTRAL: NOTES
+  // final y + 26 + 16 bottom pad == kSettingsH (538) - keep in sync with ui_theme.h
   return L;
 }
 
@@ -1453,6 +1456,10 @@ void UiCanvas::RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double d
     // Simple = the peak pen only. Same state as the OFF-build "Show RMS" menu item.
     DrawSegmented2(ctx, gfx, L.waveSeg[0], L.waveSeg[1], "WAVEFORM: DETAILED",
                    "WAVEFORM: SIMPLE", !vm.prefs.showRMS);
+    // Spectral scale (#88): Hz labels or note names (A0..A9); the spectrogram's
+    // horizontal grid lines follow the active scale.
+    DrawSegmented2(ctx, gfx, L.specSeg[0], L.specSeg[1], "SPECTRAL: HZ",
+                   "SPECTRAL: NOTES", vm.prefs.spectralNotes);
 
     if (ctx.end() != BL_SUCCESS) return;
   }

@@ -329,6 +329,9 @@ void SneakPeak::OnRightClick(int x, int y)
              m_showMeters ? "Show Meters  \xE2\x9C\x93" : "Show Meters");
   MenuAppend(viewMenu, MF_STRING, CM_SHOW_RULER,
              m_showRuler ? "Show Ruler  \xE2\x9C\x93" : "Show Ruler");
+  MenuAppend(viewMenu, MF_STRING, CM_SPECTRAL_NOTES,
+             m_spectral.GetNoteScale() ? "Spectral Scale: Notes  \xE2\x9C\x93"
+                                       : "Spectral Scale: Notes");
 #endif
 #ifndef SNEAKPEAK_BLEND2D_PANEL
   // UI Scale submenu - the OFF-build (GDI) fallback control only. The premium build
@@ -636,6 +639,13 @@ void SneakPeak::OnContextMenuCommand(int id)
         RecalcLayout(cr.right, cr.bottom);
         m_waveform.Invalidate();
       }
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_SPECTRAL_NOTES:
+      m_spectral.SetNoteScale(!m_spectral.GetNoteScale());
+      if (g_SetExtState) g_SetExtState("SneakPeak", "spectral_notes",
+                                        m_spectral.GetNoteScale() ? "1" : "0", true);
+      m_spectral.Invalidate();
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_SHOW_DYNAMICS:

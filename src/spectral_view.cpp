@@ -375,6 +375,46 @@ done:
 
 // --- Frequency scale (Audition-style) ---
 
+// Scale/grid label sets (forum #88): Hz (default) or note names. The A-octaves
+// are evenly spaced on the log-frequency axis, so the note grid reads as a
+// regular lattice; A4 = 440 Hz is the bold reference line.
+struct FreqLabel { double freq; const char* text; bool bold; };
+static const FreqLabel* ActiveFreqLabels(bool notes, int* count)
+{
+  static const FreqLabel kHz[] = {
+    {    50, "50",   false },
+    {   100, "100",  false },
+    {   200, "200",  false },
+    {   500, "500",  false },
+    {  1000, "1k",   false },
+    {  2000, "2k",   false },
+    {  4000, "4k",   false },
+    {  6000, "6k",   false },
+    {  8000, "8k",   false },
+    { 10000, "10k",  true  },
+    { 12000, "12k",  false },
+    { 14000, "14k",  false },
+    { 16000, "16k",  false },
+    { 18000, "18k",  false },
+    { 20000, "20k",  false },
+  };
+  static const FreqLabel kNotes[] = {
+    {    27.5, "A0", false },
+    {    55.0, "A1", false },
+    {   110.0, "A2", false },
+    {   220.0, "A3", false },
+    {   440.0, "A4", true  },
+    {   880.0, "A5", false },
+    {  1760.0, "A6", false },
+    {  3520.0, "A7", false },
+    {  7040.0, "A8", false },
+    { 14080.0, "A9", false },
+  };
+  if (notes) { *count = (int)(sizeof(kNotes) / sizeof(kNotes[0])); return kNotes; }
+  *count = (int)(sizeof(kHz) / sizeof(kHz[0]));
+  return kHz;
+}
+
 void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
 {
   int scaleLeft = m_rect.right - SP(DB_SCALE_WIDTH);
@@ -400,30 +440,14 @@ void SpectralView::DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate)
   double fMin = std::min(FREQ_MIN, nyquist * 0.5);
   double fMax = std::min(FREQ_MAX, nyquist);
 
-  // Full range labels: low frequencies + kHz range
-  struct FreqLabel { double freq; const char* text; bool bold; };
-  static const FreqLabel labels[] = {
-    {    50, "50",   false },
-    {   100, "100",  false },
-    {   200, "200",  false },
-    {   500, "500",  false },
-    {  1000, "1k",   false },
-    {  2000, "2k",   false },
-    {  4000, "4k",   false },
-    {  6000, "6k",   false },
-    {  8000, "8k",   false },
-    { 10000, "10k",  true  },
-    { 12000, "12k",  false },
-    { 14000, "14k",  false },
-    { 16000, "16k",  false },
-    { 18000, "18k",  false },
-    { 20000, "20k",  false },
-  };
+  int labelCount = 0;
+  const FreqLabel* labels = ActiveFreqLabels(m_noteScale, &labelCount);
 
   HPEN tickPen = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
   int lastDrawnY = yTop + height + SP(20);
 
-  for (const auto& lab : labels) {
+  for (int li = 0; li < labelCount; li++) {
+    const FreqLabel& lab = labels[li];
     if (lab.freq < fMin || lab.freq > fMax) continue;
 
     int y = FreqToY(lab.freq, yTop, height);
@@ -545,9 +569,8 @@ void SpectralView::DrawSelection(HDC hdc, const WaveformView& waveform)
 // selection. Runs on the raw 32-bit framebuffer right after the LUT colorize
 // pass - portable (no AlphaBlend) and channel-order agnostic (whitening
 // treats all three color bytes the same; the high byte is left alone).
-static inline unsigned int WhitenPx(unsigned int c)
+static inline unsigned int WhitenPx(unsigned int c, unsigned int a)  // a/256 toward white
 {
-  const unsigned int a = 36; // /256 ~ 14%
   unsigned int r = c & 0xFFu, g = (c >> 8) & 0xFFu, b = (c >> 16) & 0xFFu;
   r += ((255u - r) * a) >> 8;
   g += ((255u - g) * a) >> 8;
@@ -581,7 +604,37 @@ void SpectralView::ApplySelectionHaze(unsigned int* fbuf, int allocW, int conten
     yLow = std::max(0, std::min(height, yLow));
     for (int y = yHigh; y < yLow; y++) {
       unsigned int* row = fbuf + (size_t)y * (size_t)allocW;
-      for (int x = x1; x < x2; x++) row[x] = WhitenPx(row[x]);
+      for (int x = x1; x < x2; x++) row[x] = WhitenPx(row[x], 36);  // ~14% frost
+    }
+  }
+}
+
+// Horizontal frequency grid (forum #88): a faint 1px line at every label
+// frequency of the active scale (Hz or note A-octaves), blended into the
+// framebuffer like the marquee haze - subtle enough to read under content.
+void SpectralView::ApplyFreqGrid(unsigned int* fbuf, int allocW, int contentW,
+                                 int height, const WaveformView& waveform) const
+{
+  int labelCount = 0;
+  const FreqLabel* labels = ActiveFreqLabels(m_noteScale, &labelCount);
+  double nyquist = m_specSr > 0 ? (double)m_specSr / 2.0 : 22050.0;
+  double fMin = std::min(FREQ_MIN, nyquist * 0.5);
+  double fMax = std::min(FREQ_MAX, nyquist);
+
+  int nch = waveform.GetNumChannels();
+  int chSep = (nch > 1) ? SP(CHANNEL_SEPARATOR_HEIGHT) : 0;
+  int chH = (nch > 1) ? (height - chSep) / 2 : height;
+
+  for (int ch = 0; ch < nch; ch++) {
+    int chTop = m_rect.top + ch * (chH + chSep);
+    int bandTop = chTop - (int)m_rect.top;
+    for (int li = 0; li < labelCount; li++) {
+      if (labels[li].freq < fMin || labels[li].freq > fMax) continue;
+      int y = FreqToY(labels[li].freq, chTop, chH) - (int)m_rect.top;
+      if (y <= bandTop || y >= bandTop + chH - 1 || y < 0 || y >= height) continue;
+      unsigned int* row = fbuf + (size_t)y * (size_t)allocW;
+      const unsigned int a = labels[li].bold ? 30u : 18u;  // ~12% / ~7%
+      for (int x = 0; x < contentW; x++) row[x] = WhitenPx(row[x], a);
     }
   }
 }
@@ -840,6 +893,7 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
         for (int row = 0; row < m_pixH; row++)
           fbuf[row * allocW + col] = m_colorLUT_Native[colData[row]];
       }
+      ApplyFreqGrid(fbuf, allocW, contentW, height, waveform);
       ApplySelectionHaze(fbuf, allocW, contentW, height, waveform);
       BitBlt(hdc, m_rect.left, m_rect.top, contentW, height, m_memDC, 0, 0, SRCCOPY);
     }
@@ -861,6 +915,7 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
         for (int row = 0; row < m_pixH; row++)
           fbuf[row * allocW + col] = m_colorLUT_Native[colData[row]];
       }
+      ApplyFreqGrid(fbuf, allocW, contentW, height, waveform);
       ApplySelectionHaze(fbuf, allocW, contentW, height, waveform);
       BitBlt(hdc, m_rect.left, m_rect.top, contentW, height, m_memDC, 0, 0, SRCCOPY);
     }

@@ -167,6 +167,8 @@ enum SettingsHit {
   SET_HIT_VIEW_ZOOM1   = 18,  // wheel-zoom center: edit cursor
   SET_HIT_VIEW_WAVE0   = 19,  // waveform style: Detailed (peak + RMS band)
   SET_HIT_VIEW_WAVE1   = 20,  // waveform style: Simple (single colour, #83)
+  SET_HIT_VIEW_SPEC0   = 21,  // spectral scale: Hz
+  SET_HIT_VIEW_SPEC1   = 22,  // spectral scale: note names (forum #88)
 };
 
 // Current preference values, filled by the host each paint (it owns this state).
@@ -180,6 +182,7 @@ struct SettingsPrefs {
   bool snapZero = false;
   bool minimap = false;
   bool zoomOnCursor = false;   // wheel zoom centers on the edit cursor (default: mouse)
+  bool spectralNotes = false;  // spectral scale/grid in note names instead of Hz (#88)
 };
 
 // View-model for RenderSettingsPanel - pure data, built by SettingsPanel each paint.
@@ -240,6 +243,7 @@ struct SettingsLayout {
   URect viewCaption, viewToggle[4];              // VIEW: Meters / Ruler / Snap / Minimap
   URect zoomSeg[2];                              // VIEW: wheel-zoom center Mouse / Cursor
   URect waveSeg[2];                              // VIEW: waveform style Detailed / Simple
+  URect specSeg[2];                              // VIEW: spectral scale Hz / Notes
 };
 SettingsLayout ComputeSettingsLayout(double w, double h);
 

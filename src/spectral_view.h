@@ -53,12 +53,19 @@ public:
   double YToFreq(int y, int channelTop, int channelHeight) const;
   int FreqToY(double freqHz, int channelTop, int channelHeight) const;
 
+  // Frequency scale mode (forum #88): Hz labels (default) or note names
+  // (A1..A9). The horizontal grid lines follow the active label set.
+  void SetNoteScale(bool v) { m_noteScale = v; }
+  bool GetNoteScale() const { return m_noteScale; }
+
 private:
 
   void ComputeThreadFunc(std::vector<double> audio, int nch, int sr, int totalFrames);
   void RenderView(const WaveformView& waveform);
   void ApplySelectionHaze(unsigned int* fbuf, int allocW, int contentW, int height,
                           const WaveformView& waveform) const;
+  void ApplyFreqGrid(unsigned int* fbuf, int allocW, int contentW, int height,
+                     const WaveformView& waveform) const;
   void DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate);
   void DrawPlayhead(HDC hdc, const WaveformView& waveform);
   void DrawSelection(HDC hdc, const WaveformView& waveform);
@@ -108,6 +115,8 @@ private:
   bool m_marqueeGesture = false;
   double m_freqSelStart = 0.0;
   double m_freqSelEnd = 0.0;
+
+  bool m_noteScale = false;   // scale/grid in note names (A1..A9) instead of Hz (#88)
 
   RECT m_rect = {};
 };
