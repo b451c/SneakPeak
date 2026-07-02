@@ -108,6 +108,9 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   m_lastMouseX = x;
   m_lastMouseY = y;
 
+  // A pending wheel-nudge fade undo block must not swallow this click's own edits.
+  FlushFadeWheelUndo();
+
   // Stop standalone preview on click (allows repositioning cursor)
   if (m_previewActive) StandaloneCleanupPreview();
 
@@ -588,6 +591,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           m_standaloneFadeDrag = true;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = sf.fadeInDir;
+          m_fadeDragFine = false;   // Shift fine-drag re-anchors on first fine move
           SetCapture(m_hwnd);
           return;
         }
@@ -596,6 +600,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           m_standaloneFadeDrag = true;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = sf.fadeOutDir;
+          m_fadeDragFine = false;
           SetCapture(m_hwnd);
           return;
         }
@@ -821,6 +826,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           m_fadeDragging = FADE_IN;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = fadeInItem ? g_GetMediaItemInfo_Value(fadeInItem, "D_FADEINDIR") : 0.0;
+          m_fadeDragFine = false;   // Shift fine-drag re-anchors on first fine move
           SetCapture(m_hwnd);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
@@ -829,6 +835,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           m_fadeDragging = FADE_OUT;
           m_fadeDragStartY = y;
           m_fadeDragStartDir = fadeOutItem ? g_GetMediaItemInfo_Value(fadeOutItem, "D_FADEOUTDIR") : 0.0;
+          m_fadeDragFine = false;
           SetCapture(m_hwnd);
           if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
           return;
@@ -1787,13 +1794,30 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     double newDir = m_fadeDragStartDir + sign * (double)dy / 100.0;
     newDir = std::max(-1.0, std::min(1.0, newDir));
 
+    // Horizontal: absolute by default (the fade edge tracks the cursor); while
+    // Shift is held the drag turns fine-relative at 1/4 speed (forum #51). The
+    // anchor rebases whenever Shift is pressed/released mid-drag, so the edge
+    // never jumps on a modifier change.
+    bool fine = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    auto fadeLenTarget = [&](double curLen, double absLen) {
+      if (fine != m_fadeDragFine) {
+        m_fadeDragFine = fine;
+        m_fadeDragAnchorX = x;
+        m_fadeDragAnchorLen = curLen;
+      }
+      if (!fine) return absLen;
+      double dt = m_waveform.XToTime(x) - m_waveform.XToTime(m_fadeDragAnchorX);
+      return m_fadeDragAnchorLen + 0.25 * ((m_fadeDragging == FADE_IN) ? dt : -dt);
+    };
+
     if (m_standaloneFadeDrag) {
       auto sf = m_waveform.GetStandaloneFade();
       if (m_fadeDragging == FADE_IN) {
-        sf.fadeInLen = std::max(0.0, std::min(time, dur - sf.fadeOutLen));
+        sf.fadeInLen = std::max(0.0, std::min(fadeLenTarget(sf.fadeInLen, time),
+                                              dur - sf.fadeOutLen));
         sf.fadeInDir = newDir;
       } else {
-        sf.fadeOutLen = std::max(0.0, dur - time);
+        sf.fadeOutLen = std::max(0.0, fadeLenTarget(sf.fadeOutLen, dur - time));
         sf.fadeOutLen = std::min(sf.fadeOutLen, dur - sf.fadeInLen);
         sf.fadeOutDir = newDir;
       }
@@ -1807,7 +1831,9 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         MediaItem* item = (multi && !segs.empty()) ? segs.front().item : m_waveform.GetItem();
         double maxLen = (multi && !segs.empty()) ? segs.front().duration : dur;
         double fadeOutLen = g_GetMediaItemInfo_Value(item, "D_FADEOUTLEN");
-        double fadeLen = std::max(0.0, std::min(time, maxLen - fadeOutLen));
+        double curLen = g_GetMediaItemInfo_Value(item, "D_FADEINLEN");
+        double fadeLen = std::max(0.0, std::min(fadeLenTarget(curLen, time),
+                                                maxLen - fadeOutLen));
         g_SetMediaItemInfo_Value(item, "D_FADEINLEN", fadeLen);
         g_SetMediaItemInfo_Value(item, "D_FADEINDIR", newDir);
         m_waveform.SetFadeDragInfo(1, (int)g_GetMediaItemInfo_Value(item, "C_FADEINSHAPE"));
@@ -1815,7 +1841,8 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         MediaItem* item = (multi && !segs.empty()) ? segs.back().item : m_waveform.GetItem();
         double maxLen = (multi && !segs.empty()) ? segs.back().duration : dur;
         double fadeInLen = g_GetMediaItemInfo_Value(item, "D_FADEINLEN");
-        double fadeLen = std::max(0.0, dur - time);
+        double curLen = g_GetMediaItemInfo_Value(item, "D_FADEOUTLEN");
+        double fadeLen = std::max(0.0, fadeLenTarget(curLen, dur - time));
         fadeLen = std::min(fadeLen, maxLen - fadeInLen);
         g_SetMediaItemInfo_Value(item, "D_FADEOUTLEN", fadeLen);
         g_SetMediaItemInfo_Value(item, "D_FADEOUTDIR", newDir);
@@ -2090,6 +2117,72 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
     return;
   }
 
+  // Wheel over a fade handle = nudge the fade length (forum #51): 5% of the item
+  // per notch, Cmd = 1 ms fine - no aiming a drag at the tiny handle. Same hit
+  // zones as the mouse-down grab; the ruler above is excluded (y >= waveform top).
+  if (m_fadeDragging == FADE_NONE &&
+      y >= m_waveformRect.top && y < m_waveformRect.top + SP(FADE_HANDLE_TOP_ZONE)) {
+    double dur = m_waveform.GetItemDuration();
+    double step = cmd ? steps * 0.001 : steps * 0.05 * dur;
+    int waveL = m_waveformRect.left;
+    int waveR = m_waveformRect.right - SP(DB_SCALE_WIDTH);
+    if (m_waveform.IsStandaloneMode()) {
+      auto sf = m_waveform.GetStandaloneFade();
+      int fiX = (sf.fadeInLen >= 0.001) ? m_waveform.TimeToX(sf.fadeInLen) : waveL;
+      int foX = (sf.fadeOutLen >= 0.001) ? m_waveform.TimeToX(dur - sf.fadeOutLen) : waveR;
+      bool hitIn = abs(x - fiX) <= SP(FADE_HANDLE_HIT_ZONE);
+      bool hitOut = !hitIn && abs(x - foX) <= SP(FADE_HANDLE_HIT_ZONE);
+      if (hitIn || hitOut) {
+        double& len = hitIn ? sf.fadeInLen : sf.fadeOutLen;
+        double other = hitIn ? sf.fadeOutLen : sf.fadeInLen;
+        double newLen = std::max(0.0, std::min(len + step, dur - other));
+        if (newLen != len) {   // no-op nudge (clamped) must not dirty the file
+          len = newLen;
+          m_waveform.SetStandaloneFade(sf);
+          m_dirty = true;
+          UpdateTitle();
+          m_waveform.Invalidate();
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+        }
+        return;
+      }
+    } else if (g_GetMediaItemInfo_Value && g_SetMediaItemInfo_Value) {
+      auto& segs = m_waveform.GetSegments();
+      bool multi = segs.size() > 1 || m_waveform.IsTrackView();
+      MediaItem* fadeInItem = (multi && !segs.empty()) ? segs.front().item : m_waveform.GetItem();
+      MediaItem* fadeOutItem = (multi && !segs.empty()) ? segs.back().item : m_waveform.GetItem();
+      double fadeInLen = fadeInItem ? g_GetMediaItemInfo_Value(fadeInItem, "D_FADEINLEN") : 0.0;
+      double fadeOutLen = fadeOutItem ? g_GetMediaItemInfo_Value(fadeOutItem, "D_FADEOUTLEN") : 0.0;
+      int fiX = m_waveform.TimeToX(fadeInLen);
+      int foX = m_waveform.TimeToX(dur - fadeOutLen);
+      bool hitIn = fadeInItem && abs(x - fiX) <= SP(FADE_HANDLE_HIT_ZONE);
+      bool hitOut = !hitIn && fadeOutItem && abs(x - foX) <= SP(FADE_HANDLE_HIT_ZONE);
+      if (hitIn || hitOut) {
+        MediaItem* item = hitIn ? fadeInItem : fadeOutItem;
+        double maxLen = (multi && !segs.empty())
+            ? (hitIn ? segs.front().duration : segs.back().duration) : dur;
+        double cur = hitIn ? fadeInLen : fadeOutLen;
+        double sameItemOther = g_GetMediaItemInfo_Value(
+            item, hitIn ? "D_FADEOUTLEN" : "D_FADEINLEN");
+        double len = std::max(0.0, std::min(cur + step, maxLen - sameItemOther));
+        if (len != cur) {   // no-op nudge (clamped) must not spend an undo point
+          // One undo block per nudge burst: opened on the first notch, closed by
+          // OnTimer after ~600 ms idle (or flushed by the next mouse-down).
+          if (!m_fadeWheelUndoOpen && g_Undo_BeginBlock2) {
+            g_Undo_BeginBlock2(nullptr);
+            m_fadeWheelUndoOpen = true;
+          }
+          m_fadeWheelLastTick = GetTickCount();
+          g_SetMediaItemInfo_Value(item, hitIn ? "D_FADEINLEN" : "D_FADEOUTLEN", len);
+          if (g_UpdateArrange) g_UpdateArrange();
+          if (g_UpdateTimeline) g_UpdateTimeline();
+          InvalidateRect(m_hwnd, nullptr, FALSE);
+        }
+        return;
+      }
+    }
+  }
+
   // Scroll on dB scale column = vertical zoom
   int dbScaleLeft = m_waveformRect.right - SP(DB_SCALE_WIDTH);
   if (x >= dbScaleLeft && x <= m_waveformRect.right &&
@@ -2114,6 +2207,15 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
 
   m_spectral.Invalidate();
   InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+// Close a pending wheel-nudge fade undo block (idle timeout in OnTimer, any
+// mouse-down, or window destroy - a Begin without End must never leak).
+void SneakPeak::FlushFadeWheelUndo()
+{
+  if (!m_fadeWheelUndoOpen) return;
+  m_fadeWheelUndoOpen = false;
+  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Adjust fade", -1);
 }
 
 // Re-run the dynamics analysis after an inline type-value commit, mirroring the

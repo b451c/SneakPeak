@@ -751,6 +751,10 @@ void SneakPeak::OnTimer()
   UpdateGainPreview();
   UpdateItemState();
 
+  // Close a wheel-nudge fade undo block after ~600 ms without another notch.
+  if (m_fadeWheelUndoOpen && GetTickCount() - m_fadeWheelLastTick > 600)
+    FlushFadeWheelUndo();
+
   // Motion pass: pump a repaint only while the premium dynamics panel has an animation
   // in flight (caret blink, Live pulse, tab-slide, value-ease). Idle -> no extra repaint.
   if (m_dynamicsPanel.WantsAnimationFrame())
@@ -1511,6 +1515,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       return 0;
 
     case WM_DESTROY:
+      FlushFadeWheelUndo();   // never leak an open undo block past the window
       KillTimer(m_hwnd, TIMER_REFRESH);
       return 0;
   }

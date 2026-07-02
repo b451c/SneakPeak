@@ -218,6 +218,7 @@ private:
   void OnMouseUp(int x, int y);
   void OnMouseMove(int x, int y, WPARAM wParam);
   void OnMouseWheel(int x, int y, int delta, WPARAM wParam);
+  void FlushFadeWheelUndo();   // close a pending wheel-nudge fade undo block
   void OnDoubleClick(int x, int y);
   bool HandlePendingClose();
   void ValidateItemPointers();
@@ -348,6 +349,11 @@ private:
   FadeDragType m_fadeDragging = FADE_NONE;
   int m_fadeDragStartY = 0;
   double m_fadeDragStartDir = 0.0;  // starting curvature for vertical drag
+  int m_fadeDragAnchorX = 0;        // Shift fine-drag anchor (rebased on Shift toggle mid-drag)
+  double m_fadeDragAnchorLen = 0.0;
+  bool m_fadeDragFine = false;
+  bool m_fadeWheelUndoOpen = false; // wheel-nudge undo block; closed by OnTimer after idle
+  DWORD m_fadeWheelLastTick = 0;
   bool m_standaloneFadeDrag = false; // true when dragging standalone fade handle
 
   // Envelope point dragging + freehand drawing

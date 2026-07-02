@@ -452,6 +452,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Drag left/right</strong> - adjust fade length</li>
   <li><strong>Drag up/down</strong> - adjust curve shape (curvature from -1 to +1, matching REAPER's native D_FADEINDIR/D_FADEOUTDIR)</li>
+  <li><strong>Hold Shift while dragging</strong> - fine mode: the length moves at 1/4 of the cursor speed for precise trims. Press or release Shift mid-drag - the fade never jumps.</li>
+  <li><strong>Scroll on a handle</strong> - nudge the fade length by 5% of the item per notch, or hold <kbd>Cmd</kbd> for 1 ms steps. No need to aim a drag at the small handle.</li>
 </ul>
 
 <p>Fade-in and fade-out block each other - neither can be dragged past the other's position. In multi-item and SET views, fade-in targets the first item and fade-out targets the last item, each clamped to its segment's duration.</p>
@@ -1075,6 +1077,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Trackpad horizontal swipe</td><td>Waveform</td><td>Pan left/right</td></tr>
     <tr><td>Trackpad pinch</td><td>Waveform</td><td>Horizontal zoom (dampened)</td></tr>
     <tr><td>Drag fade handle</td><td>Top corners</td><td>Adjust fade length (H) and curve (V)</td></tr>
+    <tr><td>Shift + Drag fade handle</td><td>Top corners</td><td>Fine fade length (1/4 speed)</td></tr>
+    <tr><td>Scroll</td><td>Fade handle</td><td>Nudge fade length (5%/notch, Cmd = 1 ms)</td></tr>
     <tr><td>Click</td><td>Minimap</td><td>Center view</td></tr>
     <tr><td>Drag</td><td>Minimap</td><td>Scroll view</td></tr>
     <tr><td>Drag top edge</td><td>Minimap</td><td>Resize height</td></tr>
