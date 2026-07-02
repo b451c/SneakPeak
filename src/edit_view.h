@@ -482,7 +482,11 @@ private:
   std::vector<StandaloneUndoEntry> m_standaloneRedoStack;
   static const int MAX_STANDALONE_UNDO = 20;
   void StandaloneUndoSave();                              // full-buffer snapshot
+  void StandaloneUndoPushFull(std::vector<double>&& oldData); // zero-copy full slot
   void StandaloneUndoSaveRange(int startFrame, int numFrames); // bounded edits
+  // Bumped on every standalone buffer mutation (edit/undo/redo/tab/load): the
+  // background limiter apply swaps its result in only if this is unchanged.
+  uint64_t m_standaloneBufferSerial = 0;
   void StandaloneUndoRestore();
   void StandaloneRedoRestore();
   // Swap `entry` with the live buffer, pushing the inverse onto `inverseStack`
@@ -596,6 +600,22 @@ private:
   void LimiterPreviewDraftThread(std::shared_ptr<const std::vector<double>> peaks,
                                  int frames, int chains, int sr,
                                  LimiterParams p, uint64_t gen);
+  // Background Apply (podcast-length files must not freeze the window): the
+  // worker limits a COPY with title progress; LimiterApplyTick swaps the
+  // result in only when the live buffer is untouched, else discards it.
+  void LimiterApplyTick();
+  void LimiterApplyThread(int nch, int sr, int s0, int s1, int ramp);
+  std::thread m_limApplyThread;
+  std::atomic<bool> m_limApplyBusy{ false };
+  std::atomic<bool> m_limApplyCancel{ false };
+  std::atomic<bool> m_limApplyDone{ false };
+  std::atomic<int> m_limApplyPct{ 0 };
+  std::vector<double> m_limApplyOut;   // worker-owned copy until Done
+  LimiterResult m_limApplyResult;      // worker-written, read after Done
+  LimiterParams m_limApplyParams;      // params captured at launch
+  int m_limApplyS0 = 0, m_limApplyS1 = 0, m_limApplyFrames = 0;
+  uint64_t m_limApplySerial = 0;       // buffer identity at launch
+  int m_limApplyFileIdx = -1;
   std::shared_ptr<const std::vector<double>> m_limPeakCache; // pre-gain detector peaks
   int m_limPeakCacheFrames = 0, m_limPeakCacheChains = 0;   // cache identity...
   bool m_limPeakCacheTP = true;                             // ...(under the mutex)

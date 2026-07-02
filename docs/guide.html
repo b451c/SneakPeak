@@ -905,7 +905,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>While the panel is open, a red band along the top of the waveform previews the <strong>gain reduction over time</strong> (deeper = more limiting; full band depth = 12 dB), and the readouts show the input peak, the predicted output peak and the maximum reduction. The preview recomputes as you turn knobs. Knobs work like the Dynamics panel: drag vertically, scroll to nudge (Cmd = fine), double-click to type a value, Cmd/Ctrl-click to reset.</p>
 
-<p>The preset box holds four starting points: <strong>Game Asset -1 dBTP</strong> (the defaults), <strong>Master -0.3 dBTP</strong>, <strong>Brickwall 0 dBFS</strong> (sample-peak mode) and <strong>Loud + Proud</strong> (+8 dB push). <strong>Apply</strong> is a destructive edit with full undo: whole file, or just the time selection (with short handoff ramps at the selection edges). The toast reports the achieved output peak and the maximum gain reduction.</p>
+<p>The preset box holds four starting points: <strong>Game Asset -1 dBTP</strong> (the defaults), <strong>Master -0.3 dBTP</strong>, <strong>Brickwall 0 dBFS</strong> (sample-peak mode) and <strong>Loud + Proud</strong> (+8 dB push). <strong>Apply</strong> is a destructive edit with full undo: whole file, or just the time selection (with short handoff ramps at the selection edges). On long material (podcasts, live recordings) Apply runs in the background - the title bar shows "Limiting... N%" and the window stays fully responsive; if you edit the audio before it finishes, your edit wins and the limiter result is discarded with a note. The toast reports the achieved output peak and the maximum gain reduction.</p>
 
 <div class="tip">
   <strong>Zero overshoot by design</strong>

@@ -86,6 +86,26 @@ void SneakPeak::StandaloneUndoSave()
   m_standaloneRedoStack.clear(); // a new edit invalidates the redo branch
   m_hasUndo = true;
   m_previewCacheDirty = true;
+  m_standaloneBufferSerial++;
+}
+
+// Zero-copy variant for the background limiter apply: the caller REPLACES the
+// whole buffer right after, so the old buffer MOVES into the undo slot
+// instead of being copied (a full copy of a podcast-length file would stall
+// the swap for seconds). Same bookkeeping as StandaloneUndoSave.
+void SneakPeak::StandaloneUndoPushFull(std::vector<double>&& oldData)
+{
+  if (oldData.empty()) return;
+  if ((int)m_standaloneUndoStack.size() >= MAX_STANDALONE_UNDO)
+    m_standaloneUndoStack.erase(m_standaloneUndoStack.begin());
+  StandaloneUndoEntry e;
+  e.full = true;
+  e.data = std::move(oldData);
+  m_standaloneUndoStack.push_back(std::move(e));
+  m_standaloneRedoStack.clear();
+  m_hasUndo = true;
+  m_previewCacheDirty = true;
+  m_standaloneBufferSerial++;
 }
 
 // Range snapshot (STA-2): for bounded edits that do NOT change the buffer
@@ -113,6 +133,7 @@ void SneakPeak::StandaloneUndoSaveRange(int startFrame, int numFrames)
   m_standaloneRedoStack.clear();
   m_hasUndo = true;
   m_previewCacheDirty = true;
+  m_standaloneBufferSerial++;
 }
 
 // Swap `entry` with the live buffer, pushing the exact inverse onto
@@ -142,6 +163,7 @@ void SneakPeak::StandaloneApplyUndoEntry(StandaloneUndoEntry& entry,
   if ((int)inverseStack.size() >= MAX_STANDALONE_UNDO)
     inverseStack.erase(inverseStack.begin());
   inverseStack.push_back(std::move(inv));
+  m_standaloneBufferSerial++;
 }
 
 // Shared tail of standalone undo/redo: recalc duration, drop stale
@@ -1502,19 +1524,25 @@ void SneakPeak::DoSpectralHeal(double strength)
 }
 
 // v2.4.0 INC-L1: destructive true-peak hard limit on the standalone buffer.
-// Whole file -> full undo snapshot; selection -> range snapshot + 20 ms
-// envelope handoff ramps at the edges (engine edgeRampFrames). Mirrors the
-// DoSpectralHeal pattern (guards, undo-depth pop on no-op, toast, invalidate).
+// Runs in the BACKGROUND on a copy (a 30-min podcast takes ~35 s of DSP - a
+// synchronous apply would freeze the window): the worker limits the copy with
+// title progress, and LimiterApplyTick swaps the result in only if the live
+// buffer is untouched (edit serial + tab + length), else it is discarded with
+// a toast - the user's newer edits always win. Whole file -> zero-copy full
+// undo (old buffer moves into the slot); selection -> range snapshot + 20 ms
+// envelope handoff ramps at the edges.
 void SneakPeak::DoApplyLimiter()
 {
   if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
+  if (m_limApplyBusy.load()) {
+    ShowToast("Limiter is already running...");
+    return;
+  }
 
-  auto& data = m_waveform.GetAudioData();
   const int nch = m_waveform.GetNumChannels();
   const int sr = m_waveform.GetSampleRate();
   const int frames = m_waveform.GetAudioSampleCount();
   if (frames <= 0 || nch <= 0 || sr <= 0) return;
-  const LimiterParams p = m_limiterPanel.GetParams();
 
   int s0 = 0, s1 = frames, ramp = 0;
   if (m_waveform.HasSelection()) {
@@ -1530,22 +1558,84 @@ void SneakPeak::DoApplyLimiter()
     ramp = (int)(0.020 * sr + 0.5);   // 20 ms handoff into untouched audio
   }
 
-  const size_t undoDepth = m_standaloneUndoStack.size();
-  if (s0 == 0 && s1 == frames) StandaloneUndoSave();
-  else StandaloneUndoSaveRange(s0, s1 - s0);
+  if (m_limApplyThread.joinable()) m_limApplyThread.join();
+  m_limApplyOut = m_waveform.GetAudioData();   // worker owns this copy
+  m_limApplyParams = m_limiterPanel.GetParams();
+  m_limApplyS0 = s0;
+  m_limApplyS1 = s1;
+  m_limApplyFrames = frames;
+  m_limApplySerial = m_standaloneBufferSerial;
+  m_limApplyFileIdx = m_activeFileIdx;
+  m_limApplyCancel.store(false);
+  m_limApplyPct.store(0);
+  m_limApplyDone.store(false);
+  m_limApplyBusy.store(true);
+  m_limApplyThread = std::thread(&SneakPeak::LimiterApplyThread, this, nch, sr,
+                                 s0, s1, ramp);
+}
 
-  LimiterResult r = LimiterProcess(data.data() + (size_t)s0 * (size_t)nch,
-                                   s1 - s0, nch, sr, p, ramp);
-  // gain 0 + zero GR = bit-identical passthrough: drop our undo slot, honest toast.
-  const bool noop = r.ok && p.gainDb == 0.0 && r.maxGainReductionDb == 0.0;
-  if (!r.ok || noop) {
-    if (m_standaloneUndoStack.size() > undoDepth)
-      m_standaloneUndoStack.pop_back();
-    m_hasUndo = !m_standaloneUndoStack.empty();
-    ShowToast(!r.ok ? "Limiter failed: empty buffer"
-                    : "Nothing above the ceiling - audio unchanged");
+void SneakPeak::LimiterApplyThread(int nch, int sr, int s0, int s1, int ramp)
+{
+  LimiterProgress prog;
+  prog.user = this;
+  prog.fn = [](void* user, double frac) -> bool {
+    SneakPeak* self = (SneakPeak*)user;
+    self->m_limApplyPct.store((int)(frac * 100.0 + 0.5));
+    return !self->m_limApplyCancel.load();
+  };
+  m_limApplyResult =
+      LimiterProcess(m_limApplyOut.data() + (size_t)s0 * (size_t)nch, s1 - s0,
+                     nch, sr, m_limApplyParams, ramp, &prog);
+  m_limApplyDone.store(true);   // busy stays set until the tick finalizes
+}
+
+// OnTimer: title progress while the apply worker runs; swap/discard on finish.
+void SneakPeak::LimiterApplyTick()
+{
+  if (!m_limApplyBusy.load()) return;
+  if (!m_limApplyDone.load()) {
+    if (m_hwnd) {
+      char t[64];
+      snprintf(t, sizeof(t), "SneakPeak: Limiting... %d%%", m_limApplyPct.load());
+      SetWindowText(m_hwnd, t);
+    }
     return;
   }
+  m_limApplyDone.store(false);
+  if (m_limApplyThread.joinable()) m_limApplyThread.join();
+  m_limApplyBusy.store(false);
+
+  const LimiterResult r = m_limApplyResult;
+  const LimiterParams p = m_limApplyParams;
+  const bool stale = m_standaloneBufferSerial != m_limApplySerial ||
+                     m_activeFileIdx != m_limApplyFileIdx ||
+                     !m_waveform.IsStandaloneMode() ||
+                     m_waveform.GetAudioSampleCount() != m_limApplyFrames;
+  if (!r.ok || stale ||
+      (p.gainDb == 0.0 && r.maxGainReductionDb == 0.0)) {
+    // Nothing swapped in - the live buffer was never touched, so no undo slot
+    // exists to pop. Report why and restore the title.
+    if (!r.ok)
+      ShowToast(r.cancelled ? "Limiter cancelled"
+                            : "Limiter failed: empty buffer");
+    else if (stale)
+      ShowToast("Limiter result discarded - audio changed meanwhile");
+    else
+      ShowToast("Nothing above the ceiling - audio unchanged");
+    m_limApplyOut = std::vector<double>();
+    UpdateTitle();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
+
+  auto& data = m_waveform.GetAudioData();
+  if (m_limApplyS0 == 0 && m_limApplyS1 == m_limApplyFrames) {
+    StandaloneUndoPushFull(std::move(data));   // zero-copy: old buffer -> undo
+  } else {
+    StandaloneUndoSaveRange(m_limApplyS0, m_limApplyS1 - m_limApplyS0);
+  }
+  data = std::move(m_limApplyOut);             // processed copy becomes live
+  m_limApplyOut = std::vector<double>();
 
   char buf[96];
   snprintf(buf, sizeof(buf), "Limited: out %.1f %s, max GR %.1f dB",

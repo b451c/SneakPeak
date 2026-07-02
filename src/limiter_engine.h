@@ -39,12 +39,21 @@ struct LimiterParams {
 };
 
 struct LimiterResult {
-  bool ok = false;             // false: bad args (null/empty buffer)
+  bool ok = false;             // false: bad args (null/empty buffer) or cancelled
+  bool cancelled = false;      // progress callback asked to stop
   double inputPeakDb = -999.0; // post-gain peak, detector domain (dBTP/dBFS)
   double outputPeakDb = -999.0;// same detector on the processed output
   double maxGainReductionDb = 0.0; // deepest envelope dip, positive dB
   int latencySamples = 0;      // chain alignment D (informational; already
                                // compensated — output is time-aligned)
+};
+
+// Optional progress/cancel hook for the long offline passes (background Apply
+// on podcast-length files). fn is called with frac in [0, 1] every ~64k frames
+// of detector work; return false to abort (result comes back cancelled).
+struct LimiterProgress {
+  bool (*fn)(void* user, double frac) = nullptr;
+  void* user = nullptr;
 };
 
 // Harness-only taps: raw chain stages at chain index i (NOT delay-aligned).
@@ -74,7 +83,8 @@ LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
                                      std::vector<double>& envOut,
                                      int edgeRampFrames = 0,
                                      LimiterDebugTaps* debugTaps = nullptr,
-                                     std::vector<double>* detectorPeaksOut = nullptr);
+                                     std::vector<double>* detectorPeaksOut = nullptr,
+                                     const LimiterProgress* progress = nullptr);
 
 // DRAFT envelope from cached detector peaks: need -> chain -> edge ramp, but
 // NO true-peak refinement loop and no output measure (both need the audio).
@@ -93,7 +103,8 @@ LimiterResult LimiterEnvelopeFromPeaks(const double* peaks, int numFrames,
 // the measured output peak.
 LimiterResult LimiterProcess(double* audio, int numFrames, int numChannels,
                              int sampleRate, const LimiterParams& params,
-                             int edgeRampFrames = 0);
+                             int edgeRampFrames = 0,
+                             const LimiterProgress* progress = nullptr);
 
 // Peak of a buffer in the detector domain, linear amplitude: BS.1770-4
 // true peak (truePeak) or plain sample peak. Exposed for panel readouts and

@@ -764,6 +764,8 @@ void SneakPeak::OnTimer()
 
   // Limiter preview pump (v2.4.0 INC-L1): debounced worker launch + finish repaint.
   LimiterPreviewTick();
+  // Background limiter apply: title progress + result swap on completion.
+  LimiterApplyTick();
 
   // Incremental standalone load (STA-1): one ~20 ms decode slice per tick.
   StepStandaloneLoad();
@@ -1526,6 +1528,11 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       if (m_limPrevThread.joinable()) {
         m_limPrevGen++;       // any result it produces is discarded as stale
         m_limPrevThread.join();
+      }
+      // Background apply: ask the engine to abort (progress hook), then join.
+      if (m_limApplyThread.joinable()) {
+        m_limApplyCancel.store(true);
+        m_limApplyThread.join();
       }
       KillTimer(m_hwnd, TIMER_REFRESH);
       return 0;

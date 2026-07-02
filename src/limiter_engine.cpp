@@ -25,6 +25,27 @@ constexpr double kPi = 3.14159265358979323846;
 
 int ClampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+// --- Progress / cancel plumbing (background Apply on long files) -----------
+// Report returns false when the caller asked to abort. A scaled view lets an
+// outer pass (LimiterProcess) map an inner pass's [0,1] into its own budget.
+
+bool ProgressReport(const LimiterProgress* p, double frac)
+{
+  if (!p || !p->fn) return true;
+  return p->fn(p->user, frac < 0.0 ? 0.0 : (frac > 1.0 ? 1.0 : frac));
+}
+
+struct ProgressScale {
+  const LimiterProgress* outer;
+  double base, span;
+};
+
+bool ProgressScaleFn(void* user, double frac)
+{
+  const ProgressScale* s = (const ProgressScale*)user;
+  return ProgressReport(s->outer, s->base + s->span * frac);
+}
+
 // --- True-peak interpolator (BS.1770-family windowed sinc, libebur128) -----
 // Same kernel family as the BS.1770-4 reference (Hann-windowed sinc polyphase,
 // 12 input samples of support) but at 8x with 97 taps instead of the standard
@@ -61,12 +82,19 @@ void BuildTpCoeffs(int factor, double* h /* kTpTaps */)
 // interpolated sub-samples between x[i] and x[i+1]. Offline two-pass lets us
 // index the FIR symmetrically (x[i - 24/F .. i + 24/F], zero-padded edges),
 // so detection adds no latency that would need folding into the dry delay.
-void TpPeakPerFrame(const double* audio, int numFrames, int numChannels,
+// Returns false when the progress hook cancelled (every ~64k frames).
+bool TpPeakPerFrame(const double* audio, int numFrames, int numChannels,
                     int channel, int factor, const double* h,
-                    std::vector<double>& tpInOut)
+                    std::vector<double>& tpInOut,
+                    const LimiterProgress* progress = nullptr,
+                    double progBase = 0.0, double progSpan = 0.0)
 {
   const int center = kTpCenter / factor; // 6 input samples at 8x
   for (int i = 0; i < numFrames; i++) {
+    if (progress && (i & 0xFFFF) == 0 &&
+        !ProgressReport(progress,
+                        progBase + progSpan * (double)i / (double)numFrames))
+      return false;
     double pk = std::fabs(audio[(size_t)i * (size_t)numChannels + (size_t)channel]);
     for (int p = 1; p < factor; p++) {
       double acc = 0.0;
@@ -80,6 +108,7 @@ void TpPeakPerFrame(const double* audio, int numFrames, int numChannels,
     }
     if (pk > tpInOut[(size_t)i]) tpInOut[(size_t)i] = pk;
   }
+  return true;
 }
 
 // --- Sliding minimum over a trailing window (Lemire monotonic wedge) -------
@@ -288,11 +317,19 @@ LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
                                      std::vector<double>& envOut,
                                      int edgeRampFrames,
                                      LimiterDebugTaps* debugTaps,
-                                     std::vector<double>* detectorPeaksOut)
+                                     std::vector<double>* detectorPeaksOut,
+                                     const LimiterProgress* progress)
 {
   LimiterResult res;
   if (!audio || numFrames <= 0 || numChannels <= 0 || sampleRate <= 0)
     return res;
+  // Progress budget: detection [0, 0.5], refinement iterations [0.5, 0.95],
+  // tail (chain/ramp/stats are cheap) snaps to 1.0 at return.
+  auto cancelled = [&]() {
+    res.ok = false;
+    res.cancelled = true;
+    return res;
+  };
 
   const double gainLin = std::pow(10.0, params.gainDb / 20.0);
   const double ceilingLin = std::pow(10.0, params.ceilingDb / 20.0);
@@ -333,9 +370,14 @@ LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
     std::fill(peak.begin(), peak.end(), 0.0);
     const int chFirst = linked ? 0 : chain;
     const int chLast = linked ? numChannels - 1 : chain;
+    const int detectCalls = numChains * (chLast - chFirst + 1);
     for (int ch = chFirst; ch <= chLast; ch++) {
+      const int callIdx = chain * (chLast - chFirst + 1) + (ch - chFirst);
+      const double span = 0.5 / (double)(detectCalls > 0 ? detectCalls : 1);
       if (factor > 1) {
-        TpPeakPerFrame(audio, numFrames, numChannels, ch, factor, h, peak);
+        if (!TpPeakPerFrame(audio, numFrames, numChannels, ch, factor, h, peak,
+                            progress, (double)callIdx * span, span))
+          return cancelled();
       } else {
         for (int i = 0; i < numFrames; i++) {
           double a = std::fabs(audio[(size_t)i * (size_t)numChannels + (size_t)ch]);
@@ -368,13 +410,21 @@ LimiterResult LimiterComputeEnvelope(const double* audio, int numFrames,
     if (factor > 1) {
       const double breakLin = ceilingLin * 1.000115; // ~ +0.001 dB slack
       for (int iter = 0; iter < 8; iter++) {
+        // Refinement progress: 0.45/8 of the budget per iteration, split over
+        // this chain's channels (single-chain view; near enough for a title).
+        const double iterBase = 0.5 + 0.45 * (double)iter / 8.0;
+        const double iterSpan = 0.45 / 8.0 / (double)(chLast - chFirst + 1);
         std::fill(otp.begin(), otp.end(), 0.0);
         for (int ch = chFirst; ch <= chLast; ch++) {
           for (int k = 0; k < numFrames; k++)
             tmp[(size_t)k] =
                 audio[(size_t)k * (size_t)numChannels + (size_t)ch] * gainLin *
                 envOut[(size_t)k * (size_t)numChains + (size_t)chain];
-          TpPeakPerFrame(tmp.data(), numFrames, 1, 0, factor, h, otp);
+          if (!TpPeakPerFrame(tmp.data(), numFrames, 1, 0, factor, h, otp,
+                              progress,
+                              iterBase + iterSpan * (double)(ch - chFirst),
+                              iterSpan))
+            return cancelled();
         }
         bool violated = false;
         for (int k = 0; k < numFrames; k++)
@@ -455,12 +505,18 @@ LimiterResult LimiterEnvelopeFromPeaks(const double* peaks, int numFrames,
 
 LimiterResult LimiterProcess(double* audio, int numFrames, int numChannels,
                              int sampleRate, const LimiterParams& params,
-                             int edgeRampFrames)
+                             int edgeRampFrames,
+                             const LimiterProgress* progress)
 {
+  // Progress budget: envelope [0, 0.8], multiply (cheap) + output measure
+  // [0.8, 1.0].
+  ProgressScale envScale{ progress, 0.0, 0.8 };
+  LimiterProgress envProg{ ProgressScaleFn, &envScale };
   std::vector<double> env;
   LimiterResult res = LimiterComputeEnvelope(audio, numFrames, numChannels,
                                              sampleRate, params, env,
-                                             edgeRampFrames, nullptr);
+                                             edgeRampFrames, nullptr, nullptr,
+                                             progress ? &envProg : nullptr);
   if (!res.ok) return res;
 
   const double gainLin = std::pow(10.0, params.gainDb / 20.0);
@@ -472,9 +528,27 @@ LimiterResult LimiterProcess(double* audio, int numFrames, int numChannels,
       audio[(size_t)i * (size_t)numChannels + (size_t)ch] *= gainLin * env[envAt];
     }
 
-  const double outPk = LimiterMeasurePeak(audio, numFrames, numChannels,
-                                          sampleRate, params.truePeak);
+  const int factor = params.truePeak ? TpFactorForRate(sampleRate) : 1;
+  double outPk = 0.0;
+  if (factor == 1) {
+    outPk = LimiterMeasurePeak(audio, numFrames, numChannels, sampleRate, false);
+  } else {
+    double h[kTpTaps];
+    BuildTpCoeffs(factor, h);
+    std::vector<double> tp((size_t)numFrames, 0.0);
+    const double span = 0.2 / (double)numChannels;
+    for (int ch = 0; ch < numChannels; ch++)
+      if (!TpPeakPerFrame(audio, numFrames, numChannels, ch, factor, h, tp,
+                          progress, 0.8 + span * (double)ch, span)) {
+        res.ok = false;
+        res.cancelled = true;
+        return res;
+      }
+    for (double v : tp)
+      if (v > outPk) outPk = v;
+  }
   if (outPk > 0.0) res.outputPeakDb = 20.0 * std::log10(outPk);
+  ProgressReport(progress, 1.0);
   return res;
 }
 

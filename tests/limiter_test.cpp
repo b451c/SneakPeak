@@ -458,6 +458,52 @@ void TestDraftPath()
   Check(draftAtOrAbove, what);
 }
 
+// --- Progress / cancel hook (background Apply on long files) ------------------
+
+void TestProgressCancel()
+{
+  printf("-- progress / cancel --\n");
+  Fixture f = MakeNoise();
+  const int n = f.NumFrames();
+  LimiterParams p;
+  p.gainDb = 12.0;
+
+  struct Ctx {
+    int calls = 0;
+    double last = -1.0;
+    bool monotone = true;
+    int cancelAfter = -1;
+  };
+  Ctx c1;
+  LimiterProgress prog;
+  prog.user = &c1;
+  prog.fn = [](void* user, double frac) -> bool {
+    Ctx* c = (Ctx*)user;
+    if (frac < c->last - 1e-9) c->monotone = false;
+    c->calls++;
+    c->last = frac;
+    return c->cancelAfter < 0 || c->calls < c->cancelAfter;
+  };
+  std::vector<double> work = f.frames;
+  LimiterResult r = LimiterProcess(work.data(), n, kNch, kSr, p, 0, &prog);
+  char what[160];
+  snprintf(what, sizeof(what),
+           "progress fires (%d calls), monotone, ends at 1.0", c1.calls);
+  Check(r.ok && c1.calls > 4 && c1.monotone && c1.last == 1.0, what);
+
+  // Cancel early (during detection, before any multiply): result comes back
+  // cancelled and the caller's buffer is bit-identical.
+  Ctx c2;
+  c2.cancelAfter = 3;
+  prog.user = &c2;
+  std::vector<double> work2 = f.frames;
+  LimiterResult r2 = LimiterProcess(work2.data(), n, kNch, kSr, p, 0, &prog);
+  Check(!r2.ok && r2.cancelled &&
+            std::memcmp(work2.data(), f.frames.data(),
+                        f.frames.size() * sizeof(double)) == 0,
+        "cancel aborts with the buffer untouched");
+}
+
 // --- Baseline dump ("dump" arg) ----------------------------------------------
 
 void DumpOne(const Fixture& f, const LimiterParams& p, int edgeRamp)
@@ -518,6 +564,7 @@ int main(int argc, char** argv)
   TestMicro();
   TestGainPush();
   TestDraftPath();
+  TestProgressCancel();
 
   printf("-- ceiling sweep: attack x release x ceiling x TP (36 configs each) --\n");
   const Fixture fixtures[] = { MakeSquare997(), MakeIspSine(), MakeImpulses(),
