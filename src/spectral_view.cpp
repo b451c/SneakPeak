@@ -622,6 +622,9 @@ void SpectralView::DrawFreqSelectionOverlay(HDC hdc, const WaveformView& wavefor
   // time x frequency rectangle (the repair selection); a band-only selection
   // (Alt+drag) keeps the full-width horizontal boundary lines.
   bool marquee = waveform.HasSelection();
+  // Fresh marquee click: the band exists but the rectangle does not yet -
+  // drawing the full-width band lines here flashes a cyan line on every click.
+  if (m_marqueeGesture && !marquee) return;
   int x1 = m_rect.left, x2 = contentRight;
   if (marquee) {
     double s1 = std::min(waveform.GetSelection().startTime, waveform.GetSelection().endTime);

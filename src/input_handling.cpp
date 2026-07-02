@@ -446,6 +446,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       if (altDown) {
         double freq = m_spectral.YToFreq(y, chTop, chH);
         m_spectral.StartFreqSelection(freq);
+        m_spectral.SetMarqueeGesture(false); // band-only: full-width lines wanted
         m_spectralFreqDragging = true;
         m_spectralFreqDragChTop = chTop;
         m_spectralFreqDragChH = chH;
@@ -498,6 +499,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         if (g_SetEditCurPos)
           g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), true, false);
         m_spectral.StartFreqSelection(m_spectral.YToFreq(y, chTop, chH));
+        m_spectral.SetMarqueeGesture(true); // no band lines until the rect exists
         m_spectralFreqDragging = true;
         m_spectralFreqDragChTop = chTop;
         m_spectralFreqDragChH = chH;
@@ -1031,6 +1033,7 @@ void SneakPeak::OnMouseUp(int x, int y)
   }
   if (m_spectralFreqDragging) {
     m_spectralFreqDragging = false;
+    m_spectral.SetMarqueeGesture(false); // gesture over: normal overlay rules
     // A near-click band (a few px tall) collapses back to "no band", so a
     // plain click on the spectrogram keeps its cursor-click behavior.
     int yLo = m_spectral.FreqToY(m_spectral.GetFreqSelLow(),

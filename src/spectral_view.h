@@ -40,6 +40,9 @@ public:
 
   // Frequency selection (Y-axis band selection)
   bool HasFreqSelection() const { return m_freqSelActive; }
+  // A fresh marquee drag is in progress: suppress the full-width band lines
+  // until the rectangle exists (else the click flashes a cyan line).
+  void SetMarqueeGesture(bool v) { m_marqueeGesture = v; }
   double GetFreqSelLow() const;
   double GetFreqSelHigh() const;
   void StartFreqSelection(double freqHz);
@@ -102,6 +105,7 @@ private:
 
   // Frequency selection state
   bool m_freqSelActive = false;
+  bool m_marqueeGesture = false;
   double m_freqSelStart = 0.0;
   double m_freqSelEnd = 0.0;
 
