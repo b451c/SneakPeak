@@ -159,6 +159,30 @@ else()
   )
 endif()
 
+# --- v2.3.0 INC-5: offline spectral-repair correctness harness ---
+# Pure-DSP test binary (no REAPER/SWELL/Blend2D deps). Synthetic click/beep
+# scenarios through spectral_repair with SNR-improvement assertions (exit
+# code), NOT bit-baselines - unlike dyn_regression it is machine-independent.
+# Run via tests/run_spectral_repair_test.sh.
+add_executable(spectral_repair_test
+  tests/spectral_repair_test.cpp
+  src/spectral_repair.cpp
+)
+target_include_directories(spectral_repair_test PRIVATE src)
+target_compile_definitions(spectral_repair_test PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+)
+if(MSVC)
+  target_compile_options(spectral_repair_test PRIVATE /W3)
+else()
+  target_compile_options(spectral_repair_test PRIVATE
+    -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
+    -Wshadow
+    -Wconversion -Wno-sign-conversion
+    -fsigned-char
+  )
+endif()
+
 if(APPLE)
   set_target_properties(reaper_sneakpeak PROPERTIES
     SUFFIX ".dylib"
