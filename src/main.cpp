@@ -347,6 +347,12 @@ static void pollSelectionTimer()
     if (count <= 0) return; // no items selected — stay in standalone
     // Items selected — save standalone state before switching to REAPER
     g_sneakPeak->SaveCurrentStandaloneState();
+    // The save MOVED the active buffer out (STA-2) - the view MUST be replaced
+    // before the next paint, even when the user clicked the SAME item that was
+    // loaded before standalone. Reset the change detector so the load below
+    // always fires (it used to skip, painting a moved-out buffer -> crash).
+    g_lastSelectedItem = nullptr;
+    g_lastSelectedCount = 0;
     // Fall through to load them (exits standalone via ClearItem)
   }
 

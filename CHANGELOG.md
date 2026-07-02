@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Envelope selection rectangle looks like a selection now** - the Cmd+drag rectangle (and the dense-envelope reveal band) draws a frosted translucent interior, the same treatment as the spectral marquee, instead of the old hatched vertical lines.
 
 ### Fixed
+- **Crash when clicking back on the same item from Standalone mode** - selecting the item that was already loaded before entering Standalone crashed REAPER (the fast tab-switch buffer move left the view empty, and the selection poll skipped the reload because "nothing changed"). The reload now always fires when leaving Standalone, and the renderer refuses to index a moved-out buffer.
 - **Drag export now works on Windows** - dragging a selection (or a standalone file) out of the SneakPeak window did everything except the actual drag on Windows: the export WAV was written, then nothing followed (the drop hand-off only existed for macOS/Linux). Windows now hands the file to the OS drag as well, so dropping onto the REAPER timeline or Explorer works on all platforms.
 - The "Add Region from Selection" context-menu entry now shows its Shift+M shortcut.
 - **Splitter drag tracks the cursor at every UI scale** - the waveform/spectral splitter no longer drifts away from the cursor while dragging at UI scales other than 100%, or with the meters hidden / minimap shown (the drag used its own unscaled copy of the layout math).

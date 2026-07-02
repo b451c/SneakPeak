@@ -57,6 +57,18 @@ void WaveformView::UpdatePeaks()
     return;
   }
 
+  // A moved-out buffer must never be indexed: SaveCurrentStandaloneState moves
+  // the audio into the tab entry (STA-2 invariant - the caller must replace the
+  // view before the next paint). If a caller ever slips again, draw nothing
+  // instead of dereferencing an empty vector (this exact crash shipped once).
+  {
+    size_t needed = (size_t)m_audioSampleCount * (size_t)(m_numChannels < 1 ? 1 : m_numChannels);
+    if (m_audioData.size() < needed) {
+      m_peaksValid = false;
+      return;
+    }
+  }
+
   if (m_peaksValid && m_peaksCachedStart == m_viewStartTime &&
       m_peaksCachedDuration == m_viewDuration && m_peaksCachedWidth == w) {
     return;
