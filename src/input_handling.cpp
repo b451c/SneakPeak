@@ -2187,7 +2187,13 @@ void SneakPeak::OnKeyDown(WPARAM key)
       if (ctrl) DoPaste();
       break;
     case 'Z':
-      if (ctrl) UndoRestore();
+      if (ctrl) {
+        if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) RedoRestore();
+        else UndoRestore();
+      }
+      break;
+    case 'Y':
+      if (ctrl) RedoRestore(); // the Windows-style redo chord
       break;
     case 'S':
     case 's':

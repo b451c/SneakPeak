@@ -192,6 +192,9 @@ void SneakPeak::OnRightClick(int x, int y)
   // In standalone mode, use our own stack state
   bool canUndo = m_waveform.IsStandaloneMode() ? m_hasUndo : hasReaperItem;
   MenuAppend(editMenu, canUndo ? MF_STRING : MF_GRAYED, CM_UNDO, "Undo\tCtrl+Z");
+  bool canRedo = m_waveform.IsStandaloneMode() ? !m_standaloneRedoStack.empty()
+                                               : hasReaperItem;
+  MenuAppend(editMenu, canRedo ? MF_STRING : MF_GRAYED, CM_REDO, "Redo\tCtrl+Shift+Z");
   MenuAppendSeparator(editMenu);
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_CUT, "Cut\tCtrl+X");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_COPY, "Copy\tCtrl+C");
@@ -417,6 +420,7 @@ void SneakPeak::OnContextMenuCommand(int id)
 {
   switch (id) {
     case CM_UNDO:      UndoRestore(); break;
+    case CM_REDO:      RedoRestore(); break;
     case CM_CUT:       DoCut(); break;
     case CM_COPY:      DoCopy(); break;
     case CM_PASTE:     DoPaste(); break;

@@ -435,6 +435,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="key"><kbd>Shift</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>E</kbd></div><div class="desc">Ripple Delete (closes gap)</div>
   <div class="key"><kbd>Ctrl</kbd>+<kbd>N</kbd></div><div class="desc">Normalize to 0 dB peak</div>
   <div class="key"><kbd>Ctrl</kbd>+<kbd>Z</kbd></div><div class="desc">Undo (REAPER undo)</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></div><div class="desc">Redo</div>
 </div>
 
 <p><strong>Paste</strong> is non-destructive: it writes the clipboard to a temporary WAV file, splits the item at the cursor position, shifts subsequent items right, and inserts the new audio in the gap. The pasted region is automatically selected. Works in single-item, timeline, and SET modes.</p>
@@ -832,7 +833,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>The spectrogram is computed asynchronously (2048-point FFT) when an item loads. A progress overlay shows computation status. After computation completes, the display updates instantly.</p>
 
-<p>Hold <kbd>Alt</kbd> and click/drag vertically in the spectral view to select a frequency band. This visually isolates the band for inspection.</p>
+<p>Click and drag on the spectrogram to select a <strong>time x frequency rectangle</strong> (a dashed marquee) - the standard spectral-editor selection and the target for Spectral Repair. The time axis stays in sync with the waveform selection. Hold <kbd>Alt</kbd> and drag vertically to select a full-width frequency band instead, and <kbd>Shift</kbd>+click to extend the time range.</p>
 
 <p>A draggable splitter between the waveform and spectrogram lets you adjust the space distribution (15% to 85%).</p>
 
@@ -843,14 +844,14 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h3>Spectral Repair (Standalone mode)</h3>
 
-<p>In Standalone mode the spectral selection becomes an editing tool. Make a time selection in the waveform, <kbd>Alt</kbd>-drag a frequency band in the spectral view, then right-click:</p>
+<p>In Standalone mode the spectral selection becomes an editing tool. Drag a rectangle directly on the spectrogram (time x frequency marquee), then right-click:</p>
 
 <ul>
   <li><strong>Process &gt; Heal Selection</strong> - rebuilds the selected time x frequency rectangle from the audio around it (per-frequency interpolation across the selection). <strong>Replace (100%)</strong> fully replaces the region toward the surrounding context; the <strong>Attenuate</strong> strengths (75/50/25%) pull it down more gently. Healing only ever reduces energy, so content quieter than its surroundings is left alone - and re-applying iteratively is normal. Requires both a time selection and a frequency band; limited to 10 s selections.</li>
   <li><strong>Process &gt; Repair Clicks in Selection</strong> - detects and removes clicks and pops inside the time selection with sample accuracy (autoregressive detection and interpolation; no frequency band needed). Bursts longer than 23 ms are skipped and reported. Limited to 4 s selections.</li>
 </ul>
 
-<p>Both are destructive edits to the loaded audio in memory: undo with <kbd>Ctrl+Z</kbd>, and nothing touches the disk until you save. A toast reports what was healed or repaired, and the spectrogram recomputes automatically.</p>
+<p>Both are destructive edits to the loaded audio in memory: undo with <kbd>Ctrl+Z</kbd>, redo with <kbd>Ctrl+Shift+Z</kbd>, and nothing touches the disk until you save. A toast reports what was healed or repaired, and the spectrogram recomputes automatically.</p>
 
 <div class="warning">
   <strong>Standalone only (v1)</strong>
@@ -1020,6 +1021,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Copy</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Paste (non-destructive insert)</td><td>REAPER, SET, Timeline</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td>All</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Redo</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Normalize (peak)</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save</td><td>Standalone</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save As</td><td>Standalone</td></tr>

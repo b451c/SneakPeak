@@ -23,6 +23,7 @@ struct StandaloneFileState {
   std::string filePath;
   std::vector<double> audioData;
   std::vector<std::vector<double>> undoStack;
+  std::vector<std::vector<double>> redoStack;
   int numChannels = 0;
   int sampleRate = 44100;
   int audioSampleCount = 0;
@@ -143,6 +144,7 @@ enum ContextMenuID {
   CM_SPECTRAL_HEAL_BASE,                               // + strength presets (see context_menu.cpp)
   CM_SPECTRAL_HEAL_LAST = CM_SPECTRAL_HEAL_BASE + 4,
   CM_REPAIR_CLICKS,                                    // AR click repair on the time selection
+  CM_REDO,                                             // Ctrl+Shift+Z / Ctrl+Y
   CM_LAST // sentinel -- keep last
 };
 
@@ -283,6 +285,7 @@ private:
   void UpdateTitle();
   void UndoSave();
   void UndoRestore();
+  void RedoRestore();
 
   RECT m_modeBarRect = {};
   RECT m_modeLabelRect = {};  // clickable area of the mode label (MULTI/TIMELINE/ITEM/SET)
@@ -409,11 +412,14 @@ private:
 
   // Undo state
   bool m_hasUndo = false;
-  // Standalone undo stack (snapshots of audio data)
+  // Standalone undo/redo stacks (snapshots of audio data)
   std::vector<std::vector<double>> m_standaloneUndoStack;
+  std::vector<std::vector<double>> m_standaloneRedoStack;
   static const int MAX_STANDALONE_UNDO = 20;
   void StandaloneUndoSave();
   void StandaloneUndoRestore();
+  void StandaloneRedoRestore();
+  void StandaloneFinishRestore(const char* what); // shared undo/redo tail
 
   // Dirty indicator (destructive edit pending)
   bool m_dirty = false;

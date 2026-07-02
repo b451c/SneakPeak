@@ -41,6 +41,7 @@ void SneakPeak::SaveCurrentStandaloneState()
   auto& fs = m_standaloneFiles[m_activeFileIdx];
   fs.audioData = m_waveform.GetAudioData(); // copy
   fs.undoStack = m_standaloneUndoStack;
+  fs.redoStack = m_standaloneRedoStack;
   fs.numChannels = m_waveform.GetNumChannels();
   fs.sampleRate = m_waveform.GetSampleRate();
   fs.audioSampleCount = m_waveform.GetAudioSampleCount();
@@ -79,6 +80,7 @@ void SneakPeak::RestoreStandaloneState(int idx)
   m_waveform.Invalidate();
 
   m_standaloneUndoStack = fs.undoStack;
+  m_standaloneRedoStack = fs.redoStack;
   m_dirty = fs.dirty;
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_wavBitsPerSample = fs.bitsPerSample;
@@ -158,6 +160,7 @@ void SneakPeak::LoadStandaloneFile(const char* path)
   StandaloneCleanupPreview();
   if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
   m_standaloneUndoStack.clear();
+  m_standaloneRedoStack.clear();
   m_waveform.ClearStandaloneFade();
   m_waveform.ClearStandaloneGain();
 

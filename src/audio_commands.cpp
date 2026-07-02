@@ -80,17 +80,17 @@ void SneakPeak::StandaloneUndoSave()
   if ((int)m_standaloneUndoStack.size() >= MAX_STANDALONE_UNDO)
     m_standaloneUndoStack.erase(m_standaloneUndoStack.begin());
   m_standaloneUndoStack.push_back(data);
+  m_standaloneRedoStack.clear(); // a new edit invalidates the redo branch
   m_hasUndo = true;
   m_previewCacheDirty = true;
 }
 
-void SneakPeak::StandaloneUndoRestore()
+// Shared tail of standalone undo/redo: recalc duration, drop stale
+// selection/fade, invalidate every audio-derived view (incl. the spectrogram -
+// it renders the buffer we just swapped).
+void SneakPeak::StandaloneFinishRestore(const char* what)
 {
-  if (m_standaloneUndoStack.empty()) return;
-  m_waveform.GetAudioData() = std::move(m_standaloneUndoStack.back());
-  m_standaloneUndoStack.pop_back();
-
-  // Recalculate duration from restored data
+  (void)what; // DBG-only
   int nch = m_waveform.GetNumChannels();
   int sr = m_waveform.GetSampleRate();
   int newFrames = (nch > 0) ? (int)m_waveform.GetAudioData().size() / nch : 0;
@@ -99,15 +99,70 @@ void SneakPeak::StandaloneUndoRestore()
   m_waveform.SetItemDuration(newDur);
 
   m_waveform.ClearSelection();
-  m_waveform.ClearStandaloneFade(); // clear non-destructive fade on undo
+  m_waveform.ClearStandaloneFade(); // clear non-destructive fade on undo/redo
   m_waveform.Invalidate();
+  m_minimap.Invalidate();
+  m_spectral.ClearSpectrum();
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_dirty = true;
   m_previewCacheDirty = true;
   UpdateTitle();
   InvalidateRect(m_hwnd, nullptr, FALSE);
-  DBG("[SneakPeak] Standalone undo (stack=%d, frames=%d, dur=%.3f)\n",
-      (int)m_standaloneUndoStack.size(), newFrames, newDur);
+  DBG("[SneakPeak] Standalone %s (undo=%d redo=%d, frames=%d, dur=%.3f)\n",
+      what, (int)m_standaloneUndoStack.size(), (int)m_standaloneRedoStack.size(),
+      newFrames, newDur);
+}
+
+void SneakPeak::StandaloneUndoRestore()
+{
+  if (m_standaloneUndoStack.empty()) return;
+
+  // Current state moves onto the redo stack before the swap
+  if ((int)m_standaloneRedoStack.size() >= MAX_STANDALONE_UNDO)
+    m_standaloneRedoStack.erase(m_standaloneRedoStack.begin());
+  m_standaloneRedoStack.push_back(std::move(m_waveform.GetAudioData()));
+
+  m_waveform.GetAudioData() = std::move(m_standaloneUndoStack.back());
+  m_standaloneUndoStack.pop_back();
+  StandaloneFinishRestore("undo");
+}
+
+void SneakPeak::StandaloneRedoRestore()
+{
+  if (m_standaloneRedoStack.empty()) return;
+
+  // Current state moves back onto the undo stack (no redo clear here - only a
+  // NEW edit in StandaloneUndoSave cuts the redo branch)
+  if ((int)m_standaloneUndoStack.size() >= MAX_STANDALONE_UNDO)
+    m_standaloneUndoStack.erase(m_standaloneUndoStack.begin());
+  m_standaloneUndoStack.push_back(std::move(m_waveform.GetAudioData()));
+
+  m_waveform.GetAudioData() = std::move(m_standaloneRedoStack.back());
+  m_standaloneRedoStack.pop_back();
+  StandaloneFinishRestore("redo");
+}
+
+void SneakPeak::RedoRestore()
+{
+  if (m_waveform.IsStandaloneMode()) {
+    StandaloneRedoRestore();
+    return;
+  }
+  // Trigger REAPER's native redo (action 40030 = Edit: Redo) and reload the
+  // view the same way UndoRestore does.
+  if (g_Main_OnCommand) {
+    g_Main_OnCommand(40030, 0);
+    if (m_workingSet.active) {
+      RefreshWorkingSet();
+    } else if (m_waveform.IsTimelineView()) {
+      m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS;
+      RefreshTimelineView();
+    } else {
+      m_waveform.ClearItem();
+      LoadSelectedItem();
+    }
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
 }
 
 // --- Marker Navigation ---
