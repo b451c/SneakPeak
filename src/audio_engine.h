@@ -55,9 +55,13 @@ public:
 
   // Write audio data to WAV file (atomic: writes to .tmp then renames)
   // samples are interleaved doubles, will be converted to original format
+  // loopStartFrame/loopEndFrame (END-EXCLUSIVE): when both valid, a `smpl`
+  // sustain-loop chunk is appended after the data chunk (v2.4 INC-A4) so game
+  // engines/samplers read the loop natively. -1/-1 = no chunk (default).
   static bool WriteWavFile(const std::string& path, const double* samples,
                            int numFrames, int numChannels, int sampleRate,
-                           int bitsPerSample, int audioFormat);
+                           int bitsPerSample, int audioFormat,
+                           int loopStartFrame = -1, int loopEndFrame = -1);
 
   // Refresh REAPER's source after modifying the file on disk
   static void RefreshItemSource(MediaItem* item, MediaItem_Take* take);

@@ -6,9 +6,13 @@
 // yield nothing above the 0.5 NCC floor. Deterministic (fixed-seed LCG).
 
 #include "loop_finder.h"
+#include "wav_smpl.h"
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
 #include <vector>
 
 namespace {
@@ -143,6 +147,53 @@ int main()
     std::vector<double> buf2 = orig;
     Check(!WeldLoopSeam(buf2.data(), n, kNch, L - 1, e, L) && buf2 == orig,
           "weld refuses start < L and leaves the buffer untouched");
+  }
+
+  // smpl chunk (INC-A4): byte layout + file round-trip.
+  {
+    unsigned char chunk[kSmplChunkBytes];
+    BuildSmplChunk(48000, 12345, 67890, chunk);   // end EXCLUSIVE
+    auto u32 = [&](int off) {
+      return (uint32_t)chunk[off] | ((uint32_t)chunk[off + 1] << 8) |
+             ((uint32_t)chunk[off + 2] << 16) | ((uint32_t)chunk[off + 3] << 24);
+    };
+    Check(memcmp(chunk, "smpl", 4) == 0 && u32(4) == 60, "smpl id + size 60");
+    Check(u32(8 + 8) == 20833, "SamplePeriod = round(1e9/48000) ns");
+    Check(u32(8 + 12) == 60, "MIDIUnityNote = 60");
+    Check(u32(8 + 28) == 1, "one sustain loop");
+    Check(u32(8 + 44) == 12345 && u32(8 + 48) == 67889,
+          "loop start exact, disk end = exclusive end - 1");
+    Check(u32(8 + 56) == 0, "PlayCount 0 = infinite");
+
+    // Minimal WAV on disk: RIFF + fmt + tiny data + this chunk -> parse back.
+    const char* tmpDir = getenv("TMPDIR");
+    if (!tmpDir) tmpDir = "/tmp";
+    std::string path = std::string(tmpDir) + "/sneakpeak_smpl_test.wav";
+    FILE* f = fopen(path.c_str(), "wb");
+    Check(f != nullptr, "temp WAV opens for writing");
+    if (f) {
+      const unsigned char fmtChunk[24] = { 'f','m','t',' ', 16,0,0,0,
+                                           1,0, 2,0, 0x80,0xBB,0,0,
+                                           0,0xEE,2,0, 4,0, 16,0 };
+      const unsigned char dataHdr[8] = { 'd','a','t','a', 4,0,0,0 };
+      const unsigned char dataBytes[4] = { 0, 0, 0, 0 };
+      const uint32_t riffSize = 4 + 24 + 8 + 4 + kSmplChunkBytes;
+      fwrite("RIFF", 1, 4, f);
+      fwrite(&riffSize, 4, 1, f);
+      fwrite("WAVE", 1, 4, f);
+      fwrite(fmtChunk, 1, sizeof(fmtChunk), f);
+      fwrite(dataHdr, 1, sizeof(dataHdr), f);
+      fwrite(dataBytes, 1, sizeof(dataBytes), f);
+      fwrite(chunk, 1, sizeof(chunk), f);
+      fclose(f);
+      int ls = -1, le = -1;
+      Check(ParseWavSmplFile(path.c_str(), &ls, &le) && ls == 12345 && le == 67890,
+            "smpl round-trip: parse returns the exclusive end back");
+      remove(path.c_str());
+    }
+    int ls = -1, le = -1;
+    Check(!ParseWavSmplFile("/nonexistent/nope.wav", &ls, &le),
+          "parse fails cleanly on a missing file");
   }
 
   // Degenerate inputs never crash or return garbage.

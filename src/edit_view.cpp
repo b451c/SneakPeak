@@ -98,6 +98,8 @@ void SneakPeak::Create()
     if (showRms && showRms[0] == '0') m_waveform.SetShowRMS(false);
     const char* showMeters = g_GetExtState("SneakPeak", "show_meters");
     if (showMeters && showMeters[0] == '0') m_showMeters = false;
+    const char* wls = g_GetExtState("SneakPeak", "loop_write_smpl");
+    if (wls && wls[0]) m_writeLoopOnSave = (wls[0] != '0');
     const char* showRuler = g_GetExtState("SneakPeak", "show_ruler");
     if (showRuler && showRuler[0] == '0') m_showRuler = false;
     const char* specNotes = g_GetExtState("SneakPeak", "spectral_notes");

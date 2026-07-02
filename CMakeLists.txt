@@ -95,6 +95,7 @@ add_library(reaper_sneakpeak SHARED
   src/limiter_engine.cpp
   src/limiter_panel.cpp
   src/loop_finder.cpp
+  src/wav_smpl.cpp
   src/ui_render.cpp
   ${SNEAKPEAK_FONT_GEN}
 )
@@ -219,6 +220,7 @@ endif()
 add_executable(loop_finder_test
   tests/loop_finder_test.cpp
   src/loop_finder.cpp
+  src/wav_smpl.cpp
 )
 target_include_directories(loop_finder_test PRIVATE src)
 target_compile_definitions(loop_finder_test PRIVATE

@@ -183,6 +183,7 @@ enum ContextMenuID {
   CM_CLEAR_LOOP,
   CM_FIND_LOOP_POINTS,                                 // INC-A2: NCC candidate finder
   CM_WELD_LOOP,                                        // INC-A3: crossfade the seam
+  CM_LOOP_WRITE_SMPL,                                  // INC-A4: write smpl on save (check)
   CM_LAST // sentinel -- keep last
 };
 
@@ -615,6 +616,7 @@ private:
   void DrawLimiterOverlay(HDC hdc);      // top-anchored GR band + trace (GDI pass)
   void DrawLoopRegion(HDC hdc);          // Loop Lab brackets + tinted ruler strip
   int m_loopDrag = 0;                    // bracket drag: 0 none, 1 start, 2 end
+  bool m_writeLoopOnSave = true;         // INC-A4: append smpl on save (persisted)
   // Loop Lab finder (INC-A2): a worker scores loop-point candidates on a COPY
   // of the buffer (NCC + spectral tie-break); the results render as numbered
   // pins on the ruler - click a pin to set the loop and start the audition.

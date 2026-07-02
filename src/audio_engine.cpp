@@ -1,5 +1,6 @@
 // audio_engine.cpp — WAV file I/O and REAPER source management
 #include "audio_engine.h"
+#include "wav_smpl.h"
 #include "reaper_plugin.h"
 #include "debug.h"
 #include <cstdio>
@@ -196,8 +197,12 @@ static inline float doubleToF32(double v)
 
 bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
                                 int numFrames, int numChannels, int sampleRate,
-                                int bitsPerSample, int audioFormat)
+                                int bitsPerSample, int audioFormat,
+                                int loopStartFrame, int loopEndFrame)
 {
+  // Loop points ride along only when they form a valid in-range region.
+  const bool writeLoop = loopStartFrame >= 0 && loopEndFrame > loopStartFrame &&
+                         loopEndFrame <= numFrames;
   std::string tmpPath = path + ".sneakpeak.tmp";
   FILE* f = fopen(tmpPath.c_str(), "wb");
   if (!f) {
@@ -224,7 +229,7 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
   // RIFF header
   RiffHeader riff;
   memcpy(riff.riffId, "RIFF", 4);
-  riff.fileSize = 36 + dataSize;
+  riff.fileSize = 36 + dataSize + (writeLoop ? (uint32_t)kSmplChunkBytes : 0);
   memcpy(riff.waveId, "WAVE", 4);
   fwrite(&riff, sizeof(riff), 1, f);
 
@@ -266,6 +271,12 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
       doubleToS24(samples[i], v);
       fwrite(v, 3, 1, f);
     }
+  }
+
+  if (writeLoop) {   // one forward sustain loop, infinite (INC-A4)
+    unsigned char smpl[kSmplChunkBytes];
+    BuildSmplChunk(sampleRate, loopStartFrame, loopEndFrame, smpl);
+    fwrite(smpl, 1, sizeof(smpl), f);
   }
 
   fclose(f);

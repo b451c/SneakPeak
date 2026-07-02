@@ -9,6 +9,7 @@
 
 #include "edit_view.h"
 #include "audio_engine.h"
+#include "wav_smpl.h"
 #include "audio_ops.h"
 #include "theme.h"
 #include "debug.h"
@@ -203,6 +204,17 @@ void SneakPeak::LoadStandaloneFile(const char* path)
   m_overwriteConfirmed = false;
   m_previewCacheDirty = true;
 
+  {   // INC-A4: adopt an existing smpl sustain loop from the file
+    int ls = -1, le = -1;
+    if (ParseWavSmplFile(spath.c_str(), &ls, &le)) {
+      const int fr = m_waveform.GetAudioSampleCount();
+      if (ls >= 0 && le > ls && ls < fr) {
+        m_waveform.SetLoop(ls, std::min(le, fr));
+        ShowToast("Loop points loaded from file");
+      }
+    }
+  }
+
   // Show gain panel in standalone mode
   m_gainPanel.ShowStandalone();
 
@@ -381,6 +393,17 @@ void SneakPeak::FinishStandaloneLoad()
   m_loopCandidates.clear();     // finder pins are transient proposals
   m_standaloneBufferSerial++;   // a pending background apply must not swap in here
 
+  {   // INC-A4: adopt an existing smpl sustain loop from the file
+    int ls = -1, le = -1;
+    if (ParseWavSmplFile(spath.c_str(), &ls, &le)) {
+      const int fr = m_waveform.GetAudioSampleCount();
+      if (ls >= 0 && le > ls && ls < fr) {
+        m_waveform.SetLoop(ls, std::min(le, fr));
+        ShowToast("Loop points loaded from file");
+      }
+    }
+  }
+
   InstallStandaloneTab(spath);
   if (m_hwnd) {
     UpdateTitle();
@@ -488,8 +511,11 @@ void SneakPeak::SaveStandaloneFile()
   int sr = m_waveform.GetSampleRate();
   int frames = m_waveform.GetAudioSampleCount();
 
+  const bool wantLoop = m_writeLoopOnSave && m_waveform.HasLoop();
   if (AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
-                                m_wavBitsPerSample, m_wavAudioFormat)) {
+                                m_wavBitsPerSample, m_wavAudioFormat,
+                                wantLoop ? m_waveform.GetLoopStart() : -1,
+                                wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1)) {
     DBG("[SneakPeak] Saved: %s\n", savePath.c_str());
     m_savedPath = savePath;
     m_dirty = false;
@@ -579,8 +605,11 @@ void SneakPeak::SaveStandaloneFileAs()
     m_wavAudioFormat = 1;
   }
 
+  const bool wantLoop = m_writeLoopOnSave && m_waveform.HasLoop();
   if (AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
-                                m_wavBitsPerSample, m_wavAudioFormat)) {
+                                m_wavBitsPerSample, m_wavAudioFormat,
+                                wantLoop ? m_waveform.GetLoopStart() : -1,
+                                wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1)) {
     DBG("[SneakPeak] Saved As: %s\n", savePath.c_str());
     m_savedPath = savePath;
     m_overwriteConfirmed = true; // user explicitly chose this path

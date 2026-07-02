@@ -459,6 +459,9 @@ void SneakPeak::OnRightClick(int x, int y)
       MenuAppend(loopMenu, hasLoop ? MF_STRING : MF_GRAYED, CM_WELD_LOOP,
                  "Weld Loop (Crossfade)...");
       MenuAppend(loopMenu, hasLoop ? MF_STRING : MF_GRAYED, CM_CLEAR_LOOP, "Clear Loop");
+      MenuAppend(loopMenu,
+                 m_writeLoopOnSave ? (MF_STRING | MF_CHECKED) : MF_STRING,
+                 CM_LOOP_WRITE_SMPL, "Write Loop Points On Save");
       MenuAppendSubmenu(menu, loopMenu, "Loop");
     }
     MenuAppend(menu, MF_STRING, CM_REPLACE_SOURCE, "Replace Source in REAPER Timeline");
@@ -827,6 +830,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       if (m_previewActive && m_previewLoop) StandaloneCleanupPreview();
       m_waveform.ClearLoop();
       InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_LOOP_WRITE_SMPL:
+      m_writeLoopOnSave = !m_writeLoopOnSave;
+      if (g_SetExtState)
+        g_SetExtState("SneakPeak", "loop_write_smpl",
+                      m_writeLoopOnSave ? "1" : "0", true);
       break;
     case CM_LIM_SAVE_PRESET:
       AddLimUserPreset();

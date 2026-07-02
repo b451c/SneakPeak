@@ -898,12 +898,13 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Loop &gt; Audition Loop</strong> plays the region wrapping seamlessly from end back to start - if the seam clicks or thumps, you will hear it exactly as a game engine would play it. The audition follows bracket drags and loops until you stop it (the menu again, or <kbd>Space</kbd>).</li>
   <li><strong>Loop &gt; Find Loop Points</strong> scans the file in the background for seam candidates (loop endpoints on rising zero crossings, ranked by how well the loop's tail continues into its head, with a timbre check as tie-break). The top 5 appear as <strong>numbered yellow pins</strong> on the ruler - click a pin to set the loop and audition it immediately. On material with no repeating structure, "no clean loop points found" is the honest answer.</li>
   <li><strong>Loop &gt; Weld Loop (Crossfade)...</strong> bakes an equal-power crossfade (5-500 ms) over the end of the loop, blending it into the material just before the loop start - after welding, the wrap is continuous by construction. Destructive with undo; a running audition picks up the welded seam immediately. Requires that much audio before the loop start.</li>
+  <li><strong>Loop &gt; Write Loop Points On Save</strong> (on by default): saving writes a standard <code>smpl</code> sustain loop (forward, infinite) into the WAV - Unity, FMOD, Wwise and samplers read it natively. Loading a WAV that already carries loop points shows them as the loop region.</li>
   <li><strong>Loop &gt; Clear Loop</strong> removes the region. The loop is remembered per file tab.</li>
 </ul>
 
-<div class="tip">
-  <strong>Coming next in v2.4</strong>
-  Writing standard <code>smpl</code> loop points into saved WAVs so Unity/FMOD/Wwise and samplers read the loop natively.
+<div class="warning">
+  <strong>Metadata note</strong>
+  SneakPeak's save rebuilds the WAV from the audio in memory, so metadata chunks from the original file (bext, iXML) are not carried over - only the audio, and the <code>smpl</code> loop when enabled.
 </div>
 
 <h2 id="hard-limiter">Hard Limiter (True Peak)</h2>
