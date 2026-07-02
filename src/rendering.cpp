@@ -270,7 +270,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   } else if (isEmpty && m_masterMode) {
     // Master mode active — show indicator
-    COLORREF accent = RGB(200, 80, 80);
+    COLORREF accent = g_theme.modeBarMasterAccent;
     HBRUSH accentBrush = CreateSolidBrush(accent);
     RECT dot = { xPos, yMid - SP(3), xPos + SP(7), yMid + SP(4) };
     FillRect(hdc, &dot, accentBrush);
@@ -284,16 +284,16 @@ void SneakPeak::DrawModeBar(HDC hdc)
     COLORREF accent;
     const char* modeLabel;
     if (m_workingSet.active && isReaper) {
-      accent = RGB(80, 200, 100);  // green for track view
+      accent = g_theme.modeBarSetAccent;
       modeLabel = "SET";
     } else if (isStandalone && !isReaper) {
       accent = g_theme.modeBarStandaloneAccent;
       modeLabel = "STANDALONE";
     } else if (m_waveform.IsTimelineView()) {
-      accent = RGB(180, 140, 255);  // purple for timeline
+      accent = g_theme.modeBarTimelineAccent;
       modeLabel = "TIMELINE";
     } else if (m_waveform.IsMultiItemActive()) {
-      accent = RGB(255, 180, 80);   // orange for multi-item
+      accent = g_theme.modeBarMultiAccent;
       modeLabel = "MULTI";
     } else {
       accent = g_theme.modeBarReaperAccent;
@@ -546,7 +546,7 @@ void SneakPeak::DrawModeBar(HDC hdc)
     DeleteObject(tabBg);
 
     if (m_masterMode) {
-      HPEN ulPen = CreatePen(PS_SOLID, 2, RGB(200, 80, 80));
+      HPEN ulPen = CreatePen(PS_SOLID, 2, g_theme.modeBarMasterAccent);
       HPEN ulPrev = (HPEN)SelectObject(hdc, ulPen);
       MoveToEx(hdc, tabR.left, tabR.bottom - 1, nullptr);
       LineTo(hdc, tabR.right, tabR.bottom - 1);
@@ -555,7 +555,8 @@ void SneakPeak::DrawModeBar(HDC hdc)
     }
 
     SetTextColor(hdc, m_masterMode ? RGB(220, 220, 220)
-                                   : (hovTab ? RGB(230, 110, 110) : RGB(200, 80, 80)));
+                                   : (hovTab ? lightenCol(g_theme.modeBarMasterAccent, 30)
+                                             : g_theme.modeBarMasterAccent));
     RECT textR = { tabR.left + SP(7), tabR.top, tabR.right - SP(7), tabR.bottom };
     DrawTextUTF8(hdc, ml, -1, &textR, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 

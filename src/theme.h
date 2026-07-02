@@ -64,6 +64,10 @@ struct ThemeColors {
   COLORREF modeBarInactiveTab;
   COLORREF modeBarStandaloneAccent;
   COLORREF modeBarReaperAccent;
+  COLORREF modeBarSetAccent;       // SET (working set)
+  COLORREF modeBarTimelineAccent;  // Timeline View
+  COLORREF modeBarMultiAccent;     // Multi-item view
+  COLORREF modeBarMasterAccent;    // MASTER output view
 
   // General
   COLORREF border;

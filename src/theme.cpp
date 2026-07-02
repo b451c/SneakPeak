@@ -134,8 +134,16 @@ void Theme_Refresh()
   g_theme.modeBarText             = RGB(160, 160, 160);
   g_theme.modeBarActiveTab        = RGB(55, 55, 55);
   g_theme.modeBarInactiveTab      = RGB(35, 35, 35);
+  // Mode accents - one DISTINCT hue per mode (audit 2026-07-02: MULTI used to
+  // be a second orange, indistinguishable from STANDALONE at indicator size):
+  // ITEM blue, STANDALONE orange, SET green, TIMELINE lavender, MULTI magenta,
+  // MASTER red. A new mode color must not reuse any of these hue families.
   g_theme.modeBarStandaloneAccent = RGB(230, 160, 50);
   g_theme.modeBarReaperAccent     = RGB(80, 160, 230);
+  g_theme.modeBarSetAccent        = RGB(80, 200, 100);
+  g_theme.modeBarTimelineAccent   = RGB(180, 140, 255);
+  g_theme.modeBarMultiAccent      = RGB(225, 105, 200);
+  g_theme.modeBarMasterAccent     = RGB(200, 80, 80);
 
   // General
   g_theme.border        = grid1;

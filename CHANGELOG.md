@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Old projects and presets load bit-identically: with the new parameters at their defaults the engine output is byte-for-byte the same as v2.2.0 (verified by an offline envelope-diff regression harness added to the repo).
 
 ### Changed
+- **Every mode has its own colour now** - the Multi-item accent was a second orange, indistinguishable from Standalone at indicator size; it is now magenta. Full mode palette: ITEM blue, STANDALONE orange, SET green, TIMELINE lavender, MULTI magenta, MASTER red.
 - **Envelope selection rectangle looks like a selection now** - the Cmd+drag rectangle (and the dense-envelope reveal band) draws a frosted translucent interior, the same treatment as the spectral marquee, instead of the old hatched vertical lines.
 
 ### Fixed
