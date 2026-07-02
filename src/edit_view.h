@@ -189,6 +189,7 @@ enum ContextMenuID {
   CM_AUDITION_SEAM,                                    // seam-only audition (toggle)
   CM_ONESHOT_FACTORY,                                  // INC-B1: open the prep panel
   CM_LOOP_LAB,                                         // INC-A5: open the Loop Lab panel
+  CM_EDIT_COPY_STANDALONE,                             // INC-B4: ITEM -> copy as standalone tab
   CM_LAST // sentinel -- keep last
 };
 
@@ -336,6 +337,7 @@ private:
   void EditOneShotPattern();
   bool OneShotSourceParts(std::string* dir, std::string* base);  // export dir + {name}
   void OpenOneShotFolder();              // OPEN FOLDER button: reveal the export dir
+  void DoEditCopyStandalone();           // v2.4 INC-B4: ITEM buffer -> {name}_edit.wav -> new tab
   void SaveOneShotParams();              // os_* ExtState session defaults
   void RestoreOneShotParams();
   void SaveOneShotGeom();

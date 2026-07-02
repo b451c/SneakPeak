@@ -476,16 +476,22 @@ void SneakPeak::OnRightClick(int x, int y)
     }
 #endif
   }
+  // ITEM-mode file tools (INC-B3/B4): design on the timeline -> select the
+  // item -> Factory exports assets / Edit Copy bridges into the standalone
+  // tools (Loop Lab, Spectral Repair, Hard Limiter).
+  if (OneShotModeOk() && !m_waveform.IsStandaloneMode()) {
+    MenuAppendSeparator(menu);
 #ifdef SNEAKPEAK_BLEND2D_PANEL
-  // One-Shot Factory works in Standalone AND plain ITEM mode (INC-B3): design
-  // on the timeline -> select the item -> Factory -> asset out.
-  if (OneShotModeOk()) {
-    if (!m_waveform.IsStandaloneMode()) MenuAppendSeparator(menu);
     MenuAppend(menu, MF_STRING, CM_ONESHOT_FACTORY, "One-Shot Factory...");
-  }
 #endif
-  if (m_waveform.IsStandaloneMode())
+    MenuAppend(menu, MF_STRING, CM_EDIT_COPY_STANDALONE, "Edit Copy in Standalone");
+  }
+  if (m_waveform.IsStandaloneMode()) {
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+    MenuAppend(menu, MF_STRING, CM_ONESHOT_FACTORY, "One-Shot Factory...");
+#endif
     MenuAppend(menu, MF_STRING, CM_REPLACE_SOURCE, "Replace Source in REAPER Timeline");
+  }
   MenuAppendSeparator(menu);
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   // One discoverability entry for the premium Settings panel (the gear in the mode
@@ -842,6 +848,9 @@ void SneakPeak::OnContextMenuCommand(int id)
       RestoreLoopLabParams();
       m_loopLabPanel.Show();
       InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_EDIT_COPY_STANDALONE:
+      DoEditCopyStandalone();
       break;
     case CM_FIND_LOOP_POINTS:
       StartLoopFind();

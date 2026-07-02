@@ -2325,8 +2325,13 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
     snprintf(normNote, sizeof(normNote), ", %.1f dBTP safe", p.normTarget);
   }
 
+  // Standalone keeps the loaded file's format; ITEM mode (INC-B3) writes
+  // 32-bit float - m_wavBitsPerSample only tracks standalone loads, and float
+  // is lossless for the in-memory doubles.
+  const int outBits = m_waveform.IsStandaloneMode() ? m_wavBitsPerSample : 32;
+  const int outFmt = m_waveform.IsStandaloneMode() ? m_wavAudioFormat : 3;
   if (!AudioEngine::WriteWavFile(outPath, work.data(), len, nch, sr,
-                                 m_wavBitsPerSample, m_wavAudioFormat)) {
+                                 outBits, outFmt)) {
     snprintf(err, errSz, "Write failed - check the source folder permissions");
     return -1;
   }
@@ -2451,6 +2456,54 @@ void SneakPeak::OpenOneShotFolder()
     return;
   }
   ShellExecute(nullptr, "open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+// "Edit Copy in Standalone" (v2.4 INC-B4): the current ITEM's buffer written
+// as {name}_edit.wav next to the item's media file, then opened as a new
+// standalone tab - the one-command bridge from the timeline-first workflow
+// into ALL the standalone-only tools (Loop Lab, Spectral Repair, Hard
+// Limiter, destructive edits). The item itself is never modified; Replace
+// Source in REAPER Timeline closes the round trip afterwards.
+void SneakPeak::DoEditCopyStandalone()
+{
+  if (!OneShotModeOk() || m_waveform.IsStandaloneMode()) return;
+  const auto& data = m_waveform.GetAudioData();
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  const int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+
+  std::string dir, base;
+  if (!OneShotSourceParts(&dir, &base)) {
+    ShowToast("Item source has no file on disk - nowhere to put the copy");
+    return;
+  }
+  // Numbered collision suffix, same policy as the Factory.
+  std::string outPath = dir + "/" + base + "_edit.wav";
+  for (int suffix = 2;; suffix++) {
+    FILE* probe = fopen(outPath.c_str(), "rb");
+    if (!probe) break;
+    fclose(probe);
+    if (suffix > 99) {
+      ShowToast("Output names exhausted - clean up old _edit copies");
+      return;
+    }
+    char sfx[24];
+    snprintf(sfx, sizeof(sfx), "_edit_%d", suffix);
+    outPath = dir + "/" + base + sfx + ".wav";
+  }
+  // 32-bit float: lossless for the in-memory buffer (see OneShotExportSlice).
+  if (!AudioEngine::WriteWavFile(outPath, data.data(), frames, nch, sr, 32, 3)) {
+    ShowToast("Write failed - check the source folder permissions");
+    return;
+  }
+  const size_t slash = outPath.find_last_of("/\\");
+  char buf[160];
+  snprintf(buf, sizeof(buf), "Edit copy: %s",
+           slash == std::string::npos ? outPath.c_str()
+                                      : outPath.c_str() + slash + 1);
+  ShowToast(buf);
+  AddStandaloneFile(outPath.c_str());
 }
 
 // The pattern box opens REAPER's native input dialog - free-text editing in
