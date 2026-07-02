@@ -174,6 +174,7 @@ int OneShotPanel::HitId(double lx, double ly) const
   for (int i = 0; i < 3; i++)
     if (L.sliceSeg[i].contains(lx, ly)) return OS_HIT_SLICE0 + i;
   if (L.patternBox.contains(lx, ly)) return OS_HIT_PATTERN;
+  if (L.folderBtn.contains(lx, ly)) return OS_HIT_FOLDER;
   for (int i = 0; i < kOsNumParams; i++)
     if (L.knob[i].contains(lx, ly)) return OS_HIT_KNOB0 + i;
   return OS_HIT_NONE;
@@ -209,6 +210,10 @@ bool OneShotPanel::OnMouseDown(int x, int y, RECT wr)
   }
   if (hit == OS_HIT_PATTERN) {
     m_patternEditReq = true;
+    return true;
+  }
+  if (hit == OS_HIT_FOLDER) {
+    m_openDirReq = true;
     return true;
   }
   if (hit >= OS_HIT_KNOB0) {

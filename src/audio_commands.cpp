@@ -2313,23 +2313,10 @@ void SneakPeak::DoRunOneShot()
     return;
   }
 
-  // {name} = the source basename; output dir = the source's folder. In ITEM
-  // mode (INC-B3) that is the item's media file - assets land next to it.
-  std::string srcPath = m_waveform.IsStandaloneMode()
-                            ? m_waveform.GetStandaloneFilePath()
-                            : AudioEngine::GetSourceFilePath(m_waveform.GetTake());
-  if (srcPath.empty() && !m_waveform.IsStandaloneMode()) {
+  std::string dir, base;
+  if (!OneShotSourceParts(&dir, &base)) {
     ShowToast("Item source has no file on disk - no output folder");
     return;
-  }
-  std::string dir = ".", base = "oneshot";
-  {
-    const size_t slash = srcPath.find_last_of("/\\");
-    std::string fname = slash == std::string::npos ? srcPath : srcPath.substr(slash + 1);
-    if (slash != std::string::npos) dir = srcPath.substr(0, slash);
-    const size_t dot = fname.find_last_of('.');
-    if (dot != std::string::npos && dot > 0) fname = fname.substr(0, dot);
-    if (!fname.empty()) base = fname;
   }
 
   const int n = (int)slices.size();
@@ -2382,6 +2369,41 @@ void SneakPeak::DoRunOneShot()
              written == 1 ? "" : "s");
   }
   ShowToast(buf);
+}
+
+// Export destination parts: {name} = the source basename, dir = its folder.
+// In ITEM mode (INC-B3) that is the item's media file - assets land next to
+// it. False = the source has no file on disk (nothing to anchor the output).
+bool SneakPeak::OneShotSourceParts(std::string* dir, std::string* base)
+{
+  const std::string srcPath =
+      m_waveform.IsStandaloneMode()
+          ? m_waveform.GetStandaloneFilePath()
+          : AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+  if (srcPath.empty() && !m_waveform.IsStandaloneMode()) return false;
+  *dir = ".";
+  *base = "oneshot";
+  const size_t slash = srcPath.find_last_of("/\\");
+  std::string fname = slash == std::string::npos ? srcPath : srcPath.substr(slash + 1);
+  if (slash != std::string::npos) *dir = srcPath.substr(0, slash);
+  const size_t dot = fname.find_last_of('.');
+  if (dot != std::string::npos && dot > 0) fname = fname.substr(0, dot);
+  if (!fname.empty()) *base = fname;
+  return true;
+}
+
+// OPEN FOLDER (user request 2026-07-02): reveal the export destination in the
+// system file manager. ShellExecute "open" on a directory is the same proven
+// cross-platform path the Support links use (SWELL maps it on macOS/Linux).
+void SneakPeak::OpenOneShotFolder()
+{
+  if (!OneShotModeOk()) return;
+  std::string dir, base;
+  if (!OneShotSourceParts(&dir, &base)) {
+    ShowToast("Item source has no file on disk - no export folder");
+    return;
+  }
+  ShellExecute(nullptr, "open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 // The pattern box opens REAPER's native input dialog - free-text editing in

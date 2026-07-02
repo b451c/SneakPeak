@@ -46,6 +46,8 @@ public:
   // Pattern box clicked (INC-B2): the host opens the native input dialog
   // (free-text editing in the accelerator-driven panel is not worth the risk).
   bool PatternEditRequested() { bool v = m_patternEditReq; m_patternEditReq = false; return v; }
+  // OPEN FOLDER clicked: the host reveals the export destination folder.
+  bool OpenDirRequested() { bool v = m_openDirReq; m_openDirReq = false; return v; }
   bool ParamsChanged() const { return m_paramsChanged; }
   void ClearParamsChanged()  { m_paramsChanged = false; }
   bool GeomChanged() const   { return m_geomChanged; }
@@ -75,6 +77,7 @@ private:
   int  m_hover = OS_HIT_NONE;
   bool m_runRequested = false;
   bool m_patternEditReq = false;
+  bool m_openDirReq = false;
   bool m_paramsChanged = false;
   UiCanvas m_canvas;
 };

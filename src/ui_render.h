@@ -194,7 +194,8 @@ enum OneShotHit {
   OS_HIT_SEG0  = 3,      // normalize mode segments (+ 0..3)
   OS_HIT_SLICE0 = 7,     // slice mode segments (+ 0..2) (INC-B2)
   OS_HIT_PATTERN = 10,   // naming pattern box (INC-B2)
-  OS_HIT_KNOB0 = 11,     // + knob index (keep LAST: ">= KNOB0" means knob)
+  OS_HIT_FOLDER = 11,    // open the export folder (footer button)
+  OS_HIT_KNOB0 = 12,     // + knob index (keep LAST: ">= KNOB0" means knob)
 };
 
 struct OneShotVM {
@@ -213,7 +214,7 @@ struct OneShotLayout {
   URect normSeg[4];
   URect sliceCap, nameCap;   // "SLICE" / "NAME" captions (INC-B2)
   URect sliceSeg[3], patternBox;
-  URect footer, run;
+  URect footer, folderBtn, run;
 };
 OneShotLayout ComputeOneShotLayout(double w, double h);
 

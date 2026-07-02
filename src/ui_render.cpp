@@ -1673,6 +1673,7 @@ OneShotLayout ComputeOneShotLayout(double w, double h)
 
   const double footTop = rowTop + 26.0 + 8.0;          // 244
   L.footer = { 0, footTop, w, (double)dynui::kFooterH };  // bottom = 288
+  L.folderBtn = { pad, footTop + 9.0, 120.0, 26.0 };
   L.run = { w - pad - 100.0, footTop + 9.0, 100.0, 26.0 };
   return L;
 }
@@ -1748,6 +1749,13 @@ void UiCanvas::RenderOneShotPanel(HDC hdc, int x, int y, int w, int h, double dp
 
     ctx.set_stroke_width(1.0);
     ctx.stroke_line(BLLine(0, L.footer.y, W, L.footer.y), col(dynui::kHairline));
+    // OPEN FOLDER: quiet secondary button - reveals the export destination.
+    FillURound(ctx, L.folderBtn, dynui::kRadiusCtrl,
+               vm.hover == OS_HIT_FOLDER ? dynui::kSurface3 : dynui::kSurface2);
+    if (gfx.fontsReady)
+      TextCentered(ctx, gfx.fLabel, L.folderBtn, "OPEN FOLDER",
+                   vm.hover == OS_HIT_FOLDER ? dynui::kInkPrimary
+                                             : dynui::kInkSecondary);
     FillURound(ctx, L.run, dynui::kRadiusCtrl,
                vm.hover == OS_HIT_RUN ? dynui::kAmberGlow : dynui::kAmber);
     if (gfx.fontsReady)

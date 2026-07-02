@@ -334,6 +334,8 @@ private:
                           const std::string& outPath, char* note, size_t noteSz,
                           char* err, size_t errSz);   // 1 written, 0 skip, -1 abort
   void EditOneShotPattern();
+  bool OneShotSourceParts(std::string* dir, std::string* base);  // export dir + {name}
+  void OpenOneShotFolder();              // OPEN FOLDER button: reveal the export dir
   void SaveOneShotParams();              // os_* ExtState session defaults
   void RestoreOneShotParams();
   void SaveOneShotGeom();
