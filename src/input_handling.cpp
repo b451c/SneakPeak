@@ -460,8 +460,10 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         return;
       }
 
-      // Normal click = time selection (same as waveform)
-      m_spectral.ClearFreqSelection();
+      // Normal click+drag = marquee: time selection AND frequency band in one
+      // gesture (a time x frequency rectangle, the spectral-editor standard).
+      // A plain click (no vertical drag) collapses the band on mouse-up and
+      // behaves like the old cursor click. Shift extends the time axis only.
       double time = m_waveform.XToTime(x);
       if (wParam & MK_SHIFT) {
         m_waveform.UpdateSelection(time);
@@ -470,6 +472,10 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         m_waveform.SetCursorTime(time);
         if (g_SetEditCurPos)
           g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), true, false);
+        m_spectral.StartFreqSelection(m_spectral.YToFreq(y, chTop, chH));
+        m_spectralFreqDragging = true;
+        m_spectralFreqDragChTop = chTop;
+        m_spectralFreqDragChH = chH;
       }
       m_dragging = true;
       SetCapture(m_hwnd);
@@ -956,9 +962,19 @@ void SneakPeak::OnMouseUp(int x, int y)
   }
   if (m_spectralFreqDragging) {
     m_spectralFreqDragging = false;
-    ReleaseCapture();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
-    return;
+    // A near-click band (a few px tall) collapses back to "no band", so a
+    // plain click on the spectrogram keeps its cursor-click behavior.
+    int yLo = m_spectral.FreqToY(m_spectral.GetFreqSelLow(),
+                                 m_spectralFreqDragChTop, m_spectralFreqDragChH);
+    int yHi = m_spectral.FreqToY(m_spectral.GetFreqSelHigh(),
+                                 m_spectralFreqDragChTop, m_spectralFreqDragChH);
+    if (std::abs(yLo - yHi) < 3) m_spectral.ClearFreqSelection();
+    if (!m_dragging) { // Alt+drag: band only
+      ReleaseCapture();
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      return;
+    }
+    // Marquee: the m_dragging branch below finishes the time axis.
   }
   if (m_minimapDragging) {
     m_minimapDragging = false;
@@ -1644,8 +1660,11 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
   if (m_spectralFreqDragging) {
     double freq = m_spectral.YToFreq(y, m_spectralFreqDragChTop, m_spectralFreqDragChH);
     m_spectral.UpdateFreqSelection(freq);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
-    return;
+    if (!m_dragging) { // Alt+drag: frequency band only
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      return;
+    }
+    // Marquee: fall through so the time axis (m_dragging below) updates too.
   }
 
   if (m_gainPanel.IsDragging()) {

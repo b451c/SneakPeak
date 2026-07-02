@@ -150,45 +150,90 @@ void SpectralView::PrecomputeSpectrum(const WaveformView& waveform)
                                  std::move(audioCopy), nch, sr, totalFrames);
 }
 
-// Background thread: computes FFT spectrogram
+// Background thread: computes the FFT spectrogram. Columns are independent, so
+// the work is split across a small pool of sub-workers (the FFTs dominate), and
+// channel PAIRS are packed into one complex transform (Z = chA + i*chB;
+// X_A[k] = (Z[k]+conj(Z[N-k]))/2, X_B[k] = (Z[k]-conj(Z[N-k]))/(2i)), halving
+// the FFT count on stereo. Together roughly an order of magnitude faster than
+// the old single-threaded one-FFT-per-channel loop on typical machines.
 void SpectralView::ComputeThreadFunc(std::vector<double> audio, int nch, int sr, int totalFrames)
 {
+  (void)sr;
   int specCols = (totalFrames + HOP_SIZE - 1) / HOP_SIZE;
 
-  // Allocate result buffer locally
+  // Allocate result buffer locally; workers write disjoint column ranges.
   std::vector<unsigned char> specData((size_t)specCols * (size_t)nch * FFT_HALF, 0);
 
-  float re[FFT_SIZE], im[FFT_SIZE];
+  std::atomic<int> colsDone{0};
 
-  for (int fc = 0; fc < specCols; fc++) {
-    // Check for cancellation periodically
-    if (m_cancelRequested.load()) {
-      m_computing.store(false);
-      return;
-    }
+  auto worker = [&](int c0, int c1) {
+    std::vector<float> re((size_t)FFT_SIZE), im((size_t)FFT_SIZE);
+    for (int fc = c0; fc < c1; fc++) {
+      if (m_cancelRequested.load()) return;
+      int centerFrame = fc * HOP_SIZE;
 
-    int centerFrame = fc * HOP_SIZE;
-
-    for (int ch = 0; ch < nch; ch++) {
-      for (int i = 0; i < FFT_SIZE; i++) {
-        int frame = centerFrame - FFT_SIZE / 2 + i;
-        re[i] = (frame >= 0 && frame < totalFrames)
-          ? (float)audio[(size_t)frame * (size_t)nch + (size_t)ch] * s_hann[i]
-          : 0.0f;
-        im[i] = 0.0f;
-      }
-      DoFFT(re, im, FFT_SIZE);
-
-      unsigned char* dst = &specData[((size_t)fc * (size_t)nch + (size_t)ch) * FFT_HALF];
-      for (int bin = 0; bin < FFT_HALF; bin++) {
-        float m = sqrtf(re[bin]*re[bin] + im[bin]*im[bin]);
+      auto gather = [&](int ch, float* dst) { // windowed frame of one channel
+        for (int i = 0; i < FFT_SIZE; i++) {
+          int frame = centerFrame - FFT_SIZE / 2 + i;
+          dst[i] = (frame >= 0 && frame < totalFrames)
+            ? (float)audio[(size_t)frame * (size_t)nch + (size_t)ch] * s_hann[i]
+            : 0.0f;
+        }
+      };
+      auto writeMag = [&](int ch, int bin, float xr, float xi) {
+        float m = sqrtf(xr * xr + xi * xi);
         float db = 20.0f * log10f(m / (float)FFT_SIZE + 1e-10f);
         float norm = (db + 90.0f) / 90.0f;
-        dst[bin] = (unsigned char)(std::max(0.0f, std::min(1.0f, norm)) * 255.0f);
-      }
-    }
+        specData[((size_t)fc * (size_t)nch + (size_t)ch) * FFT_HALF + (size_t)bin] =
+          (unsigned char)(std::max(0.0f, std::min(1.0f, norm)) * 255.0f);
+      };
 
-    m_progress.store((float)(fc + 1) / (float)specCols);
+      for (int ch = 0; ch < nch; ch += 2) {
+        if (ch + 1 < nch) {
+          gather(ch, re.data());
+          gather(ch + 1, im.data());
+          DoFFT(re.data(), im.data(), FFT_SIZE);
+          for (int bin = 0; bin < FFT_HALF; bin++) {
+            int mirror = bin == 0 ? 0 : FFT_SIZE - bin;
+            float a = re[bin], b = im[bin];
+            float c = re[mirror], d = im[mirror];
+            writeMag(ch,     bin, 0.5f * (a + c), 0.5f * (b - d));
+            writeMag(ch + 1, bin, 0.5f * (b + d), 0.5f * (c - a));
+          }
+        } else { // odd channel count: plain real-in-re transform for the tail
+          gather(ch, re.data());
+          std::fill(im.begin(), im.end(), 0.0f);
+          DoFFT(re.data(), im.data(), FFT_SIZE);
+          for (int bin = 0; bin < FFT_HALF; bin++)
+            writeMag(ch, bin, re[bin], im[bin]);
+        }
+      }
+
+      int done = colsDone.fetch_add(1) + 1;
+      if ((done & 31) == 0 || done == specCols)
+        m_progress.store((float)done / (float)specCols);
+    }
+  };
+
+  int hw = (int)std::thread::hardware_concurrency();
+  int nWorkers = std::max(1, std::min(8, hw - 1));
+  nWorkers = std::min(nWorkers, specCols);
+  if (nWorkers <= 1) {
+    worker(0, specCols);
+  } else {
+    std::vector<std::thread> pool;
+    int chunk = (specCols + nWorkers - 1) / nWorkers;
+    for (int w = 0; w < nWorkers; w++) {
+      int c0 = w * chunk, c1 = std::min(specCols, c0 + chunk);
+      if (c0 >= c1) break;
+      pool.emplace_back(worker, c0, c1);
+    }
+    for (auto& th : pool) th.join();
+  }
+
+  if (m_cancelRequested.load()) {
+    m_computing.store(false);
+    return;
   }
 
   // Hand off result to main thread
@@ -235,10 +280,13 @@ void SpectralView::RenderView(const WaveformView& waveform)
     double fMax = std::min(FREQ_MAX, nyquist);
     double logRatio = fMax / fMin;
 
-    // Pre-compute frequency→bin LUT for each pixel row (shared across columns)
+    // Pre-compute frequency→bin LUTs for each pixel row (shared across columns):
+    // center sample for the bilinear (zoom-in) path plus the row's bin SPAN for
+    // the peak-preserving (zoom-out) path.
     std::vector<int> binLow(chH);
     std::vector<int> binHigh(chH);
     std::vector<float> binFrac(chH);
+    std::vector<float> binEdge((size_t)chH + 1);
 
     for (int py = 0; py < chH; py++) {
       double pyFrac = (double)py / (double)chH;
@@ -248,13 +296,21 @@ void SpectralView::RenderView(const WaveformView& waveform)
       binHigh[py] = std::min(binLow[py] + 1, FFT_HALF - 1);
       binFrac[py] = binF - (float)binLow[py];
     }
+    for (int py = 0; py <= chH; py++) {
+      double pyFrac = (double)py / (double)chH;
+      double freq = fMin * pow(logRatio, pyFrac);
+      binEdge[(size_t)py] = (float)(freq / nyquist * (double)(FFT_HALF - 1));
+    }
 
     for (int px = 0; px < width; px++) {
       double t = viewStart + (viewDur * px) / width;
+      double tNext = viewStart + (viewDur * (px + 1)) / width;
       float specCol = (float)(t / colTime);
       int sc0 = std::max(0, std::min(m_specCols - 1, (int)specCol));
       int sc1 = std::max(0, std::min(m_specCols - 1, sc0 + 1));
+      int scEnd = std::max(sc0, std::min(m_specCols - 1, (int)(tNext / colTime)));
       float hFrac = specCol - (float)(int)specCol;
+      bool timeDown = (scEnd - sc0) >= 2; // pixel spans 2+ hop columns
 
       for (int ch = 0; ch < nch; ch++) {
         int chTop = ch * (chH + chSep);
@@ -266,12 +322,29 @@ void SpectralView::RenderView(const WaveformView& waveform)
           if (screenY < 0 || screenY >= height) continue;
 
           int b0 = binLow[py], b1 = binHigh[py];
-          float vf = binFrac[py];
+          int bSpanEnd = std::min(FFT_HALF - 1, (int)binEdge[(size_t)py + 1]);
+          bool freqDown = (bSpanEnd - b0) >= 2; // row spans 2+ bins
 
-          // Bilinear interpolation
-          float top = (float)col0[b0] * (1.0f - hFrac) + (float)col1[b0] * hFrac;
-          float bot = (float)col0[b1] * (1.0f - hFrac) + (float)col1[b1] * hFrac;
-          float val = top * (1.0f - vf) + bot * vf;
+          float val;
+          if (timeDown || freqDown) {
+            // Downsampling on either axis: take the MAX over the covered
+            // column x bin block (peak-preserving, like the waveform peaks
+            // path) so narrow clicks / thin tones stay visible zoomed out.
+            unsigned char mx = 0;
+            int bHi = std::max(b0, bSpanEnd);
+            for (int c = sc0; c <= scEnd; c++) {
+              const unsigned char* colp =
+                &m_specData[((size_t)c * (size_t)nch + (size_t)ch) * FFT_HALF];
+              for (int b = b0; b <= bHi; b++) mx = std::max(mx, colp[b]);
+            }
+            val = (float)mx;
+          } else {
+            // Zoom-in: bilinear interpolation (smooth, unchanged behavior)
+            float vf = binFrac[py];
+            float top = (float)col0[b0] * (1.0f - hFrac) + (float)col1[b0] * hFrac;
+            float bot = (float)col0[b1] * (1.0f - hFrac) + (float)col1[b1] * hFrac;
+            val = top * (1.0f - vf) + bot * vf;
+          }
 
           m_pixels[(size_t)px * (size_t)height + (size_t)screenY] =
             (unsigned char)std::max(0.0f, std::min(255.0f, val));
@@ -429,6 +502,7 @@ void SpectralView::DrawPlayhead(HDC hdc, const WaveformView& waveform)
 void SpectralView::DrawSelection(HDC hdc, const WaveformView& waveform)
 {
   if (!waveform.HasSelection()) return;
+  if (m_freqSelActive) return; // marquee: DrawFreqSelectionOverlay owns the rectangle
 
   double s1 = std::min(waveform.GetSelection().startTime, waveform.GetSelection().endTime);
   double s2 = std::max(waveform.GetSelection().startTime, waveform.GetSelection().endTime);
@@ -454,6 +528,25 @@ void SpectralView::DrawSelection(HDC hdc, const WaveformView& waveform)
 
 // --- Frequency selection overlay ---
 
+// Manual dashes (4 on / 4 off): SWELL only guarantees solid pens, so PS_DOT is
+// not portable. Draws horizontal when y1 == y2, vertical when x1 == x2.
+static void DashedLine(HDC hdc, int x1, int y1, int x2, int y2)
+{
+  if (y1 == y2) {
+    if (x2 < x1) std::swap(x1, x2);
+    for (int x = x1; x < x2; x += 8) {
+      MoveToEx(hdc, x, y1, nullptr);
+      LineTo(hdc, std::min(x + 4, x2), y1);
+    }
+  } else {
+    if (y2 < y1) std::swap(y1, y2);
+    for (int y = y1; y < y2; y += 8) {
+      MoveToEx(hdc, x1, y, nullptr);
+      LineTo(hdc, x1, std::min(y + 4, y2));
+    }
+  }
+}
+
 void SpectralView::DrawFreqSelectionOverlay(HDC hdc, const WaveformView& waveform)
 {
   if (!m_freqSelActive) return;
@@ -467,7 +560,20 @@ void SpectralView::DrawFreqSelectionOverlay(HDC hdc, const WaveformView& wavefor
   double fLow = GetFreqSelLow();
   double fHigh = GetFreqSelHigh();
 
-  HPEN pen = CreatePen(PS_SOLID, 1, RGB(0, 200, 255));
+  // Marquee: with a time selection active the band renders as a dashed
+  // time x frequency rectangle (the repair selection); a band-only selection
+  // (Alt+drag) keeps the full-width horizontal boundary lines.
+  bool marquee = waveform.HasSelection();
+  int x1 = m_rect.left, x2 = contentRight;
+  if (marquee) {
+    double s1 = std::min(waveform.GetSelection().startTime, waveform.GetSelection().endTime);
+    double s2 = std::max(waveform.GetSelection().startTime, waveform.GetSelection().endTime);
+    x1 = std::max((int)m_rect.left, std::min(contentRight, waveform.TimeToX(s1)));
+    x2 = std::max((int)m_rect.left, std::min(contentRight, waveform.TimeToX(s2)));
+    if (x2 <= x1) return; // rectangle fully off-view
+  }
+
+  HPEN pen = CreatePen(PS_SOLID, 1, marquee ? RGB(235, 235, 235) : RGB(0, 200, 255));
   HPEN old = (HPEN)SelectObject(hdc, pen);
 
   for (int ch = 0; ch < nch; ch++) {
@@ -476,11 +582,17 @@ void SpectralView::DrawFreqSelectionOverlay(HDC hdc, const WaveformView& wavefor
     int yHigh = FreqToY(fHigh, chTop, chH);
     if (yLow < yHigh) std::swap(yLow, yHigh); // yHigh is higher freq = lower y
 
-    // Horizontal lines at freq boundaries
-    MoveToEx(hdc, m_rect.left, yHigh, nullptr);
-    LineTo(hdc, contentRight, yHigh);
-    MoveToEx(hdc, m_rect.left, yLow, nullptr);
-    LineTo(hdc, contentRight, yLow);
+    if (marquee) {
+      DashedLine(hdc, x1, yHigh, x2, yHigh);
+      DashedLine(hdc, x1, yLow, x2, yLow);
+      DashedLine(hdc, x1, yHigh, x1, yLow);
+      DashedLine(hdc, x2, yHigh, x2, yLow);
+    } else {
+      MoveToEx(hdc, x1, yHigh, nullptr);
+      LineTo(hdc, x2, yHigh);
+      MoveToEx(hdc, x1, yLow, nullptr);
+      LineTo(hdc, x2, yLow);
+    }
   }
 
   SelectObject(hdc, old);
