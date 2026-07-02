@@ -679,6 +679,18 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             m_envDragEnv = env;
             m_envDragSegOffset = segOffset;
             m_envDragSegDuration = segDuration;
+            // Grab offset: point's on-screen Y minus cursor Y. The move handler
+            // maps the anchor point ABSOLUTELY from cursor Y + this offset, so
+            // it tracks the cursor 1:1 (no fader-scale lag) without jumping.
+            m_envDragGrabDy = 0;
+            if (g_GetEnvelopePoint && g_GetEnvelopeScalingMode && g_ScaleFromEnvelopeMode) {
+              double gt = 0, gv = 0, gtn = 0; int gs = 0; bool gsel = false;
+              if (g_GetEnvelopePoint(env, hitIdx, &gt, &gv, &gs, &gtn, &gsel)) {
+                int sm = g_GetEnvelopeScalingMode(env);
+                m_envDragGrabDy =
+                  m_waveform.EnvYToGainY(g_ScaleFromEnvelopeMode(sm, gv), sm) - y;
+              }
+            }
             SetCapture(m_hwnd);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
             InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -745,6 +757,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
                   m_envDragEnv = env;
                   m_envDragSegOffset = segOffset;
                   m_envDragSegDuration = segDuration;
+                  m_envDragGrabDy = lineY - y; // new point sits on the line
                   SetCapture(m_hwnd);
                   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
                 }
@@ -1645,7 +1658,24 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         g_GetEnvelopeScalingMode && g_ScaleToEnvelopeMode && g_ScaleFromEnvelopeMode) {
       double timeDelta = m_waveform.XToTime(x) - m_waveform.XToTime(m_lastMouseX);
       int scalingMode = g_GetEnvelopeScalingMode(env);
-      double gainDelta = m_waveform.EnvPixelToGain(y, scalingMode) - m_waveform.EnvPixelToGain(m_lastMouseY, scalingMode);
+      // ANCHORED ABSOLUTE drag (user bug: fader-scale is nonlinear in Y, so
+      // per-move deltas taken at the CURSOR's Y made the point lag ever more
+      // on the way down - the cursor hit the window edge while the point hung
+      // mid-lane, forcing a re-grab). The dragged point now maps absolutely
+      // from cursor Y + grab offset (tracks 1:1 at any scale position); the
+      // other selected points move by the anchor's gain delta, so batch-move
+      // semantics are unchanged.
+      double gainDelta = 0.0;
+      double anchorTargetGain = -1.0;
+      {
+        double at = 0, av = 0, atn = 0; int as = 0; bool asel = false;
+        if (g_GetEnvelopePoint(env, m_envDragPointIdx, &at, &av, &as, &atn, &asel)) {
+          double anchorGain = g_ScaleFromEnvelopeMode(scalingMode, av);
+          anchorTargetGain =
+            m_waveform.EnvPixelToGain(y + m_envDragGrabDy, scalingMode);
+          gainDelta = anchorTargetGain - anchorGain;
+        }
+      }
       // Clamp timeDelta so no selected point crosses a non-selected neighbor
       int cnt = g_CountEnvelopePoints(env);
       double selMin = 1e30, selMax = -1e30;
@@ -1665,7 +1695,10 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         if (!psel) continue;
         double newTime = pt + timeDelta;
         double curGain = g_ScaleFromEnvelopeMode(scalingMode, pv);
-        double newGain = std::max(0.0, curGain + gainDelta);
+        // The anchor gets its exact absolute target; companions get its delta.
+        double newGain = (i == m_envDragPointIdx && anchorTargetGain >= 0.0)
+                           ? anchorTargetGain
+                           : std::max(0.0, curGain + gainDelta);
         double newRawVal = g_ScaleToEnvelopeMode(scalingMode, newGain);
         g_SetEnvelopePoint(env, i, &newTime, &newRawVal, nullptr, nullptr, nullptr, &noSort);
       }

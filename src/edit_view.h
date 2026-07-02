@@ -327,6 +327,7 @@ private:
   int m_timelineEditGuard = 0; // ticks to suppress timeline exit after edit operation
   WaveformSelection m_pendingSelRestore = {}; // selection to restore after guarded reload
   bool m_dragging = false;
+  int m_envDragGrabDy = 0; // env point drag: point screen Y - cursor Y at grab
   bool m_scrollbarDragging = false;
   bool m_mmbPanning = false;   // middle-mouse horizontal pan (#61)
   int m_mmbLastX = 0;          // last cursor X during the MMB pan
