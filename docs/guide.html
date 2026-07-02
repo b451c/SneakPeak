@@ -127,7 +127,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <nav class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div class="sidebar-logo">SneakPeak</div>
-    <div class="sidebar-version">v2.2.0 User Guide</div>
+    <div class="sidebar-version">v2.4.0 User Guide</div>
   </div>
 
   <div class="nav-group">
@@ -225,11 +225,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Hero -->
 <h1>Sneak<span>Peak</span> User Guide</h1>
-<p class="subtitle">Precision waveform editor for REAPER - v2.2.0</p>
+<p class="subtitle">Precision waveform editor for REAPER - v2.4.0</p>
 
 <img src="images/sneakpeak-hero.png" alt="SneakPeak" style="width:100%;border-radius:var(--radius);margin:0 0 32px;border:1px solid var(--border)">
 
-<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. v2.0 added volume envelope editing, dynamics processing, and multiplatform support. v2.1 polished the release with automatic envelope activation, source replacement back into the timeline, hide RMS/meter toggles and an update checker. v2.2 scales the whole interface from 80% to 200% (Settings panel with DPI auto-detection), adds truthful clip indication, meters that reflect fades and envelopes, and a round of workflow polish: D/ESC hotkeys, zoom-center preference, middle-mouse panning, selection edge resizing, and stereo-preserving channel solo.</p>
+<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. v2.0 added volume envelope editing, dynamics processing, and multiplatform support. v2.1 polished the release with automatic envelope activation, source replacement back into the timeline, hide RMS/meter toggles and an update checker. v2.2 scales the whole interface from 80% to 200% (Settings panel with DPI auto-detection), adds truthful clip indication, meters that reflect fades and envelopes, and a round of workflow polish. v2.4 is the biggest release yet: the full Dynamics Suite rework (upward compression and BOTH leveling, a complete noise-gate redo, a wideband de-esser, Spectral Repair, curved envelopes), the Game Audio Suite (Loop Lab, One-Shot Factory, True-Peak Hard Limiter), and the two worlds joined up - the Factory and the limiter work directly on timeline items, Dynamics applies destructively on standalone files, Edit Copy bridges an item into every standalone tool, and destructive item edits are finally undoable.</p>
 
 <div class="hero-modes">
   <div class="hero-mode">
@@ -335,7 +335,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <ul>
   <li><strong>Non-destructive (default):</strong> everything you do in ITEM / SET / Timeline modes - splits, gain, fades, envelopes, Dynamics - goes through the REAPER API and lands in REAPER's undo history. Your audio files are never touched.</li>
-  <li><strong>Destructive on a REAPER item:</strong> the processing entries in the right-click menu (Reverse, Normalize, DC Remove, LUFS Normalize, ...) rewrite the item's source WAV on disk after a confirmation prompt. Non-WAV sources are written to a new <code>name_edit.wav</code> instead.</li>
+  <li><strong>Destructive on a REAPER item:</strong> the processing entries in the right-click menu (Reverse, DC Remove, Hard Limiter, ...) rewrite the item's source WAV on disk after a confirmation prompt - and can be undone: <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> writes the original audio back (one level). WAV sources only; for MP3/FLAC items use <strong>Edit Copy in Standalone</strong> instead.</li>
   <li><strong>Destructive standalone editor:</strong> drag a file from Finder/Explorer (or any file browser) and drop it ONTO the SneakPeak window - the mode bar switches to the orange STANDALONE tab. Cut, paste, silence, process and draw freely; nothing happens to any file until you Save (<kbd>Ctrl</kbd>+<kbd>S</kbd>) or use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a>. Standalone has its own 20-level undo, independent of REAPER's.</li>
 </ul>
 
@@ -427,9 +427,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>The toolbar also has Zoom In, Zoom Out, Zoom to Fit, and Zoom to Selection buttons.</p>
 
 <h2 id="editing-reaper">Editing (REAPER Mode)</h2>
-<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+<div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 
-<p>Editing in REAPER mode is non-destructive. Operations go through the REAPER API and create undo points.</p>
+<p>Editing in ITEM mode is non-destructive. Operations go through the REAPER API and create undo points.</p>
 
 <div class="shortcut-grid">
   <div class="key"><kbd>Ctrl</kbd>+<kbd>X</kbd></div><div class="desc">Cut selection (copy + ripple delete)</div>
@@ -455,7 +455,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Scope notes: slip works on single items with non-looped sources. Inside a selection, <kbd>Option</kbd>+drag keeps its drag-export meaning; in SET / Timeline / Multi-item views it keeps segment-snap; on the envelope line it edits curvature.</p>
 
 <h2 id="fades">Fades</h2>
-<div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-standalone">STANDALONE</span></div>
+<div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>Fade handles appear at the top corners of the waveform as small squares. They are always visible - even when no fade exists yet - so you can grab them to create new fades.</p>
 
@@ -468,7 +468,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Fade-in and fade-out block each other - neither can be dragged past the other's position. In multi-item and SET views, fade-in targets the first item and fade-out targets the last item, each clamped to its segment's duration.</p>
 
-<p>In REAPER mode, fades sync bidirectionally in real-time - change a fade in REAPER's arrange view and see it update instantly in SneakPeak, and vice versa. In standalone mode, fades are previewed visually and baked into the audio on save.</p>
+<p>In ITEM mode, fades sync bidirectionally in real-time - change a fade in REAPER's arrange view and see it update instantly in SneakPeak, and vice versa. In standalone mode, fades are previewed visually and baked into the audio on save.</p>
 
 <h2 id="gain">Gain Control</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
@@ -484,7 +484,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <table>
   <thead><tr><th>Mode</th><th>With Selection</th><th>Without Selection</th></tr></thead>
   <tbody>
-    <tr><td>REAPER</td><td>Splits at selection edges, applies D_VOL to fragment</td><td>Changes D_VOL on whole item</td></tr>
+    <tr><td>ITEM</td><td>Splits at selection edges, applies D_VOL to fragment</td><td>Changes D_VOL on whole item</td></tr>
     <tr><td>Timeline View</td><td>Splits at edges, applies D_VOL to fragment</td><td>Applies D_VOL to all fragments</td></tr>
     <tr><td>Multi-item</td><td>Splits at edges, applies D_VOL across segments</td><td>Applies D_VOL to all items</td></tr>
     <tr><td>SET</td><td>Splits at edges, applies D_VOL with 10ms crossfade</td><td>Applies D_VOL to all set items</td></tr>
@@ -500,7 +500,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </div>
 
 <h2 id="split">Split</h2>
-<div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-set">SET</span></div>
+<div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-set">SET</span></div>
 
 <p>Press <kbd>S</kbd> to split the item at the edit cursor position. If you have a selection, the item is split at both selection edges. This uses REAPER's native SplitMediaItem and creates an undo point.</p>
 
@@ -564,7 +564,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="set-dormant">Dormant State & Auto-Restore</h2>
 
-<p>The working set is persistent. When you click on a different item outside the set, SneakPeak switches to normal REAPER mode for that item. But the set is not destroyed - it goes <em>dormant</em>.</p>
+<p>The working set is persistent. When you click on a different item outside the set, SneakPeak switches to normal ITEM mode for that item. But the set is not destroyed - it goes <em>dormant</em>.</p>
 
 <p>Click back on any item that belongs to the working set, and SneakPeak automatically restores the SET view. No need to press <kbd>T</kbd> again.</p>
 
@@ -574,9 +574,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Timeline View -->
 <h2 id="timeline-overview">Timeline View - Overview</h2>
-<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+<div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 
-<p>Timeline View activates automatically when you cut a section from an item in REAPER mode. Instead of showing only the remaining left portion, SneakPeak displays <strong>all surviving fragments</strong> with gaps preserved - matching the REAPER timeline 1:1. Dark background regions mark the gaps where audio was removed.</p>
+<p>Timeline View activates automatically when you cut a section from an item in ITEM mode. Instead of showing only the remaining left portion, SneakPeak displays <strong>all surviving fragments</strong> with gaps preserved - matching the REAPER timeline 1:1. Dark background regions mark the gaps where audio was removed.</p>
 
 <p>This lets you continue editing across all fragments without losing visual context. Your zoom position is preserved through cuts, and you can make multiple edits in succession.</p>
 
@@ -603,7 +603,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="timeline-lifecycle">Entering & Exiting</h2>
 
-<p><strong>Entering:</strong> Timeline View activates automatically when a delete or selection-aware gain operation in REAPER mode produces two or more fragments from the same item.</p>
+<p><strong>Entering:</strong> Timeline View activates automatically when a delete or selection-aware gain operation in ITEM mode produces two or more fragments from the same item.</p>
 
 <p><strong>Exiting:</strong> Click any single item on the REAPER timeline. SneakPeak exits Timeline View and loads that item normally. You can also press <kbd>T</kbd> to enter SET mode if you want gap-collapsed editing instead.</p>
 
@@ -629,7 +629,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Edit Copy in Standalone</strong> - in ITEM mode, right-click a selected timeline item &gt; <strong>Edit Copy in Standalone</strong>: the item's audio is written as <code>{name}_edit.wav</code> (32-bit float) next to its media file and opens as a new standalone tab - the fastest route from the timeline into Loop Lab, Spectral Repair, the Hard Limiter and destructive editing. The original item is untouched; use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a> to bring the result back.</li>
   <li><strong>Switch tabs</strong> - click a tab in the mode bar</li>
   <li><strong>Close a tab</strong> - click the X on the active tab. If the file has unsaved changes, you'll be asked to save first.</li>
-  <li><strong>Return to REAPER mode</strong> - click the "REAPER" tab (appears when you have an item selected)</li>
+  <li><strong>Return to ITEM mode</strong> - click the item tab (blue diamond, shows the take name; appears when you have an item selected)</li>
 </ul>
 
 <p>An asterisk (*) on the tab name indicates unsaved changes.</p>
@@ -859,7 +859,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Features -->
 <h2 id="spectral">Spectral View</h2>
-<div class="modes"><span class="mode mode-reaper">REAPER</span><span class="mode mode-standalone">STANDALONE</span></div>
+<div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>Toggle the spectrogram via right-click > View > Spectral View. A resizable pane appears below the waveform showing a time-frequency representation of the audio using the magma color scheme (dark = silence, bright = energy).</p>
 
@@ -889,7 +889,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <div class="warning">
   <strong>Standalone only (v1)</strong>
-  Spectral Repair works in Standalone mode. For a REAPER item, edit a saved copy and use Replace Source in REAPER Timeline - direct ITEM-mode repair is a planned follow-up. Healing v1 works horizontally (across time); vertical and pattern modes are follow-ups too.
+  Spectral Repair works in Standalone mode. For a REAPER item, <strong>Edit Copy in Standalone</strong> (one right-click command) opens a copy ready to repair, and Replace Source in REAPER Timeline brings it back - direct ITEM-mode repair is a planned follow-up. Healing v1 works horizontally (across time); vertical and pattern modes are follow-ups too.
 </div>
 
 <h2 id="loop-lab">Loop Lab (Seamless Loops)</h2>
@@ -955,12 +955,12 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </div>
 
 <div class="warning">
-  <strong>Standalone only (v1)</strong>
-  The Hard Limiter edits the audio loaded in Standalone mode. For a REAPER item, edit a saved copy and use Replace Source in REAPER Timeline - direct ITEM-mode apply is a planned follow-up.
+  <strong>Destructive by design</strong>
+  A true-peak ceiling needs per-sample gain, so the limiter always changes the audio itself - in Standalone it edits the loaded buffer (nothing on disk until Save), in ITEM mode Apply rewrites the source WAV after a confirm prompt (undoable with <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd>, one level).
 </div>
 
 <h2 id="multi-item">Multi-Item View</h2>
-<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+<div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 
 <p>Select two or more items on the timeline. SneakPeak shows all of them together on an absolute timeline. Dark background regions mark gaps between items. Right-click to choose a display mode:</p>
 
@@ -1013,7 +1013,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </ul>
 
 <h2 id="markers">Markers</h2>
-<div class="modes"><span class="mode mode-reaper">REAPER</span></div>
+<div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 
 <p>SneakPeak integrates with REAPER's marker system. Markers appear as colored triangles in the ruler area.</p>
 
@@ -1099,7 +1099,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Ten things people miss on the first pass:</p>
 
 <ul>
-  <li><strong>Destructive editing lives in two places</strong> - the right-click processing entries rewrite an item's source file (after a confirmation), and dropping an audio file onto the SneakPeak window opens the fully destructive <a href="#standalone-overview">Standalone editor</a>. The <a href="#destructive">orientation section</a> has the full map.</li>
+  <li><strong>Destructive editing lives in two places</strong> - the right-click processing entries rewrite an item's source file (after a confirmation, undoable with <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd>), and dropping an audio file onto the SneakPeak window opens the fully destructive <a href="#standalone-overview">Standalone editor</a>. The <a href="#destructive">orientation section</a> has the full map.</li>
   <li><strong>Press <kbd>D</kbd></strong> to open the Dynamics panel, and <kbd>ESC</kbd> to close any panel.</li>
   <li><strong>Scroll on knobs.</strong> The gain knob and every dynamics knob respond to the mouse wheel (<kbd>Cmd</kbd> = fine steps), and double-clicking a dynamics knob lets you type an exact value.</li>
   <li><strong>Fade handles take the wheel too</strong> - scroll to nudge a fade length (<kbd>Cmd</kbd> = 1 ms steps), or hold <kbd>Shift</kbd> while dragging for a 1/4-speed fine trim.</li>
@@ -1119,16 +1119,16 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <thead><tr><th>Shortcut</th><th>Action</th><th>Mode</th></tr></thead>
   <tbody>
     <tr><td><kbd>Space</kbd></td><td>Play / Stop (from cursor or selection)</td><td>All</td></tr>
-    <tr><td><kbd>T</kbd></td><td>Toggle Working Set mode</td><td>REAPER</td></tr>
-    <tr><td><kbd>S</kbd></td><td>Split at cursor / selection</td><td>REAPER, SET</td></tr>
+    <tr><td><kbd>T</kbd></td><td>Toggle Working Set mode</td><td>ITEM</td></tr>
+    <tr><td><kbd>S</kbd></td><td>Split at cursor / selection</td><td>ITEM, SET</td></tr>
     <tr><td><kbd>G</kbd></td><td>Toggle gain panel</td><td>All</td></tr>
-    <tr><td><kbd>D</kbd></td><td>Toggle Dynamics panel</td><td>REAPER, SET, Timeline</td></tr>
-    <tr><td><kbd>M</kbd></td><td>Add marker at cursor</td><td>REAPER</td></tr>
-    <tr><td><kbd>Shift</kbd>+<kbd>M</kbd></td><td>Add region from selection</td><td>REAPER</td></tr>
+    <tr><td><kbd>D</kbd></td><td>Toggle Dynamics panel</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td><kbd>M</kbd></td><td>Add marker at cursor</td><td>ITEM</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>M</kbd></td><td>Add region from selection</td><td>ITEM</td></tr>
     <tr><td><kbd>E</kbd></td><td>Delete selection (gap preserved)</td><td>All</td></tr>
-    <tr><td><kbd>Shift</kbd>+<kbd>E</kbd></td><td>Ripple Delete (closes gap)</td><td>REAPER, SET, Timeline</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>E</kbd></td><td>Ripple Delete (closes gap)</td><td>ITEM, SET, Timeline</td></tr>
     <tr><td><kbd>Delete</kbd></td><td>Delete selection (gap preserved)</td><td>All</td></tr>
-    <tr><td><kbd>Shift</kbd>+<kbd>Delete</kbd></td><td>Ripple Delete (closes gap)</td><td>REAPER, SET, Timeline</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>Delete</kbd></td><td>Ripple Delete (closes gap)</td><td>ITEM, SET, Timeline</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Delete</kbd></td><td>Silence selection</td><td>All</td></tr>
     <tr><td><kbd>Up</kbd></td><td>Gain +1 dB</td><td>All</td></tr>
     <tr><td><kbd>Down</kbd></td><td>Gain -1 dB</td><td>All</td></tr>
@@ -1137,12 +1137,12 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>Escape</kbd></td><td>Close Settings/Dynamics panel / exit working set / clear selection / stop</td><td>All</td></tr>
     <tr><td><kbd>Home</kbd></td><td>Go to item start</td><td>All</td></tr>
     <tr><td><kbd>End</kbd></td><td>Go to item end</td><td>All</td></tr>
-    <tr><td><kbd>Tab</kbd></td><td>Next marker</td><td>REAPER</td></tr>
-    <tr><td><kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Previous marker</td><td>REAPER</td></tr>
+    <tr><td><kbd>Tab</kbd></td><td>Next marker</td><td>ITEM</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Previous marker</td><td>ITEM</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Select all</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Cut (copy + ripple delete)</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Copy</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Paste (non-destructive insert)</td><td>REAPER, SET, Timeline</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Paste (non-destructive insert)</td><td>ITEM, SET, Timeline</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Redo</td><td>All</td></tr>
     <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Normalize (peak)</td><td>All</td></tr>
@@ -1218,7 +1218,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h3>Check for Updates</h3>
 
-<p>Click the version label (<code>v2.2.0</code>) in the mode bar. SneakPeak queries GitHub's Releases API via <code>curl</code> (5 s timeout) and reports the result in a toast:</p>
+<p>Click the version label (<code>v2.4.0</code>) in the mode bar. SneakPeak queries GitHub's Releases API via <code>curl</code> (5 s timeout) and reports the result in a toast:</p>
 
 <ul>
   <li><strong>SneakPeak is up to date (vX.Y.Z)</strong> - you are on the latest release</li>
