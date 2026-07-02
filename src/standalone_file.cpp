@@ -120,8 +120,15 @@ void SneakPeak::OnModeBarCloseTab(int idx)
                             "SneakPeak", MB_YESNOCANCEL | MB_ICONQUESTION);
     if (result == IDCANCEL) return;
     if (result == IDYES) {
-      // Save if this is the active tab
-      if (isActiveTab) SaveStandaloneFile();
+      // Saving works on the ACTIVE state - switch to the tab first when it is
+      // a background one (the old code silently skipped saving those).
+      if (!isActiveTab) {
+        if (m_waveform.IsStandaloneMode() && m_activeFileIdx >= 0)
+          SaveCurrentStandaloneState();
+        RestoreStandaloneState(idx);
+        isActiveTab = true;
+      }
+      SaveStandaloneFile();
     }
   }
 
@@ -212,28 +219,55 @@ void SneakPeak::AddStandaloneFile(const char* path)
     }
   }
 
-  // Save current standalone state before switching
-  if (m_waveform.IsStandaloneMode() && m_activeFileIdx >= 0) {
-    SaveCurrentStandaloneState();
+  // STA-1: decode incrementally. Long files stream in OnTimer slices with a
+  // progress title while the CURRENT view keeps working; the new tab installs
+  // at completion (FinishStandaloneLoad owns all bookkeeping). Small files
+  // finish synchronously - identical feel to the old path.
+  if (m_stdLoading) {
+    ShowToast("Still loading the previous file...");
+    return;
   }
-
-  // Evict if at max
-  if ((int)m_standaloneFiles.size() >= MAX_STANDALONE_FILES) {
-    // Find oldest non-dirty, or oldest if all dirty
-    int evictIdx = 0;
-    for (int i = 0; i < (int)m_standaloneFiles.size(); i++) {
-      if (!m_standaloneFiles[i].dirty) { evictIdx = i; break; }
+  if (AudioEngine::BeginStream(spath, m_stdLoad)) {
+    const double secs =
+      (double)m_stdLoad.totalFrames / (double)std::max(1, m_stdLoad.info.sampleRate);
+    if (secs > 20.0) {
+      m_stdLoading = true;
+      char toast[300];
+      snprintf(toast, sizeof(toast), "Loading %s...", FileNameFromPath(path));
+      ShowToast(toast);
+      return; // StepStandaloneLoad (OnTimer) drives the rest
     }
-    m_standaloneFiles.erase(m_standaloneFiles.begin() + evictIdx);
-    if (m_activeFileIdx > evictIdx) m_activeFileIdx--;
-    else if (m_activeFileIdx == evictIdx) m_activeFileIdx = -1;
+    while (AudioEngine::ReadStreamStep(m_stdLoad, 0.050)) {}
+    FinishStandaloneLoad();
+    return;
   }
 
-  // Load the file via existing logic
+  // PCM_Source unavailable/unreadable: the old synchronous path (including the
+  // direct-WAV fallback and its error box), with the original tab bookkeeping.
+  if (m_waveform.IsStandaloneMode() && m_activeFileIdx >= 0)
+    SaveCurrentStandaloneState();
+  EvictStandaloneTabIfFull();
   LoadStandaloneFile(path);
   if (!m_waveform.IsStandaloneMode()) return; // load failed
+  InstallStandaloneTab(spath);
+}
 
-  // Create state entry
+// Oldest non-dirty tab (or plain oldest) makes room at MAX_STANDALONE_FILES.
+void SneakPeak::EvictStandaloneTabIfFull()
+{
+  if ((int)m_standaloneFiles.size() < MAX_STANDALONE_FILES) return;
+  int evictIdx = 0;
+  for (int i = 0; i < (int)m_standaloneFiles.size(); i++) {
+    if (!m_standaloneFiles[i].dirty) { evictIdx = i; break; }
+  }
+  m_standaloneFiles.erase(m_standaloneFiles.begin() + evictIdx);
+  if (m_activeFileIdx > evictIdx) m_activeFileIdx--;
+  else if (m_activeFileIdx == evictIdx) m_activeFileIdx = -1;
+}
+
+// Create + activate the tab entry for the audio currently in the waveform.
+void SneakPeak::InstallStandaloneTab(const std::string& spath)
+{
   StandaloneFileState fs;
   fs.filePath = spath;
   fs.audioData = m_waveform.GetAudioData();
@@ -253,7 +287,84 @@ void SneakPeak::AddStandaloneFile(const char* path)
   m_activeFileIdx = (int)m_standaloneFiles.size() - 1;
 
   if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
-  DBG("[SneakPeak] Added standalone tab %d: %s\n", m_activeFileIdx, path);
+  DBG("[SneakPeak] Added standalone tab %d: %s\n", m_activeFileIdx, spath.c_str());
+}
+
+// OnTimer slice of an in-flight incremental load (~20 ms of decode per tick;
+// the message loop breathes between ticks, so the UI stays live).
+void SneakPeak::StepStandaloneLoad()
+{
+  if (!m_stdLoading) return;
+  if (AudioEngine::ReadStreamStep(m_stdLoad, 0.020)) {
+    if (m_hwnd && m_stdLoad.totalFrames > 0) {
+      char title[512];
+      snprintf(title, sizeof(title), "SneakPeak: Loading %s... %d%%",
+               FileNameFromPath(m_stdLoad.path.c_str()),
+               (int)(100.0 * (double)m_stdLoad.framesRead / (double)m_stdLoad.totalFrames));
+      SetWindowText(m_hwnd, title);
+    }
+    return;
+  }
+  FinishStandaloneLoad();
+}
+
+// Install a finished incremental load: everything the old synchronous path did
+// (preview/undo cleanup, waveform install, standalone state reset) PLUS the tab
+// bookkeeping - all deferred to completion so a failed/canceled load leaves the
+// previous state untouched.
+void SneakPeak::FinishStandaloneLoad()
+{
+  m_stdLoading = false;
+  if (m_stdLoad.framesRead <= 0 || m_stdLoad.info.numChannels <= 0) {
+    AudioEngine::AbortStream(m_stdLoad);
+    MessageBox(m_hwnd, "Failed to load audio file.", "SneakPeak", MB_OK | MB_ICONERROR);
+    if (m_hwnd) UpdateTitle();
+    return;
+  }
+
+  if (m_waveform.IsStandaloneMode() && m_activeFileIdx >= 0)
+    SaveCurrentStandaloneState();
+  EvictStandaloneTabIfFull();
+
+  StandaloneCleanupPreview();
+  if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
+  m_standaloneUndoStack.clear();
+  m_standaloneRedoStack.clear();
+  m_waveform.ClearStandaloneFade();
+  m_waveform.ClearStandaloneGain();
+
+  const WavInfo info = m_stdLoad.info;
+  const std::string spath = m_stdLoad.path;
+  const double dur = (double)info.numFrames / (double)std::max(1, info.sampleRate);
+  m_waveform.RestoreFromMemory(spath, std::move(m_stdLoad.samples),
+                               info.numChannels, info.sampleRate, info.numFrames,
+                               info.bitsPerSample, info.audioFormat, dur);
+  m_waveform.SetViewStart(0.0);
+  m_waveform.SetViewDuration(dur);
+  m_waveform.SetCursorTime(0.0);
+  m_waveform.ClearSelection();
+  AudioEngine::AbortStream(m_stdLoad); // samples were moved out; closes the rest
+
+  m_wavBitsPerSample = info.bitsPerSample;
+  m_wavAudioFormat = info.audioFormat;
+  m_hasUndo = false;
+  m_dirty = false;
+  m_savedPath.clear();
+  m_overwriteConfirmed = false;
+  m_previewCacheDirty = true;
+
+  m_gainPanel.ShowStandalone();
+  m_spectral.ClearSpectrum();
+  m_spectral.Invalidate();
+  m_minimap.Invalidate();
+
+  InstallStandaloneTab(spath);
+  if (m_hwnd) {
+    UpdateTitle();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+  DBG("[SneakPeak] Incremental load installed: %s (%d frames)\n",
+      spath.c_str(), info.numFrames);
 }
 
 // Generate a unique "_edit.wav" path from an original file path.

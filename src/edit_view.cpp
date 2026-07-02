@@ -138,6 +138,9 @@ void SneakPeak::Destroy()
   StandaloneCleanupPreview();
   if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
   CleanupDragTemp();
+  // Cancel an in-flight incremental load (closes its PCM_source)
+  m_stdLoading = false;
+  AudioEngine::AbortStream(m_stdLoad);
   // Save floating window position/size
   if (!m_isDocked && g_SetExtState) {
     RECT wr;
@@ -748,6 +751,9 @@ void SneakPeak::OnTimer()
   // in flight (caret blink, Live pulse, tab-slide, value-ease). Idle -> no extra repaint.
   if (m_dynamicsPanel.WantsAnimationFrame())
     InvalidateRect(m_hwnd, nullptr, FALSE);
+
+  // Incremental standalone load (STA-1): one ~20 ms decode slice per tick.
+  StepStandaloneLoad();
 
   // Spectral compute pump: the background thread cannot invalidate the window,
   // so without this the "Computing spectrum..." overlay freezes at its last

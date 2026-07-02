@@ -5,6 +5,7 @@
 #include "config.h"
 #include "globals.h"
 #include "waveform_view.h"
+#include "audio_engine.h"
 #include "toolbar.h"
 #include "gain_panel.h"
 #include "marker_manager.h"
@@ -389,6 +390,14 @@ private:
 
   // Standalone file mode (drag & drop from disk)
   void LoadStandaloneFile(const char* path);
+  // Incremental load (STA-1): long files decode in OnTimer slices; the new
+  // tab installs at completion, the current view keeps working meanwhile.
+  AudioEngine::StreamLoad m_stdLoad;
+  bool m_stdLoading = false;
+  void StepStandaloneLoad();    // OnTimer slice + progress title
+  void FinishStandaloneLoad();  // install buffer + tab bookkeeping
+  void EvictStandaloneTabIfFull();
+  void InstallStandaloneTab(const std::string& spath);
   void SaveStandaloneFile();
   void SaveStandaloneFileAs();
   void BakePendingFades();

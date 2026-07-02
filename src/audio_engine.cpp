@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <algorithm>
+#include <chrono>
 
 // --- WAV format structures ---
 
@@ -348,6 +349,86 @@ bool AudioEngine::ReadAudioFile(const std::string& path, WavInfo& info,
 
   // Fallback: direct WAV reading
   return ReadWavFile(path, info, samples);
+}
+
+// --- Incremental streaming load (STA-1) ---
+
+bool AudioEngine::BeginStream(const std::string& path, StreamLoad& s)
+{
+  AbortStream(s);
+  if (!g_PCM_Source_CreateFromFile) return false;
+  PCM_source* src = g_PCM_Source_CreateFromFile(path.c_str());
+  if (!src) return false;
+  int nch = src->GetNumChannels();
+  int sr = (int)src->GetSampleRate();
+  double length = src->GetLength();
+  int totalFrames = (int)(length * sr);
+  if (nch <= 0 || sr <= 0 || totalFrames <= 0) { delete src; return false; }
+  if (nch > 2) nch = 2; // cap at stereo (matches ReadAudioFile)
+
+  s.src = src;
+  s.path = path;
+  s.info.numChannels = nch;
+  s.info.sampleRate = sr;
+  s.info.numFrames = totalFrames;
+  s.info.bitsPerSample = 32; // PCM_Source always gives float-quality
+  s.info.audioFormat = 3;
+  {
+    WavInfo wavInfo; // WAV source: preserve the original format for write-back
+    if (ReadWavHeader(path, wavInfo)) {
+      s.info.bitsPerSample = wavInfo.bitsPerSample;
+      s.info.audioFormat = wavInfo.audioFormat;
+    }
+  }
+  s.framesRead = 0;
+  s.totalFrames = totalFrames;
+  s.samples.assign((size_t)totalFrames * nch, 0.0);
+  return true;
+}
+
+bool AudioEngine::ReadStreamStep(StreamLoad& s, double budgetSec)
+{
+  if (!s.src) return false;
+  using clock = std::chrono::steady_clock;
+  const auto t0 = clock::now();
+  static const int CHUNK = 65536;
+  const int nch = s.info.numChannels;
+  std::vector<double> buf((size_t)CHUNK * nch);
+
+  while (s.framesRead < s.totalFrames) {
+    int chunk = std::min(CHUNK, s.totalFrames - s.framesRead);
+    PCM_source_transfer_t transfer = {};
+    transfer.time_s = (double)s.framesRead / (double)s.info.sampleRate;
+    transfer.length = chunk;
+    transfer.nch = nch;
+    transfer.samplerate = s.info.sampleRate;
+    transfer.samples = buf.data();
+    s.src->GetSamples(&transfer);
+    int got = transfer.samples_out;
+    if (got <= 0) break; // decoder end/error: finish with what decoded
+    memcpy(s.samples.data() + (size_t)s.framesRead * nch,
+           buf.data(), (size_t)got * nch * sizeof(double));
+    s.framesRead += got;
+    if (std::chrono::duration<double>(clock::now() - t0).count() >= budgetSec)
+      return s.framesRead < s.totalFrames;
+  }
+
+  // Finished (or the decoder stopped early - same tolerance as ReadAudioFile)
+  s.info.numFrames = s.framesRead;
+  s.samples.resize((size_t)s.framesRead * (size_t)nch);
+  delete s.src;
+  s.src = nullptr;
+  return false;
+}
+
+void AudioEngine::AbortStream(StreamLoad& s)
+{
+  if (s.src) { delete s.src; s.src = nullptr; }
+  s.samples.clear();
+  s.samples.shrink_to_fit();
+  s.framesRead = 0;
+  s.totalFrames = 0;
+  s.path.clear();
 }
 
 void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)

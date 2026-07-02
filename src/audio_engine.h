@@ -32,6 +32,27 @@ public:
   static bool ReadAudioFile(const std::string& path, WavInfo& info,
                             std::vector<double>& samples);
 
+  // Incremental streaming load (STA-1): the same decode as ReadAudioFile but
+  // sliced - BeginStream opens + preallocates, ReadStreamStep decodes for
+  // ~budgetSec of wall time per call (driven from the window timer, so the UI
+  // stays responsive and the REAPER API is never touched off-thread), and the
+  // caller installs `samples` when the step returns false. AbortStream cancels.
+  struct StreamLoad {
+    PCM_source* src = nullptr;
+    WavInfo info;
+    std::vector<double> samples; // preallocated by BeginStream, filled by steps
+    int framesRead = 0;
+    int totalFrames = 0;
+    std::string path;
+  };
+  // False when PCM_Source is unavailable or the file is unreadable - the
+  // caller falls back to the synchronous ReadAudioFile path.
+  static bool BeginStream(const std::string& path, StreamLoad& s);
+  // True while more audio remains; false = finished (info.numFrames trimmed
+  // to what actually decoded, source closed).
+  static bool ReadStreamStep(StreamLoad& s, double budgetSec);
+  static void AbortStream(StreamLoad& s);
+
   // Write audio data to WAV file (atomic: writes to .tmp then renames)
   // samples are interleaved doubles, will be converted to original format
   static bool WriteWavFile(const std::string& path, const double* samples,
