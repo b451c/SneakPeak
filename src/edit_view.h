@@ -360,6 +360,7 @@ private:
   RECT m_gearRect = {};           // settings gear in the mode bar (premium build only)
   bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;
+  bool m_spectralWasLoading = false; // OnTimer: repaint pump while spectrum computes
   bool m_spectralPainted = false;  // triggers one repaint after FFT completes
   bool m_minimapVisible = false;
   bool m_showMeters = true;

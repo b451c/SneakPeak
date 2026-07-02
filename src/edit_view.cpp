@@ -748,6 +748,18 @@ void SneakPeak::OnTimer()
   // in flight (caret blink, Live pulse, tab-slide, value-ease). Idle -> no extra repaint.
   if (m_dynamicsPanel.WantsAnimationFrame())
     InvalidateRect(m_hwnd, nullptr, FALSE);
+
+  // Spectral compute pump: the background thread cannot invalidate the window,
+  // so without this the "Computing spectrum..." overlay freezes at its last
+  // painted frame and never reveals the finished spectrogram (user report
+  // after undo). While loading: animate the progress bar; the extra tick after
+  // the load flag drops paints the final result.
+  if (m_spectralVisible) {
+    bool loading = m_spectral.IsLoading();
+    if (loading || m_spectralWasLoading)
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+    m_spectralWasLoading = loading;
+  }
 }
 
 bool SneakPeak::HandlePendingClose()
