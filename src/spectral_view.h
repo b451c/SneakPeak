@@ -54,6 +54,8 @@ private:
 
   void ComputeThreadFunc(std::vector<double> audio, int nch, int sr, int totalFrames);
   void RenderView(const WaveformView& waveform);
+  void ApplySelectionHaze(unsigned int* fbuf, int allocW, int contentW, int height,
+                          const WaveformView& waveform) const;
   void DrawFreqScale(HDC hdc, int yTop, int height, int sampleRate);
   void DrawPlayhead(HDC hdc, const WaveformView& waveform);
   void DrawSelection(HDC hdc, const WaveformView& waveform);

@@ -528,6 +528,52 @@ void SpectralView::DrawSelection(HDC hdc, const WaveformView& waveform)
 
 // --- Frequency selection overlay ---
 
+// Marquee interior haze: brighten the framebuffer pixels inside the
+// time x frequency rectangle toward white (~14%), Audition-class "frosted"
+// selection. Runs on the raw 32-bit framebuffer right after the LUT colorize
+// pass - portable (no AlphaBlend) and channel-order agnostic (whitening
+// treats all three color bytes the same; the high byte is left alone).
+static inline unsigned int WhitenPx(unsigned int c)
+{
+  const unsigned int a = 36; // /256 ~ 14%
+  unsigned int r = c & 0xFFu, g = (c >> 8) & 0xFFu, b = (c >> 16) & 0xFFu;
+  r += ((255u - r) * a) >> 8;
+  g += ((255u - g) * a) >> 8;
+  b += ((255u - b) * a) >> 8;
+  return (c & 0xFF000000u) | (b << 16) | (g << 8) | r;
+}
+
+void SpectralView::ApplySelectionHaze(unsigned int* fbuf, int allocW, int contentW,
+                                      int height, const WaveformView& waveform) const
+{
+  if (!m_freqSelActive || !waveform.HasSelection()) return;
+
+  double s1 = std::min(waveform.GetSelection().startTime, waveform.GetSelection().endTime);
+  double s2 = std::max(waveform.GetSelection().startTime, waveform.GetSelection().endTime);
+  int x1 = std::max(0, std::min(contentW, waveform.TimeToX(s1) - (int)m_rect.left));
+  int x2 = std::max(0, std::min(contentW, waveform.TimeToX(s2) - (int)m_rect.left));
+  if (x2 <= x1) return;
+
+  int nch = waveform.GetNumChannels();
+  int chSep = (nch > 1) ? SP(CHANNEL_SEPARATOR_HEIGHT) : 0;
+  int chH = (nch > 1) ? (height - chSep) / 2 : height;
+  double fLow = GetFreqSelLow();
+  double fHigh = GetFreqSelHigh();
+
+  for (int ch = 0; ch < nch; ch++) {
+    int chTop = m_rect.top + ch * (chH + chSep);
+    int yLow = FreqToY(fLow, chTop, chH) - (int)m_rect.top;
+    int yHigh = FreqToY(fHigh, chTop, chH) - (int)m_rect.top;
+    if (yLow < yHigh) std::swap(yLow, yHigh); // yHigh = higher freq = lower y
+    yHigh = std::max(0, std::min(height, yHigh));
+    yLow = std::max(0, std::min(height, yLow));
+    for (int y = yHigh; y < yLow; y++) {
+      unsigned int* row = fbuf + (size_t)y * (size_t)allocW;
+      for (int x = x1; x < x2; x++) row[x] = WhitenPx(row[x]);
+    }
+  }
+}
+
 // Manual dashes (4 on / 4 off): SWELL only guarantees solid pens, so PS_DOT is
 // not portable. Draws horizontal when y1 == y2, vertical when x1 == x2.
 static void DashedLine(HDC hdc, int x1, int y1, int x2, int y2)
@@ -779,6 +825,7 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
         for (int row = 0; row < m_pixH; row++)
           fbuf[row * allocW + col] = m_colorLUT_Native[colData[row]];
       }
+      ApplySelectionHaze(fbuf, allocW, contentW, height, waveform);
       BitBlt(hdc, m_rect.left, m_rect.top, contentW, height, m_memDC, 0, 0, SRCCOPY);
     }
   }
@@ -799,6 +846,7 @@ void SpectralView::Paint(HDC hdc, const WaveformView& waveform)
         for (int row = 0; row < m_pixH; row++)
           fbuf[row * allocW + col] = m_colorLUT_Native[colData[row]];
       }
+      ApplySelectionHaze(fbuf, allocW, contentW, height, waveform);
       BitBlt(hdc, m_rect.left, m_rect.top, contentW, height, m_memDC, 0, 0, SRCCOPY);
     }
   }
