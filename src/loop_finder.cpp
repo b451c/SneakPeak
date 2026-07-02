@@ -200,3 +200,27 @@ std::vector<LoopCandidate> FindLoopCandidates(const double* audio,
   }
   return out;
 }
+
+bool WeldLoopSeam(double* audio, int numFrames, int numChannels,
+                  int startFrame, int endFrame, int crossfadeFrames)
+{
+  if (!audio || numFrames <= 0 || numChannels <= 0) return false;
+  const int L = crossfadeFrames;
+  if (L <= 0) return false;
+  if (startFrame < L) return false;              // needs L frames before start
+  if (endFrame <= startFrame) return false;
+  if (endFrame > numFrames) return false;
+  if (L > endFrame - startFrame) return false;   // weld can't exceed the loop
+
+  for (int i = 0; i < L; i++) {
+    const double t = (double)(i + 1) / (double)(L + 1);
+    const double gTail = std::cos(t * kPi * 0.5);   // original tail fades out
+    const double gHead = std::sin(t * kPi * 0.5);   // pre-start fades in
+    const size_t dst = (size_t)(endFrame - L + i) * (size_t)numChannels;
+    const size_t src = (size_t)(startFrame - L + i) * (size_t)numChannels;
+    for (int c = 0; c < numChannels; c++)
+      audio[dst + (size_t)c] = audio[dst + (size_t)c] * gTail +
+                               audio[src + (size_t)c] * gHead;
+  }
+  return true;
+}

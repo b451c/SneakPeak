@@ -757,6 +757,60 @@ void SneakPeak::StandalonePlayStop()
   StandaloneStartPreviewPlayback(startTime, false, 0.0);
 }
 
+// Loop Weld (v2.4 INC-A3): bake an equal-power crossfade over the seam - the
+// last L frames of the loop blend into the material that PRECEDES the start,
+// so the wrap becomes continuous by construction. Length-preserving, bounded
+// range undo; the DSP lives in loop_finder.cpp (WeldLoopSeam, offline-tested).
+void SneakPeak::DoWeldLoop(double crossfadeMs)
+{
+  if (!m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
+  if (!m_waveform.HasLoop()) return;
+  auto& data = m_waveform.GetAudioData();
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  const int frames = m_waveform.GetAudioSampleCount();
+  if (frames <= 0 || nch <= 0 || sr <= 0) return;
+
+  const int s = std::max(0, std::min(frames, m_waveform.GetLoopStart()));
+  const int e = std::max(s, std::min(frames, m_waveform.GetLoopEnd()));
+  int L = (int)(crossfadeMs * 0.001 * sr + 0.5);
+  L = std::max(8, std::min(L, e - s));   // weld cannot exceed the loop itself
+  if (s < L) {
+    char buf[96];
+    snprintf(buf, sizeof(buf),
+             "Weld needs %.0f ms of audio before the loop start", crossfadeMs);
+    ShowToast(buf);
+    return;
+  }
+
+  StandaloneUndoSaveRange(e - L, L);
+  if (!WeldLoopSeam(data.data(), frames, nch, s, e, L)) {
+    if (!m_standaloneUndoStack.empty()) m_standaloneUndoStack.pop_back();
+    m_hasUndo = !m_standaloneUndoStack.empty();
+    ShowToast("Weld failed: invalid loop region");
+    return;
+  }
+
+  char buf[64];
+  snprintf(buf, sizeof(buf), "Loop welded (%.0f ms crossfade)",
+           (double)L * 1000.0 / sr);
+  ShowToast(buf);
+
+  m_dirty = true;
+  m_previewCacheDirty = true;
+  UpdateTitle();
+  m_waveform.Invalidate();
+  m_minimap.Invalidate();
+  m_spectral.ClearSpectrum();
+  InvalidateLimiterPreview();
+  // A running audition replays the welded seam right away.
+  if (m_previewActive && m_previewLoop) {
+    StandaloneCleanupPreview();
+    StandaloneAuditionLoop();
+  }
+  InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
 // Loop Lab finder (v2.4 INC-A2): score loop-point candidates on a worker
 // (NCC of the pre-end vs pre-start windows + spectral tie-break; the module
 // doc in loop_finder.h has the math). Results land as numbered pins.

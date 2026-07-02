@@ -182,6 +182,7 @@ enum ContextMenuID {
   CM_AUDITION_LOOP,                                    // gapless region preview (toggle)
   CM_CLEAR_LOOP,
   CM_FIND_LOOP_POINTS,                                 // INC-A2: NCC candidate finder
+  CM_WELD_LOOP,                                        // INC-A3: crossfade the seam
   CM_LAST // sentinel -- keep last
 };
 
@@ -467,6 +468,7 @@ private:
   void BakePendingFades();
   void StandalonePlayStop();
   void StandaloneAuditionLoop();                       // Loop Lab: gapless region toggle
+  void DoWeldLoop(double crossfadeMs);                 // INC-A3: equal-power seam bake
   bool StandaloneWritePreviewFile(int startFrame, int endFrame);
   bool StandaloneStartPreviewPlayback(double curpos, bool loopFlag, double displayOffset);
   void StandaloneCleanupPreview();

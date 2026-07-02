@@ -93,6 +93,58 @@ int main()
     Check(found.empty(), what);
   }
 
+  // Loop Weld (INC-A3): equal-power seam crossfade.
+  {
+    const int n = kSr * 3;
+    std::vector<double> buf((size_t)n * kNch);
+    Lcg lcg;
+    for (int i = 0; i < n; i++) {
+      const double v = 0.4 * lcg.Next();   // structureless: a hard seam for sure
+      buf[(size_t)i * kNch] = v;
+      buf[(size_t)i * kNch + 1] = 0.5 * v;
+    }
+    const int s = kSr / 2, e = kSr * 2, L = kSr / 10;   // 0.5 s .. 2.0 s, 100 ms
+    std::vector<double> orig = buf;
+    Check(WeldLoopSeam(buf.data(), n, kNch, s, e, L), "weld accepts valid args");
+
+    bool outsideIdentical = true;
+    for (int i = 0; i < n && outsideIdentical; i++) {
+      if (i >= e - L && i < e) continue;   // the welded range
+      for (int c = 0; c < kNch; c++)
+        if (buf[(size_t)i * kNch + (size_t)c] != orig[(size_t)i * kNch + (size_t)c]) {
+          outsideIdentical = false;
+          break;
+        }
+    }
+    Check(outsideIdentical, "weld touches ONLY [end-L, end)");
+
+    // Boundary continuity: the last welded frame is ~the frame before the
+    // start (gTail = cos(pi/2 * L/(L+1)) is a <1% residual at L=4800), so the
+    // wrap end->start continues exactly like start-1 -> start does.
+    double worst = 0.0;
+    for (int c = 0; c < kNch; c++) {
+      const double welded = buf[(size_t)(e - 1) * kNch + (size_t)c];
+      const double target = orig[(size_t)(s - 1) * kNch + (size_t)c];
+      worst = std::max(worst, std::fabs(welded - target));
+    }
+    Check(worst < 0.02, "welded tail lands on the pre-start material (seam continuous)");
+
+    // Equal-power midpoint: at t = 0.5 both gains are cos(pi/4) = sqrt(0.5).
+    {
+      const int i = (L - 1) / 2;   // t = (i+1)/(L+1) = 0.5 for odd L; ~0.5 here
+      const double t = (double)(i + 1) / (double)(L + 1);
+      const double expect = orig[(size_t)(e - L + i) * kNch] * std::cos(t * kPi / 2.0) +
+                            orig[(size_t)(s - L + i) * kNch] * std::sin(t * kPi / 2.0);
+      Check(std::fabs(buf[(size_t)(e - L + i) * kNch] - expect) < 1e-12,
+            "equal-power law holds mid-crossfade");
+    }
+
+    // Guard: not enough material before the start -> refused, buffer untouched.
+    std::vector<double> buf2 = orig;
+    Check(!WeldLoopSeam(buf2.data(), n, kNch, L - 1, e, L) && buf2 == orig,
+          "weld refuses start < L and leaves the buffer untouched");
+  }
+
   // Degenerate inputs never crash or return garbage.
   {
     std::vector<double> tiny((size_t)100 * kNch, 0.1);

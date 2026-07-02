@@ -25,3 +25,16 @@ std::vector<LoopCandidate> FindLoopCandidates(const double* audio,
                                               int numFrames, int numChannels,
                                               int sampleRate,
                                               int maxCandidates = 5);
+
+// Loop Weld (INC-A3): equal-power crossfade of the seam. The last
+// crossfadeFrames frames before endFrame blend from the original tail into
+// the material that PRECEDES startFrame, so the wrap end->start becomes
+// continuous by construction:
+//   buf[end-L+i] = buf[end-L+i]*cos(t*pi/2) + buf[start-L+i]*sin(t*pi/2),
+//   t = (i+1)/(L+1)
+// Length-preserving; touches ONLY [endFrame-L, endFrame). Requires
+// startFrame >= L (there must be L frames before the start to weld with)
+// and L <= endFrame-startFrame. Returns false on invalid args (buffer
+// untouched).
+bool WeldLoopSeam(double* audio, int numFrames, int numChannels,
+                  int startFrame, int endFrame, int crossfadeFrames);

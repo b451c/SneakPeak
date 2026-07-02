@@ -456,6 +456,8 @@ void SneakPeak::OnRightClick(int x, int y)
       UINT audFlags = hasLoop ? MF_STRING : MF_GRAYED;
       if (m_previewActive && m_previewLoop) audFlags |= MF_CHECKED;
       MenuAppend(loopMenu, audFlags, CM_AUDITION_LOOP, "Audition Loop");
+      MenuAppend(loopMenu, hasLoop ? MF_STRING : MF_GRAYED, CM_WELD_LOOP,
+                 "Weld Loop (Crossfade)...");
       MenuAppend(loopMenu, hasLoop ? MF_STRING : MF_GRAYED, CM_CLEAR_LOOP, "Clear Loop");
       MenuAppendSubmenu(menu, loopMenu, "Loop");
     }
@@ -808,6 +810,19 @@ void SneakPeak::OnContextMenuCommand(int id)
     case CM_FIND_LOOP_POINTS:
       StartLoopFind();
       break;
+    case CM_WELD_LOOP: {
+      if (!m_waveform.IsStandaloneMode() || !m_waveform.HasLoop()) break;
+      char lenStr[32] = "50";
+      if (!g_GetUserInputs ||
+          !g_GetUserInputs("Weld Loop", 1, "Crossfade length (ms):", lenStr,
+                           sizeof(lenStr)))
+        break;   // cancelled
+      int ms = atoi(lenStr);   // integer ms: locale-proof enough for a length
+      if (ms < 5) ms = 5;
+      if (ms > 500) ms = 500;
+      DoWeldLoop((double)ms);
+      break;
+    }
     case CM_CLEAR_LOOP:
       if (m_previewActive && m_previewLoop) StandaloneCleanupPreview();
       m_waveform.ClearLoop();
