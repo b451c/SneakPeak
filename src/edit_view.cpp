@@ -775,6 +775,7 @@ void SneakPeak::OnTimer()
     m_oneShotPanel.Hide();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
+  OneShotPreviewTick();
 
   // Incremental standalone load (STA-1): one ~20 ms decode slice per tick.
   StepStandaloneLoad();
@@ -2046,4 +2047,52 @@ void SneakPeak::LimiterPreviewDraftThread(
   }
   m_limPrevComputing.store(false);
   m_limPrevFinished.store(true);
+}
+
+
+// --- One-Shot live preview (v2.4 INC-B1 follow-up: no blind knobs) ----------
+// Recompute the trim bounds when the params or the buffer changed. The scan
+// is O(n) over the buffer; the timer tick naturally throttles it during a
+// knob drag (one scan per frame at most, and one-shots are short by nature).
+void SneakPeak::OneShotPreviewTick()
+{
+  if (!m_oneShotPanel.IsVisible() || !m_waveform.IsStandaloneMode() ||
+      !m_waveform.HasItem())
+    return;
+  const uint64_t serial = m_standaloneBufferSerial.load();
+  if (!m_osPreviewDirty && serial == m_osPreviewSerial) return;
+  m_osPreviewDirty = false;
+  m_osPreviewSerial = serial;
+
+  const OneShotParams p = m_oneShotPanel.GetParams();
+  const auto& data = m_waveform.GetAudioData();
+  const int nch = m_waveform.GetNumChannels();
+  const int sr = m_waveform.GetSampleRate();
+  const int frames = m_waveform.GetAudioSampleCount();
+  m_osTrimA = -1;
+  m_osTrimB = -1;
+  if (frames > 0 && nch > 0 && sr > 0) {
+    if (p.trimEnable) {
+      const double thr = pow(10.0, p.trimThreshDb / 20.0);
+      int first = -1, last = -1;
+      for (int i = 0; i < frames; i++) {
+        bool hot = false;
+        for (int c = 0; c < nch && !hot; c++)
+          hot = fabs(data[(size_t)i * nch + c]) >= thr;
+        if (hot) {
+          if (first < 0) first = i;
+          last = i;
+        }
+      }
+      if (first >= 0) {
+        const int padFrames = (int)(p.trimPadMs * 0.001 * sr + 0.5);
+        m_osTrimA = std::max(0, first - padFrames);
+        m_osTrimB = std::min(frames, last + 1 + padFrames);
+      }
+    } else {
+      m_osTrimA = 0;
+      m_osTrimB = frames;
+    }
+  }
+  InvalidateRect(m_hwnd, nullptr, FALSE);
 }

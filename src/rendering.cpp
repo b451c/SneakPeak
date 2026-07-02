@@ -150,6 +150,7 @@ void SneakPeak::OnPaint(HDC hdc)
   if (m_markers.GetShowMarkers()) m_markers.DrawMarkers(hdc, m_waveformRect, m_rulerRect, m_waveform);
   DrawLoopRegion(hdc);   // Loop Lab brackets + strip (gates itself)
   DrawLoopPins(hdc);     // INC-A2 candidate pins (gates itself)
+  DrawOneShotOverlay(hdc);   // INC-B1 live prep preview (gates itself)
 #ifndef SNEAKPEAK_BLEND2D_PANEL
   // GDI gain panel (OFF build only - the premium build draws it in OnPaintOverlay)
   if (m_waveform.HasItem()) m_gainPanel.Draw(hdc, m_waveformRect, m_waveform.HasSelection());
@@ -875,6 +876,66 @@ void SneakPeak::UpdateSoloState()
   for (auto* tr : tracks) {
     int* pSolo = (int*)g_GetSetMediaTrackInfo(tr, "I_SOLO", nullptr);
     if (pSolo && *pSolo != 0) { m_trackSoloed = true; break; }
+  }
+}
+
+// One-Shot live prep preview (INC-B1 follow-up): while the panel is open,
+// the zones the trim will CUT are dimmed (alternate dark columns - GDI has
+// no alpha), amber boundary lines mark the kept region and diagonal ramps
+// show where the edge micro-fades land. No more working blind.
+void SneakPeak::DrawOneShotOverlay(HDC hdc)
+{
+  if (!m_oneShotPanel.IsVisible() || !m_waveform.IsStandaloneMode() ||
+      !m_waveform.HasItem() || m_osTrimA < 0 || m_osTrimB <= m_osTrimA)
+    return;
+  const int sr = m_waveform.GetSampleRate();
+  if (sr <= 0) return;
+  RECT wr = m_waveform.GetRect();
+  const int waveL = wr.left;
+  const int waveR = wr.right - SP(DB_SCALE_WIDTH);
+  if (waveR <= waveL) return;
+  const OneShotParams p = m_oneShotPanel.GetParams();
+
+  auto xOf = [&](int frame) {
+    int x = m_waveform.TimeToX((double)frame / (double)sr);
+    return std::max(waveL, std::min(waveR, x));
+  };
+  const int xa = xOf(m_osTrimA);
+  const int xb = xOf(m_osTrimB);
+
+  // Dim the cut zones (only when the trim actually cuts something).
+  if (p.trimEnable) {
+    OwnedPen dimPen(PS_SOLID, 1, RGB(10, 10, 12));
+    DCPenScope scope(hdc, dimPen);
+    for (int x = waveL; x < xa; x += 2) {
+      MoveToEx(hdc, x, wr.top, nullptr);
+      LineTo(hdc, x, wr.bottom);
+    }
+    for (int x = xb + 1; x <= waveR; x += 2) {
+      MoveToEx(hdc, x, wr.top, nullptr);
+      LineTo(hdc, x, wr.bottom);
+    }
+  }
+
+  // Kept-region boundaries + fade ramps (diagonals over the fade spans).
+  {
+    OwnedPen edgePen(PS_SOLID, 2, RGB(245, 166, 35));   // premium amber
+    DCPenScope scope(hdc, edgePen);
+    MoveToEx(hdc, xa, wr.top, nullptr);
+    LineTo(hdc, xa, wr.bottom);
+    MoveToEx(hdc, xb, wr.top, nullptr);
+    LineTo(hdc, xb, wr.bottom);
+
+    const int inPx = xOf(m_osTrimA + (int)(p.fadeInMs * 0.001 * sr + 0.5));
+    const int outPx = xOf(m_osTrimB - (int)(p.fadeOutMs * 0.001 * sr + 0.5));
+    if (inPx > xa) {
+      MoveToEx(hdc, xa, wr.bottom, nullptr);
+      LineTo(hdc, inPx, wr.top);
+    }
+    if (outPx < xb) {
+      MoveToEx(hdc, outPx, wr.top, nullptr);
+      LineTo(hdc, xb, wr.bottom);
+    }
   }
 }
 

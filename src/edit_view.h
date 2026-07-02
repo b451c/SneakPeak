@@ -324,6 +324,13 @@ private:
   void SaveOneShotParams();              // os_* ExtState session defaults
   void RestoreOneShotParams();
   void SaveOneShotGeom();
+  // Live prep preview (no blind knobs): trim bounds recomputed on param
+  // change, drawn as dimmed cut zones + fade ramps while the panel is open.
+  void OneShotPreviewTick();
+  void DrawOneShotOverlay(HDC hdc);
+  int m_osTrimA = -1, m_osTrimB = -1;   // kept region [A, B); -1 = no preview
+  bool m_osPreviewDirty = true;
+  uint64_t m_osPreviewSerial = 0;
 
   // Navigation
   void NavigateToMarker(bool forward);

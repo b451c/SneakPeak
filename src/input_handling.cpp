@@ -450,6 +450,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       }
       if (m_oneShotPanel.ParamsChanged()) {
         m_oneShotPanel.ClearParamsChanged();
+        m_osPreviewDirty = true;
         SaveOneShotParams();
       }
       InvalidateRect(m_hwnd, nullptr, FALSE);
@@ -2062,7 +2063,10 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 
   if (m_oneShotPanel.IsDragging()) {
     m_oneShotPanel.OnMouseMove(x, y, m_waveformRect);
-    if (m_oneShotPanel.ParamsChanged()) m_oneShotPanel.ClearParamsChanged();
+    if (m_oneShotPanel.ParamsChanged()) {
+      m_oneShotPanel.ClearParamsChanged();
+      m_osPreviewDirty = true;
+    }
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
 
@@ -2309,8 +2313,10 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
     return;
   if (m_oneShotPanel.IsVisible() && m_oneShotPanel.HitTest(x, y, m_waveformRect)) {
     if (m_oneShotPanel.OnMouseWheel(x, y, steps, cmd, m_waveformRect) &&
-        m_oneShotPanel.ParamsChanged())
+        m_oneShotPanel.ParamsChanged()) {
       m_oneShotPanel.ClearParamsChanged();
+      m_osPreviewDirty = true;
+    }
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }

@@ -820,6 +820,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) break;
       RestoreOneShotParams();
       m_oneShotPanel.Show();
+      m_osPreviewDirty = true;   // trim/fade preview from the first frame
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_FIND_LOOP_POINTS:
