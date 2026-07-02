@@ -800,9 +800,22 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p><strong>Per-stage bypass:</strong> the small power dots inside the COMP and GATE tab buttons switch each stage off for auditioning (amber = active, grey = bypassed) - with Live mode on you hear the change immediately. Bypassing the compressor also mutes its makeup gain. Bypasses are audition controls like A/B: they are never saved into items or presets and reset when the panel opens.</p>
 
+<h2 id="dynamics-deess">De-Esser</h2>
+
+<p>The DE-ESS tab adds a third processing stage: a <strong>wideband de-esser</strong> for taming sibilance ("s", "sh", "ts") in speech and vocals. A band-filtered detector measures energy in the sibilance band; when it crosses the threshold, gain reduction is written into the same envelope as the compressor and gate. Enable it with the power dot inside the DE-ESS tab button (it is saved with your item settings, unlike the audition bypasses).</p>
+
+<p><strong>Freq</strong> centers the detector (2-16 kHz; sibilance typically sits at 3-6 kHz for male and 6-8 kHz for female voices) and <strong>Width</strong> sets the band-pass width. The <strong>BP / HP</strong> switch picks the detector shape: band-pass listens to a specific band, high-pass (24 dB/oct) reacts to everything above Freq. <strong>D.Thr / D.Ratio / D.Att / D.Rel</strong> work like their compressor namesakes but on the band level, and <strong>D.Range</strong> hard-limits the reduction (default -10 dB) so the ducking always stays polite.</p>
+
+<p><strong>LISTEN</strong> paints an amber lane along the top of the waveform over every span the de-esser is reducing by more than 1 dB - the offline equivalent of a sidechain-listen switch, and the quickest way to spot false triggers (cymbals, bright vowels) before applying.</p>
+
+<div class="warning">
+  <strong>Wideband topology</strong>
+  Because the reduction is written to the take volume envelope, the WHOLE signal ducks briefly during a sibilant - the classic broadband de-esser design, not a dynamic EQ. With the default -10 dB range this is the proven de-esser sound for voice work; a split-band mode (only the band ducks) is on the roadmap as a destructive edit.
+</div>
+
 <h2 id="dynamics-presets">Presets</h2>
 
-<p>Click the preset name in the panel title bar to open a dropdown with 7 built-in presets:</p>
+<p>Click the preset name in the panel title bar to open a dropdown with 8 built-in presets:</p>
 
 <table>
   <thead><tr><th>Preset</th><th>Use Case</th></tr></thead>
@@ -814,6 +827,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>De-breath</td><td>Light compression + aggressive gate targeting breath removal</td></tr>
     <tr><td>Music Bus</td><td>2:1 slow attack for mix bus glue</td></tr>
     <tr><td>Upward Leveling</td><td>Up mode: gentle 2:1 RMS lift of quiet passages, gate on so the noise floor stays down</td></tr>
+    <tr><td>De-Ess Vocal</td><td>Voice/Podcast compression + wideband de-esser at 6 kHz, 4:1, -10 dB range</td></tr>
   </tbody>
 </table>
 

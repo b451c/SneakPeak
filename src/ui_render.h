@@ -18,8 +18,9 @@
 
 // Shared param count for the Dynamics panel (SLIDER_DEFS rows, knob slots, VM
 // arrays). v2.3.0: 10 -> 14 (gate extension) -> 15 (M.Boost, upward mode).
-constexpr int kDynNumParams = 15;
+constexpr int kDynNumParams = 22; // 15 comp/gate + 7 de-ess (v2.3.0 INC-3)
 constexpr int kDynParamMaxBoost = 14;  // knob index; laid out only in Up mode
+constexpr int kDynParamDsFreq   = 15;  // first de-ess knob (log-mapped frequency)
 
 // Inputs for the transfer-curve hero. Plain values (no Blend2D in the header);
 // the compression math mirrors dynamics_engine.cpp ComputeCompression().
@@ -73,7 +74,7 @@ struct KnobVM {
 // (shared with hit-testing), not carried here.
 struct DynPanelVM {
   DynCurveParams curve;              // transfer plot + GR meter
-  int   activeTab   = 0;            // 0=Compressor, 1=Gate, 2=View
+  int   activeTab   = 0;            // 0=Compressor, 1=Gate, 2=DeEss, 3=View
   const char* presetName = nullptr; // null -> "Preset"
   KnobVM knobs[kDynNumParams];       // all params; only on-tab ones get a rect
   // Toggle/state (Inc 5): the View-tab pills + header A/B render from these; the
@@ -89,6 +90,9 @@ struct DynPanelVM {
   bool  gateBypass = false;         // COMP/GATE footer tab pills; ephemeral like A/B)
   int   meterFloorSel = 0;          // active meter-scale segment index (see kMeterFloorOptDb)
   bool  compact  = false;           // Compact mode: hero plot hidden, knobs in a 4-col grid
+  int   dsMode   = 0;               // De-Ess detector: 0 = BP, 1 = HP (segmented pill)
+  bool  dsEnable = false;           // De-Ess stage on (power dot in the DE-ESS pill)
+  bool  dsListen = false;           // Listen: tint sibilant spans on the waveform
   int   dragHandle = -1;            // curve handle being dragged (-1 none, 0 knee, 1 gate) -> glow
   int   hoverHandle = -1;           // curve handle under the cursor -> lights its accent colour
   // Motion pass: the panel computes these from its animation clock; the renderer is a
@@ -113,10 +117,12 @@ struct DynLayout {
   URect header, footer, plotWell, grMeter;
   URect preset, abBtn, closeBtn, apply;
   URect modeBtn;     // DOWN/UP processor-mode state button (A/B-style; click flips)
-  URect tabSeg[3];   // Compressor / Gate / View pill segments
-  URect stagePower[2]; // power dots inside the COMP/GATE pills (stage bypass hit zones)
+  URect tabSeg[4];   // Compressor / Gate / DeEss / View pill segments
+  URect stagePower[3]; // power dots inside the COMP/GATE/DE-ESS pills (stage toggles)
   URect knob[kDynNumParams]; // per-param knob cells; empty (w==0) when not on the active tab
   URect rms[2];      // Peak / RMS segmented halves (Compressor tab; empty otherwise)
+  URect dsMode[2];   // BP / HP detector segmented halves (De-Ess tab; empty otherwise)
+  URect dsListen;    // Listen pill (De-Ess tab; empty otherwise)
   URect viewToggle[5]; // Dyn / Env / GR / Live / A-B pills (View tab; empty otherwise)
   URect meterScale[4]; // plot/GR-meter dB-floor selector segments (View tab; empty otherwise)
   URect compactToggle; // Compact-mode pill (View tab; empty otherwise)

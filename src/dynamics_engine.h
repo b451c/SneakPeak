@@ -159,6 +159,8 @@ public:
   // with dsEnable on.
   double GetAvgDeEssGR() const { return m_avgDsGR; }
   const std::vector<double>& GetBandPeaks() const { return m_bandPeaks; }
+  // Per-point smoothed ds GR (1:1 with GetResults()); empty when ds is off.
+  const std::vector<double>& GetDeEssGRs() const { return m_dsGRs; }
   double GetDeEssThreshold() const
   { return (m_params.dsThreshDb <= -99.0) ? m_avgBandDb : m_params.dsThreshDb; }
 
@@ -201,6 +203,7 @@ private:
   };
   BandTraceKey m_bandKey;
   std::vector<double> m_bandPeaks;
+  std::vector<double> m_dsGRs;  // per-point smoothed ds GR (Listen overlay)
   double m_avgBandDb = -60.0; // mean band level (dB, incl item vol) for Auto threshold
   double m_avgDsGR = 0.0;
 };

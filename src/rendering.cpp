@@ -869,6 +869,35 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     startIdx = std::max(0, lo - 1); // one before for line continuity
   }
 
+  // De-Ess Listen (INC-3): an amber lane at the top of the waveform over every
+  // span with > 1 dB of de-ess reduction - the offline analog of a sidechain
+  // "listen" switch (shows exactly where the de-esser bites, and any misfires).
+  {
+    const auto& dsGRs = m_dynamics.GetDeEssGRs();
+    if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.GetDsListen() &&
+        dsGRs.size() == results.size()) {
+      HBRUSH amber = CreateSolidBrush(RGB(255, 170, 40));
+      const int laneTop = wr.top + 1, laneBot = laneTop + SPmin(4);
+      int spanX0 = -1;
+      for (int i = startIdx; i < count && results[i].time <= viewEnd; i++) {
+        bool hot = dsGRs[(size_t)i] < -1.0;
+        int x = waveL + (int)((results[i].time - viewStart) / viewDur * (double)waveW);
+        x = std::max(waveL, std::min(waveR, x));
+        if (hot && spanX0 < 0) spanX0 = x;
+        if (!hot && spanX0 >= 0) {
+          RECT lane = { spanX0, laneTop, std::max(x, spanX0 + 2), laneBot };
+          FillRect(hdc, &lane, amber);
+          spanX0 = -1;
+        }
+      }
+      if (spanX0 >= 0) {
+        RECT lane = { spanX0, laneTop, waveR, laneBot };
+        FillRect(hdc, &lane, amber);
+      }
+      DeleteObject(amber);
+    }
+  }
+
   // Stride: how many analysis points map to one pixel column
   double resultDt = (count > 1) ? (results[count - 1].time - results[0].time) / (double)(count - 1) : 0.001;
   double secsPerPx = viewDur / (double)waveW;

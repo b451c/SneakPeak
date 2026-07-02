@@ -29,6 +29,13 @@ const DynamicsPanel::SliderDef DynamicsPanel::SLIDER_DEFS[NUM_SLIDERS] = {
   { "G.Att",     0.0,   50.0, "ms",  1,    2.0 },  // 12: gate open speed
   { "G.Rel",    10.0, 1000.0, "ms",  0,  100.0 },  // 13: gate close speed
   { "M.Boost",   0.0,   24.0, "dB",  1,    8.0 },  // 14: Up-mode boost cap (premium: shown only in Up)
+  { "Freq",   2000.0, 16000.0, "Hz", 0, 6000.0 },  // 15: de-ess detector center/corner (log-mapped knob)
+  { "Width",     0.5,    8.0, "Q",   2,    2.0 },  // 16: BP width (ignored in HP mode)
+  { "D.Thr",   -60.0,    0.0, "dB",  1,  -30.0 },  // 17: band-level threshold
+  { "D.Ratio",   1.0,   20.0, ":1",  1,    4.0 },  // 18
+  { "D.Range", -24.0,    0.0, "dB",  1,  -10.0 },  // 19: max reduction clamp (wideband stays polite)
+  { "D.Att",     0.5,   10.0, "ms",  1,    1.0 },  // 20
+  { "D.Rel",    20.0,  200.0, "ms",  0,   60.0 },  // 21
 };
 
 // --- Ratio knob piecewise norm mapping (v2.3.0 extended ratio) ---------------
@@ -119,6 +126,13 @@ double DynamicsPanel::GetSliderValue(int idx) const
     case 12: return m_params.gateAttackMs;
     case 13: return m_params.gateReleaseMs;
     case 14: return m_params.maxBoostDb;
+    case 15: return m_params.dsFreqHz;
+    case 16: return m_params.dsQ;
+    case 17: return m_params.dsThreshDb;
+    case 18: return m_params.dsRatio;
+    case 19: return m_params.dsRangeDb;
+    case 20: return m_params.dsAttackMs;
+    case 21: return m_params.dsReleaseMs;
     default: return 0.0;
   }
 }
@@ -163,6 +177,13 @@ void DynamicsPanel::SetSliderValue(int idx, double val)
     case 12: m_params.gateAttackMs = val; break;
     case 13: m_params.gateReleaseMs = val; break;
     case 14: m_params.maxBoostDb = val; break;
+    case 15: m_params.dsFreqHz = val; break;
+    case 16: m_params.dsQ = val; break;
+    case 17: m_params.dsThreshDb = val; break;
+    case 18: m_params.dsRatio = val; break;
+    case 19: m_params.dsRangeDb = val; break;
+    case 20: m_params.dsAttackMs = val; break;
+    case 21: m_params.dsReleaseMs = val; break;
   }
 }
 
@@ -197,6 +218,7 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
   m_avgGR = 0.0;
   m_upHintPending = false;     // Up-with-gate-off hint re-arms per panel open
   m_upHintShown = false;
+  m_dsListen = false;          // Listen is an ephemeral audition aid (like A/B)
   m_params.compBypass = false; // stage bypasses are audition controls (like A/B):
   m_params.gateBypass = false; // never persisted, re-armed on every panel open
   // Reset toggles to show everything on panel open
@@ -396,10 +418,25 @@ void DynamicsPanel::ApplyParams(const DynamicsParams& p)
 
 // --- Coordinate conversion ---
 
+// De-ess Freq knob: log mapping across 2-16 kHz, so each octave gets equal
+// knob travel (the perceptual convention for frequency controls).
+static double FreqFromNorm(double n)
+{
+  const double lo = 2000.0, hi = 16000.0;
+  return lo * pow(hi / lo, std::max(0.0, std::min(1.0, n)));
+}
+static double NormFromFreq(double f)
+{
+  const double lo = 2000.0, hi = 16000.0;
+  f = std::max(lo, std::min(hi, f));
+  return log(f / lo) / log(hi / lo);
+}
+
 int DynamicsPanel::ValueToPixel(double val, RECT tr, int idx) const
 {
   const auto& def = SLIDER_DEFS[idx];
   double ratio = (idx == 1) ? NormFromRatio(val)   // piecewise extended-ratio mapping
+               : (idx == kDynParamDsFreq) ? NormFromFreq(val)  // log frequency
                             : (val - def.minVal) / (def.maxVal - def.minVal);
   ratio = std::max(0.0, std::min(1.0, ratio));
   return tr.left + (int)(ratio * (double)(tr.right - tr.left));
@@ -411,6 +448,7 @@ double DynamicsPanel::PixelToValue(int px, RECT tr, int idx) const
   double ratio = (double)(px - tr.left) / (double)(tr.right - tr.left);
   ratio = std::max(0.0, std::min(1.0, ratio));
   if (idx == 1) return RatioFromNorm(ratio);       // piecewise extended-ratio mapping
+  if (idx == kDynParamDsFreq) return FreqFromNorm(ratio);      // log frequency
   return def.minVal + ratio * (def.maxVal - def.minVal);
 }
 
@@ -498,12 +536,31 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
     m_paramsChanged = true;
     return true;
   }
-  for (int i = 0; i < 3; ++i)
+  // DE-ESS pill dot (INC-3): toggles the PERSISTED dsEnable param (the stage
+  // ships off) - same visual language as the bypass dots, stage-true semantics.
+  if (L.stagePower[2].contains(lx, ly)) {
+    m_params.dsEnable = !m_params.dsEnable;
+    m_paramsChanged = true;
+    m_presetIdx = -1;
+    return true;
+  }
+  for (int i = 0; i < 4; ++i)
     if (L.tabSeg[i].contains(lx, ly)) {
       if ((Tab)i != m_tab) { m_tabFrom = (int)m_tab; m_tabSlideStartSec = NowSec(); m_tab = (Tab)i; }
       return true;                                // start the active-pill slide (motion pass)
     }
   if (!m_liveMode && L.apply.contains(lx, ly)) { m_applyRequested = true; return true; }
+  // De-Ess tab controls: BP/HP detector switch + LISTEN (ephemeral overlay).
+  if (L.dsMode[0].contains(lx, ly) || L.dsMode[1].contains(lx, ly)) {
+    m_params.dsMode = L.dsMode[1].contains(lx, ly) ? 1 : 0;
+    m_paramsChanged = true;
+    m_presetIdx = -1;
+    return true;
+  }
+  if (L.dsListen.contains(lx, ly) && L.dsListen.w >= 1.0) {
+    m_dsListen = !m_dsListen;
+    return true;
+  }
 
   // Curve drag-handles on the plot. Knee handle = Threshold only (HORIZONTAL; ratio
   // is the line's slope, set by the dedicated knob - the universal compressor
@@ -774,10 +831,14 @@ void DynamicsPanel::OnMouseMove(int x, int y, RECT wr)
     const double cur = (m_dragSlider == 5 && m_params.autoMakeup)
                          ? -m_avgGR : DragSeedValue(m_dragSlider);
     // Ratio (idx 1) travels through the piecewise extended mapping (1..20,
-    // Inf detent, over-comp); all other knobs stay linear in the def range.
-    double nrm = (m_dragSlider == 1) ? NormFromRatio(cur) : (cur - def.minVal) / range;
+    // Inf detent, over-comp); the de-ess Freq knob is log; the rest linear.
+    double nrm = (m_dragSlider == 1) ? NormFromRatio(cur)
+               : (m_dragSlider == kDynParamDsFreq) ? NormFromFreq(cur)
+                                                   : (cur - def.minVal) / range;
     nrm = std::max(0.0, std::min(1.0, nrm + (double)dy * gainPerPx));
     if (m_dragSlider == 1) SetSliderValue(1, RatioFromNorm(nrm));
+    else if (m_dragSlider == kDynParamDsFreq)
+      SetSliderValue(m_dragSlider, FreqFromNorm(nrm));
     else SetSliderValue(m_dragSlider, def.minVal + nrm * range);
     m_paramsChanged = true;
     m_presetIdx = -1; // manual adjustment = custom
@@ -863,9 +924,12 @@ bool DynamicsPanel::OnMouseWheel(int x, int y, double steps, bool fine, RECT wr)
   // Seed Makeup from the displayed value while auto (GetSliderValue(5)==0 then);
   // DragSeedValue lets a wheel notch re-enter the range from G.Thr Off.
   const double cur = (i == 5 && m_params.autoMakeup) ? -m_avgGR : DragSeedValue(i);
-  double nrm = (i == 1) ? NormFromRatio(cur) : (cur - def.minVal) / range;
+  double nrm = (i == 1) ? NormFromRatio(cur)
+             : (i == kDynParamDsFreq) ? NormFromFreq(cur)
+                                      : (cur - def.minVal) / range;
   nrm = std::max(0.0, std::min(1.0, nrm + (fine ? 0.005 : 0.025) * steps));
   if (i == 1) SetSliderValue(1, RatioFromNorm(nrm));
+  else if (i == kDynParamDsFreq) SetSliderValue(i, FreqFromNorm(nrm));
   else SetSliderValue(i, def.minVal + nrm * range);
   m_paramsChanged = true;
   m_presetIdx = -1;
@@ -1439,6 +1503,9 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.mode     = m_params.compMode;
   vm.compBypass = m_params.compBypass;
   vm.gateBypass = m_params.gateBypass;
+  vm.dsMode   = m_params.dsMode;
+  vm.dsEnable = m_params.dsEnable;
+  vm.dsListen = m_dsListen;
   vm.meterFloorSel = m_meterFloorSel;
   vm.compact  = m_compactMode;
   vm.dragHandle = m_dragHandle;
@@ -1454,6 +1521,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
     const double range = (def.maxVal - def.minVal) != 0.0 ? (def.maxVal - def.minVal) : 1.0;
     auto norm = [&](double v) {
       if (i == 1) return NormFromRatio(v);   // piecewise extended-ratio mapping
+      if (i == kDynParamDsFreq) return NormFromFreq(v);  // log frequency knob
       return std::max(0.0, std::min(1.0, (v - def.minVal) / range));
     };
     double dflt = def.defaultVal;
@@ -1465,7 +1533,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
     k.label       = def.label;
     k.unit        = def.unit;
     k.precision   = def.precision;
-    k.isGate      = (i >= 7 && i != kDynParamMaxBoost);  // M.Boost is a comp knob (amber)
+    k.isGate      = (i >= 7 && i < kDynParamMaxBoost);  // gate knobs violet; M.Boost + ds knobs amber
     k.showAuto    = (i == 5 && m_params.autoMakeup);
     k.showOff     = (i == 7 && k.value <= -99.0);   // G.Thr sentinel -> "Off" readout
     k.showInf     = (i == 1 && k.value == 0.0);     // Ratio Inf:1 sentinel -> "Inf" readout

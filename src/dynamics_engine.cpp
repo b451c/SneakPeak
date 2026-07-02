@@ -425,7 +425,8 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   // does NOT feed auto-makeup (m_avgGR stays comp-only) and the gate keeps
   // detecting on rawDb + compGR (a band event and a silence detector are
   // orthogonal - research_v230 "De-esser").
-  std::vector<double> dsGRs;
+  std::vector<double>& dsGRs = m_dsGRs; // member: the Listen overlay reads it
+  dsGRs.clear();
   m_avgDsGR = 0.0;
   const bool dsOn = m_params.dsEnable && m_bandPeaks.size() == m_results.size();
   if (dsOn) {

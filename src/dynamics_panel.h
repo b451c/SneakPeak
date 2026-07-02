@@ -94,6 +94,10 @@ public:
   bool ViewPrefsChanged() const { return m_viewPrefsChanged; }
   void ClearViewPrefsChanged() { m_viewPrefsChanged = false; }
 
+  // De-Ess Listen (INC-3): ephemeral - the host tints waveform spans where the
+  // de-esser reduces (dsGR < -1 dB). Never persisted; reset on panel open.
+  bool GetDsListen() const { return m_dsListen; }
+
   // Live preview mode: write envelope points on every slider change
   bool IsLive() const { return m_liveMode; }
   void SetLiveMode(bool v) { m_liveMode = v; }   // host restores the persisted Live state after open
@@ -101,7 +105,7 @@ public:
   void SetLiveUndoOpen(bool v) { m_liveUndoOpen = v; }
 
 private:
-  enum class Tab { Compressor, Gate, View };   // premium panel active tab
+  enum class Tab { Compressor, Gate, DeEss, View };   // premium panel active tab
   static constexpr int NUM_SLIDERS = kDynNumParams;  // 14 since the v2.3.0 gate extension
   static constexpr int HANDLE_KNEE = 0;        // curve drag-handle ids
   static constexpr int HANDLE_GATE = 1;
@@ -120,6 +124,7 @@ private:
   double DragSeedValue(int idx) const;  // gesture seed; G.Thr Off seeds from the knob min (kills the -100 dead zone)
 
   static int SliderCol(int idx) {
+    if (idx >= 15) return (idx == 15 || idx == 17 || idx == 19 || idx == 21) ? 0 : 1;
     return (idx < 3 || idx == 6 || idx == 8 || idx == 10 || idx == 12 || idx == 14) ? 0 : 1;
   }
   static int SliderRow(int idx) {
@@ -131,7 +136,10 @@ private:
     if (idx == 9) return 4;        // G.Hold: right row 4
     if (idx < 12) return 5;        // G.Ratio: left / G.Hyst: right row 5
     if (idx < 14) return 6;        // G.Att: left / G.Rel: right row 6
-    return 7;                      // M.Boost: left row 7
+    if (idx == 14) return 7;       // M.Boost: left row 7
+    // De-ess (GDI fallback rows 8-11): Freq/Width, D.Thr/D.Ratio,
+    // D.Range/D.Att, D.Rel
+    return 8 + (idx - 15) / 2;
   }
 
   RECT GetSliderTrackRect(RECT panelRect, int idx) const;
@@ -209,6 +217,7 @@ private:
   bool m_upHintShown = false;        // hint fired already this panel-open
   bool m_compactMode = false; // Compact mode: hero plot hidden, knobs in a 4-col grid; persisted
   bool m_bypassed = false;  // A/B: envelope bypass for comparison
+  bool m_dsListen = false;  // De-Ess Listen overlay (ephemeral, like A/B)
   bool m_liveMode = false;  // live preview: write envelope on slider change
   bool m_liveUndoOpen = false; // undo block is open for live session
 
@@ -227,7 +236,7 @@ private:
   [[maybe_unused]] double m_resizeStartScale = 1.0;  // m_uiScale at grab -> first move = no-op
 
   static const int PANEL_W = 380;
-  static const int PANEL_H = 202;  // 8 slider rows (5 legacy + 2 gate ext + M.Boost)
+  static const int PANEL_H = 274;  // 12 slider rows (8 comp/gate + 4 de-ess)
   static const int TITLE_H = 22;
   static const int ROW_H = 18;
   static const int THUMB_R = 4;

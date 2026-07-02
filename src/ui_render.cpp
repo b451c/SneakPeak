@@ -506,6 +506,13 @@ static const KnobSlot KNOB_SLOTS[kDynNumParams] = {
   { 1, 1, 0 },  // 12 G.Att    (Gate / TIME)
   { 1, 1, 1 },  // 13 G.Rel
   { 0, 1, 3 },  // 14 M.Boost  (Compressor; ex-RMS cell - RMS moved to the footer; Up mode only)
+  { 2, 0, 0 },  // 15 Freq     (De-Ess / BAND - v2.3.0 INC-3)
+  { 2, 0, 1 },  // 16 Width
+  { 2, 0, 2 },  // 17 D.Thr    (De-Ess / LEVELS)
+  { 2, 1, 0 },  // 18 D.Ratio
+  { 2, 0, 3 },  // 19 D.Range
+  { 2, 1, 1 },  // 20 D.Att    (De-Ess / TIME)
+  { 2, 1, 2 },  // 21 D.Rel    (cell (1,3) hosts the BP/HP + LISTEN pills)
 };
 
 // Compact-mode slots: the hero plot is hidden, so the knobs reflow into a wider
@@ -528,6 +535,13 @@ static const KnobSlot COMPACT_KNOB_SLOTS[kDynNumParams] = {
   { 1, 0, 1 },  // 12 G.Att
   { 1, 1, 1 },  // 13 G.Rel
   { 0, 3, 1 },  // 14 M.Boost  (ex-RMS compact cell; Up mode only)
+  { 2, 0, 0 },  // 15 Freq     (De-Ess compact: row0 = band+levels, row1 = time)
+  { 2, 1, 0 },  // 16 Width
+  { 2, 2, 0 },  // 17 D.Thr
+  { 2, 3, 0 },  // 18 D.Ratio
+  { 2, 0, 1 },  // 19 D.Range
+  { 2, 1, 1 },  // 20 D.Att
+  { 2, 2, 1 },  // 21 D.Rel    (cell (3,1) hosts the BP/HP + LISTEN pills)
 };
 
 static inline double Deg2Rad(double d) { return d * 3.14159265358979323846 / 180.0; }
@@ -727,7 +741,7 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
       L.knob[i] = (s.tab == activeTab) ? ccell(s.col, s.row) : URect{ 0, 0, 0, 0 };
     }
     // Peak/RMS moved to the footer gap (v2.3.0) - M.Boost owns the ex-RMS cell.
-    if (activeTab == 2) {   // View: DYN/ENV/GR/LIVE on row0; Compact on row1
+    if (activeTab == 3) {   // View: DYN/ENV/GR/LIVE on row0; Compact on row1
       const double tH = 36.0;
       auto pill = [&](int ccol, int crow) -> URect {
         const URect c = ccell(ccol, crow); return { c.x, c.y + (c.h - tH) * 0.5, c.w, tH };
@@ -739,6 +753,14 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
       L.compactToggle = pill(0, 1);  // COMPACT
       // No A/B (it lives in the header) and no meter-scale (the plot + GR meter it
       // scales are hidden in compact, so the selector would do nothing).
+    }
+    if (activeTab == 2) {   // De-Ess: BP/HP + LISTEN pills in the free cell (3,1)
+      const URect c = ccell(3, 1);
+      const double pH = 20.0, gap2 = 4.0;
+      const double topY = c.y + (c.h - (2.0 * pH + gap2)) * 0.5;
+      L.dsMode[0] = { c.x, topY, (c.w - 2.0) * 0.5, pH };
+      L.dsMode[1] = { c.x + (c.w + 2.0) * 0.5, topY, (c.w - 2.0) * 0.5, pH };
+      L.dsListen  = { c.x, topY + pH + gap2, c.w, pH };
     }
   } else {
   // Hero transfer plot: square on the LEFT, sized to the body height. The GR meter
@@ -771,7 +793,7 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
   // View-tab state toggles fill the knob-grid cells: col0 rows 0-2 = Dyn/Env/GR
   // (overlay visibility), col1 row0 = Live, col1 row1 = Compact. (A/B is NOT here -
   // it lives in the header.) The meter-scale selector spans the bottom row.
-  if (activeTab == 2) {
+  if (activeTab == 3) {
     static const int slot[4][2] = { {0,0}, {0,1}, {0,2}, {1,0} };  // DYN/ENV/GR/LIVE
     const double tH = 36.0;
     for (int i = 0; i < 4; ++i) {
@@ -792,19 +814,30 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
     for (int i = 0; i < nSeg; ++i)
       L.meterScale[i] = { x0 + (double)i * (segW + segGap), segY, segW, segH };
   }
+  if (activeTab == 2) { // De-Ess: BP/HP + LISTEN pills in the free cell (1,3)
+    const URect c = cellRect(1, 3);
+    const double pH = 20.0, gap2 = 4.0;
+    const double topY = c.y + (c.h - (2.0 * pH + gap2)) * 0.5;
+    L.dsMode[0] = { c.x, topY, (c.w - 2.0) * 0.5, pH };
+    L.dsMode[1] = { c.x + (c.w + 2.0) * 0.5, topY, (c.w - 2.0) * 0.5, pH };
+    L.dsListen  = { c.x, topY + pH + gap2, c.w, pH };
+  }
   }
 
   const double fMid = L.footer.y + L.footer.h * 0.5;
   L.apply = { pad, fMid - 12.0, 84.0, 24.0 };
-  const double segW = 86.0, segGap = 2.0;
-  const double pillW = 3.0 * segW + 2.0 * segGap;
+  // 4 tabs since INC-3 (COMP/GATE/DE-ESS/VIEW): segW 86 -> 64 keeps the pill's
+  // total width byte-identical (262), so Apply / Peak-RMS gap math is untouched.
+  const double segW = 64.0, segGap = 2.0;
+  const double pillW = 4.0 * segW + 3.0 * segGap;
   const double pillX = w - pad - pillW;
-  for (int i = 0; i < 3; ++i)
+  for (int i = 0; i < 4; ++i)
     L.tabSeg[i] = { pillX + (double)i * (segW + segGap), fMid - 12.0, segW, 24.0 };
-  // Stage-power dots (v2.3.0 INC-4): a small bypass toggle INSIDE the COMP and
-  // GATE pills (left edge; the rest of the pill still switches tabs) - visible
-  // in every layout mode, tied visually to its stage.
-  for (int i = 0; i < 2; ++i)
+  // Stage-power dots (v2.3.0 INC-4): a small toggle INSIDE the COMP, GATE and
+  // DE-ESS pills (left edge; the rest of the pill still switches tabs) -
+  // visible in every layout mode, tied visually to its stage. COMP/GATE dots
+  // are the ephemeral bypasses; the DE-ESS dot is the persisted dsEnable.
+  for (int i = 0; i < 3; ++i)
     L.stagePower[i] = { L.tabSeg[i].x + 4.0, L.tabSeg[i].y + 4.0, 16.0, 16.0 };
   // Peak/RMS detection pill (v2.3.0: moved here from the knob grid so M.Boost
   // could take that cell): centred in the footer gap between Apply and the tab
@@ -928,15 +961,15 @@ static void DrawHeader(BLContext& ctx, const Gfx& gfx, const DynLayout& L, const
 
 static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L,
                        int activeTab, int tabFrom, double slideT,
-                       bool compBypass, bool gateBypass) {
-  const char* labels[3] = { "COMP", "GATE", "VIEW" };
+                       bool compBypass, bool gateBypass, bool dsEnable) {
+  const char* labels[4] = { "COMP", "GATE", "DE-ESS", "VIEW" };
   // inactive backgrounds first
-  for (int i = 0; i < 3; ++i)
+  for (int i = 0; i < 4; ++i)
     FillURound(ctx, L.tabSeg[i], dynui::kRadiusCtrl, dynui::kSurface1);
   // one active fill + amber underline that GLIDES between segments (motion pass); at
   // slideT==1 it sits exactly on tabSeg[activeTab] (byte-identical to the static layout).
   {
-    const URect& a = L.tabSeg[tabFrom < 0 || tabFrom > 2 ? activeTab : tabFrom];
+    const URect& a = L.tabSeg[tabFrom < 0 || tabFrom > 3 ? activeTab : tabFrom];
     const URect& b = L.tabSeg[activeTab];
     const double t = std::clamp(slideT, 0.0, 1.0);
     const URect s{ a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
@@ -946,18 +979,21 @@ static void DrawTabBar(BLContext& ctx, const Gfx& gfx, const DynLayout& L,
   }
   // labels: the destination tab is amber immediately; the fill catches up underneath
   if (gfx.fontsReady)
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
       TextCentered(ctx, gfx.fTab, L.tabSeg[i], labels[i],
                    i == activeTab ? dynui::kAmber : dynui::kInkSecondary);
-  // Stage-power dots: filled amber ring = stage active, hollow grey = bypassed.
-  const bool byp[2] = { compBypass, gateBypass };
-  for (int i = 0; i < 2; ++i) {
+  // Stage-power dots: filled amber ring = stage active, hollow grey = off. The
+  // COMP/GATE dots are the ephemeral bypasses (INC-4); the DE-ESS dot is the
+  // PERSISTED dsEnable param (the stage ships disabled) - same visual language,
+  // stage-appropriate semantics.
+  const bool off[3] = { compBypass, gateBypass, !dsEnable };
+  for (int i = 0; i < 3; ++i) {
     const URect& d = L.stagePower[i];
     const double cx = d.x + d.w * 0.5, cy = d.y + d.h * 0.5;
     ctx.set_stroke_width(1.5);
     ctx.stroke_circle(BLCircle(cx, cy, 4.0),
-                      col(byp[i] ? dynui::kInkMuted : dynui::kAmber));
-    if (!byp[i]) ctx.fill_circle(BLCircle(cx, cy, 2.0), col(dynui::kAmber));
+                      col(off[i] ? dynui::kInkMuted : dynui::kAmber));
+    if (!off[i]) ctx.fill_circle(BLCircle(cx, cy, 2.0), col(dynui::kAmber));
   }
 }
 
@@ -1138,7 +1174,7 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     const DynLayout L = ComputeDynLayout(W, H, vm.activeTab, vm.compact);
     DrawHeader(ctx, *m_gfx, L, vm);
     DrawTabBar(ctx, *m_gfx, L, vm.activeTab, vm.tabFrom, vm.tabSlideT,
-               vm.compBypass, vm.gateBypass);
+               vm.compBypass, vm.gateBypass, vm.dsEnable);
     DrawFooter(ctx, *m_gfx, L, /*applyEnabled=*/!vm.liveMode);
     // Hero plot + GR meter: hidden in Compact mode (plotWell is empty there).
     if (L.plotWell.w >= 1.0) {
@@ -1154,6 +1190,11 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     // Peak/RMS switch (Compressor tab) + View-tab state toggles. Each helper
     // self-skips when its rect is empty, so these are no-ops on the other tabs.
     DrawSegmented2(ctx, *m_gfx, L.rms[0], L.rms[1], "PEAK", "RMS", vm.rmsMode);
+    // De-Ess tab: BP/HP detector switch + LISTEN pill (self-skip off-tab).
+    DrawSegmented2(ctx, *m_gfx, L.dsMode[0], L.dsMode[1], "BP", "HP",
+                   vm.dsMode == 1);
+    DrawTogglePill(ctx, *m_gfx, L.dsListen, "LISTEN", vm.dsListen,
+                   dynui::kAmber, false, 0.0);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[0], "DYN",  vm.showDyn,  dynui::kAmber,   false, 0.0);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[1], "ENV",  vm.showEnv,  dynui::kEnvCyan, false, 0.0);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[2], "GR",   vm.showGR,   dynui::kGrRed,   false, 0.0);
