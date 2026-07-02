@@ -4,7 +4,10 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] - v2.3.0 "Dynamics Suite" (in development)
+## [Unreleased] - v2.4.0 (in development)
+<!-- User decision 2026-07-02: v2.3.0 is SKIPPED - the Dynamics Suite ships
+     together with the Game Audio Suite (Loop Lab, One-Shot Factory, True-Peak
+     Hard Limiter) as one v2.4.0 release. -->
 
 ### Added
 - **Upward compression** - a DOWN/UP switch in the Dynamics panel header flips the whole processor: Up mode boosts quiet material toward the threshold instead of reducing loud material (leveling quiet speech, OTT-style lift). A mandatory **M.Boost** cap (0-24 dB, default 8) keeps the noise floor bounded, and with the gate enabled the boost is floored at the gate threshold - the gate always wins, so gated noise is never pumped up. The GR readout and meter turn amber and read "BOOST +x.x dB" when lifting. New **Upward Leveling** preset (gate on, RMS, gentle 2:1). Auto-makeup defaults off in Up mode (it acts as a downward trim there).
