@@ -153,6 +153,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           case SET_HIT_METER1:       cmd = CM_METER_RMS;            break;
           case SET_HIT_METER2:       cmd = CM_METER_VU;             break;
           case SET_HIT_VIEW_METERS:  cmd = CM_SHOW_METERS;          break;
+          case SET_HIT_VIEW_RULER:   cmd = CM_SHOW_RULER;           break;
           case SET_HIT_VIEW_SNAP:    cmd = CM_SNAP_ZERO;            break;
           case SET_HIT_VIEW_MINIMAP: cmd = CM_MINIMAP;              break;
           // Zoom-center is a 2-way selector: only toggle when the clicked side differs.
@@ -1634,8 +1635,12 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
   if (m_splitterDragging) {
     RECT clientRect;
     GetClientRect(m_hwnd, &clientRect);
-    int contentTop = TOOLBAR_HEIGHT + MODE_BAR_HEIGHT + RULER_HEIGHT;
-    int contentBot = clientRect.bottom - BOTTOM_PANEL_HEIGHT - SCROLLBAR_HEIGHT;
+    // Content bounds from the live layout rects - RecalcLayout's own definition
+    // (was duplicated here with unscaled constants, so the splitter jumped away
+    // from the cursor at UI scale != 100%, with meters hidden, or with the
+    // minimap or a hidden ruler in play).
+    int contentTop = m_rulerRect.bottom;
+    int contentBot = m_minimapRect.top;
     int contentH = contentBot - contentTop;
     if (contentH > 0) {
       m_splitterRatio = (float)(y - contentTop) / (float)contentH;

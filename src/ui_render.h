@@ -160,12 +160,13 @@ enum SettingsHit {
   SET_HIT_METER1       = 11,
   SET_HIT_METER2       = 12,
   SET_HIT_VIEW_METERS  = 13,  // show meters (bottom panel)
-  SET_HIT_VIEW_SNAP    = 14,  // snap to zero-crossing
-  SET_HIT_VIEW_MINIMAP = 15,  // minimap
-  SET_HIT_VIEW_ZOOM0   = 16,  // wheel-zoom center: mouse (#83)
-  SET_HIT_VIEW_ZOOM1   = 17,  // wheel-zoom center: edit cursor
-  SET_HIT_VIEW_WAVE0   = 18,  // waveform style: Detailed (peak + RMS band)
-  SET_HIT_VIEW_WAVE1   = 19,  // waveform style: Simple (single colour, #83)
+  SET_HIT_VIEW_RULER   = 14,  // show ruler (forum #51 hide-ruler ask)
+  SET_HIT_VIEW_SNAP    = 15,  // snap to zero-crossing
+  SET_HIT_VIEW_MINIMAP = 16,  // minimap
+  SET_HIT_VIEW_ZOOM0   = 17,  // wheel-zoom center: mouse (#83)
+  SET_HIT_VIEW_ZOOM1   = 18,  // wheel-zoom center: edit cursor
+  SET_HIT_VIEW_WAVE0   = 19,  // waveform style: Detailed (peak + RMS band)
+  SET_HIT_VIEW_WAVE1   = 20,  // waveform style: Simple (single colour, #83)
 };
 
 // Current preference values, filled by the host each paint (it owns this state).
@@ -174,6 +175,7 @@ struct SettingsPrefs {
   int  meterMode = 0;          // 0=Peak 1=RMS 2=VU
   bool meterFromMaster = false;
   bool showMeters = true;
+  bool showRuler = true;
   bool showRMS = true;         // waveform style: true = Detailed (RMS band), false = Simple (#83)
   bool snapZero = false;
   bool minimap = false;
@@ -235,7 +237,7 @@ struct SettingsLayout {
   URect fitBtn;                  // "Fit to window"
   URect rulerCaption, rulerSeg[3];               // RULER section
   URect metersCaption, masterToggle, meterSeg[3]; // METERS section (+ master pill)
-  URect viewCaption, viewToggle[3];              // VIEW: Meters / Snap / Minimap
+  URect viewCaption, viewToggle[4];              // VIEW: Meters / Ruler / Snap / Minimap
   URect zoomSeg[2];                              // VIEW: wheel-zoom center Mouse / Cursor
   URect waveSeg[2];                              // VIEW: waveform style Detailed / Simple
 };

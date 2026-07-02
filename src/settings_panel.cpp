@@ -75,8 +75,9 @@ int SettingsPanel::HitId(double lx, double ly) const
   for (int i = 0; i < 3; ++i)
     if (L.meterSeg[i].contains(lx, ly)) return SET_HIT_METER0 + i;
   if (L.viewToggle[0].contains(lx, ly)) return SET_HIT_VIEW_METERS;
-  if (L.viewToggle[1].contains(lx, ly)) return SET_HIT_VIEW_SNAP;
-  if (L.viewToggle[2].contains(lx, ly)) return SET_HIT_VIEW_MINIMAP;
+  if (L.viewToggle[1].contains(lx, ly)) return SET_HIT_VIEW_RULER;
+  if (L.viewToggle[2].contains(lx, ly)) return SET_HIT_VIEW_SNAP;
+  if (L.viewToggle[3].contains(lx, ly)) return SET_HIT_VIEW_MINIMAP;
   if (L.zoomSeg[0].contains(lx, ly))    return SET_HIT_VIEW_ZOOM0;
   if (L.zoomSeg[1].contains(lx, ly))    return SET_HIT_VIEW_ZOOM1;
   if (L.waveSeg[0].contains(lx, ly))    return SET_HIT_VIEW_WAVE0;

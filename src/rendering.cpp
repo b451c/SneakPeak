@@ -65,6 +65,7 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
     sp.meterMode       = (int)m_levels.GetMode();
     sp.meterFromMaster = m_meterFromMaster;
     sp.showMeters      = m_showMeters;
+    sp.showRuler       = m_showRuler;
     sp.showRMS         = m_waveform.GetShowRMS();
     sp.snapZero        = m_waveform.GetSnapToZero();
     sp.minimap         = m_minimapVisible;
@@ -530,6 +531,8 @@ void SneakPeak::DrawModeBar(HDC hdc)
 
 void SneakPeak::DrawRuler(HDC hdc)
 {
+  if (!m_showRuler) return;   // hidden: zero-height rect, nothing to paint
+
   int w = m_rulerRect.right - m_rulerRect.left;
   int h = m_rulerRect.bottom - m_rulerRect.top;
 

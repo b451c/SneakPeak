@@ -126,6 +126,7 @@ enum ContextMenuID {
   CM_SHOW_DYNAMICS,
   CM_SHOW_RMS,
   CM_SHOW_METERS,
+  CM_SHOW_RULER,
   CM_APPLY_DYNAMICS,
   CM_ENV_SHAPE_LINEAR,
   CM_ENV_SHAPE_SQUARE,
@@ -385,6 +386,7 @@ private:
   bool m_spectralPainted = false;  // triggers one repaint after FFT completes
   bool m_minimapVisible = false;
   bool m_showMeters = true;
+  bool m_showRuler = true;        // hide-ruler layout flag (forum #51); markers fall back onto the waveform
   int m_minimapHeight = MINIMAP_HEIGHT;
   bool m_minimapDragging = false;       // resize drag (top edge)
   bool m_minimapScrollDragging = false; // click-drag to scroll view

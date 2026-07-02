@@ -327,6 +327,8 @@ void SneakPeak::OnRightClick(int x, int y)
              m_waveform.GetShowRMS() ? "Show RMS  \xE2\x9C\x93" : "Show RMS");
   MenuAppend(viewMenu, MF_STRING, CM_SHOW_METERS,
              m_showMeters ? "Show Meters  \xE2\x9C\x93" : "Show Meters");
+  MenuAppend(viewMenu, MF_STRING, CM_SHOW_RULER,
+             m_showRuler ? "Show Ruler  \xE2\x9C\x93" : "Show Ruler");
 #endif
 #ifndef SNEAKPEAK_BLEND2D_PANEL
   // UI Scale submenu - the OFF-build (GDI) fallback control only. The premium build
@@ -616,6 +618,18 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_showMeters = !m_showMeters;
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_meters",
                                         m_showMeters ? "1" : "0", true);
+      {
+        RECT cr;
+        GetClientRect(m_hwnd, &cr);
+        RecalcLayout(cr.right, cr.bottom);
+        m_waveform.Invalidate();
+      }
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      break;
+    case CM_SHOW_RULER:
+      m_showRuler = !m_showRuler;
+      if (g_SetExtState) g_SetExtState("SneakPeak", "show_ruler",
+                                        m_showRuler ? "1" : "0", true);
       {
         RECT cr;
         GetClientRect(m_hwnd, &cr);

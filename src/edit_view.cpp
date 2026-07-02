@@ -98,6 +98,8 @@ void SneakPeak::Create()
     if (showRms && showRms[0] == '0') m_waveform.SetShowRMS(false);
     const char* showMeters = g_GetExtState("SneakPeak", "show_meters");
     if (showMeters && showMeters[0] == '0') m_showMeters = false;
+    const char* showRuler = g_GetExtState("SneakPeak", "show_ruler");
+    if (showRuler && showRuler[0] == '0') m_showRuler = false;
     const char* zc = g_GetExtState("SneakPeak", "zoom_center");
     if (zc && zc[0] == '1') m_zoomOnEditCursor = true;
   }
@@ -1646,7 +1648,8 @@ double SneakPeak::ComputeFitUiScale() const
   const int cw = cr.right, ch = cr.bottom;
   auto fits = [&](double s) {
     auto sp = [&](int px) { return (int)(px * s + 0.5); };
-    int need = sp(TOOLBAR_HEIGHT) + sp(MODE_BAR_HEIGHT) + sp(RULER_HEIGHT)
+    int need = sp(TOOLBAR_HEIGHT) + sp(MODE_BAR_HEIGHT)
+             + (m_showRuler ? sp(RULER_HEIGHT) : 0)
              + sp(MIN_WAVEFORM_HEIGHT)
              + (m_spectralVisible ? sp(SPLITTER_HEIGHT) + sp(MIN_SPECTRAL_HEIGHT) : 0)
              + (m_minimapVisible ? m_minimapHeight : 0)
@@ -1698,7 +1701,9 @@ void SneakPeak::RecalcLayout(int w, int h)
   m_modeBarRect = { 0, y, w, y + modeH };
   y += modeH;
 
-  int rulerH = SP(RULER_HEIGHT);
+  // Hidden ruler collapses to a zero-height rect: every ruler hit-test fails
+  // naturally, and markers/regions anchor at rulerRect.top == waveform top.
+  int rulerH = m_showRuler ? SP(RULER_HEIGHT) : 0;
   m_rulerRect = { 0, y, w, y + rulerH };
   y += rulerH;
 
