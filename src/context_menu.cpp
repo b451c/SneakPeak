@@ -475,11 +475,17 @@ void SneakPeak::OnRightClick(int x, int y)
       MenuAppendSubmenu(menu, loopMenu, "Loop");
     }
 #endif
-#ifdef SNEAKPEAK_BLEND2D_PANEL
-    MenuAppend(menu, MF_STRING, CM_ONESHOT_FACTORY, "One-Shot Factory...");
-#endif
-    MenuAppend(menu, MF_STRING, CM_REPLACE_SOURCE, "Replace Source in REAPER Timeline");
   }
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  // One-Shot Factory works in Standalone AND plain ITEM mode (INC-B3): design
+  // on the timeline -> select the item -> Factory -> asset out.
+  if (OneShotModeOk()) {
+    if (!m_waveform.IsStandaloneMode()) MenuAppendSeparator(menu);
+    MenuAppend(menu, MF_STRING, CM_ONESHOT_FACTORY, "One-Shot Factory...");
+  }
+#endif
+  if (m_waveform.IsStandaloneMode())
+    MenuAppend(menu, MF_STRING, CM_REPLACE_SOURCE, "Replace Source in REAPER Timeline");
   MenuAppendSeparator(menu);
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   // One discoverability entry for the premium Settings panel (the gear in the mode
@@ -825,7 +831,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       StandaloneAuditionSeam();
       break;
     case CM_ONESHOT_FACTORY:
-      if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) break;
+      if (!OneShotModeOk()) break;
       RestoreOneShotParams();
       m_oneShotPanel.Show();
       m_osPreviewDirty = true;   // trim/fade preview from the first frame

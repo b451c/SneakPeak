@@ -2051,6 +2051,16 @@ void SneakPeak::SaveLimiterGeom()
 // (CalculateNormalization on a temp file), Peak is a plain scan, TP-safe runs
 // the limiter engine at the target ceiling.
 
+// One-Shot eligibility (INC-B3): the chain runs on the single loaded buffer,
+// so Standalone and plain ITEM mode qualify - SET/timeline/multi-item
+// (segmented buffers) and master mode do not.
+bool SneakPeak::OneShotModeOk() const
+{
+  if (!m_waveform.HasItem() || m_masterMode) return false;
+  if (m_waveform.IsStandaloneMode()) return true;
+  return !m_waveform.IsMultiItem() && !m_workingSet.active;
+}
+
 // Kept bounds of one slice: the trim scan (any channel above the threshold
 // keeps the frame) + keep-padding, clamped to the slice. Shared by the
 // exporter and the live preview so what is drawn is exactly what Run writes.
@@ -2292,7 +2302,7 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
 
 void SneakPeak::DoRunOneShot()
 {
-  if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) return;
+  if (!OneShotModeOk()) return;
   const OneShotParams p = m_oneShotPanel.GetParams();
 
   const std::vector<std::pair<int, int>> slices = OneShotBuildSlices(p);
@@ -2303,8 +2313,15 @@ void SneakPeak::DoRunOneShot()
     return;
   }
 
-  // {name} = the source basename; output dir = the source's folder.
-  std::string srcPath = m_waveform.GetStandaloneFilePath();
+  // {name} = the source basename; output dir = the source's folder. In ITEM
+  // mode (INC-B3) that is the item's media file - assets land next to it.
+  std::string srcPath = m_waveform.IsStandaloneMode()
+                            ? m_waveform.GetStandaloneFilePath()
+                            : AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+  if (srcPath.empty() && !m_waveform.IsStandaloneMode()) {
+    ShowToast("Item source has no file on disk - no output folder");
+    return;
+  }
   std::string dir = ".", base = "oneshot";
   {
     const size_t slash = srcPath.find_last_of("/\\");

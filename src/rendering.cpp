@@ -916,8 +916,7 @@ void SneakPeak::UpdateSoloState()
 // show where the edge micro-fades land. No more working blind.
 void SneakPeak::DrawOneShotOverlay(HDC hdc)
 {
-  if (!m_oneShotPanel.IsVisible() || !m_waveform.IsStandaloneMode() ||
-      !m_waveform.HasItem() || m_osSpans.empty())
+  if (!m_oneShotPanel.IsVisible() || !OneShotModeOk() || m_osSpans.empty())
     return;
   const int sr = m_waveform.GetSampleRate();
   if (sr <= 0) return;

@@ -323,6 +323,7 @@ private:
   void DoRepairClicks();                 // v2.3.0 INC-5: AR click repair on time selection
   void DoApplyLimiter();                 // v2.4.0 INC-L1: true-peak hard limiter apply
   void DoRunOneShot();                   // v2.4 INC-B1/B2: per-slice trim/fade/normalize -> WAVs
+  bool OneShotModeOk() const;            // INC-B3: Standalone or plain ITEM mode
   // INC-B2 slice helpers: the slice list for the active mode (whole file /
   // regions-markers / silence gaps), the per-slice kept-bounds (shared by the
   // exporter and the live preview so they can never disagree), one slice's

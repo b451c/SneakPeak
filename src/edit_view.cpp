@@ -582,6 +582,9 @@ void SneakPeak::LoadSelectedItem()
   m_envDragPointIdx = -1;
   m_envTensionDragging = false;
   m_envTensionPtIdx = -1;
+  // ITEM-mode One-Shot preview (INC-B3): the buffer serial only tracks
+  // standalone mutations, so an item switch must mark the preview dirty here.
+  m_osPreviewDirty = true;
 
   int selCount = g_CountSelectedMediaItems(nullptr);
   DBG("[SneakPeak] LoadSelectedItem: count=%d firstSel=%p isTimeline=%d isTrackView=%d\n",
@@ -770,8 +773,9 @@ void SneakPeak::OnTimer()
   LimiterApplyTick();
   // Loop finder: publish finished candidates (INC-A2).
   LoopFindTick();
-  // One-Shot Prep edits the standalone buffer's file only: close on mode exit.
-  if (m_oneShotPanel.IsVisible() && !m_waveform.IsStandaloneMode()) {
+  // One-Shot Prep needs the single loaded buffer (Standalone or plain ITEM
+  // mode, INC-B3): close when the mode stops qualifying.
+  if (m_oneShotPanel.IsVisible() && !OneShotModeOk()) {
     m_oneShotPanel.Hide();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
@@ -2063,9 +2067,7 @@ void SneakPeak::LimiterPreviewDraftThread(
 // during a knob drag (one pass per frame at most, one-shots are short).
 void SneakPeak::OneShotPreviewTick()
 {
-  if (!m_oneShotPanel.IsVisible() || !m_waveform.IsStandaloneMode() ||
-      !m_waveform.HasItem())
-    return;
+  if (!m_oneShotPanel.IsVisible() || !OneShotModeOk()) return;
   const uint64_t serial = m_standaloneBufferSerial.load();
   if (!m_osPreviewDirty && serial == m_osPreviewSerial) return;
   m_osPreviewDirty = false;
