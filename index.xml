@@ -40,6 +40,25 @@
 ]]></description>
       </metadata>
 
+      <version name="2.4.0-rc1" author="b451c" time="2026-07-02T18:04:26Z">
+        <changelog><![CDATA[RELEASE CANDIDATE (pre-release, opt-in) - v2.4.0 test round
+
+The biggest update so far. Full notes land with the final release; highlights:
+- Game Audio Suite: Loop Lab (loop region, gapless loop/seam auditions, automatic loop-point finder with texture fallback, equal-power Weld, smpl loop points on save, all in one panel), One-Shot Factory (trim/fade/normalize exporter with live preview, slicing to variations by regions/markers/silence, {name}_{nn} naming, OPEN FOLDER), True-Peak Hard Limiter (hard dBTP ceiling, 8x-oversampled detection, live GR band, Game Asset -1 dBTP preset)
+- Dynamics Suite rework: upward compression (DOWN/UP/BOTH), ratio to Inf:1 and beyond, complete noise-gate redo (ratio, hysteresis, attack/release, -90 dB floors), wideband de-esser with LISTEN, per-stage bypass; Dynamics now also applies destructively on Standalone files
+- Spectral Repair (Standalone): heal a time x frequency selection, sample-accurate click repair
+- Bridges: One-Shot Factory + Hard Limiter work directly on timeline items (destructive source rewrite with confirm + undo), Edit Copy in Standalone, destructive item edits now undoable (Cmd/Ctrl+Z)
+- Plus: curved envelopes, redo, spectral frequency grid (Hz/Notes), ~10x faster spectrogram, responsive long-file loading, Windows drag-export, and many fixes
+
+Feedback -> https://forum.cockos.com/showthread.php?t=307499
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-arm64.dylib</source>
+        <source platform="darwin64" file="reaper_sneakpeak-x86_64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-x86_64.dylib</source>
+        <source platform="win64" file="reaper_sneakpeak-x64.dll">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-x64.dll</source>
+        <source platform="linux64" file="reaper_sneakpeak-x86_64.so">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_sneakpeak-aarch64.so">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-aarch64.so</source>
+      </version>
+
       <version name="2.2.0" author="b451c" time="2026-06-17T09:55:47Z">
         <changelog><![CDATA[UI Scaling Release - Global UI Scale, Settings Panel, Premium Rendering, Truthful Clipping
 
