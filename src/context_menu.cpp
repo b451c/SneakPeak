@@ -938,6 +938,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
       break;
     case CM_TOGGLE_SPECTRAL:
+      if (!m_spectralVisible && !RequireItemAudio("Spectral view")) break;
       m_spectralVisible = !m_spectralVisible;
       m_spectralPainted = false;
       {

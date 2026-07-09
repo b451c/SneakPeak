@@ -133,3 +133,7 @@ double (*g_CalculateNormalization)(PCM_source*, int, double, double, double) = n
 
 // Time selection
 void (*g_GetSet_LoopTimeRange2)(ReaProject*, bool, bool, double*, double*, bool) = nullptr;
+
+// SDK peaks (INC-PK1): instant waveform display without decoding the source
+int (*g_GetMediaItemTake_Peaks)(MediaItem_Take*, double, double, int, int, int, double*) = nullptr;
+int (*g_PCM_Source_BuildPeaks)(PCM_source*, int) = nullptr;

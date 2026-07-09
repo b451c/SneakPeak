@@ -1142,3 +1142,180 @@ void SneakPeak::DoReplaceSourceInTimeline()
   else snprintf(buf, sizeof(buf), "No items in timeline reference this file");
   ShowToast(buf);
 }
+
+// ============================================================================
+// Background ITEM audio load (INC-PK1, .harness/design_sdk_peaks_hybrid.md)
+// The waveform paints from REAPER's .reapeaks the moment an item is selected;
+// the sample buffer decodes here in OnTimer slices (same idea as STA-1) and
+// installs on completion, at which point the display switches to the normal
+// audio pipeline. Anything that needs raw samples gates on RequireItemAudio().
+// ============================================================================
+
+void SneakPeak::StartItemAudioLoad()
+{
+  AbortItemAudioLoad();
+  if (m_waveform.IsStandaloneMode() || m_waveform.IsMultiItem()) return;
+  if (!m_waveform.GetTake() || m_waveform.GetAudioSampleCount() > 0) return;
+  if (!g_CreateTakeAudioAccessor || !g_GetAudioAccessorSamples || !g_DestroyAudioAccessor) return;
+
+  int readRate = 0, readFrames = 0;
+  if (!m_waveform.ComputeItemLoadPlan(readRate, readFrames)) return;
+  int nch = m_waveform.GetSrcChannels();
+  if (nch < 1) nch = 1;
+
+  m_itemLoad.accessor = g_CreateTakeAudioAccessor(m_waveform.GetTake());
+  if (!m_itemLoad.accessor) return;
+  m_itemLoad.take = m_waveform.GetTake();
+  m_itemLoad.readRate = readRate;
+  m_itemLoad.readFrames = readFrames;
+  m_itemLoad.nch = nch;
+  m_itemLoad.framesRead = 0;
+  m_itemLoad.samples.assign((size_t)readFrames * (size_t)nch, 0.0);
+  m_itemLoad.active = true;
+  DBG("[SneakPeak] StartItemAudioLoad: %d frames @ %d Hz, %d ch\n", readFrames, readRate, nch);
+}
+
+void SneakPeak::AbortItemAudioLoad()
+{
+  if (m_itemLoad.accessor && g_DestroyAudioAccessor)
+    g_DestroyAudioAccessor(m_itemLoad.accessor);
+  m_itemLoad.accessor = nullptr;
+  m_itemLoad.take = nullptr;
+  m_itemLoad.samples.clear();
+  m_itemLoad.samples.shrink_to_fit();
+  m_itemLoad.framesRead = 0;
+  if (m_itemLoad.active) {
+    m_itemLoad.active = false;
+    if (m_hwnd) UpdateTitle();
+  }
+}
+
+void SneakPeak::StepItemAudioLoad()
+{
+  if (!m_itemLoad.active) return;
+
+  // The view moved on (item switch, standalone, multi) or the take died.
+  if (m_waveform.IsStandaloneMode() || m_waveform.IsMultiItem() ||
+      m_waveform.GetTake() != m_itemLoad.take ||
+      m_waveform.GetAudioSampleCount() > 0 ||
+      (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)m_itemLoad.take, "MediaItem_Take*"))) {
+    AbortItemAudioLoad();
+    return;
+  }
+
+  // ~15 ms decode budget per tick keeps the UI fluid at TIMER_INTERVAL_MS.
+  static const int CHUNK_FRAMES = 16384;
+  DWORD t0 = GetTickCount();
+  while (m_itemLoad.framesRead < m_itemLoad.readFrames && GetTickCount() - t0 < 15) {
+    int n = std::min(CHUNK_FRAMES, m_itemLoad.readFrames - m_itemLoad.framesRead);
+    double t = (double)m_itemLoad.framesRead / (double)m_itemLoad.readRate;
+    int ret = g_GetAudioAccessorSamples(m_itemLoad.accessor, m_itemLoad.readRate,
+                                        m_itemLoad.nch, t, n,
+                                        m_itemLoad.samples.data() +
+                                            (size_t)m_itemLoad.framesRead * m_itemLoad.nch);
+    if (ret <= 0) { m_itemLoad.framesRead = m_itemLoad.readFrames; break; } // keep zeros
+    m_itemLoad.framesRead += n;
+  }
+
+  if (m_itemLoad.framesRead >= m_itemLoad.readFrames) {
+    FinishItemAudioLoad();
+    return;
+  }
+
+  if (m_hwnd) {
+    char title[256];
+    snprintf(title, sizeof(title), "SneakPeak: Loading item audio... %d%%",
+             (int)(100.0 * (double)m_itemLoad.framesRead / (double)m_itemLoad.readFrames));
+    SetWindowText(m_hwnd, title);
+  }
+}
+
+void SneakPeak::FinishItemAudioLoad()
+{
+  // Fold I_CHANMODE mono modes exactly like the legacy synchronous path.
+  int outNch = m_itemLoad.nch;
+  if (outNch == 2 && g_GetSetMediaItemTakeInfo && m_itemLoad.take) {
+    int* p = (int*)g_GetSetMediaItemTakeInfo(m_itemLoad.take, "I_CHANMODE", nullptr);
+    int chanMode = p ? *p : 0;
+    if (chanMode >= 2 && chanMode <= 4) {
+      int frames = m_itemLoad.readFrames;
+      std::vector<double> mono((size_t)frames);
+      for (int i = 0; i < frames; i++) {
+        const double* f = &m_itemLoad.samples[(size_t)i * 2];
+        mono[(size_t)i] = (chanMode == 2) ? (f[0] + f[1]) * 0.5
+                        : (chanMode == 4) ? f[1] : f[0];
+      }
+      m_itemLoad.samples = std::move(mono);
+      outNch = 1;
+    }
+  }
+
+  m_waveform.InstallItemAudio(std::move(m_itemLoad.samples), m_itemLoad.readFrames,
+                              m_itemLoad.readRate, outNch);
+  AbortItemAudioLoad(); // releases accessor, clears state, restores title
+
+  // Full-fidelity consumers wake up: RMS/flat-top recompute on next paint,
+  // minimap upgrades from SDK peaks, an open dynamics panel gets its analysis.
+  m_minimap.Invalidate();
+  if (m_dynamicsPanel.IsVisible() && m_waveform.GetAudioSampleCount() > 0) {
+    m_dynamics.SetParams(m_dynamicsPanel.GetParams());
+    double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
+    m_dynamics.Analyze(m_waveform.GetAudioData().data(), m_waveform.GetAudioSampleCount(),
+                       m_waveform.GetNumChannels(), m_waveform.GetSampleRate(),
+                       ivDb, m_dynamicsPanel.GetParams());
+    m_dynamics.ComputeCompression();
+    m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
+  }
+  if (m_spectralVisible) { m_spectral.ClearSpectrum(); m_spectral.Invalidate(); }
+  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+bool SneakPeak::ItemAudioReady() const
+{
+  return m_waveform.IsStandaloneMode() || m_waveform.GetAudioSampleCount() > 0;
+}
+
+// Gate for sample-dependent user actions during the background load: honest
+// toast instead of a multi-second freeze (never a synchronous fallback load).
+bool SneakPeak::RequireItemAudio(const char* what)
+{
+  if (ItemAudioReady()) return true;
+  char buf[160];
+  if (m_itemLoad.active && m_itemLoad.readFrames > 0)
+    snprintf(buf, sizeof(buf), "%s needs the item audio - still loading (%d%%)", what,
+             (int)(100.0 * (double)m_itemLoad.framesRead / (double)m_itemLoad.readFrames));
+  else
+    snprintf(buf, sizeof(buf), "%s needs the item audio - still loading", what);
+  ShowToast(buf);
+  return false;
+}
+
+// .reapeaks not built yet for this source (fresh import with peaks disabled,
+// cleared peak cache): pump REAPER's builder so the SDK display can appear.
+void SneakPeak::StepSdkPeaksBuild()
+{
+  if (!m_waveform.SdkPeaksPending() || m_waveform.IsStandaloneMode() ||
+      !m_waveform.GetTake() || !g_PCM_Source_BuildPeaks || !g_GetMediaItemTake_Source) {
+    m_sdkPeaksBuildStage = -1;
+    return;
+  }
+  PCM_source* src = g_GetMediaItemTake_Source(m_waveform.GetTake());
+  if (!src) { m_sdkPeaksBuildStage = -1; return; }
+
+  if (m_sdkPeaksBuildStage < 0) {
+    if (g_PCM_Source_BuildPeaks(src, 0) == 0) {
+      // Nothing to build - peaks exist; retry the fetch on next paint.
+      InvalidateRect(m_hwnd, nullptr, FALSE);
+      return;
+    }
+    m_sdkPeaksBuildStage = 0;
+    return;
+  }
+
+  int left = g_PCM_Source_BuildPeaks(src, 1);
+  if (left == 0) {
+    g_PCM_Source_BuildPeaks(src, 2);
+    m_sdkPeaksBuildStage = -1;
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+}

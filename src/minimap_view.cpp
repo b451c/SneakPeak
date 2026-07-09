@@ -1,6 +1,7 @@
 // minimap_view.cpp — Miniature overview of entire item waveform
 #include "minimap_view.h"
 #include "waveform_view.h"
+#include "globals.h"
 #include "theme.h"
 #include "config.h"
 #include <algorithm>
@@ -16,6 +17,16 @@ void MinimapView::ComputePeaks(const WaveformView& wv)
   int w = m_rect.right - m_rect.left;
   if (w <= 0) return;
 
+  if (m_peaksValid && m_cachedWidth == w) return;
+
+  // SDK-peaks hybrid (INC-PK1): while the item buffer loads in the background
+  // the overview comes straight from .reapeaks, like the main waveform.
+  if (!wv.IsStandaloneMode() && !wv.IsMultiItem() && wv.GetTake() &&
+      wv.GetAudioSampleCount() <= 0 && g_GetMediaItemTake_Peaks) {
+    ComputePeaksFromSDK(wv);
+    return;
+  }
+
   const auto& audioData = wv.GetAudioData();
   int nch = wv.GetNumChannels();
   int totalFrames = wv.GetAudioSampleCount();
@@ -23,8 +34,6 @@ void MinimapView::ComputePeaks(const WaveformView& wv)
     m_peaksValid = false;
     return;
   }
-
-  if (m_peaksValid && m_cachedWidth == w) return;
 
   m_peakMax.resize((size_t)w);
   m_peakMin.resize((size_t)w);
@@ -159,4 +168,61 @@ double MinimapView::XToTime(int x, double itemDuration) const
   if (w <= 0) return 0.0;
   double ratio = (double)(x - m_rect.left) / (double)w;
   return std::max(0.0, std::min(itemDuration, ratio * itemDuration));
+}
+
+// Whole-item overview from REAPER's .reapeaks (mono fold of source channels).
+void MinimapView::ComputePeaksFromSDK(const WaveformView& wv)
+{
+  int w = m_rect.right - m_rect.left;
+  double dur = wv.GetItemDuration();
+  if (w <= 0 || dur <= 0.0) { m_peaksValid = false; return; }
+
+  int srcNch = wv.GetSrcChannels();
+  if (srcNch < 1) srcNch = 1;
+  double peakrate = (double)w / dur;
+  double starttime = wv.GetItemPosition();
+
+  std::vector<double> buf((size_t)srcNch * (size_t)w * 2, 0.0);
+  int ret = g_GetMediaItemTake_Peaks(wv.GetTake(), peakrate, starttime, srcNch, w, 0, buf.data());
+  int actual = ret & 0xFFFFF;
+  int mode = (ret >> 20) & 0xF;
+  if (actual <= 0 || (mode != 0 && mode != 1)) { m_peaksValid = false; return; }
+
+  m_peakMax.assign((size_t)w, 0.0);
+  m_peakMin.assign((size_t)w, 0.0);
+
+  if (mode == 0) {
+    size_t minOff = (size_t)srcNch * (size_t)actual;
+    for (int col = 0; col < w; col++) {
+      int s = (col < actual) ? col : actual - 1;
+      double mx = 0.0, mn = 0.0;
+      for (int ch = 0; ch < srcNch; ch++) {
+        mx += buf[(size_t)s * srcNch + ch];
+        mn += buf[minOff + (size_t)s * srcNch + ch];
+      }
+      m_peakMax[col] = mx / (double)srcNch;
+      m_peakMin[col] = mn / (double)srcNch;
+    }
+  } else {
+    double spp = (double)actual / (double)w;
+    for (int col = 0; col < w; col++) {
+      int s0 = (int)(col * spp), s1 = (int)((col + 1) * spp);
+      if (s1 <= s0) s1 = s0 + 1;
+      if (s1 > actual) s1 = actual;
+      double mx = -2.0, mn = 2.0;
+      for (int s = s0; s < s1; s++) {
+        double v = 0.0;
+        for (int ch = 0; ch < srcNch; ch++) v += buf[(size_t)s * srcNch + ch];
+        v /= (double)srcNch;
+        if (v > mx) mx = v;
+        if (v < mn) mn = v;
+      }
+      if (mx < -1.5) { mx = 0.0; mn = 0.0; }
+      m_peakMax[col] = mx;
+      m_peakMin[col] = mn;
+    }
+  }
+
+  m_peaksValid = true;
+  m_cachedWidth = w;
 }

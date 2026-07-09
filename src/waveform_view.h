@@ -245,6 +245,19 @@ public:
   void SetItemDuration(double dur) { m_itemDuration = dur; }
   void SetItemPosition(double pos) { m_itemPosition = pos; }
 
+  // SDK-peaks hybrid (INC-PK1, .harness/design_sdk_peaks_hybrid.md):
+  // single-item ITEM mode shows the waveform from REAPER's .reapeaks
+  // immediately while the sample buffer loads in OnTimer slices. Loaded ==
+  // m_audioSampleCount > 0; every sample consumer already no-ops on 0.
+  bool IsItemAudioLoaded() const { return m_standaloneMode || m_audioSampleCount > 0; }
+  int GetSrcChannels() const { return m_srcChannels; }
+  bool SdkPeaksPending() const { return m_sdkPeaksPending; }  // .reapeaks absent -> pump builder
+  // The background loader's read plan == LoadAudioData's (incl. the 10M-frame
+  // downsample cap). Returns false when there is nothing to load.
+  bool ComputeItemLoadPlan(int& readRate, int& readFrames) const;
+  // Install a finished background load (already channel-mode folded).
+  void InstallItemAudio(std::vector<double>&& data, int frames, int rate, int nch);
+
 private:
   void LoadAudioData();
   void LoadConcatenated(const std::vector<MediaItem*>& items);
@@ -252,6 +265,7 @@ private:
   void UpdateFadeCacheSingle();
   bool CompareFadeParams(const FadeCache& a, const FadeCache& b) const;
   void UpdatePeaks();
+  void UpdatePeaksFromSDK();
   void DrawWaveformChannel(HDC hdc, int channel, int yTop, int height);
   void DrawSelection(HDC hdc);
   void DrawCursor(HDC hdc);
@@ -297,9 +311,13 @@ private:
   int m_numChannels = 0;
   int m_sampleRate = 44100;
 
-  // Cached audio samples (loaded once per item)
+  // Cached audio samples (loaded once per item; in single-item ITEM mode the
+  // buffer arrives via the background loader - empty until then, display
+  // served by UpdatePeaksFromSDK)
   std::vector<double> m_audioData;  // interleaved [sample * nch + ch]
   int m_audioSampleCount = 0;       // total frames loaded
+  int m_srcChannels = 1;            // source channel count before I_CHANMODE fold
+  bool m_sdkPeaksPending = false;   // last SDK fetch returned no peaks yet
 
   // View state
   double m_viewStartTime = 0.0;

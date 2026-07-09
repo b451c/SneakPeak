@@ -52,7 +52,27 @@ void WaveformView::UpdatePeaks()
     return;
   }
 
-  if (w <= 0 || m_audioSampleCount <= 0) {
+  if (w <= 0) {
+    m_peaksValid = false;
+    return;
+  }
+
+  if (m_peaksValid && m_peaksCachedStart == m_viewStartTime &&
+      m_peaksCachedDuration == m_viewDuration && m_peaksCachedWidth == w) {
+    return;
+  }
+
+  // SDK-peaks hybrid (INC-PK1): single-item ITEM mode with no sample buffer
+  // yet - serve the display from REAPER's .reapeaks while the background
+  // loader fills m_audioData. Once installed (count > 0) the audio path below
+  // takes over permanently (byte-identical to the pre-hybrid pipeline).
+  if (!m_standaloneMode && m_take && m_segments.size() <= 1 &&
+      m_audioSampleCount <= 0 && g_GetMediaItemTake_Peaks) {
+    UpdatePeaksFromSDK();
+    return;
+  }
+
+  if (m_audioSampleCount <= 0) {
     m_peaksValid = false;
     return;
   }
@@ -67,11 +87,6 @@ void WaveformView::UpdatePeaks()
       m_peaksValid = false;
       return;
     }
-  }
-
-  if (m_peaksValid && m_peaksCachedStart == m_viewStartTime &&
-      m_peaksCachedDuration == m_viewDuration && m_peaksCachedWidth == w) {
-    return;
   }
 
   int nch = m_numChannels;
@@ -140,6 +155,118 @@ void WaveformView::UpdatePeaks()
   for (int col = 0; col < w; col++) {
     for (int ch = 0; ch < nch; ch++) {
       size_t idx = (size_t)(col * nch + ch);
+      if (fabs(m_peakMax[idx] * vol) >= 1.0 || fabs(m_peakMin[idx] * vol) >= 1.0)
+        m_clipFlags[idx] |= 1;
+    }
+  }
+
+  m_peaksValid = true;
+  m_peaksCachedStart = m_viewStartTime;
+  m_peaksCachedDuration = m_viewDuration;
+  m_peaksCachedWidth = w;
+}
+
+// SDK-peaks display path (INC-PK1): fetch min/max from REAPER's .reapeaks for
+// the visible range - instant regardless of source format/length (this is
+// what the arrange view itself draws from). Values are treated as raw
+// take-domain: item volume, fades and the take envelope are applied at draw
+// time exactly like the audio path (the SDK->audio switch at install acts as
+// a built-in A/B for that assumption). RMS stays zeroed - never faked from
+// peaks - and DrawWaveformChannel skips the RMS pass until real samples
+// arrive; clip flags carry the over-0dB warning bit only (the source
+// flat-top scan needs raw samples).
+void WaveformView::UpdatePeaksFromSDK()
+{
+  int w = m_rect.right - m_rect.left - SP(DB_SCALE_WIDTH);
+  if (w < 1) w = m_rect.right - m_rect.left;
+  if (w <= 0 || m_viewDuration <= 0.0 || !m_take) { m_peaksValid = false; return; }
+
+  int srcNch = (m_srcChannels < 1) ? 1 : m_srcChannels;
+  int dispNch = (m_numChannels < 1) ? 1 : m_numChannels;
+
+  double peakrate = (double)w / m_viewDuration;
+  double starttime = m_itemPosition + m_viewStartTime; // absolute project time
+
+  std::vector<double> buf((size_t)srcNch * (size_t)w * 2, 0.0);
+  int ret = g_GetMediaItemTake_Peaks(m_take, peakrate, starttime, srcNch, w, 0, buf.data());
+  int actual = ret & 0xFFFFF;
+  int mode = (ret >> 20) & 0xF;
+
+  if (actual <= 0 || (mode != 0 && mode != 1)) {
+    // .reapeaks not built yet: flag for the OnTimer builder pump.
+    m_sdkPeaksPending = true;
+    m_peaksValid = false;
+    return;
+  }
+  m_sdkPeaksPending = false;
+
+  m_peakMax.assign((size_t)(w * dispNch), 0.0);
+  m_peakMin.assign((size_t)(w * dispNch), 0.0);
+  m_peakRMS.assign((size_t)(w * dispNch), 0.0);
+  m_clipFlags.assign((size_t)(w * dispNch), 0);
+
+  int chanMode = 0;
+  if (dispNch == 1 && srcNch == 2 && g_GetSetMediaItemTakeInfo) {
+    int* p = (int*)g_GetSetMediaItemTakeInfo(m_take, "I_CHANMODE", nullptr);
+    if (p) chanMode = *p;
+  }
+  auto foldMono = [&](double l, double r) -> double {
+    if (chanMode == 2) return (l + r) * 0.5; // downmix
+    if (chanMode == 4) return r;             // right only
+    return l;                                // left only / default
+  };
+
+  if (mode == 0) {
+    // Peaks mode: buf = [max: srcNch x actual][min: srcNch x actual]
+    size_t minOff = (size_t)srcNch * (size_t)actual;
+    for (int col = 0; col < w; col++) {
+      int s = (col < actual) ? col : actual - 1;
+      if (dispNch == 1 && srcNch == 2) {
+        m_peakMax[col] = foldMono(buf[(size_t)s * 2], buf[(size_t)s * 2 + 1]);
+        m_peakMin[col] = foldMono(buf[minOff + (size_t)s * 2],
+                                  buf[minOff + (size_t)s * 2 + 1]);
+      } else {
+        for (int ch = 0; ch < dispNch; ch++) {
+          size_t pi = (size_t)(col * dispNch + ch);
+          size_t si = (size_t)s * srcNch + ch;
+          m_peakMax[pi] = buf[si];
+          m_peakMin[pi] = buf[minOff + si];
+        }
+      }
+    }
+  } else {
+    // Waveform mode (deep zoom): buf holds raw samples; min/max per column.
+    double spp = (double)actual / (double)w;
+    for (int col = 0; col < w; col++) {
+      int s0 = (int)(col * spp);
+      int s1 = (int)((col + 1) * spp);
+      if (s1 <= s0) s1 = s0 + 1;
+      if (s1 > actual) s1 = actual;
+      for (int ch = 0; ch < dispNch; ch++) {
+        double mx = -2.0, mn = 2.0;
+        for (int s = s0; s < s1; s++) {
+          double v;
+          if (dispNch == 1 && srcNch == 2)
+            v = foldMono(buf[(size_t)s * 2], buf[(size_t)s * 2 + 1]);
+          else
+            v = buf[(size_t)s * srcNch + ch];
+          if (v > mx) mx = v;
+          if (v < mn) mn = v;
+        }
+        if (mx < -1.5) { mx = 0.0; mn = 0.0; }
+        size_t pi = (size_t)(col * dispNch + ch);
+        m_peakMax[pi] = mx;
+        m_peakMin[pi] = mn;
+      }
+    }
+  }
+
+  // Over-0dB warning after item volume (bit0) - same rule as the audio path.
+  double vol = m_fadeCache.itemVol;
+  if (vol <= 0.0) vol = 1.0;
+  for (int col = 0; col < w; col++) {
+    for (int ch = 0; ch < dispNch; ch++) {
+      size_t idx = (size_t)(col * dispNch + ch);
       if (fabs(m_peakMax[idx] * vol) >= 1.0 || fabs(m_peakMin[idx] * vol) >= 1.0)
         m_clipFlags[idx] |= 1;
     }
@@ -423,8 +550,10 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
     }
   }
 
-  // Draw RMS overlay (narrower, darker) - skipped if user hid RMS via View menu
-  if (m_showRMS) {
+  // Draw RMS overlay (narrower, darker) - skipped if user hid RMS via View
+  // menu, and while only SDK peaks are available (RMS is never faked from
+  // peak values; it returns when the background sample load installs).
+  if (m_showRMS && m_audioSampleCount > 0) {
   curPen = rmsNormPen;
   SelectObject(hdc, curPen);
   colTime = viewStart;

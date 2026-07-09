@@ -147,6 +147,7 @@ void SneakPeak::Destroy()
   // Cancel an in-flight incremental load (closes its PCM_source)
   m_stdLoading = false;
   AudioEngine::AbortStream(m_stdLoad);
+  AbortItemAudioLoad(); // releases the background item-load accessor
   // Save floating window position/size
   if (!m_isDocked && g_SetExtState) {
     RECT wr;
@@ -664,6 +665,7 @@ void SneakPeak::LoadSelectedItem()
   if (m_waveform.IsMultiItem()) m_waveform.ClearItem();
   m_waveform.SetItem(item);
   m_waveform.UpdateFadeCache(); // read D_VOL/fades immediately so first paint is correct
+  StartItemAudioLoad(); // SDK-peaks hybrid: buffer fills in OnTimer slices (no-op if loaded)
 
   // Run dynamics analysis on freshly loaded audio
   if ((m_dynamicsVisible || m_dynamicsPanel.IsVisible()) && m_waveform.GetAudioSampleCount() > 0) {
@@ -789,6 +791,9 @@ void SneakPeak::OnTimer()
 
   // Incremental standalone load (STA-1): one ~20 ms decode slice per tick.
   StepStandaloneLoad();
+  // Background ITEM audio load + .reapeaks builder pump (INC-PK1).
+  StepItemAudioLoad();
+  StepSdkPeaksBuild();
 
   // Spectral compute pump: the background thread cannot invalidate the window,
   // so without this the "Computing spectrum..." overlay freezes at its last
@@ -884,6 +889,7 @@ void SneakPeak::UpdatePlaybackFollow()
             if (playPos >= iPos && playPos < iPos + iLen) {
               if (trackItem != m_waveform.GetItem()) {
                 m_waveform.SetItem(trackItem);
+                StartItemAudioLoad();
                 InvalidateRect(m_hwnd, nullptr, FALSE);
               }
               break;
@@ -1033,6 +1039,7 @@ void SneakPeak::UpdateItemState()
       m_waveform.SetItemDuration(len);
       if (lenChanged) {
         m_waveform.ReloadAudio();
+        StartItemAudioLoad(); // SDK phase: re-plan the background load for the new length
         if (m_waveform.GetViewStart() + m_waveform.GetViewDuration() > len)
           m_waveform.ZoomToFit();
         m_minimap.Invalidate();
@@ -1049,6 +1056,7 @@ void SneakPeak::UpdateItemState()
         MediaItem* item = m_waveform.GetItem();
         m_waveform.ClearItem();
         m_waveform.SetItem(item);
+        StartItemAudioLoad();
         if (m_gainPanel.IsVisible()) m_gainPanel.Show(item);
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
@@ -1065,6 +1073,7 @@ void SneakPeak::UpdateItemState()
       if (m_waveform.CheckAudioChanged()) {
         DBG("[SneakPeak] External audio change detected, reloading\n");
         m_waveform.ReloadAfterExternalChange();
+        StartItemAudioLoad(); // hybrid: buffer dropped above, refill in background
         m_spectral.ClearSpectrum();
         m_spectral.Invalidate();
         m_minimap.Invalidate();

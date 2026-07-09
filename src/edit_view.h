@@ -501,6 +501,27 @@ private:
   bool m_stdLoading = false;
   void StepStandaloneLoad();    // OnTimer slice + progress title
   void FinishStandaloneLoad();  // install buffer + tab bookkeeping
+
+  // Background ITEM audio load (INC-PK1, design_sdk_peaks_hybrid.md): the
+  // waveform shows SDK peaks instantly; the sample buffer decodes here in
+  // OnTimer slices and installs on finish. Ops that need samples gate on
+  // ItemAudioReady().
+  struct ItemAudioLoad {
+    AudioAccessor* accessor = nullptr;
+    MediaItem_Take* take = nullptr;   // load target; abort if view moves on
+    std::vector<double> samples;      // staging, srcNch interleaved
+    int readRate = 0, readFrames = 0, nch = 0, framesRead = 0;
+    bool active = false;
+  };
+  ItemAudioLoad m_itemLoad;
+  void StartItemAudioLoad();
+  void StepItemAudioLoad();     // OnTimer slice + progress title
+  void FinishItemAudioLoad();
+  void AbortItemAudioLoad();
+  bool ItemAudioReady() const;                 // buffer present (or standalone)
+  bool RequireItemAudio(const char* what);     // gate: toast + false while loading
+  void StepSdkPeaksBuild();     // pump PCM_Source_BuildPeaks when .reapeaks absent
+  int m_sdkPeaksBuildStage = -1; // -1 idle, 0 begun
   void EvictStandaloneTabIfFull();
   void InstallStandaloneTab(const std::string& spath);
   void SaveStandaloneFile();

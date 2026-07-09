@@ -398,6 +398,7 @@ void SneakPeak::SyncSelectionToReaper()
 void SneakPeak::DoCopy()
 {
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
+  if (!RequireItemAudio("Copy")) return;
 
   // Sync selection to REAPER so native copy works on the right range
   SyncSelectionToReaper();
@@ -437,6 +438,7 @@ void SneakPeak::DoCut()
 {
   // Copy + ripple delete (standard waveform editor behavior: cut closes the gap)
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
+  if (!RequireItemAudio("Cut")) return;
 
   DoCopy();
   DoDelete(true); // ripple
@@ -445,6 +447,7 @@ void SneakPeak::DoCut()
 void SneakPeak::DoPaste()
 {
   if (!m_waveform.HasItem() || s_clipboard.numFrames <= 0) return;
+  if (!RequireItemAudio("Paste")) return;
   // Standalone mode: destructive paste (no REAPER track)
   if (m_waveform.IsStandaloneMode()) {
     DoPasteDestructive();
@@ -606,6 +609,7 @@ void SneakPeak::DoPaste()
 
 void SneakPeak::DoPasteDestructive()
 {
+  if (!RequireItemAudio("Paste")) return;
   if (s_clipboard.numChannels != m_waveform.GetNumChannels()) return;
 
   int ret = MessageBox(m_hwnd,
@@ -989,6 +993,7 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
 void SneakPeak::DoSilence()
 {
   if (!m_waveform.HasItem()) return;
+  if (!RequireItemAudio("Silence")) return;
 
   // --- Standalone mode ---
   if (m_waveform.IsStandaloneMode()) {
@@ -1133,6 +1138,7 @@ void SneakPeak::DoSilence()
 void SneakPeak::DoNormalize()
 {
   // Non-destructive (REAPER) or destructive (standalone)
+  if (!RequireItemAudio("Normalize")) return;
   if (!m_waveform.HasItem()) return;
 
   if (m_waveform.IsStandaloneMode()) {
@@ -1278,6 +1284,7 @@ void SneakPeak::DoReverse()
 {
   // Destructive — no REAPER non-destructive reverse available
   if (!m_waveform.HasItem()) return;
+  if (!RequireItemAudio("Reverse")) return;
   if (m_waveform.IsMultiItem()) {
     MessageBox(m_hwnd, "Reverse is not supported in multi-item view.", "SneakPeak", MB_OK);
     return;
@@ -1437,6 +1444,7 @@ void SneakPeak::DoDCRemove()
 {
   // Destructive — must modify audio data
   if (!m_waveform.HasItem()) return;
+  if (!RequireItemAudio("DC Remove")) return;
   if (m_waveform.IsMultiItem()) {
     MessageBox(m_hwnd, "DC Remove is not supported in multi-item view.", "SneakPeak", MB_OK);
     return;
@@ -1470,6 +1478,7 @@ void SneakPeak::DoDCRemove()
 void SneakPeak::DoNormalizeLUFS(double targetLufs)
 {
   if (!m_waveform.HasItem()) return;
+  if (!RequireItemAudio("Normalize")) return;
   if (m_waveform.IsStandaloneMode()) return;
   if (!g_CalculateNormalization || !g_SetMediaItemInfo_Value) return;
 
@@ -2265,7 +2274,10 @@ bool SneakPeak::SingleBufferModeOk() const
 {
   if (!m_waveform.HasItem() || m_masterMode) return false;
   if (m_waveform.IsStandaloneMode()) return true;
-  return !m_waveform.IsMultiItem() && !m_workingSet.active;
+  // INC-PK1: ITEM mode qualifies only once the background load installed the
+  // buffer (One-Shot/Edit Copy/limiter all consume raw samples).
+  return !m_waveform.IsMultiItem() && !m_workingSet.active &&
+         m_waveform.GetAudioSampleCount() > 0;
 }
 
 // Kept bounds of one slice: the trim scan (any channel above the threshold

@@ -89,6 +89,8 @@
 
 // Time selection
 #define REAPERAPI_WANT_GetSet_LoopTimeRange2
+#define REAPERAPI_WANT_GetMediaItemTake_Peaks
+#define REAPERAPI_WANT_PCM_Source_BuildPeaks
 
 // Tempo map (bars/beats ruler)
 #define REAPERAPI_WANT_TimeMap2_timeToBeats
@@ -565,6 +567,8 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_PreventUIRefresh = PreventUIRefresh;
 
   g_GetSet_LoopTimeRange2 = GetSet_LoopTimeRange2;
+  g_GetMediaItemTake_Peaks = GetMediaItemTake_Peaks;
+  g_PCM_Source_BuildPeaks = PCM_Source_BuildPeaks;
 
   g_TimeMap2_timeToBeats = TimeMap2_timeToBeats;
   g_TimeMap2_beatsToTime = TimeMap2_beatsToTime;

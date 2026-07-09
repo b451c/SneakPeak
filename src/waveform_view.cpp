@@ -77,10 +77,32 @@ void WaveformView::SetItem(MediaItem* item)
     }
   }
   m_numChannels = srcChannels;
+  m_srcChannels = srcChannels;
 
   m_cursorTime = 0.0;
 
-  // Load all audio samples at source channel count
+  // SDK-peaks hybrid (INC-PK1): skip the synchronous full decode - the
+  // waveform draws from REAPER's .reapeaks immediately and the sample buffer
+  // arrives via SneakPeak's background loader (StepItemAudioLoad). Display
+  // channel count still reflects I_CHANMODE; the loader folds the buffer to
+  // match on install.
+  if (g_GetMediaItemTake_Peaks) {
+    if (g_GetSetMediaItemTakeInfo && srcChannels == 2) {
+      int* pChanMode = (int*)g_GetSetMediaItemTakeInfo(m_take, "I_CHANMODE", nullptr);
+      int chanMode = pChanMode ? *pChanMode : 0;
+      if (chanMode >= 2 && chanMode <= 4) m_numChannels = 1;
+    }
+    if (g_CreateTakeAudioAccessor)
+      m_liveAccessor = g_CreateTakeAudioAccessor(m_take);
+    UpdateFadeCache();  // first paint needs D_VOL/fades
+    m_viewStartTime = 0.0;
+    m_viewDuration = m_itemDuration;
+    DBG("[SneakPeak] SetItem (SDK peaks): pos=%.3f dur=%.3f srcCh=%d dispCh=%d sr=%d\n",
+        m_itemPosition, m_itemDuration, m_srcChannels, m_numChannels, m_sampleRate);
+    return;
+  }
+
+  // Legacy path (SDK peaks API unavailable): load all audio synchronously
   LoadAudioData();
 
   // Create live accessor for external change detection
@@ -534,7 +556,16 @@ void WaveformView::ReloadAfterExternalChange()
   }
   if (m_liveAccessor && g_AudioAccessorValidateState)
     g_AudioAccessorValidateState(m_liveAccessor);
-  LoadAudioData();
+  // SDK-peaks hybrid: drop the stale buffer and let the caller restart the
+  // background loader - display falls back to .reapeaks meanwhile (which
+  // REAPER refreshes itself on source changes). No code depends on the
+  // buffer being back synchronously here (unlike post-edit ReloadAudio).
+  if (g_GetMediaItemTake_Peaks && !m_standaloneMode && m_segments.size() <= 1) {
+    m_audioData.clear();
+    m_audioSampleCount = 0;
+  } else if (m_audioSampleCount > 0) {
+    LoadAudioData();
+  }
   m_peaksValid = false;
 }
 
@@ -595,6 +626,46 @@ void WaveformView::RestoreFromMemory(const std::string& path, std::vector<double
 }
 
 // Load ALL audio samples into memory — called once per item
+// Shared read plan for the synchronous loader below and the background item
+// loader (SneakPeak::StepItemAudioLoad) - single source of truth, including
+// the 10M-frame downsample cap for very long items.
+bool WaveformView::ComputeItemLoadPlan(int& readRate, int& readFrames) const
+{
+  if (!m_take || m_itemDuration <= 0.0 || m_sampleRate <= 0) return false;
+
+  int totalFrames = (int)(m_itemDuration * (double)m_sampleRate);
+  // Safety cap: 30 minutes of stereo 96kHz = ~346M samples, ~2.6GB
+  // For practical use, cap at 10M frames (~3.5 min stereo 48kHz)
+  // Beyond that, we'll downsample on load
+  static const int MAX_FRAMES = 10000000;
+
+  readRate = m_sampleRate;
+  readFrames = totalFrames;
+
+  // If too many frames, read at lower rate to keep memory sane
+  if (totalFrames > MAX_FRAMES) {
+    int ratio = (totalFrames + MAX_FRAMES - 1) / MAX_FRAMES;
+    readRate = m_sampleRate / ratio;
+    if (readRate < 8000) readRate = 8000;
+    readFrames = (int)(m_itemDuration * (double)readRate) + 1;
+  }
+  return readFrames > 0;
+}
+
+// Install a finished background item load (buffer already channel-folded).
+void WaveformView::InstallItemAudio(std::vector<double>&& data, int frames, int rate, int nch)
+{
+  if (m_standaloneMode || !m_take) return;
+  m_audioData = std::move(data);
+  m_audioSampleCount = frames;
+  m_sampleRate = rate;   // may be the downsampled read rate (see the cap above)
+  m_numChannels = (nch < 1) ? 1 : nch;
+  m_peaksValid = false;  // switch display to the audio path
+  DBG("[SneakPeak] InstallItemAudio: %d frames (%d ch) @ %d Hz, %.1f MB\n",
+      frames, m_numChannels, rate,
+      (double)(m_audioData.size() * sizeof(double)) / (1024.0 * 1024.0));
+}
+
 void WaveformView::LoadAudioData()
 {
   m_audioData.clear();
@@ -606,24 +677,11 @@ void WaveformView::LoadAudioData()
   int nch = m_numChannels;
   if (nch < 1) nch = 1;
 
-  int totalFrames = (int)(m_itemDuration * (double)m_sampleRate);
-  // Safety cap: 30 minutes of stereo 96kHz = ~346M samples, ~2.6GB
-  // For practical use, cap at 10M frames (~3.5 min stereo 48kHz)
-  // Beyond that, we'll downsample on load
-  static const int MAX_FRAMES = 10000000;
-
-  int readRate = m_sampleRate;
-  int readFrames = totalFrames;
-
-  // If too many frames, read at lower rate to keep memory sane
-  if (totalFrames > MAX_FRAMES) {
-    // Downsample ratio
-    int ratio = (totalFrames + MAX_FRAMES - 1) / MAX_FRAMES;
-    readRate = m_sampleRate / ratio;
-    if (readRate < 8000) readRate = 8000;
-    readFrames = (int)(m_itemDuration * (double)readRate) + 1;
+  int readRate = 0, readFrames = 0;
+  if (!ComputeItemLoadPlan(readRate, readFrames)) return;
+  if (readRate != m_sampleRate) {
     m_sampleRate = readRate; // update so peak calculations use correct rate
-    DBG("[SneakPeak] Downsampling: ratio=%d readRate=%d readFrames=%d\n", ratio, readRate, readFrames);
+    DBG("[SneakPeak] Downsampling: readRate=%d readFrames=%d\n", readRate, readFrames);
   }
 
   AudioAccessor* accessor = g_CreateTakeAudioAccessor(m_take);
@@ -662,6 +720,11 @@ void WaveformView::LoadAudioData()
 void WaveformView::ReloadAudio()
 {
   m_peaksValid = false;
+  // SDK-peaks phase: no buffer to reload - the background loader owns the
+  // refill (caller restarts it) and the display re-fetches .reapeaks.
+  if (g_GetMediaItemTake_Peaks && !m_standaloneMode && m_segments.size() <= 1 &&
+      m_audioSampleCount <= 0)
+    return;
   LoadAudioData();
 }
 

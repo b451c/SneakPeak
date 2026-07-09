@@ -63,6 +63,7 @@ void SneakPeak::CleanupDragTemp()
 void SneakPeak::InitiateDragExport()
 {
   if (!m_waveform.HasItem()) return;
+  if (!RequireItemAudio("Drag export")) return;
   CleanupDragTemp();
 
   bool isStandalone = m_waveform.IsStandaloneMode();

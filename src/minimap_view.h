@@ -16,6 +16,7 @@ public:
   double XToTime(int x, double itemDuration) const;
 
 private:
+  void ComputePeaksFromSDK(const WaveformView& wv);
   RECT m_rect = {};
   std::vector<double> m_peakMax, m_peakMin;
   bool m_peaksValid = false;

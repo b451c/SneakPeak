@@ -125,6 +125,10 @@ extern void (*g_UpdateTimeline)();
 // Time selection
 extern void (*g_GetSet_LoopTimeRange2)(ReaProject* proj, bool isSet, bool isLoop, double* startOut, double* endOut, bool allowautoseek);
 
+// SDK peaks (INC-PK1)
+extern int (*g_GetMediaItemTake_Peaks)(MediaItem_Take*, double, double, int, int, int, double*);
+extern int (*g_PCM_Source_BuildPeaks)(PCM_source*, int);
+
 // Master track metering
 extern MediaTrack* (*g_GetMasterTrack)(ReaProject* proj);
 extern double (*g_Track_GetPeakInfo)(MediaTrack* track, int channel);
