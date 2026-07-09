@@ -178,6 +178,25 @@ private:
     double peak;
   };
 
+  // Raw-peak cache (forum #103): Live re-analyzes on every knob tick, but the
+  // 1ms peak/RMS scan depends only on the audio and (rmsMode, rmsWindowMs) -
+  // threshold/ratio/attack/release tweaks reuse it. On long items the scan
+  // dominates the tick (a 4-minute stereo file is ~23M samples, far more in
+  // RMS mode), so this cache is load-bearing for Live UI responsiveness.
+  // Same sparse-content-hash invalidation as the band-trace cache below.
+  struct PeakCacheKey {
+    int numFrames = -1, numChannels = 0, sampleRate = 0;
+    bool rmsMode = false;
+    double rmsWindowMs = 0.0;
+    unsigned long long contentHash = 0;
+    bool operator==(const PeakCacheKey& o) const
+    {
+      return numFrames == o.numFrames && numChannels == o.numChannels &&
+             sampleRate == o.sampleRate && rmsMode == o.rmsMode &&
+             rmsWindowMs == o.rmsWindowMs && contentHash == o.contentHash;
+    }
+  };
+  PeakCacheKey m_peakKey;
   std::vector<RawPeak> m_rawPeaks;
   std::vector<DynamicsPoint> m_results;
   double m_avgPeakDb = -60.0;

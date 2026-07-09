@@ -122,14 +122,41 @@ void DynamicsEngine::Analyze(const double* audioData, int numFrames, int numChan
 {
   m_params = params;
   m_results.clear();
-  m_rawPeaks.clear();
   m_avgGR = 0.0;
   m_itemVolDb = itemVolDb;
 
-  if (!audioData || numFrames <= 0 || sampleRate <= 0) return;
+  if (!audioData || numFrames <= 0 || sampleRate <= 0) {
+    m_rawPeaks.clear();
+    m_peakKey = PeakCacheKey();
+    return;
+  }
 
-  CollectPeaks(audioData, numFrames, numChannels, sampleRate,
-               params.rmsMode, params.rmsWindowMs);
+  // Sparse FNV-1a content hash, shared by the raw-peak cache and the de-esser
+  // band-trace cache below. Catches same-length destructive edits (e.g.
+  // normalize) that the dimensions alone would miss.
+  unsigned long long contentHash = 1469598103934665603ULL;
+  const size_t totalSamples = (size_t)numFrames * (size_t)std::max(1, numChannels);
+  for (size_t i = 0; i < totalSamples; i += 4096) {
+    unsigned long long bits;
+    memcpy(&bits, &audioData[i], sizeof(bits));
+    contentHash = (contentHash ^ bits) * 1099511628211ULL;
+  }
+
+  // Raw-peak cache (forum #103): skip the full-buffer scan when only
+  // non-detection params changed - the common case for every Live knob tick.
+  PeakCacheKey pkey;
+  pkey.numFrames = numFrames;
+  pkey.numChannels = numChannels;
+  pkey.sampleRate = sampleRate;
+  pkey.rmsMode = params.rmsMode;
+  pkey.rmsWindowMs = params.rmsWindowMs;
+  pkey.contentHash = contentHash;
+  if (!(pkey == m_peakKey) || m_rawPeaks.empty()) {
+    m_rawPeaks.clear();
+    CollectPeaks(audioData, numFrames, numChannels, sampleRate,
+                 params.rmsMode, params.rmsWindowMs);
+    m_peakKey = pkey;
+  }
   if (m_rawPeaks.empty()) return;
 
   // Average peak dB (for auto-threshold when sentinel -100)
@@ -143,8 +170,7 @@ void DynamicsEngine::Analyze(const double* audioData, int numFrames, int numChan
   // De-esser band trace (v2.3.0 INC-3). Cache-keyed: Live re-analyzes on every
   // knob tick, but the trace depends only on the audio and (mode, f0, Q) -
   // threshold/ratio/attack/release tweaks reuse it (load-bearing for Live
-  // CPU). The sparse FNV-1a content hash catches same-length destructive
-  // edits (e.g. normalize) that the dimensions alone would miss.
+  // CPU). Reuses the sparse content hash computed above.
   if (params.dsEnable) {
     BandTraceKey key;
     key.numFrames = numFrames;
@@ -153,14 +179,7 @@ void DynamicsEngine::Analyze(const double* audioData, int numFrames, int numChan
     key.mode = params.dsMode;
     key.freqHz = params.dsFreqHz;
     key.q = params.dsQ;
-    unsigned long long h = 1469598103934665603ULL;
-    const size_t totalSamples = (size_t)numFrames * (size_t)std::max(1, numChannels);
-    for (size_t i = 0; i < totalSamples; i += 4096) {
-      unsigned long long bits;
-      memcpy(&bits, &audioData[i], sizeof(bits));
-      h = (h ^ bits) * 1099511628211ULL;
-    }
-    key.contentHash = h;
+    key.contentHash = contentHash;
 
     if (!(key == m_bandKey) || m_bandPeaks.size() != m_rawPeaks.size()) {
       DeEssBandTrace(audioData, numFrames, numChannels, sampleRate, STEP_SIZE,
