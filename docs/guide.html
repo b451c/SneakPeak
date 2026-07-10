@@ -442,7 +442,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="key"><kbd>Ctrl</kbd>+<kbd>V</kbd></div><div class="desc">Paste at cursor (non-destructive insert)</div>
   <div class="key"><kbd>Delete</kbd> / <kbd>E</kbd></div><div class="desc">Delete selection (gap preserved)</div>
   <div class="key"><kbd>Shift</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>E</kbd></div><div class="desc">Ripple Delete (closes gap)</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>N</kbd></div><div class="desc">Normalize to 0 dB peak</div>
+  <div class="key"><kbd>Ctrl</kbd>+<kbd>N</kbd></div><div class="desc">Normalize to -0.1 dBFS peak</div>
   <div class="key"><kbd>Ctrl</kbd>+<kbd>Z</kbd></div><div class="desc">Undo (REAPER undo)</div>
   <div class="key"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></div><div class="desc">Redo</div>
 </div>
@@ -481,7 +481,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Press <kbd>G</kbd> to open the floating gain panel. A rotary knob controls volume from -60 dB to +24 dB. Hold <kbd>Cmd</kbd> while dragging for fine adjustment (0.1 dB per pixel instead of 0.5 dB). Double-click the knob to reset to 0 dB.</p>
 
-<p>Use <kbd>Up</kbd>/<kbd>Down</kbd> arrow keys for quick +/-1 dB adjustments without the mouse. You can also scroll the mouse wheel on the gain knob for +/-0.5 dB per notch (<kbd>Cmd</kbd>+scroll for +/-0.1 dB fine mode). The waveform updates in real-time.</p>
+<p>With the gain panel open, use <kbd>Up</kbd>/<kbd>Down</kbd> arrow keys for quick +/-1 dB adjustments without the mouse. You can also scroll the mouse wheel on the gain knob for +/-0.5 dB per notch (<kbd>Cmd</kbd>+scroll for +/-0.1 dB fine mode). The waveform updates in real-time.</p>
 
 <p>In batch mode (SET, timeline, multi-item), the knob label turns gold and shows <strong>"+0.0 dB rel"</strong> to indicate that the value is a relative offset applied to all items, not an absolute level.</p>
 
@@ -776,10 +776,10 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <tbody>
     <tr><td>Thresh</td><td>-60 to 0 dB</td><td>Compression threshold - signals above this are compressed</td></tr>
     <tr><td>Ratio</td><td>1:1 to Inf:1 and beyond</td><td>Compression ratio; past 20:1 the knob approaches Inf:1 (true limiting, detent) and continues into over-compression (negative ratios - reduction exceeds the overshoot)</td></tr>
-    <tr><td>Knee</td><td>0 to 30 dB</td><td>Soft knee width - gradual transition into compression; in BOTH mode it sets the gentle "leave-alone" band around the threshold</td></tr>
+    <tr><td>Knee</td><td>0 to 24 dB</td><td>Soft knee width - gradual transition into compression; in BOTH mode it sets the gentle "leave-alone" band around the threshold</td></tr>
     <tr><td>L.ahead</td><td>0 to 20 ms</td><td>Lookahead - catch transients before they arrive</td></tr>
-    <tr><td>Attack</td><td>0.1 to 200 ms</td><td>How fast compression fades in</td></tr>
-    <tr><td>Release</td><td>5 to 2000 ms</td><td>How fast compression fades out</td></tr>
+    <tr><td>Attack</td><td>0 to 500 ms</td><td>How fast compression fades in</td></tr>
+    <tr><td>Release</td><td>0 to 1000 ms</td><td>How fast compression fades out</td></tr>
     <tr><td>Makeup</td><td>-24 to +24 dB</td><td>Gain compensation (auto-calculated from average GR); negative values trim - the useful direction after an Up-mode boost</td></tr>
     <tr><td>G.Thr</td><td>-90 to 0 dB, Off</td><td>Gate threshold - signals below this are attenuated; drag fully left (or Cmd/Ctrl-click) for Off</td></tr>
     <tr><td>G.Ratio</td><td>1:1 to 10:1</td><td>Gate ratio - attenuation slope below the threshold (2:1 = gentle expander, higher = harder gate)</td></tr>
@@ -850,12 +850,12 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <tbody>
     <tr><td>Default</td><td>Flat - no processing (all sliders at neutral)</td></tr>
     <tr><td>Gentle Leveling</td><td>Light 2:1 compression with wide knee and RMS detection</td></tr>
-    <tr><td>Voice/Podcast</td><td>4:1 compression with gate at -45 dB for speech cleanup</td></tr>
+    <tr><td>Voice / Podcast</td><td>4:1 compression with gate at -45 dB for speech cleanup</td></tr>
     <tr><td>Broadcast</td><td>6:1 aggressive compression with fast attack and strong gate</td></tr>
     <tr><td>De-breath</td><td>Light compression + aggressive gate targeting breath removal</td></tr>
     <tr><td>Music Bus</td><td>2:1 slow attack for mix bus glue</td></tr>
     <tr><td>Upward Leveling</td><td>Up mode: gentle 2:1 RMS lift of quiet passages, gate on so the noise floor stays down</td></tr>
-    <tr><td>De-Ess Vocal</td><td>Voice/Podcast compression + wideband de-esser at 6 kHz, 4:1, -10 dB range</td></tr>
+    <tr><td>De-Ess Vocal</td><td>Voice / Podcast compression + wideband de-esser at 6 kHz, 4:1, -10 dB range</td></tr>
   </tbody>
 </table>
 
@@ -1139,7 +1139,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>T</kbd></td><td>Toggle Working Set mode</td><td>ITEM</td></tr>
     <tr><td><kbd>S</kbd></td><td>Split at cursor / selection</td><td>ITEM, SET</td></tr>
     <tr><td><kbd>G</kbd></td><td>Toggle gain panel</td><td>All</td></tr>
-    <tr><td><kbd>D</kbd></td><td>Toggle Dynamics panel</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td><kbd>D</kbd></td><td>Toggle Dynamics panel</td><td>ITEM, SET, Timeline, Standalone</td></tr>
     <tr><td><kbd>M</kbd></td><td>Add marker at cursor</td><td>ITEM</td></tr>
     <tr><td><kbd>Shift</kbd>+<kbd>M</kbd></td><td>Add region from selection</td><td>ITEM</td></tr>
     <tr><td><kbd>E</kbd></td><td>Delete selection (gap preserved)</td><td>All</td></tr>
@@ -1229,7 +1229,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>One-Shot Factory... / Edit Copy in Standalone</strong> - top-level entries (see their sections)</li>
   <li><strong>Multi-Item</strong> - Mix/Layered modes, Show Join Lines, Switch to Timeline View (when multiple items are loaded)</li>
   <li><strong>Markers</strong> - Add Marker, Add Region, Edit, Delete, Show/Hide</li>
-  <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal, GitHub</li>
+  <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal (the GitHub link lives in the mode-bar Support popup)</li>
   <li><strong>Replace Source in REAPER Timeline</strong> - standalone mode only; see Replace Source section</li>
   <li><strong>Dock SneakPeak in Docker / Undock SneakPeak</strong> - toggle between floating and docked window</li>
 </ul>
@@ -1257,7 +1257,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Zoom Selection</td><td>Zoom to fit current selection</td></tr>
     <tr><td>Play</td><td>Start playback from cursor</td></tr>
     <tr><td>Stop</td><td>Stop playback</td></tr>
-    <tr><td>Normalize</td><td>Normalize selection to 0 dB</td></tr>
+    <tr><td>Normalize</td><td>Normalize selection to -0.1 dBFS</td></tr>
     <tr><td>Fade In</td><td>Apply fade in to selection</td></tr>
     <tr><td>Fade Out</td><td>Apply fade out to selection</td></tr>
     <tr><td>Reverse</td><td>Reverse audio</td></tr>
