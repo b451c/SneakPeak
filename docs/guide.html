@@ -139,7 +139,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   </div>
 
   <div class="nav-group">
-    <div class="nav-group-title">REAPER Mode</div>
+    <div class="nav-group-title">ITEM Mode</div>
     <a href="#reaper-basics" class="nav-link">Basics</a>
     <a href="#waveform-display" class="nav-link">Waveform Display</a>
     <a href="#selection" class="nav-link">Selection</a>
@@ -174,7 +174,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <a href="#standalone-files" class="nav-link">File Management</a>
     <a href="#standalone-editing" class="nav-link">Editing</a>
     <a href="#standalone-save" class="nav-link">Save Workflow</a>
-    <a href="#standalone-export" class="nav-link">Drag Export</a>
+    <a href="#standalone-replace-source" class="nav-link">Replace Source</a>
+<a href="#standalone-export" class="nav-link">Drag Export</a>
   </div>
 
   <div class="nav-group">
@@ -191,7 +192,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <a href="#dynamics-panel" class="nav-link">Dynamics Panel</a>
     <a href="#dynamics-live" class="nav-link">Live Mode</a>
     <a href="#dynamics-gate" class="nav-link">Gate</a>
-    <a href="#dynamics-presets" class="nav-link">Presets</a>
+    <a href="#dynamics-deess" class="nav-link">De-Esser</a>
+<a href="#dynamics-presets" class="nav-link">Presets</a>
     <a href="#dynamics-ab" class="nav-link">A/B Bypass</a>
   </div>
 
@@ -227,7 +229,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h1>Sneak<span>Peak</span> User Guide</h1>
 <p class="subtitle">Precision waveform editor for REAPER - v2.4.0</p>
 
-<img src="images/sneakpeak-hero.png" alt="SneakPeak" style="width:100%;border-radius:var(--radius);margin:0 0 32px;border:1px solid var(--border)">
+<img src="images/sneakpeak-hero.png" alt="SneakPeak - precision waveform editor docked in REAPER" style="width:100%;border-radius:var(--radius);margin:0 0 32px;border:1px solid var(--border)">
 
 <p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. v2.0 added volume envelope editing, dynamics processing, and multiplatform support. v2.1 polished the release with automatic envelope activation, source replacement back into the timeline, hide RMS/meter toggles and an update checker. v2.2 scales the whole interface from 80% to 200% (Settings panel with DPI auto-detection), adds truthful clip indication, meters that reflect fades and envelopes, and a round of workflow polish. v2.4 is the biggest release yet: the full Dynamics Suite rework (upward compression and BOTH leveling, a complete noise-gate redo, a wideband de-esser, Spectral Repair, curved envelopes), the Game Audio Suite (Loop Lab, One-Shot Factory, True-Peak Hard Limiter), and the two worlds joined up - the Factory and the limiter work directly on timeline items, Dynamics applies destructively on standalone files, Edit Copy bridges an item into every standalone tool, and destructive item edits are finally undoable.</p>
 
@@ -288,6 +290,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- First Launch -->
 <h2 id="first-launch">First Launch</h2>
+<p class="note"><strong>Shortcut notation:</strong> this guide mixes Mac and Windows key names where a section calls for it - on Windows/Linux read <kbd>Cmd</kbd> as <kbd>Ctrl</kbd> and <kbd>Option</kbd> as <kbd>Alt</kbd>.</p>
 <p>After installing, open SneakPeak from REAPER's action list:</p>
 <ol>
   <li>Open <strong>Actions > Show action list</strong></li>
@@ -428,7 +431,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>The toolbar also has Zoom In, Zoom Out, Zoom to Fit, and Zoom to Selection buttons.</p>
 
-<h2 id="editing-reaper">Editing (REAPER Mode)</h2>
+<h2 id="editing-reaper">Editing (ITEM Mode)</h2>
 <div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 
 <p>Editing in ITEM mode is non-destructive. Operations go through the REAPER API and create undo points.</p>
@@ -446,7 +449,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p><strong>Paste</strong> is non-destructive: it writes the clipboard to a temporary WAV file, splits the item at the cursor position, shifts subsequent items right, and inserts the new audio in the gap. The pasted region is automatically selected. Works in single-item, timeline, and SET modes.</p>
 
-<p><strong>Ripple Delete</strong> removes the selection and shifts all subsequent items left to close the gap. Standard Delete preserves gaps. Cut (<kbd>Cmd</kbd>+<kbd>X</kbd>) uses ripple delete by default, matching standard waveform editor behavior.</p>
+<p><strong>Ripple Delete</strong> removes the selection and shifts all subsequent items left to close the gap. Standard Delete preserves gaps. Cut (<kbd>Ctrl</kbd>+<kbd>X</kbd>) uses ripple delete by default, matching standard waveform editor behavior.</p>
 
 <p>Additional processing is available from the right-click context menu: LUFS normalization (-14 / -16), reverse, DC offset removal, and silence.</p>
 
@@ -490,7 +493,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>ITEM</td><td>Splits at selection edges, applies D_VOL to fragment</td><td>Changes D_VOL on whole item</td></tr>
     <tr><td>Timeline View</td><td>Splits at edges, applies D_VOL to fragment</td><td>Applies D_VOL to all fragments</td></tr>
     <tr><td>Multi-item</td><td>Splits at edges, applies D_VOL across segments</td><td>Applies D_VOL to all items</td></tr>
-    <tr><td>SET</td><td>Splits at edges, applies D_VOL with 10ms crossfade</td><td>Applies D_VOL to all set items</td></tr>
+    <tr><td>SET</td><td>Splits at edges, applies D_VOL with 10 ms crossfade</td><td>Applies D_VOL to all set items</td></tr>
     <tr><td>Standalone</td><td>Destructive gain with crossfade at edges</td><td>Destructive gain on entire file</td></tr>
   </tbody>
 </table>
@@ -549,7 +552,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li>While you drag the knob, you see a visual preview on the waveform (only the selected region changes)</li>
   <li>When you release the knob, SneakPeak splits the items at the selection edges</li>
   <li>The isolated fragment gets the new volume (D_VOL)</li>
-  <li>A 10ms overlap is created with neighboring items so REAPER generates an automatic crossfade</li>
+  <li>A 10 ms overlap is created with neighboring items so REAPER generates an automatic crossfade</li>
   <li>The working set reloads to reflect the change</li>
 </ol>
 
@@ -745,7 +748,6 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Dynamics -->
 <h2 id="dynamics-overview">Dynamics Processing</h2>
-<img src="images/dynamics-overview.png" alt="Dynamics panel over the waveform - detector curves, compressed preview, volume envelope and threshold line" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-set">SET</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>SneakPeak includes a built-in dynamics processor that analyzes your audio and writes volume envelope points to achieve compression and gating. Instead of real-time DSP, it works offline - analyzing the audio buffer and generating precise envelope automation. This means zero CPU cost during playback.</p>
@@ -767,7 +769,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="dynamics-panel">Dynamics Panel</h2>
 
-<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 15 real-time controls across the COMP and GATE tabs. The mode button in the panel header cycles <strong>DOWN / UP / BOTH</strong>: DOWN is a classic compressor (reduce loud material above the threshold), UP is an upward compressor (boost quiet material below the threshold - leveling quiet speech without touching the peaks), and BOTH does the two at once in a single pass - a full leveler that pulls everything toward the threshold, ideal for "lift the quiet, tame the loud" voice work. In Up/Both the GR readout turns amber when the net gain is a boost, auto-makeup acts as a trim, and the boost is capped by M.Boost and floored at the gate threshold when the gate is on.</p>
+<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with its real-time controls across the COMP, GATE and DE-ESS tabs. The mode button in the panel header cycles <strong>DOWN / UP / BOTH</strong>: DOWN is a classic compressor (reduce loud material above the threshold), UP is an upward compressor (boost quiet material below the threshold - leveling quiet speech without touching the peaks), and BOTH does the two at once in a single pass - a full leveler that pulls everything toward the threshold, ideal for "lift the quiet, tame the loud" voice work. In Up/Both the GR readout turns amber when the net gain is a boost, auto-makeup acts as a trim, and the boost is capped by M.Boost and floored at the gate threshold when the gate is on.</p>
 
 <table>
   <thead><tr><th>Slider</th><th>Range</th><th>Description</th></tr></thead>
@@ -802,6 +804,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p class="subtitle" style="margin-top:-16px;font-size:13px">The GATE tab taming breaths between dialogue phrases: yellow threshold and gate lines on the waveform, the computed envelope (cyan) and detector curves drawn live, gain reduction read-out in the panel header.</p>
 
 <h2 id="dynamics-live">Live Mode</h2>
+<p><strong>Envelope ceiling:</strong> take volume envelopes top out at +6 dB by default (REAPER's envelope range). If an UP or BOTH boost would exceed it, SneakPeak clamps the written points at the ceiling and a toast reports how many points were clamped - what you hear always matches the curve that was actually written.</p>
 
 <p>Click the <strong>[Live]</strong> toggle (green when active) to enable real-time envelope writing. In Live mode, every slider change immediately writes envelope points to REAPER - the waveform updates in real-time as you drag. No need to click Apply.</p>
 
@@ -932,7 +935,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>TRIM</strong> - drop silence below the threshold (default -60 dBFS), keeping a small padding (default 10 ms) around the sound.</li>
   <li><strong>Fade In / Fade Out</strong> - edge micro-fades (defaults 5 ms / 20 ms, the industry click-killers).</li>
   <li><strong>Normalize</strong> - OFF, <strong>PEAK</strong> (dBFS), <strong>LUFS</strong> (integrated, custom target, measured by REAPER's own engine) or <strong>TP SAFE</strong> (the Hard Limiter at your dBTP ceiling - the game-asset default).</li>
-  <li><strong>SLICE</strong> - <strong>WHOLE</strong> exports the file as one asset; <strong>REGIONS</strong> makes each region a variation (with no regions, markers act as split points); <strong>SILENCE</strong> auto-splits on gaps longer than 150 ms below the trim threshold (slices under 50 ms are dropped, and each slice keeps its padding without bleeding into a neighbour). Record ten footsteps in one take, add nothing, and SILENCE finds the ten slices.</li>
+  <li><strong>SLICE</strong> - <strong>WHOLE</strong> exports the file as one asset; <strong>REGIONS</strong> makes each region a variation (with no regions, markers act as split points); <strong>SILENCE</strong> auto-splits on gaps longer than 150 ms below the trim threshold (slices under 50 ms are dropped, and each slice keeps its padding without bleeding into a neighbor). Record ten footsteps in one take, add nothing, and SILENCE finds the ten slices.</li>
   <li><strong>NAME</strong> - the naming pattern for the written files: <code>{name}</code> = source basename, <code>{nn}</code> = 01-based zero-padded number; default <code>{name}_{nn}</code>. Any digit token works too: <code>{01}</code> numbers from 01, <code>{001}</code> pads to three digits, <code>{5}</code> starts at 5. Click the box to edit.</li>
 </ul>
 
@@ -996,7 +999,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <thead><tr><th>Mode</th><th>Behavior</th></tr></thead>
   <tbody>
     <tr><td>Peak (PPM)</td><td>True peak metering. Instant attack, slow decay. Peak hold marks.</td></tr>
-    <tr><td>RMS (AES/EBU)</td><td>RMS loudness with 300ms integration window per AES/EBU standard.</td></tr>
+    <tr><td>RMS (AES/EBU)</td><td>RMS loudness with 300 ms integration window per AES/EBU standard.</td></tr>
     <tr><td>VU</td><td>Classic VU-meter ballistics. Slow attack, slow decay.</td></tr>
   </tbody>
 </table>
@@ -1008,7 +1011,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Two Settings panel controls (VIEW section) let you simplify the display when you want more waveform area:</p>
 
 <ul>
-  <li><strong>Waveform style</strong> - <strong>Detailed</strong> (default) draws the peak waveform with a darker RMS band inside it; <strong>Simple</strong> draws a single-colour waveform (peaks only). Useful on dense stereo material where the RMS fill obscures detail, or if the two-tone look is not to your taste. Red/amber clip marking is drawn in both styles.</li>
+  <li><strong>Waveform style</strong> - <strong>Detailed</strong> (default) draws the peak waveform with a darker RMS band inside it; <strong>Simple</strong> draws a single-color waveform (peaks only). Useful on dense stereo material where the RMS fill obscures detail, or if the two-tone look is not to your taste. Red/amber clip marking is drawn in both styles.</li>
   <li><strong>Meters</strong> (default on) - when off, the entire bottom panel (meters + info) collapses to zero height and the waveform expands into that space. The scrollbar stays at the bottom.</li>
 </ul>
 
@@ -1085,7 +1088,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Ruler</strong> - Relative / Absolute / Bars &amp; Beats.</li>
   <li><strong>Meters</strong> - Peak / RMS / VU ballistics, plus the Master Output source toggle.</li>
-  <li><strong>View</strong> - Meters, Ruler (hide for extra waveform height; markers fall back onto the waveform), Snap to Zero-Crossing, Minimap, the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor), the <strong>Waveform style</strong> (Detailed = peak + RMS band, Simple = single-colour peaks), and the <strong>Spectral scale</strong> (Hz or note names).</li>
+  <li><strong>View</strong> - Meters, Ruler (hide for extra waveform height; markers fall back onto the waveform), Snap to Zero-Crossing, Minimap, the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor), the <strong>Waveform style</strong> (Detailed = peak + RMS band, Simple = single-color peaks), and the <strong>Spectral scale</strong> (Hz or note names).</li>
 </ul>
 
 <p>The Dynamics panel follows the global scale too, multiplied by its own corner resize grip, so it grows with the rest of the UI while staying independently adjustable.</p>
@@ -1119,7 +1122,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Fade handles take the wheel too</strong> - scroll to nudge a fade length (<kbd>Cmd</kbd> = 1 ms steps), or hold <kbd>Shift</kbd> while dragging for a 1/4-speed fine trim.</li>
   <li><strong><kbd>Option</kbd>/<kbd>Alt</kbd>+drag does four jobs</strong> - on the envelope line it bends the curve, inside a selection it starts a drag export, outside a selection (ITEM mode) it <a href="#editing-reaper">slips the item contents</a>, and in SET/Timeline/Multi-item it snaps the selection to a segment.</li>
   <li><strong>Middle-mouse drag pans the view</strong>, and a selection can be resized by grabbing its edge (the cursor shows when you are on it).</li>
-  <li><strong>The window is yours to declutter</strong> - Settings &gt; View can hide the ruler and the meters, switch the waveform to a single-colour Simple style, and choose whether wheel zoom centers on the mouse or the edit cursor.</li>
+  <li><strong>The window is yours to declutter</strong> - Settings &gt; View can hide the ruler and the meters, switch the waveform to a single-color Simple style, and choose whether wheel zoom centers on the mouse or the edit cursor.</li>
   <li><strong>Every toolbar command is a REAPER action</strong> - search "SneakPeak" in the Action List and bind any shortcut you like.</li>
   <li><strong><kbd>M</kbd> drops a marker, <kbd>Shift</kbd>+<kbd>M</kbd> makes a region</strong> from the selection - and you can drag a selection out of the window to export it as a file.</li>
   <li><strong>Click the version label</strong> in the mode bar to check for updates.</li>
@@ -1221,8 +1224,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <ul>
   <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Ripple Delete, Silence, Select All, Split at Cursor (S)</li>
-  <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix, Dynamics Panel</li>
-  <li><strong>View</strong> - Zoom controls, Spectral View, Show Volume Envelope, Show Dynamics Curve, Show RMS, Show Meters, Snap to Zero-Crossing, Minimap, Ruler mode (Relative/Absolute/Bars & Beats), Working Set toggle, Group, Switch to Timeline View</li>
+  <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix, Dynamics Panel, Hard Limiter; in Standalone also Loop Lab and the Spectral Repair commands (Heal Selection, Repair Clicks) when their views apply</li>
+  <li><strong>View</strong> - Zoom controls, Spectral View, Show Volume Envelope, Show Dynamics Curve, Working Set toggle, Group, Switch to Timeline View. Display preferences (ruler mode, minimap, snap to zero, waveform style, meters) live in the Settings panel (gear icon)</li>
+  <li><strong>One-Shot Factory... / Edit Copy in Standalone</strong> - top-level entries (see their sections)</li>
   <li><strong>Multi-Item</strong> - Mix/Layered modes, Show Join Lines, Switch to Timeline View (when multiple items are loaded)</li>
   <li><strong>Markers</strong> - Add Marker, Add Region, Edit, Delete, Show/Hide</li>
   <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal, GitHub</li>
