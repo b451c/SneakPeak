@@ -55,7 +55,7 @@ New features:
 
 Bug fixes:
 - Destructive item edits (Reverse, DC Remove, limiter, destructive gain/paste) are now undoable: Cmd/Ctrl+Z restores the original source file
-- Dynamics sliders no longer stutter on long items (full-file peak scan now cached across knob moves; reported by BogdanS)
+- Dynamics sliders no longer stutter on multi-minute items (full-file peak scan now cached across knob moves; reported by BogdanS); very long items (15+ min) can still feel heavy - tracked for the next release
 - Long standalone files load incrementally without freezing the UI; bounded edits snapshot only the touched range
 - Windows drag-export now completes the OS drag (drop to timeline or Explorer)
 - Standalone no longer bounces back to ITEM mode with an item still selected; crash fixed when re-selecting the same item from Standalone
