@@ -355,6 +355,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Everything you do in this mode uses the REAPER API. The audio files on disk are never modified directly. Gain changes use the item's D_VOL parameter. Fades use D_FADEINLEN and D_FADEOUTLEN. Split uses SplitMediaItem. All reversible with REAPER's undo system.</p>
 
 <h2 id="waveform-display">Waveform Display</h2>
+<img src="images/item-mode-overview.png" alt="ITEM mode - detailed peak+RMS waveform, dB scale, relative ruler and minimap" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
 
 <p>The main area shows the waveform with peak (outer envelope) and RMS (inner, darker fill) levels. A dB scale on the right side shows amplitude from 0 dB down to the noise floor.</p>
@@ -369,6 +370,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </ul>
 
 <h2 id="selection">Selection</h2>
+<img src="images/selection-range.png" alt="A time selection on the waveform - inverted range with draggable edges and selection info" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
 
 <p>Click and drag on the waveform to create a time selection. The selected region is highlighted. Most editing operations (cut, copy, normalize, fade, gain) work on the selection when one exists, or on the entire item when there is no selection.</p>
@@ -455,6 +457,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Scope notes: slip works on single items with non-looped sources. Inside a selection, <kbd>Option</kbd>+drag keeps its drag-export meaning; in SET / Timeline / Multi-item views it keeps segment-snap; on the envelope line it edits curvature.</p>
 
 <h2 id="fades">Fades</h2>
+<img src="images/fades.gif" alt="Dragging fade handles with continuous curvature" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>Fade handles appear at the top corners of the waveform as small squares. They are always visible - even when no fade exists yet - so you can grab them to create new fades.</p>
@@ -616,6 +619,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Standalone Mode -->
 <h2 id="standalone-overview">Standalone Mode - Overview</h2>
+<img src="images/standalone-tabs.png" alt="Standalone mode - orange accent, file tab next to the ITEM tab, independent editing of a copied file" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>Drag any audio file into the SneakPeak window to open it in standalone mode. The mode bar shows an orange "STANDALONE" label. Up to 8 files can be open simultaneously in separate tabs.</p>
@@ -635,6 +639,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>An asterisk (*) on the tab name indicates unsaved changes.</p>
 
 <h2 id="standalone-editing">Editing (Standalone)</h2>
+<img src="images/standalone-editing.gif" alt="Destructive editing of a standalone file" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <p>All the same shortcuts work: <kbd>Ctrl</kbd>+<kbd>X</kbd>/<kbd>C</kbd>/<kbd>V</kbd> for clipboard, <kbd>Delete</kbd> for removing audio, <kbd>Ctrl</kbd>+<kbd>N</kbd> for normalize. The difference is that these operations modify the audio data directly.</p>
 
@@ -740,6 +745,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Dynamics -->
 <h2 id="dynamics-overview">Dynamics Processing</h2>
+<img src="images/dynamics-overview.png" alt="Dynamics panel over the waveform - detector curves, compressed preview, volume envelope and threshold line" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-set">SET</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>SneakPeak includes a built-in dynamics processor that analyzes your audio and writes volume envelope points to achieve compression and gating. Instead of real-time DSP, it works offline - analyzing the audio buffer and generating precise envelope automation. This means zero CPU cost during playback.</p>
@@ -819,6 +825,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p><strong>Per-stage bypass:</strong> the small power dots inside the COMP and GATE tab buttons switch each stage off for auditioning (amber = active, grey = bypassed) - with Live mode on you hear the change immediately. Bypassing the compressor also mutes its makeup gain. Bypasses are audition controls like A/B: they are never saved into items or presets and reset when the panel opens.</p>
 
 <h2 id="dynamics-deess">De-Esser</h2>
+<img src="images/dynamics-deess-panel.png" alt="DE-ESS tab - band-pass/high-pass detector, LISTEN lane and reduction controls" style="width:420px;max-width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <p>The DE-ESS tab adds a third processing stage: a <strong>wideband de-esser</strong> for taming sibilance ("s", "sh", "ts") in speech and vocals. A band-filtered detector measures energy in the sibilance band; when it crosses the threshold, gain reduction is written into the same envelope as the compressor and gate. Enable it with the power dot inside the DE-ESS tab button (it is saved with your item settings, unlike the audition bypasses).</p>
 
@@ -859,6 +866,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Features -->
 <h2 id="spectral">Spectral View</h2>
+<img src="images/spectral-view.png" alt="Spectral view - split waveform and spectrogram with the frequency grid (Hz scale)" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>Toggle the spectrogram via right-click > View > Spectral View. A resizable pane appears below the waveform showing a time-frequency representation of the audio using the magma color scheme (dark = silence, bright = energy).</p>
@@ -893,6 +901,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </div>
 
 <h2 id="loop-lab">Loop Lab (Seamless Loops)</h2>
+<img src="images/loop-lab-panel.png" alt="Loop Lab panel - loop region readouts, candidate list, auditions, Find/Weld and smpl loop points" style="width:420px;max-width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>Building seamless loops (ambiences, room tone, engine/machine loops, hums, drones) for game engines and samplers starts with finding the right region and <em>hearing</em> the seam. Loop Lab is built for that kind of sustained material - it is not a beat-aware music looper (musical loops need bar alignment, which is a different tool). In Standalone mode, right-click &gt; <strong>Loop Lab...</strong> opens the Loop Lab panel - the whole loop workflow lives there: live <strong>START / END / LENGTH</strong> readouts, the finder's <strong>candidate list</strong>, loop and seam transport, weld and <code>smpl</code> controls. The panel remembers its position; drag its empty area to move it.</p>
@@ -913,6 +922,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </div>
 
 <h2 id="oneshot">One-Shot Factory</h2>
+<img src="images/oneshot-prep-slicing.png" alt="One-Shot Factory slicing a take into variations by silence detection - live prep preview on the waveform" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+<img src="images/oneshot-prep-panel.png" alt="One-Shot Prep panel - trim, fades, normalize, slicing mode and naming pattern" style="width:420px;max-width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>Preparing game-ready one-shots (footsteps, impacts, UI sounds) is the same three steps every time: trim the silence, kill the trigger clicks with tiny edge fades, hit the loudness target. Right-click &gt; <strong>One-Shot Factory...</strong> does the whole chain in one Run - for one file or a whole batch of variations. It works on a Standalone file or directly on a selected timeline item (plain ITEM mode): design the sound on the timeline, select the item, run the Factory - the assets land next to the item's media file. The item and its source are never modified.</p>
@@ -930,6 +941,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p><strong>Run</strong> writes each slice through the full chain next to the source file (existing files are never overwritten - collisions get a numbered suffix <code>_2</code>, <code>_3</code>, ...). Unrecognized <code>{tokens}</code> in the pattern degrade gracefully: the braces are stripped, so a mistyped <code>{test}_{01}</code> still writes a clean <code>test_01.wav</code>. The audio loaded in the editor is not modified. Long batches show progress in the title bar and the toast sums up, e.g. "14 files written". <strong>OPEN FOLDER</strong> reveals the export destination in your file manager - no hunting for where the batch landed. Knobs work like the other premium panels; settings persist.</p>
 
 <h2 id="hard-limiter">Hard Limiter (True Peak)</h2>
+<img src="images/hard-limiter-panel.png" alt="Hard Limiter panel - Gain/Ceiling/Attack/Hold/Release, TRUE PEAK and LINK, IN/OUT/GR readouts" style="width:420px;max-width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>A transparent lookahead brickwall limiter for final asset loudness - push a sound effect or a mixed file into a hard ceiling that is guaranteed on <strong>true peaks</strong> (inter-sample peaks measured BS.1770-style), not just sample values. Game platforms commonly require assets to stay at or below <strong>-1 dBTP</strong>; this is the tool for that last step.</p>
@@ -960,6 +972,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </div>
 
 <h2 id="multi-item">Multi-Item View</h2>
+<img src="images/multiview.gif" alt="Multi-item view - Mix and Layered modes" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 
 <p>Select two or more items on the timeline. SneakPeak shows all of them together on an absolute timeline. Dark background regions mark gaps between items. Right-click to choose a display mode:</p>
@@ -1002,6 +1015,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Both settings persist across REAPER sessions via ExtState.</p>
 
 <h2 id="minimap">Minimap</h2>
+<img src="images/minimap.gif" alt="Minimap navigation - click to jump, drag to pan" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
 
 <p>Toggle via right-click > View > Minimap. A compact overview of the entire waveform appears above the scrollbar. It shows the full duration at a glance with a highlighted region indicating your current view.</p>
@@ -1057,7 +1071,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Click the <strong>gear icon</strong> in the mode bar (or right-click &gt; Settings...) to open the Settings panel - the home for SneakPeak's interface preferences. Click anywhere outside the panel or press <kbd>Escape</kbd> to close it.</p>
 
-<img src="images/settings-panel.png" alt="SneakPeak Settings panel - UI scale, density presets, ruler, meters and view preferences" style="width:325px;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+<img src="images/settings-panel.png" alt="SneakPeak Settings panel - UI scale, density presets, ruler, meters and view preferences" style="width:325px;max-width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <h4>UI Scale</h4>
 <p>The whole interface - fonts, toolbar, ruler, meters, panels and every click target - scales between <strong>80% and 200%</strong> from a single slider, with a live preview while you drag. Quick options:</p>
