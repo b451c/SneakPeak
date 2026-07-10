@@ -4,7 +4,7 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] - v2.4.0 (in development)
+## [2.4.0] - 2026-07-10
 <!-- User decision 2026-07-02: v2.3.0 is SKIPPED - the Dynamics Suite ships
      together with the Game Audio Suite (Loop Lab, One-Shot Factory, True-Peak
      Hard Limiter) as one v2.4.0 release. -->
@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Envelope selection rectangle looks like a selection now** - the Cmd+drag rectangle (and the dense-envelope reveal band) draws a frosted translucent interior, the same treatment as the spectral marquee, instead of the old hatched vertical lines.
 
 ### Fixed
+- **Dynamics sliders no longer stutter on long items** - every knob move re-ran the full peak/RMS scan over the whole file (~23M samples per tick on a 17-minute item); the scan is now cached and re-runs only when the audio or the detection mode actually changes. Reported by BogdanS on a 4-minute item.
 - **Destructive ITEM edits are now undoable** (Cmd/Ctrl+Z) - Reverse, DC Offset Remove, destructive gain/paste and the new Hard Limiter rewrite the item's source file on disk, which REAPER's own undo cannot restore - so these edits were effectively one-way (the confirm prompt was the only guard). SneakPeak now keeps a single-level snapshot of the pre-edit audio: undo writes the original back to the file and every item referencing it refreshes. The snapshot is tied to the exact source file (switching items keeps it safe), and REAPER's own undo history entry for the edit remains as a label.
 - **Standalone no longer bounces back to ITEM mode** - with the timeline item still selected (the usual case), switching to a standalone tab could immediately exit back to ITEM mode: the selection poll treated the leftover selection as "user selected an item". It now reacts only to an actual selection change.
 - **Mode-bar tabs finally say what they are** - the ITEM tab used to show the window title ("SneakPeak: name"), reading like a second mystery file next to the standalone tab; it now shows the take name. Every tab also carries a type marker matching the mode indicator: blue diamond = REAPER item, orange dot = standalone file.
