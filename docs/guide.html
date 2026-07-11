@@ -312,6 +312,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Three Modes -->
 <h2 id="three-modes">Three Editing Modes</h2>
+<p>Every mode carries its own accent color in the mode bar and view chrome: <strong>ITEM</strong> blue, <strong>SET</strong> green, <strong>STANDALONE</strong> orange, <strong>TIMELINE</strong> lavender, <strong>MULTI</strong> magenta and <strong>MASTER</strong> red - a glance at the top-left badge always tells you which mode you are in.</p>
 
 <p>SneakPeak has three distinct modes, shown in the mode bar at the top of the window. Each mode serves a different workflow.</p>
 
@@ -810,7 +811,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>A single undo block wraps each drag gesture, so <kbd>Cmd</kbd>+<kbd>Z</kbd> reverts the entire adjustment. When Live is active, the Apply button is grayed out (it would be redundant).</p>
 
-<img src="images/dynamics-live-mode.png" alt="SneakPeak Live mode with envelope points" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+<img src="images/dynamics-live-mode.png" alt="Live mode - the take volume envelope (cyan) written in real time, detector curves and threshold line on the waveform" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <div class="tip">
   <strong>Workflow:</strong>
@@ -850,9 +851,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <tbody>
     <tr><td>Default</td><td>Flat - no processing (all sliders at neutral)</td></tr>
     <tr><td>Gentle Leveling</td><td>Light 2:1 compression with wide knee and RMS detection</td></tr>
-    <tr><td>Voice / Podcast</td><td>4:1 compression with gate at -45 dB for speech cleanup</td></tr>
-    <tr><td>Broadcast</td><td>6:1 aggressive compression with fast attack and strong gate</td></tr>
-    <tr><td>De-breath</td><td>Light compression + aggressive gate targeting breath removal</td></tr>
+    <tr><td>Voice / Podcast</td><td>4:1 compression with gate at -45 dB for speech cleanup; ships with a -6 dB gate hysteresis band</td></tr>
+    <tr><td>Broadcast</td><td>6:1 aggressive compression with fast attack and strong gate; -6 dB gate hysteresis</td></tr>
+    <tr><td>De-breath</td><td>Light compression + aggressive gate targeting breath removal; -6 dB gate hysteresis</td></tr>
     <tr><td>Music Bus</td><td>2:1 slow attack for mix bus glue</td></tr>
     <tr><td>Upward Leveling</td><td>Up mode: gentle 2:1 RMS lift of quiet passages, gate on so the noise floor stays down</td></tr>
     <tr><td>De-Ess Vocal</td><td>Voice / Podcast compression + wideband de-esser at 6 kHz, 4:1, -10 dB range</td></tr>
