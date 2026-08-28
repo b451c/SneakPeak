@@ -566,7 +566,36 @@ private:
   void FlushDynamicsPipeline();        // mouse-up: finish + write the final position
   bool TakeDynamicsResult();
   void LiveWriteEnvelope();
-  void JoinDynamicsWorker(bool discardResult); // before the sample buffer changes
+  void JoinDynamicsWorker(bool discardResult); // true = the audio/view changes: drop everything
+  // 8f (dynamics_pipeline.cpp): item views analyse Dynamics from the stream.
+  // The job streams the view at full rate on its own thread into a DynTrace
+  // (accessors opened here before the thread starts, closed after the join);
+  // the DynWorker above then analyses the finished, shared trace.
+  struct DynTraceJob {
+    AudioStream stream;
+    DynTraceBuilder builder;
+    std::thread thread;
+    std::atomic<bool> abort{false};
+    std::atomic<bool> done{false};
+    std::atomic<int64_t> framesDone{0};
+    std::shared_ptr<const DynTrace> result;   // set by the thread before done
+    DynTraceKey key;
+    unsigned generation = 0;
+    int lastPct = -1;
+    bool active = false;
+  };
+  DynTraceJob m_dynTraceJob;
+  std::shared_ptr<const DynTrace> m_dynTrace;  // the current view's trace
+  unsigned m_dynTraceGen = ~0u;                 // load generation it belongs to
+  unsigned m_dynTraceFailedGen = ~0u;           // generation whose stream errored (no retry loop)
+  bool m_dynApplyPending = false;               // Apply pressed before a result existed
+  const DynamicsParams& CurrentDynParams() const;
+  bool DynamicsWanted() const;
+  bool DynTraceCurrent(const DynamicsParams& p) const;
+  void StartDynTraceJob();
+  void StepDynTraceJob();       // OnTimer: abort/finish/progress + self-healing start
+  void AbortDynTraceJob();      // main thread: abort + join + close the accessors
+  void RequestDynamicsAnalysis();   // the ONE entry for "analysis must be (re)done"
   // 8e (export_stream.cpp): Edit Copy streams the item at full rate into its
   // file in OnTimer slices - the working buffer is downsampled on long items.
   struct ExportPump {

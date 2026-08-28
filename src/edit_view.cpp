@@ -682,15 +682,8 @@ void SneakPeak::LoadSelectedItem()
   m_waveform.UpdateFadeCache(); // read D_VOL/fades immediately so first paint is correct
   StartItemAudioLoad(); // SDK-peaks hybrid: buffer fills in OnTimer slices (no-op if loaded)
 
-  // Run dynamics analysis on freshly loaded audio
-  if ((m_dynamicsVisible || m_dynamicsPanel.IsVisible()) && m_waveform.GetAudioSampleCount() > 0) {
-    double itemVolDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-    m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                       m_waveform.GetAudioSampleCount(),
-                       m_waveform.GetNumChannels(),
-                       m_waveform.GetSampleRate(),
-                       itemVolDb, m_dynamics.GetParams());
-  }
+  // Dynamics for the fresh item: the trace job streams it, the pipeline delivers
+  if (m_dynamicsVisible || m_dynamicsPanel.IsVisible()) RequestDynamicsAnalysis();
 
   m_spectralVisible = false;  // spectral is per-item, reset on switch
   m_spectral.ClearSpectrum();
@@ -782,6 +775,7 @@ void SneakPeak::OnTimer()
 
   // Motion pass: pump a repaint only while the premium dynamics panel has an animation
   // in flight (caret blink, Live pulse, tab-slide, value-ease). Idle -> no extra repaint.
+  StepDynTraceJob();        // 8f: stream -> trace for item views
   StepDynamicsPipeline();   // phase 2b
   if (m_dynamicsPanel.WantsAnimationFrame())
     InvalidateRect(m_hwnd, nullptr, FALSE);

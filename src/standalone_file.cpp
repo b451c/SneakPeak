@@ -1327,7 +1327,6 @@ void SneakPeak::StepItemAudioLoad()
 
 void SneakPeak::FinishItemAudioLoad()
 {
-  JoinDynamicsWorker(true);   // a job may still read the (empty->replaced) buffer
   ItemAudioLoad& L = m_itemLoad;
   if (L.single) {
     // Fold I_CHANMODE mono modes exactly like the legacy synchronous path.
@@ -1347,18 +1346,9 @@ void SneakPeak::FinishItemAudioLoad()
   AbortItemAudioLoad(); // releases accessors, clears state, restores title
 
   // Full-fidelity consumers wake up: RMS/flat-top recompute on next paint,
-  // minimap upgrades from SDK peaks, an open dynamics panel gets its analysis.
+  // minimap upgrades from SDK peaks (Dynamics streams its own trace, 8f).
   m_waveform.Invalidate();
   m_minimap.Invalidate();
-  if (m_dynamicsPanel.IsVisible() && m_waveform.GetAudioSampleCount() > 0) {
-    m_dynamics.SetParams(m_dynamicsPanel.GetParams());
-    double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-    m_dynamics.Analyze(m_waveform.GetAudioData().data(), m_waveform.GetAudioSampleCount(),
-                       m_waveform.GetNumChannels(), m_waveform.GetSampleRate(),
-                       ivDb, m_dynamicsPanel.GetParams());
-    m_dynamics.ComputeCompression();
-    m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
-  }
   if (m_spectralVisible) { m_spectral.ClearSpectrum(); m_spectral.Invalidate(); }
   if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
 }

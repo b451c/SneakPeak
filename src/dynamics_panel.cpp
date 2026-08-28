@@ -206,7 +206,8 @@ void DynamicsPanel::Show(const DynamicsParams& params, double avgPeakDb)
 {
   m_params = params;
   m_avgPeakDb = avgPeakDb;
-  if (m_params.threshold <= -99.0)
+  m_threshFromAvg = (m_params.threshold <= -99.0);
+  if (m_threshFromAvg)
     m_params.threshold = avgPeakDb;
   m_visible = true;
   m_paramsChanged = false;

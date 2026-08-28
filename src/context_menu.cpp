@@ -738,15 +738,8 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_dynamicsVisible = !m_dynamicsVisible;
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_dynamics",
                                         m_dynamicsVisible ? "1" : "0", true);
-      // Run analysis if enabling and audio is loaded
-      if (m_dynamicsVisible && m_waveform.GetAudioSampleCount() > 0 && !m_dynamics.HasResults()) {
-        double itemVolDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-        m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                           m_waveform.GetAudioSampleCount(),
-                           m_waveform.GetNumChannels(),
-                           m_waveform.GetSampleRate(),
-                           itemVolDb, m_dynamics.GetParams());
-      }
+      // Run analysis if enabling (item views: delivered by the pipeline)
+      if (m_dynamicsVisible && !m_dynamics.HasResults()) RequestDynamicsAnalysis();
       InvalidateRect(m_hwnd, nullptr, FALSE);
       break;
     case CM_SWITCH_TIMELINE: {
@@ -771,12 +764,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         // INC-D1: destructive-mode panel - no envelope, no P_EXT. Live and
         // A/B are envelope concepts and stay disabled; Apply multiplies the
         // GR curve into the buffer (see DoApplyDynamicsStandalone).
-        if (!m_dynamics.HasResults() && m_waveform.GetAudioSampleCount() > 0)
-          m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                             m_waveform.GetAudioSampleCount(),
-                             m_waveform.GetNumChannels(),
-                             m_waveform.GetSampleRate(), 0.0,
-                             m_dynamics.GetParams());
+        if (!m_dynamics.HasResults()) RequestDynamicsAnalysis();
         m_dynamicsPanel.SetStandalone(true);
         m_dynamicsPanel.Show(m_dynamics.GetParams(), m_dynamics.GetAveragePeakDb());
         RefreshDynamicsAvgGr();
@@ -809,16 +797,9 @@ void SneakPeak::OnContextMenuCommand(int id)
         EnsureVolumeEnvelope(m_waveform.GetTake(), m_waveform.GetItem(), &wasCreated);
         if (wasCreated) ShowToast("Volume envelope enabled");
       }
-      // Ensure analysis is done
-      if (!m_dynamics.HasResults() && m_waveform.GetAudioSampleCount() > 0) {
-        double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-        m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                           m_waveform.GetAudioSampleCount(),
-                           m_waveform.GetNumChannels(),
-                           m_waveform.GetSampleRate(),
-                           ivDb, m_dynamics.GetParams());
-      }
       // Show inline dynamics panel - try loading saved params from item P_EXT first
+      // (both paths end in RefreshDynamicsAvgGr: the analysis arrives via the
+      // pipeline; the operating point follows it - DynamicsPanel::SetAvgPeakDb)
       if (!LoadDynamicsFromItem()) {
         m_dynamicsPanel.Show(m_dynamics.GetParams(), m_dynamics.GetAveragePeakDb());
         RefreshDynamicsAvgGr();      // correct avg GR from the first paint (no makeup leap on first drag)
@@ -1075,20 +1056,9 @@ void SneakPeak::OnContextMenuCommand(int id)
         DeleteLimUserPreset(id - CM_LIM_DEL_PRESET_BASE);
       }
       if (applied) {
-        // Same re-analysis + Live path as a knob drag, so the curve/GR update at once.
+        // Same re-analysis + Live path as a knob drag (pipeline: debounced Live write).
         m_dynamics.SetParams(m_dynamicsPanel.GetParams());
-        if (m_waveform.GetAudioSampleCount() > 0) {
-          double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-          m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                             m_waveform.GetAudioSampleCount(),
-                             m_waveform.GetNumChannels(),
-                             m_waveform.GetSampleRate(),
-                             ivDb, m_dynamicsPanel.GetParams());
-          m_dynamics.ComputeCompression();
-          m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
-          if (m_dynamicsPanel.IsLive())
-            ApplyDynamicsToEnvelope();
-        }
+        RequestDynamicsAnalysis();
         InvalidateRect(m_hwnd, nullptr, FALSE);
       }
       break;

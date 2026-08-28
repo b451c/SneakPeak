@@ -368,6 +368,7 @@ bool SneakPeak::BeginDestructiveWrite(std::string& path)
   }
   AbortItemAudioLoad();
   AbortExportPump();
+  JoinDynamicsWorker(true);   // the trace job holds accessors on the file being rewritten
   m_waveform.ReleaseTakeAccessors();
   return true;
 }
@@ -2039,16 +2040,15 @@ void SneakPeak::ApplyDynamicsToEnvelope()
     }
   }
 
-  // Ensure analysis is current
-  if (!m_dynamics.HasResults() && m_waveform.GetAudioSampleCount() > 0) {
-    double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-    m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                       m_waveform.GetAudioSampleCount(),
-                       m_waveform.GetNumChannels(),
-                       m_waveform.GetSampleRate(),
-                       ivDb, m_dynamics.GetParams());
+  // No analysis for the CURRENT params yet (trace still streaming, worker
+  // busy or its result not swapped in): the apply is PENDING and fires from
+  // TakeDynamicsResult when the up-to-date result lands.
+  if (!m_dynamics.HasResults() || m_dynParamsDirty || m_dynWorker.busy.load() ||
+      m_dynWorker.hasResult.load()) {
+    m_dynApplyPending = true;
+    RequestDynamicsAnalysis();
+    return;
   }
-  if (!m_dynamics.HasResults()) return;
 
   auto compRaw = m_dynamics.ComputeCompression();
   if (compRaw.empty()) return;
@@ -3115,15 +3115,7 @@ void SneakPeak::DeleteUserPreset(int idx)
 // user reported. Mirrors the OnMouseMove path (input_handling.cpp ~1455-1467).
 void SneakPeak::RefreshDynamicsAvgGr()
 {
-  if (m_waveform.GetAudioSampleCount() <= 0) return;
   m_dynamics.SetParams(m_dynamicsPanel.GetParams());
-  const double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-  m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                     m_waveform.GetAudioSampleCount(),
-                     m_waveform.GetNumChannels(),
-                     m_waveform.GetSampleRate(),
-                     ivDb, m_dynamicsPanel.GetParams());
-  m_dynamics.ComputeCompression();
-  m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
+  RequestDynamicsAnalysis();   // Standalone: now; item views: with the result
 }
 

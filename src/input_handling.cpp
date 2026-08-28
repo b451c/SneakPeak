@@ -552,18 +552,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       if (m_dynamicsPanel.ParamsChanged()) {
         m_dynamicsPanel.ClearParamsChanged();
         m_dynamics.SetParams(m_dynamicsPanel.GetParams());
-        if (m_waveform.GetAudioSampleCount() > 0) {
-          double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-          m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                             m_waveform.GetAudioSampleCount(),
-                             m_waveform.GetNumChannels(),
-                             m_waveform.GetSampleRate(),
-                             ivDb, m_dynamicsPanel.GetParams());
-          m_dynamics.ComputeCompression();
-          m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
-          if (m_dynamicsPanel.IsLive())
-            ApplyDynamicsToEnvelope();
-        }
+        RequestDynamicsAnalysis();   // pipeline: Live write follows the result
       }
       // Close live undo block if panel was hidden (close button) or Live toggled off
       if (wasLiveUndo && !m_dynamicsPanel.LiveUndoOpen() &&
@@ -2401,32 +2390,9 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
         m_dynamicsPanel.ParamsChanged()) {
       m_dynamicsPanel.ClearParamsChanged();
       m_dynamics.SetParams(m_dynamicsPanel.GetParams());
-      if (m_waveform.GetAudioSampleCount() > 0) {
-        double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-        m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                           m_waveform.GetAudioSampleCount(),
-                           m_waveform.GetNumChannels(),
-                           m_waveform.GetSampleRate(),
-                           ivDb, m_dynamicsPanel.GetParams());
-        m_dynamics.ComputeCompression();
-        m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
-        if (m_dynamicsPanel.IsLive()) {
-          // Single-shot undo for this wheel nudge. Mirror the drag path exactly:
-          // mark LiveUndoOpen so ApplyDynamicsToEnvelope suppresses its OWN inner
-          // undo block AND its per-apply toast (the audio_commands liveSession
-          // gate); the wheel's Begin/End is then the single "Live Dynamics" block.
-          // If a drag already holds a live block open (mid-drag wheel), don't nest
-          // a second one - leave that block + its mouseup to own the lifecycle.
-          bool alreadyOpen = m_dynamicsPanel.LiveUndoOpen();
-          if (!alreadyOpen && g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-          m_dynamicsPanel.SetLiveUndoOpen(true);
-          ApplyDynamicsToEnvelope();
-          if (!alreadyOpen) {
-            m_dynamicsPanel.SetLiveUndoOpen(false);
-            if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
-          }
-        }
-      }
+      // Pipeline: the Live write lands as its own single-shot "Live Dynamics"
+      // undo step (LiveWriteEnvelope), or inside the drag's open block.
+      RequestDynamicsAnalysis();
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
@@ -2543,32 +2509,13 @@ void SneakPeak::FlushFadeWheelUndo()
 }
 
 // Re-run the dynamics analysis after an inline type-value commit, mirroring the
-// wheel-nudge path exactly: re-analyse + refresh the GR meter, and in Live mode wrap
-// the envelope write in a single-shot undo block (suppressing ApplyDynamicsToEnvelope's
-// own inner block + per-apply toast). Clears the panel's ParamsChanged flag.
+// wheel-nudge path: the pipeline re-analyses and, in Live mode, writes the
+// envelope as its own single-shot undo step. Clears the panel's ParamsChanged flag.
 void SneakPeak::ReanalyzeDynamicsAfterEdit()
 {
   m_dynamicsPanel.ClearParamsChanged();
   m_dynamics.SetParams(m_dynamicsPanel.GetParams());
-  if (m_waveform.GetAudioSampleCount() <= 0) return;
-  double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-  m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                     m_waveform.GetAudioSampleCount(),
-                     m_waveform.GetNumChannels(),
-                     m_waveform.GetSampleRate(),
-                     ivDb, m_dynamicsPanel.GetParams());
-  m_dynamics.ComputeCompression();
-  m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
-  if (m_dynamicsPanel.IsLive()) {
-    bool alreadyOpen = m_dynamicsPanel.LiveUndoOpen();
-    if (!alreadyOpen && g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-    m_dynamicsPanel.SetLiveUndoOpen(true);
-    ApplyDynamicsToEnvelope();
-    if (!alreadyOpen) {
-      m_dynamicsPanel.SetLiveUndoOpen(false);
-      if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
-    }
-  }
+  RequestDynamicsAnalysis();
 }
 
 // Route one key (from the SWS accelerator) to the open inline value editor. A commit
@@ -3141,14 +3088,7 @@ void SneakPeak::ReloadAfterGainChange(double savedViewStart, double savedViewDur
   m_waveform.UpdateFadeCache();
 
   // Re-analyze dynamics with updated audio levels
-  if ((m_dynamicsVisible || m_dynamicsPanel.IsVisible()) && m_waveform.GetAudioSampleCount() > 0) {
-    double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-    m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                       m_waveform.GetAudioSampleCount(),
-                       m_waveform.GetNumChannels(),
-                       m_waveform.GetSampleRate(),
-                       ivDb, m_dynamics.GetParams());
-  }
+  if (m_dynamicsVisible || m_dynamicsPanel.IsVisible()) RequestDynamicsAnalysis();
 
   m_waveform.Invalidate();
   if (savedSel.active) m_waveform.SetSelection(savedSel);

@@ -50,6 +50,16 @@ public:
 
   // For GR meter display
   void SetAvgGainReduction(double gr) { m_avgGR = gr; }
+  // 8f: the operating point arrives with the (asynchronous) analysis. A
+  // threshold still sitting on the provisional one follows it; returns true
+  // when it moved (the host recomputes the curve for it).
+  bool SetAvgPeakDb(double v)
+  {
+    const bool follow = m_threshFromAvg && m_params.threshold == m_avgPeakDb && v != m_avgPeakDb;
+    m_avgPeakDb = v;
+    if (follow) m_params.threshold = v;
+    return follow;
+  }
 
   // Overlay visibility toggles (read by SneakPeak in OnPaint)
   bool GetShowDyn() const { return m_showDyn; }
@@ -179,6 +189,7 @@ private:
   bool m_visible = false;
   DynamicsParams m_params;
   double m_avgPeakDb = -18.0;
+  bool m_threshFromAvg = false;  // Show() seeded the threshold from the operating point
   double m_avgGR = 0.0;
   Tab m_tab = Tab::Compressor;   // active tab (premium panel)
   UiCanvas m_canvas;             // Blend2D renderer for the premium panel
