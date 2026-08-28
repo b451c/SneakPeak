@@ -106,6 +106,7 @@ def client_size(s) -> tuple[int, int]:
 
 def capture(s, out: Path):
     from reaproof.observe.visual.capture import capture_window_macos
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
     return capture_window_macos(s.handle.pid, WINDOW_TITLE, out)
 
 
@@ -372,14 +373,20 @@ def measure_after(s, action_lua: str, *, loaded_marker: str, first_marker: str =
             max_stall = gap
 
     t_first = t_loaded = None
+    seen_loading = False
     for w, title in titles:
         tr = to_reaper(w)
         if tr is None or tr < action_t:
             continue
         if t_first is None and first_marker in title:
             t_first = tr - action_t
-        if t_loaded is None and loaded_marker in title and "Loading" not in title:
+        if "Loading" in title:
+            seen_loading = True
+            t_loaded = None            # a plain title BEFORE the loader retitled was premature
+        elif t_loaded is None and loaded_marker in title:
             t_loaded = tr - action_t
+    # the loader only retitles once it has ticked; a plain-name title with no
+    # "Loading" ever seen means the view loaded synchronously (short file)
     return {"max_stall": round(max_stall, 3),
             "t_first": None if t_first is None else round(t_first, 3),
             "t_loaded": None if t_loaded is None else round(t_loaded, 3),
@@ -432,3 +439,56 @@ def insert_item_unselected(s, media: Path, *, position: float = 0.0):
 SELECT_ITEM0 = ("local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0) "
                 "reaper.SetMediaItemSelected(it, true) reaper.UpdateArrange() return true")
 DESELECT_ALL = "reaper.SelectAllMediaItems(0, false) reaper.UpdateArrange() return true"
+
+
+# --------------------------------------------------------------------------
+# View-mode observable (mode-bar accent pixels, colours from theme.cpp) + input
+# --------------------------------------------------------------------------
+MODE_ACCENTS = {
+    "ITEM": (80, 160, 230), "SET": (80, 200, 100), "TIMELINE": (180, 140, 255),
+    "MULTI": (225, 105, 200), "STANDALONE": (230, 160, 50), "MASTER": (200, 80, 80),
+}
+
+
+def mode_from_capture(s, out: Path) -> str:
+    """Classify the current view mode from the mode-bar label colour in a
+    window capture (the label is drawn in the mode's accent; hue survives
+    the capture's colour profile, brightness does not -> cosine match)."""
+    cap = capture(s, out)
+    cw, ch = client_size(s)
+    titlebar = cap.height - ch
+    band = cap.image[titlebar:titlebar + 26, 0:140].astype(float)   # mode bar, left
+    px = band.reshape(-1, 3)
+    sat = px.max(axis=1) - px.min(axis=1)
+    px = px[(sat > 60) & (px.max(axis=1) > 90)]                      # coloured pixels only
+    if len(px) == 0:
+        return "NONE"
+    votes: dict[str, int] = {}
+    norms = px / np.linalg.norm(px, axis=1, keepdims=True)
+    for name, rgb in MODE_ACCENTS.items():
+        ref = np.array(rgb, float); ref /= np.linalg.norm(ref)
+        votes[name] = int(((norms @ ref) > 0.995).sum())
+    best = max(votes, key=votes.get)
+    return best if votes[best] > 0 else "NONE"
+
+
+def drag_client(s, x0: int, y0: int, x1: int, y1: int, steps: int = 30):
+    from reaproof.observe.input import bridge_drag
+    bridge_drag(s, WINDOW_TITLE, (x0, y0), (x1, y1), steps=steps)
+
+
+def press_key(s, vk: int):
+    ok = s.eval(f"local h = {window_handle_lua()} if not h then return false end "
+                f'reaper.JS_WindowMessage_Post(h, "WM_KEYDOWN", {int(vk)}, 0, 0, 0) '
+                f'reaper.JS_WindowMessage_Post(h, "WM_KEYUP", {int(vk)}, 0, 0, 0) return true')
+    if not ok:
+        raise RuntimeError("SneakPeak window not found")
+
+
+VK_DELETE = 0x2E
+WAVE_Y = 200          # a client row inside the waveform lane (800x400 window)
+
+
+def track_item_count(s, track_idx: int = 0) -> int:
+    return int(s.eval(f"local tr = reaper.GetTrack(0, {track_idx}) "
+                      "return tr and reaper.CountTrackMediaItems(tr) or -1", hang_timeout=120))

@@ -144,54 +144,20 @@ bool MultiItemView::LoadItems(const std::vector<MediaItem*>& items,
     DBG("[MultiItem] Downsampling all layers: ratio=%d readRate=%d\n", ratio, readRate);
   }
 
-  // Load audio for each layer (full duration, absolute timeline aligned)
+  // Phase 2a: plan every layer; the samples arrive from SneakPeak's background
+  // loader (one job per layer, D_VOL baked on install). Until then the layer
+  // draws from .reapeaks (ComputeLayerPeaksFromSDK).
+  m_channels = maxChannels;
   for (auto& layer : m_layers) {
     int frames = (int)(layer.duration * (double)readRate);
     if (frames <= 0) continue;
-
-    AudioAccessor* accessor = g_CreateTakeAudioAccessor(layer.take);
-    if (!accessor) continue;
-
-    layer.audio.resize((size_t)frames * maxChannels, 0.0);
-    layer.audioFrameCount = frames;
+    layer.plannedFrames = frames;
+    layer.audioFrameCount = 0;
+    layer.audio.clear();
     layer.audioStartFrame = (int)((layer.position - m_timelineStart) * (double)m_sampleRate);
-
-    // Read in chunks
-    static const int CHUNK_FRAMES = 65536;
-    int framesLoaded = 0;
-    while (framesLoaded < frames) {
-      int chunk = std::min(CHUNK_FRAMES, frames - framesLoaded);
-      double chunkTime = (double)framesLoaded / (double)readRate;
-
-      if (layer.numChannels < maxChannels) {
-        std::vector<double> tmpBuf((size_t)chunk * layer.numChannels, 0.0);
-        g_GetAudioAccessorSamples(accessor, readRate, layer.numChannels,
-                                  chunkTime, chunk, tmpBuf.data());
-        for (int f = 0; f < chunk; f++) {
-          size_t dstOff = ((size_t)framesLoaded + f) * maxChannels;
-          layer.audio[dstOff] = tmpBuf[(size_t)f * layer.numChannels];
-          layer.audio[dstOff + 1] = tmpBuf[(size_t)f * layer.numChannels];
-        }
-      } else {
-        g_GetAudioAccessorSamples(accessor, readRate, maxChannels,
-                                  chunkTime, chunk,
-                                  layer.audio.data() + (size_t)framesLoaded * maxChannels);
-      }
-      framesLoaded += chunk;
-    }
-    g_DestroyAudioAccessor(accessor);
-
-    // Bake D_VOL into audio
-    if (layer.itemVol != 1.0) {
-      size_t sampleCount = (size_t)frames * maxChannels;
-      for (size_t s = 0; s < sampleCount; s++)
-        layer.audio[s] *= layer.itemVol;
-    }
-
-    layer.numChannels = maxChannels;  // upmixed to common channel count
-
-    DBG("[MultiItem] Layer: pos=%.3f dur=%.3f vol=%.3f frames=%d startFrame=%d\n",
-        layer.position, layer.duration, layer.itemVol, frames, layer.audioStartFrame);
+    DBG("[MultiItem] Layer planned: pos=%.3f dur=%.3f vol=%.3f frames=%d startFrame=%d srcCh=%d\n",
+        layer.position, layer.duration, layer.itemVol, frames, layer.audioStartFrame,
+        layer.numChannels);
   }
 
   // Assign color indices: per-item and per-track
@@ -285,7 +251,7 @@ void MultiItemView::UpdatePeaks(double viewStart, double viewDur, int width, int
     return;
   }
 
-  if (m_mode == MultiItemMode::MIX) {
+  if (m_mode == MultiItemMode::MIX && AllLayersLoaded()) {
     ComputeMixPeaks(viewStart, viewDur, width, numChannels, peakMax, peakMin, peakRMS);
   } else {
     // LAYERED modes: compute per-layer peaks, then derive mix from layer peaks (fast)
@@ -383,6 +349,11 @@ void MultiItemView::ComputeLayeredPeaks(double viewStart, double viewDur, int wi
     layer.peakMax.assign(total, 0.0);
     layer.peakMin.assign(total, 0.0);
     layer.peakRMS.assign(total, 0.0);
+
+    if (layer.audioFrameCount <= 0) {   // still loading: REAPER's own peaks
+      ComputeLayerPeaksFromSDK(layer, viewStart, viewDur, width, nch);
+      continue;
+    }
 
     // Compute column range where this layer has audio — skip everything outside
     double layerRelStart = (double)layer.audioStartFrame / sr;
@@ -575,4 +546,100 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
     DeleteObject(allPens[li].peakSel);
     DeleteObject(allPens[li].rmsSel);
   }
+}
+
+// --- Phase 2a: background loading support ---
+
+// One .reapeaks fetch for the layer's visible columns (mono/stereo mapped to the
+// common channel count, D_VOL applied like the baked buffer, RMS never faked).
+void MultiItemView::ComputeLayerPeaksFromSDK(ItemLayer& layer, double viewStart, double viewDur,
+                                             int width, int numChannels)
+{
+  if (!g_GetMediaItemTake_Peaks || !layer.take || width <= 0 || viewDur <= 0.0) return;
+  int nch = numChannels;
+  double step = viewDur / (double)width;
+  double layerRelStart = layer.position - m_timelineStart;
+  double layerRelEnd = layerRelStart + layer.duration;
+  int c0 = (int)ceil((layerRelStart - viewStart) / step);
+  int c1 = (int)floor((layerRelEnd - viewStart) / step);
+  if (c0 < 0) c0 = 0;
+  if (c1 > width) c1 = width;
+  int n = c1 - c0;
+  if (n <= 0) return;
+
+  int srcNch = 1;
+  if (g_GetMediaItemTake_Source) {
+    PCM_source* src = g_GetMediaItemTake_Source(layer.take);
+    if (src) srcNch = std::max(1, std::min(2, src->GetNumChannels()));
+  }
+  double starttime = layer.position + (viewStart + (double)c0 * step - layerRelStart);
+  std::vector<double> buf((size_t)srcNch * (size_t)n * 2, 0.0);
+  int ret = g_GetMediaItemTake_Peaks(layer.take, (double)width / viewDur, starttime, srcNch, n, 0, buf.data());
+  int actual = ret & 0xFFFFF;
+  int mode = (ret >> 20) & 0xF;
+  if (actual <= 0 || (mode != 0 && mode != 1)) return;
+
+  double vol = layer.itemVol > 0.0 ? layer.itemVol : 1.0;
+  auto sampleAt = [&](int s, int ch, bool minSide) -> double {
+    size_t minOff = (mode == 0 && minSide) ? (size_t)srcNch * (size_t)actual : 0;
+    if (srcNch == 2 && nch == 1) {
+      return (buf[minOff + (size_t)s * 2] + buf[minOff + (size_t)s * 2 + 1]) * 0.5;
+    }
+    int sc = (srcNch == 1) ? 0 : ch;
+    return buf[minOff + (size_t)s * srcNch + sc];
+  };
+  for (int col = c0; col < c1; col++) {
+    int local = col - c0;
+    for (int ch = 0; ch < nch; ch++) {
+      double mx, mn;
+      if (mode == 0) {
+        int sidx = (local < actual) ? local : actual - 1;
+        mx = sampleAt(sidx, ch, false);
+        mn = sampleAt(sidx, ch, true);
+      } else {
+        double spp = (double)actual / (double)n;
+        int s0 = (int)(local * spp), s1 = (int)((local + 1) * spp);
+        if (s1 <= s0) s1 = s0 + 1;
+        if (s1 > actual) s1 = actual;
+        mx = -2.0; mn = 2.0;
+        for (int sidx = s0; sidx < s1; sidx++) {
+          double v = sampleAt(sidx, ch, false);
+          if (v > mx) mx = v;
+          if (v < mn) mn = v;
+        }
+        if (mx < -1.5) { mx = 0.0; mn = 0.0; }
+      }
+      size_t idx = (size_t)(col * nch + ch);
+      layer.peakMax[idx] = mx * vol;
+      layer.peakMin[idx] = mn * vol;
+    }
+  }
+}
+
+void MultiItemView::InstallLayerAudio(size_t idx, std::vector<double>&& audio, int frames, double bakedVol)
+{
+  if (idx >= m_layers.size()) return;
+  ItemLayer& layer = m_layers[idx];
+  layer.audio = std::move(audio);
+  layer.audioFrameCount = frames;
+  layer.numChannels = m_channels;   // upmixed to the common channel count
+  if (bakedVol > 0.0) layer.itemVol = bakedVol;
+  m_peaksValid = false;
+}
+
+bool MultiItemView::AllLayersLoaded() const
+{
+  for (const auto& layer : m_layers)
+    if (layer.plannedFrames > 0 && layer.audioFrameCount <= 0) return false;
+  return true;
+}
+
+void MultiItemView::DropAudio()
+{
+  for (auto& layer : m_layers) {
+    layer.audio.clear();
+    layer.audio.shrink_to_fit();
+    layer.audioFrameCount = 0;
+  }
+  m_peaksValid = false;
 }

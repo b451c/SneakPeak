@@ -11,6 +11,7 @@
 // ============================================================================
 
 #include "waveform_view.h"
+#include "reaper_plugin.h"
 #include "audio_ops.h"
 #include "theme.h"
 #include "config.h"
@@ -66,8 +67,7 @@ void WaveformView::UpdatePeaks()
   // yet - serve the display from REAPER's .reapeaks while the background
   // loader fills m_audioData. Once installed (count > 0) the audio path below
   // takes over permanently (byte-identical to the pre-hybrid pipeline).
-  if (!m_standaloneMode && m_take && m_segments.size() <= 1 &&
-      m_audioSampleCount <= 0 && g_GetMediaItemTake_Peaks) {
+  if (!m_standaloneMode && m_take && m_audioSampleCount <= 0 && g_GetMediaItemTake_Peaks) {
     UpdatePeaksFromSDK();
     return;
   }
@@ -180,6 +180,7 @@ void WaveformView::UpdatePeaksFromSDK()
   int w = m_rect.right - m_rect.left - SP(DB_SCALE_WIDTH);
   if (w < 1) w = m_rect.right - m_rect.left;
   if (w <= 0 || m_viewDuration <= 0.0 || !m_take) { m_peaksValid = false; return; }
+  if (m_segments.size() > 1) { UpdatePeaksFromSDKSegments(w); return; }
 
   int srcNch = (m_srcChannels < 1) ? 1 : m_srcChannels;
   int dispNch = (m_numChannels < 1) ? 1 : m_numChannels;
@@ -1639,4 +1640,97 @@ void WaveformView::DrawStandaloneFadeHandles(HDC hdc)
     foX = std::max(waveL, TimeToX(m_itemDuration - m_standaloneFade.fadeOutLen));
   RECT foHandle = { foX - SPmin(FADE_HANDLE_HALF_SIZE), yTop - SPmin(FADE_HANDLE_HALF_SIZE), foX + SPmin(FADE_HANDLE_HALF_SIZE), yTop + SPmin(FADE_HANDLE_HALF_SIZE) };
   hb.Fill(hdc, &foHandle);
+}
+
+// Timeline/SET view (phase 2a): one .reapeaks fetch per visible segment. The
+// buffer for these views bakes D_VOL (legacy parity), so the peaks are scaled
+// by the same volume here; gaps stay zero; RMS stays zeroed until samples land.
+void WaveformView::UpdatePeaksFromSDKSegments(int w)
+{
+  int dispNch = (m_numChannels < 1) ? 1 : m_numChannels;
+  m_peakMax.assign((size_t)(w * dispNch), 0.0);
+  m_peakMin.assign((size_t)(w * dispNch), 0.0);
+  m_peakRMS.assign((size_t)(w * dispNch), 0.0);
+  m_clipFlags.assign((size_t)(w * dispNch), 0);
+
+  const double step = m_viewDuration / (double)w;
+  const double peakrate = (double)w / m_viewDuration;
+  bool anyMissing = false;
+  std::vector<double> buf;
+
+  for (const auto& seg : m_segments) {
+    if (!seg.take || seg.duration <= 0.0) continue;
+    double segStart = seg.relativeOffset, segEnd = seg.relativeOffset + seg.duration;
+    int c0 = (int)ceil((segStart - m_viewStartTime) / step);
+    int c1 = (int)floor((segEnd - m_viewStartTime) / step);
+    if (c0 < 0) c0 = 0;
+    if (c1 > w) c1 = w;
+    int n = c1 - c0;
+    if (n <= 0) continue;
+
+    int srcNch = 1;
+    if (g_GetMediaItemTake_Source) {
+      PCM_source* src = g_GetMediaItemTake_Source(seg.take);
+      if (src) srcNch = std::max(1, std::min(2, src->GetNumChannels()));
+    }
+    double vol = 1.0;
+    if (seg.item && g_GetMediaItemInfo_Value) vol = g_GetMediaItemInfo_Value(seg.item, "D_VOL");
+    if (g_GetSetMediaItemTakeInfo) {
+      double* pv = (double*)g_GetSetMediaItemTakeInfo(seg.take, "D_VOL", nullptr);
+      if (pv) vol *= *pv;
+    }
+    if (vol <= 0.0) vol = 1.0;
+
+    double starttime = seg.position + (m_viewStartTime + (double)c0 * step - segStart);
+    buf.assign((size_t)srcNch * (size_t)n * 2, 0.0);
+    int ret = g_GetMediaItemTake_Peaks(seg.take, peakrate, starttime, srcNch, n, 0, buf.data());
+    int actual = ret & 0xFFFFF;
+    int mode = (ret >> 20) & 0xF;
+    if (actual <= 0 || (mode != 0 && mode != 1)) { anyMissing = true; continue; }
+
+    auto sampleAt = [&](int s, int ch, bool minSide) -> double {
+      // mode 0: [max: srcNch x actual][min: srcNch x actual]; mode 1: raw samples
+      size_t minOff = (mode == 0 && minSide) ? (size_t)srcNch * (size_t)actual : 0;
+      if (srcNch == 2 && dispNch == 1) {
+        double l = buf[minOff + (size_t)s * 2], r = buf[minOff + (size_t)s * 2 + 1];
+        return (l + r) * 0.5;
+      }
+      int sc = (srcNch == 1) ? 0 : ch;
+      return buf[minOff + (size_t)s * srcNch + sc];
+    };
+
+    for (int col = c0; col < c1; col++) {
+      int local = col - c0;
+      for (int ch = 0; ch < dispNch; ch++) {
+        double mx, mn;
+        if (mode == 0) {
+          int sidx = (local < actual) ? local : actual - 1;
+          mx = sampleAt(sidx, ch, false);
+          mn = sampleAt(sidx, ch, true);
+        } else {
+          double spp = (double)actual / (double)n;
+          int s0 = (int)(local * spp), s1 = (int)((local + 1) * spp);
+          if (s1 <= s0) s1 = s0 + 1;
+          if (s1 > actual) s1 = actual;
+          mx = -2.0; mn = 2.0;
+          for (int sidx = s0; sidx < s1; sidx++) {
+            double v = sampleAt(sidx, ch, false);
+            if (v > mx) mx = v;
+            if (v < mn) mn = v;
+          }
+          if (mx < -1.5) { mx = 0.0; mn = 0.0; }
+        }
+        size_t pi = (size_t)(col * dispNch + ch);
+        m_peakMax[pi] = mx * vol;
+        m_peakMin[pi] = mn * vol;
+        if (fabs(m_peakMax[pi]) >= 1.0 || fabs(m_peakMin[pi]) >= 1.0) m_clipFlags[pi] |= 1;
+      }
+    }
+  }
+
+  m_sdkPeaksPending = anyMissing;
+  m_peaksValid = true;
+  m_peaksCachedStart = m_viewStartTime;
+  m_peaksCachedDuration = m_viewDuration;
+  m_peaksCachedWidth = w;
 }

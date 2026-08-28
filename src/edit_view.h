@@ -506,14 +506,33 @@ private:
   // waveform shows SDK peaks instantly; the sample buffer decodes here in
   // OnTimer slices and installs on finish. Ops that need samples gate on
   // ItemAudioReady().
+  // Phase 2a: one job per take - single item, every timeline/SET segment,
+  // every multi-item layer - serviced in order by StepItemAudioLoad.
+  struct ItemAudioJob {
+    MediaItem_Take* take = nullptr;
+    MediaItem* item = nullptr;
+    AudioAccessor* accessor = nullptr; // created lazily when the job starts
+    int dstFrame = 0;                  // shared-buffer views: frame offset in samples
+    int frames = 0;
+    int srcNch = 1;                    // channels to read (multi: source count)
+    int layerIdx = -1;                 // multi-item: layer index (own staging)
+    std::vector<double> staging;       // multi-item only
+  };
   struct ItemAudioLoad {
-    AudioAccessor* accessor = nullptr;
-    MediaItem_Take* take = nullptr;   // load target; abort if view moves on
-    std::vector<double> samples;      // staging, srcNch interleaved
-    int readRate = 0, readFrames = 0, nch = 0, framesRead = 0;
+    std::vector<ItemAudioJob> jobs;
+    size_t jobIdx = 0;
+    int framesRead = 0;                // within the current job
+    int doneFrames = 0, totalFrames = 0; // progress
+    std::vector<double> samples;       // shared buffer (single/timeline/SET)
+    int readRate = 0, nch = 0;
+    bool multi = false;
+    bool single = false;               // single item: I_CHANMODE fold on finish
+    unsigned generation = 0;           // WaveformView::GetLoadGeneration at start
+    int lastPct = -1;
     bool active = false;
   };
   ItemAudioLoad m_itemLoad;
+  unsigned m_itemLoadFailedGen = ~0u;  // generation that produced no jobs (no retry loop)
   void StartItemAudioLoad();
   void StepItemAudioLoad();     // OnTimer slice + progress title
   void FinishItemAudioLoad();

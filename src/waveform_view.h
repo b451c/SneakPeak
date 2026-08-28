@@ -249,7 +249,19 @@ public:
   // single-item ITEM mode shows the waveform from REAPER's .reapeaks
   // immediately while the sample buffer loads in OnTimer slices. Loaded ==
   // m_audioSampleCount > 0; every sample consumer already no-ops on 0.
-  bool IsItemAudioLoaded() const { return m_standaloneMode || m_audioSampleCount > 0; }
+  bool IsItemAudioLoaded() const {
+    if (m_standaloneMode) return true;
+    if (m_multiItemActive) return m_multiItem.AllLayersLoaded();
+    return m_audioSampleCount > 0;
+  }
+  // Bumped by every view (re)load; the background loader aborts a job set
+  // whose generation no longer matches (phase 2a: one rule for all views).
+  unsigned GetLoadGeneration() const { return m_loadGeneration; }
+  MultiItemView& GetMultiItemViewMut() { return m_multiItem; }
+  int GetPlannedFrames() const { return m_plannedFrames; }
+  // Read plan shared by every loader (single, timeline, SET, multi-item):
+  // the 10M-frame cap downsamples long spans instead of refusing them.
+  static bool PlanRead(double seconds, int srcRate, int& readRate, int& readFrames);
   int GetSrcChannels() const { return m_srcChannels; }
   bool SdkPeaksPending() const { return m_sdkPeaksPending; }  // .reapeaks absent -> pump builder
   // The background loader's read plan == LoadAudioData's (incl. the 10M-frame
@@ -266,6 +278,7 @@ private:
   bool CompareFadeParams(const FadeCache& a, const FadeCache& b) const;
   void UpdatePeaks();
   void UpdatePeaksFromSDK();
+  void UpdatePeaksFromSDKSegments(int w);   // timeline/SET: one fetch per visible segment
   void DrawWaveformChannel(HDC hdc, int channel, int yTop, int height);
   void DrawSelection(HDC hdc);
   void DrawCursor(HDC hdc);
@@ -318,6 +331,8 @@ private:
   int m_audioSampleCount = 0;       // total frames loaded
   int m_srcChannels = 1;            // source channel count before I_CHANMODE fold
   bool m_sdkPeaksPending = false;   // last SDK fetch returned no peaks yet
+  unsigned m_loadGeneration = 0;    // see GetLoadGeneration()
+  int m_plannedFrames = 0;          // timeline/SET: frames the loader must deliver
 
   // View state
   double m_viewStartTime = 0.0;

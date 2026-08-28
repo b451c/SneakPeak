@@ -21,7 +21,8 @@ struct ItemLayer {
   int trackColorIndex = 0;     // index into kLayerColors (per-track, for LAYERED_TRACKS)
 
   std::vector<double> audio;   // interleaved samples (full length)
-  int audioFrameCount = 0;
+  int audioFrameCount = 0;     // 0 until the background loader installs the layer
+  int plannedFrames = 0;       // frames the loader must deliver (read rate)
   int audioStartFrame = 0;     // frame offset from timelineStart
 
   // Per-layer peaks (LAYERED mode only)
@@ -76,18 +77,29 @@ public:
   // Check if any layer's volume changed since load — caller should reload if true
   bool CheckVolumeChanged() const;
 
+  // Phase 2a background loading: LoadItems only PLANS the layers (.reapeaks
+  // draw them meanwhile); SneakPeak's loader installs each layer's samples.
+  void InstallLayerAudio(size_t idx, std::vector<double>&& audio, int frames, double bakedVol);
+  bool AllLayersLoaded() const;
+  void DropAudio();                  // forget samples, keep the plan (reload)
+  int GetChannels() const { return m_channels; }
+  int GetSampleRate() const { return m_sampleRate; }
+
 private:
   void ComputeMixPeaks(double viewStart, double viewDur, int width, int numChannels,
                        std::vector<double>& peakMax, std::vector<double>& peakMin,
                        std::vector<double>& peakRMS);
   void ComputeLayeredPeaks(double viewStart, double viewDur, int width, int numChannels);
   double GetLayerSample(const ItemLayer& layer, int timelineFrame, int ch, int nch) const;
+  void ComputeLayerPeaksFromSDK(ItemLayer& layer, double viewStart, double viewDur,
+                                int width, int numChannels);
 
   std::vector<ItemLayer> m_layers;
   MultiItemMode m_mode = MultiItemMode::MIX;
   double m_timelineStart = 0.0;
   double m_timelineEnd = 0.0;
   int m_sampleRate = 44100;
+  int m_channels = 1;               // common (upmixed) channel count
   bool m_peaksValid = false;
   double m_cachedViewStart = 0.0;
   double m_cachedViewDur = 0.0;

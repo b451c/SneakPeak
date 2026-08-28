@@ -1144,118 +1144,217 @@ void SneakPeak::DoReplaceSourceInTimeline()
 }
 
 // ============================================================================
-// Background ITEM audio load (INC-PK1, .harness/design_sdk_peaks_hybrid.md)
-// The waveform paints from REAPER's .reapeaks the moment an item is selected;
-// the sample buffer decodes here in OnTimer slices (same idea as STA-1) and
-// installs on completion, at which point the display switches to the normal
-// audio pipeline. Anything that needs raw samples gates on RequireItemAudio().
+// Background ITEM audio load (INC-PK1 + phase 2a, design_sdk_peaks_hybrid.md)
+// Every ITEM view - single item, timeline/SET segments, multi-item layers -
+// paints from REAPER's .reapeaks the moment it is (re)built; the sample
+// buffer decodes here in OnTimer slices, one job per take, and installs on
+// completion (whole buffer for shared views, per layer for multi-item).
+// Anything that needs raw samples gates on RequireItemAudio().
 // ============================================================================
+
+static double ItemTakeVolume(MediaItem* item, MediaItem_Take* take)
+{
+  double vol = (item && g_GetMediaItemInfo_Value) ? g_GetMediaItemInfo_Value(item, "D_VOL") : 1.0;
+  if (take && g_GetSetMediaItemTakeInfo) {
+    double* pv = (double*)g_GetSetMediaItemTakeInfo(take, "D_VOL", nullptr);
+    if (pv) vol *= *pv;
+  }
+  return vol > 0.0 ? vol : 1.0;
+}
 
 void SneakPeak::StartItemAudioLoad()
 {
   AbortItemAudioLoad();
-  if (m_waveform.IsStandaloneMode() || m_waveform.IsMultiItem()) return;
-  if (!m_waveform.GetTake() || m_waveform.GetAudioSampleCount() > 0) return;
+  if (m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
   if (!g_CreateTakeAudioAccessor || !g_GetAudioAccessorSamples || !g_DestroyAudioAccessor) return;
+  const unsigned gen = m_waveform.GetLoadGeneration();
+  if (m_waveform.IsItemAudioLoaded()) return;
 
-  int readRate = 0, readFrames = 0;
-  if (!m_waveform.ComputeItemLoadPlan(readRate, readFrames)) return;
-  int nch = m_waveform.GetSrcChannels();
-  if (nch < 1) nch = 1;
+  ItemAudioLoad& L = m_itemLoad;
+  L.generation = gen;
 
-  m_itemLoad.accessor = g_CreateTakeAudioAccessor(m_waveform.GetTake());
-  if (!m_itemLoad.accessor) return;
-  m_itemLoad.take = m_waveform.GetTake();
-  m_itemLoad.readRate = readRate;
-  m_itemLoad.readFrames = readFrames;
-  m_itemLoad.nch = nch;
-  m_itemLoad.framesRead = 0;
-  m_itemLoad.samples.assign((size_t)readFrames * (size_t)nch, 0.0);
-  m_itemLoad.active = true;
-  DBG("[SneakPeak] StartItemAudioLoad: %d frames @ %d Hz, %d ch\n", readFrames, readRate, nch);
+  if (m_waveform.IsMultiItemActive()) {
+    const MultiItemView& mv = m_waveform.GetMultiItemView();
+    L.multi = true;
+    L.readRate = mv.GetSampleRate();
+    L.nch = std::max(1, mv.GetChannels());
+    const auto& layers = mv.GetLayers();
+    for (size_t i = 0; i < layers.size(); i++) {
+      const auto& ly = layers[i];
+      if (ly.plannedFrames <= 0 || ly.audioFrameCount > 0 || !ly.take) continue;
+      ItemAudioJob j;
+      j.take = ly.take; j.item = ly.item; j.frames = ly.plannedFrames;
+      j.srcNch = std::max(1, std::min(L.nch, ly.numChannels));
+      j.layerIdx = (int)i;
+      L.jobs.push_back(std::move(j));
+      L.totalFrames += ly.plannedFrames;
+    }
+  } else if (m_waveform.GetSegments().size() > 1) {
+    // Timeline / SET: one shared buffer laid out by the segment plan (gaps = silence).
+    L.readRate = m_waveform.GetSampleRate();
+    L.nch = std::max(1, m_waveform.GetNumChannels());
+    int total = m_waveform.GetPlannedFrames();
+    for (const auto& seg : m_waveform.GetSegments()) {
+      if (!seg.take || seg.audioFrameCount <= 0) continue;
+      ItemAudioJob j;
+      j.take = seg.take; j.item = seg.item; j.dstFrame = seg.audioStartFrame;
+      j.frames = seg.audioFrameCount; j.srcNch = L.nch;
+      L.jobs.push_back(std::move(j));
+      L.totalFrames += seg.audioFrameCount;
+      if (seg.audioStartFrame + seg.audioFrameCount > total) total = seg.audioStartFrame + seg.audioFrameCount;
+    }
+    if (total > 0) L.samples.assign((size_t)total * (size_t)L.nch, 0.0);
+    L.totalFrames = total;
+  } else if (m_waveform.GetTake()) {
+    int readRate = 0, readFrames = 0;
+    if (m_waveform.ComputeItemLoadPlan(readRate, readFrames)) {
+      L.single = true;
+      L.readRate = readRate;
+      L.nch = std::max(1, m_waveform.GetSrcChannels());
+      ItemAudioJob j;
+      j.take = m_waveform.GetTake(); j.item = m_waveform.GetItem();
+      j.frames = readFrames; j.srcNch = L.nch;
+      L.jobs.push_back(std::move(j));
+      L.totalFrames = readFrames;
+      L.samples.assign((size_t)readFrames * (size_t)L.nch, 0.0);
+    }
+  }
+
+  if (L.jobs.empty()) {
+    m_itemLoadFailedGen = gen;   // nothing to load for this view - don't spin
+    L = ItemAudioLoad();
+    return;
+  }
+  L.active = true;
+  DBG("[SneakPeak] StartItemAudioLoad: %d jobs, %d frames @ %d Hz, %d ch (multi=%d)\n",
+      (int)L.jobs.size(), L.totalFrames, L.readRate, L.nch, (int)L.multi);
 }
 
 void SneakPeak::AbortItemAudioLoad()
 {
-  if (m_itemLoad.accessor && g_DestroyAudioAccessor)
-    g_DestroyAudioAccessor(m_itemLoad.accessor);
-  m_itemLoad.accessor = nullptr;
-  m_itemLoad.take = nullptr;
-  m_itemLoad.samples.clear();
-  m_itemLoad.samples.shrink_to_fit();
-  m_itemLoad.framesRead = 0;
-  if (m_itemLoad.active) {
-    m_itemLoad.active = false;
-    if (m_hwnd) UpdateTitle();
-  }
+  for (auto& j : m_itemLoad.jobs)
+    if (j.accessor && g_DestroyAudioAccessor) g_DestroyAudioAccessor(j.accessor);
+  bool wasActive = m_itemLoad.active;
+  m_itemLoad = ItemAudioLoad();
+  if (wasActive && m_hwnd) UpdateTitle();
 }
 
 void SneakPeak::StepItemAudioLoad()
 {
-  if (!m_itemLoad.active) return;
+  ItemAudioLoad& L = m_itemLoad;
+  if (!L.active) return;
 
-  // The view moved on (item switch, standalone, multi) or the take died.
-  if (m_waveform.IsStandaloneMode() || m_waveform.IsMultiItem() ||
-      m_waveform.GetTake() != m_itemLoad.take ||
-      m_waveform.GetAudioSampleCount() > 0 ||
-      (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)m_itemLoad.take, "MediaItem_Take*"))) {
+  // The view moved on (any reload bumps the generation) or a take died.
+  if (m_waveform.IsStandaloneMode() || L.generation != m_waveform.GetLoadGeneration()) {
     AbortItemAudioLoad();
     return;
   }
 
-  // ~15 ms decode budget per tick keeps the UI fluid at TIMER_INTERVAL_MS.
-  static const int CHUNK_FRAMES = 16384;
+  // ~15 ms decode budget per tick keeps the UI fluid at TIMER_INTERVAL_MS; a
+  // single accessor call covers at most ~1/8 s of audio so one call cannot
+  // blow the budget on a slow codec.
+  const int chunkMax = std::max(1024, std::min(16384, L.readRate / 8));
   DWORD t0 = GetTickCount();
-  while (m_itemLoad.framesRead < m_itemLoad.readFrames && GetTickCount() - t0 < 15) {
-    int n = std::min(CHUNK_FRAMES, m_itemLoad.readFrames - m_itemLoad.framesRead);
-    double t = (double)m_itemLoad.framesRead / (double)m_itemLoad.readRate;
-    int ret = g_GetAudioAccessorSamples(m_itemLoad.accessor, m_itemLoad.readRate,
-                                        m_itemLoad.nch, t, n,
-                                        m_itemLoad.samples.data() +
-                                            (size_t)m_itemLoad.framesRead * m_itemLoad.nch);
-    if (ret <= 0) { m_itemLoad.framesRead = m_itemLoad.readFrames; break; } // keep zeros
-    m_itemLoad.framesRead += n;
+  while (L.jobIdx < L.jobs.size() && GetTickCount() - t0 < 15) {
+    ItemAudioJob& j = L.jobs[L.jobIdx];
+    if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)j.take, "MediaItem_Take*")) {
+      AbortItemAudioLoad();
+      return;
+    }
+    if (!j.accessor) {
+      j.accessor = g_CreateTakeAudioAccessor(j.take);
+      if (!j.accessor) { L.doneFrames += j.frames; L.jobIdx++; L.framesRead = 0; continue; }
+      if (L.multi) j.staging.assign((size_t)j.frames * (size_t)L.nch, 0.0);
+    }
+
+    int n = std::min(chunkMax, j.frames - L.framesRead);
+    double t = (double)L.framesRead / (double)L.readRate;
+    double* dst = L.multi ? j.staging.data() + (size_t)L.framesRead * L.nch
+                          : L.samples.data() + (size_t)(j.dstFrame + L.framesRead) * L.nch;
+    if (j.srcNch < L.nch) {
+      // mono source in a stereo layer set: read mono, duplicate (legacy parity)
+      std::vector<double> tmp((size_t)n * (size_t)j.srcNch, 0.0);
+      int ret = g_GetAudioAccessorSamples(j.accessor, L.readRate, j.srcNch, t, n, tmp.data());
+      if (ret > 0)
+        for (int f = 0; f < n; f++)
+          for (int ch = 0; ch < L.nch; ch++)
+            dst[(size_t)f * L.nch + ch] = tmp[(size_t)f * j.srcNch];
+      if (ret <= 0) n = j.frames - L.framesRead;   // keep zeros for the rest
+    } else {
+      int ret = g_GetAudioAccessorSamples(j.accessor, L.readRate, L.nch, t, n, dst);
+      if (ret <= 0) n = j.frames - L.framesRead;
+    }
+    L.framesRead += n;
+    L.doneFrames += n;
+
+    if (L.framesRead >= j.frames) {
+      // Job done: bake D_VOL (timeline/SET/multi parity with the legacy loaders),
+      // install a multi-item layer right away, release the accessor.
+      if (!L.single) {
+        double vol = ItemTakeVolume(j.item, j.take);
+        double* base = L.multi ? j.staging.data() : L.samples.data() + (size_t)j.dstFrame * L.nch;
+        if (vol != 1.0)
+          for (size_t i = 0, cnt = (size_t)j.frames * (size_t)L.nch; i < cnt; i++) base[i] *= vol;
+        if (L.multi) {
+          m_waveform.GetMultiItemViewMut().InstallLayerAudio((size_t)j.layerIdx, std::move(j.staging),
+                                                             j.frames, vol);
+          m_waveform.Invalidate();
+        }
+      }
+      if (g_DestroyAudioAccessor) g_DestroyAudioAccessor(j.accessor);
+      j.accessor = nullptr;
+      L.jobIdx++;
+      L.framesRead = 0;
+    }
   }
 
-  if (m_itemLoad.framesRead >= m_itemLoad.readFrames) {
+  if (L.jobIdx >= L.jobs.size()) {
     FinishItemAudioLoad();
     return;
   }
 
-  if (m_hwnd) {
-    char title[256];
-    snprintf(title, sizeof(title), "SneakPeak: Loading item audio... %d%%",
-             (int)(100.0 * (double)m_itemLoad.framesRead / (double)m_itemLoad.readFrames));
-    SetWindowText(m_hwnd, title);
+  if (m_hwnd && L.totalFrames > 0) {
+    int pct = (int)(100.0 * (double)L.doneFrames / (double)L.totalFrames);
+    if (pct != L.lastPct) {       // title writes are not free - only on change
+      L.lastPct = pct;
+      char title[256];
+      snprintf(title, sizeof(title), "SneakPeak: Loading item audio... %d%%", pct);
+      SetWindowText(m_hwnd, title);
+    }
   }
 }
 
 void SneakPeak::FinishItemAudioLoad()
 {
-  // Fold I_CHANMODE mono modes exactly like the legacy synchronous path.
-  int outNch = m_itemLoad.nch;
-  if (outNch == 2 && g_GetSetMediaItemTakeInfo && m_itemLoad.take) {
-    int* p = (int*)g_GetSetMediaItemTakeInfo(m_itemLoad.take, "I_CHANMODE", nullptr);
-    int chanMode = p ? *p : 0;
-    if (chanMode >= 2 && chanMode <= 4) {
-      int frames = m_itemLoad.readFrames;
-      std::vector<double> mono((size_t)frames);
-      for (int i = 0; i < frames; i++) {
-        const double* f = &m_itemLoad.samples[(size_t)i * 2];
-        mono[(size_t)i] = (chanMode == 2) ? (f[0] + f[1]) * 0.5
-                        : (chanMode == 4) ? f[1] : f[0];
+  ItemAudioLoad& L = m_itemLoad;
+  if (L.single) {
+    // Fold I_CHANMODE mono modes exactly like the legacy synchronous path.
+    int outNch = L.nch;
+    MediaItem_Take* take = L.jobs.empty() ? nullptr : L.jobs[0].take;
+    if (outNch == 2 && g_GetSetMediaItemTakeInfo && take) {
+      int* p = (int*)g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", nullptr);
+      int chanMode = p ? *p : 0;
+      if (chanMode >= 2 && chanMode <= 4) {
+        int frames = L.totalFrames;
+        std::vector<double> mono((size_t)frames);
+        for (int i = 0; i < frames; i++) {
+          const double* f = &L.samples[(size_t)i * 2];
+          mono[(size_t)i] = (chanMode == 2) ? (f[0] + f[1]) * 0.5
+                          : (chanMode == 4) ? f[1] : f[0];
+        }
+        L.samples = std::move(mono);
+        outNch = 1;
       }
-      m_itemLoad.samples = std::move(mono);
-      outNch = 1;
     }
+    m_waveform.InstallItemAudio(std::move(L.samples), L.totalFrames, L.readRate, outNch);
+  } else if (!L.multi) {
+    m_waveform.InstallItemAudio(std::move(L.samples), L.totalFrames, L.readRate, L.nch);
   }
-
-  m_waveform.InstallItemAudio(std::move(m_itemLoad.samples), m_itemLoad.readFrames,
-                              m_itemLoad.readRate, outNch);
-  AbortItemAudioLoad(); // releases accessor, clears state, restores title
+  AbortItemAudioLoad(); // releases accessors, clears state, restores title
 
   // Full-fidelity consumers wake up: RMS/flat-top recompute on next paint,
   // minimap upgrades from SDK peaks, an open dynamics panel gets its analysis.
+  m_waveform.Invalidate();
   m_minimap.Invalidate();
   if (m_dynamicsPanel.IsVisible() && m_waveform.GetAudioSampleCount() > 0) {
     m_dynamics.SetParams(m_dynamicsPanel.GetParams());
@@ -1272,7 +1371,7 @@ void SneakPeak::FinishItemAudioLoad()
 
 bool SneakPeak::ItemAudioReady() const
 {
-  return m_waveform.IsStandaloneMode() || m_waveform.GetAudioSampleCount() > 0;
+  return m_waveform.IsItemAudioLoaded();
 }
 
 // Gate for sample-dependent user actions during the background load: honest
@@ -1281,9 +1380,9 @@ bool SneakPeak::RequireItemAudio(const char* what)
 {
   if (ItemAudioReady()) return true;
   char buf[160];
-  if (m_itemLoad.active && m_itemLoad.readFrames > 0)
+  if (m_itemLoad.active && m_itemLoad.totalFrames > 0)
     snprintf(buf, sizeof(buf), "%s needs the item audio - still loading (%d%%)", what,
-             (int)(100.0 * (double)m_itemLoad.framesRead / (double)m_itemLoad.readFrames));
+             (int)(100.0 * (double)m_itemLoad.doneFrames / (double)m_itemLoad.totalFrames));
   else
     snprintf(buf, sizeof(buf), "%s needs the item audio - still loading", what);
   ShowToast(buf);

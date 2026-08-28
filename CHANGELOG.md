@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+- **Long items no longer freeze REAPER** - selecting an item now paints the waveform from REAPER's own peak files immediately and decodes the audio in the background (title shows the progress); the same applies to Timeline view after an edit, to SET view and to Multi-item view, which used to decode every segment or layer synchronously. Timeline view also drops its old 600-second span limit: a long item split by a delete now stays in Timeline view instead of falling back to a full reload. Measured on a 20-minute WAV and a 17-minute AAC: the longest main-thread stall on select/reselect/delete/multi-select went from 0.4-1.5 s to under 0.1 s. Operations that need the raw samples (destructive edits, drag export, dynamics apply, spectral) show a short "still loading" toast until the audio is in.
+
 ### Fixed
 - **Envelopes on items with playrate other than 1.0** (forum #107, Lunar Ladder) - REAPER stores take-envelope point times in the take's own timebase (item time x playrate) and SneakPeak read and wrote them in plain item time. On a rate-changed item every envelope written by SneakPeak (Apply Dynamics, Live mode, clicked, dragged and freehand points) landed at the wrong time in REAPER - early on faster items, late on slower ones - and the overlay drew REAPER's own points shifted the other way. All envelope reads and writes now map through the take playrate, per segment in Timeline and SET view.
 

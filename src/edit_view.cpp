@@ -791,7 +791,14 @@ void SneakPeak::OnTimer()
 
   // Incremental standalone load (STA-1): one ~20 ms decode slice per tick.
   StepStandaloneLoad();
-  // Background ITEM audio load + .reapeaks builder pump (INC-PK1).
+  // Background ITEM audio load + .reapeaks builder pump (INC-PK1 / phase 2a).
+  // Self-healing start: any view whose samples are missing (fresh load,
+  // timeline/SET/multi rebuild after an edit, external change) gets its job
+  // set here - no call site can forget it.
+  if (!m_itemLoad.active && !ItemAudioReady() && m_waveform.HasItem() &&
+      !m_waveform.IsStandaloneMode() &&
+      m_itemLoadFailedGen != m_waveform.GetLoadGeneration())
+    StartItemAudioLoad();
   StepItemAudioLoad();
   StepSdkPeaksBuild();
 

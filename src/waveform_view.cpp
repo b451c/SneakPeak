@@ -35,6 +35,7 @@ void WaveformView::SetItem(MediaItem* item)
   }
 
   if (m_item == item && !m_standaloneMode) return;
+  m_loadGeneration++;
 
   m_standaloneMode = false;
   m_standaloneFilePath.clear();
@@ -154,6 +155,7 @@ void WaveformView::SetItem(MediaItem* item)
 
 void WaveformView::SetItems(const std::vector<MediaItem*>& items)
 {
+  m_loadGeneration++;
   if (items.size() <= 1) {
     if (!items.empty()) SetItem(items[0]);
     return;
@@ -220,6 +222,7 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
 void WaveformView::LoadConcatenated(const std::vector<MediaItem*>& items)
 {
   if (items.empty()) return;
+  m_loadGeneration++;
   if (!g_GetActiveTake || !g_GetMediaItemInfo_Value || !g_GetMediaItemTake_Source) return;
   if (!g_CreateTakeAudioAccessor || !g_GetAudioAccessorSamples || !g_DestroyAudioAccessor) return;
 
@@ -246,6 +249,14 @@ void WaveformView::LoadConcatenated(const std::vector<MediaItem*>& items)
   m_audioData.clear();
   m_audioSampleCount = 0;
   m_segments.clear();
+
+  {
+    double spanSec = 0.0;
+    for (const auto& ii : itemInfos) spanSec += ii.dur;
+    int readRate = 0, readFrames = 0;
+    if (PlanRead(spanSec, m_sampleRate, readRate, readFrames)) m_sampleRate = readRate;
+  }
+  m_srcChannels = m_numChannels;
 
   double totalDuration = 0.0;
   for (size_t idx = 0; idx < itemInfos.size(); idx++) {
@@ -276,41 +287,17 @@ void WaveformView::LoadConcatenated(const std::vector<MediaItem*>& items)
 
     int frames = (int)(effectiveDur * (double)m_sampleRate);
     if (frames <= 0) continue;
-
-    AudioAccessor* accessor = g_CreateTakeAudioAccessor(take);
-    if (!accessor) continue;
-
-    size_t prevSize = m_audioData.size();
-    m_audioData.resize(prevSize + (size_t)frames * m_numChannels, 0.0);
-
-    static const int CHUNK_FRAMES = 65536;
-    int framesLoaded = 0;
-    while (framesLoaded < frames) {
-      int chunk = std::min(CHUNK_FRAMES, frames - framesLoaded);
-      double chunkTime = (double)framesLoaded / (double)m_sampleRate;
-      g_GetAudioAccessorSamples(accessor, m_sampleRate, m_numChannels,
-                                chunkTime, chunk,
-                                m_audioData.data() + prevSize + (size_t)framesLoaded * m_numChannels);
-      framesLoaded += chunk;
-    }
-    g_DestroyAudioAccessor(accessor);
-
-    double itemVol = g_GetMediaItemInfo_Value(item, "D_VOL");
-    if (g_GetSetMediaItemTakeInfo && take) {
-      double* pTakeVol = (double*)g_GetSetMediaItemTakeInfo(take, "D_VOL", nullptr);
-      if (pTakeVol) itemVol *= *pTakeVol;
-    }
-    if (itemVol != 1.0 && itemVol > 0.0) {
-      size_t sampleCount = (size_t)frames * m_numChannels;
-      for (size_t s = 0; s < sampleCount; s++)
-        m_audioData[prevSize + s] *= itemVol;
-    }
+    // Phase 2a: no decode here - the background loader fills the buffer
+    // segment by segment (D_VOL baked there); .reapeaks serve the display.
+    m_audioSampleCount += frames;
 
     seg.audioFrameCount = frames;
-    m_audioSampleCount += frames;
     totalDuration += effectiveDur;
     m_segments.push_back(seg);
   }
+  m_plannedFrames = m_audioSampleCount;   // loader target (see PlanRead)
+  m_audioSampleCount = 0;                  // buffer arrives from the loader
+  m_audioData.clear();
 
   m_itemDuration = totalDuration;
   m_takeOffset = 0.0;
@@ -367,6 +354,7 @@ void WaveformView::LoadItemsList(const std::vector<MediaItem*>& items)
 void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
 {
   if (items.empty()) return;
+  m_loadGeneration++;
   if (!g_GetActiveTake || !g_GetMediaItemInfo_Value || !g_GetMediaItemTake_Source) return;
   if (!g_CreateTakeAudioAccessor || !g_GetAudioAccessorSamples || !g_DestroyAudioAccessor) return;
 
@@ -394,15 +382,22 @@ void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
   }
   double totalSpan = lastEnd - firstPos;
 
-  // Sanity: don't allocate huge buffers for unreasonable gaps
+  // Sanity: refuse absurd gaps (span >> content); long spans are fine -
+  // PlanRead downsamples them like every other view (the old 600 s cap
+  // silently fell back to a single-item/multi reload after edits on long
+  // items - forum-visible on the 17-min file).
   double totalItemDur = 0.0;
   for (auto* it : sorted) totalItemDur += g_GetMediaItemInfo_Value(it, "D_LENGTH");
-  if (totalSpan > totalItemDur * 10.0 || totalSpan > 600.0) return; // fallback
+  if (totalSpan > totalItemDur * 10.0) return; // fallback
 
-  int totalFrames = (int)(totalSpan * m_sampleRate);
-  if (totalFrames <= 0) return;
+  int readRate = 0, totalFrames = 0;
+  if (!PlanRead(totalSpan, m_sampleRate, readRate, totalFrames)) return;
+  m_sampleRate = readRate;
+  m_srcChannels = m_numChannels;
 
-  m_audioData.assign((size_t)totalFrames * m_numChannels, 0.0); // silence-filled
+  // Phase 2a: segments are planned here, decoded by the background loader
+  // (silence gaps + D_VOL baked there); the display uses .reapeaks meanwhile.
+  m_audioData.clear();
   m_segments.clear();
 
   for (auto* it : sorted) {
@@ -415,33 +410,6 @@ void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
     int startFrame = (int)(relOff * m_sampleRate);
     int frames = (int)(dur * m_sampleRate);
     if (startFrame < 0 || startFrame + frames > totalFrames) continue;
-
-    AudioAccessor* accessor = g_CreateTakeAudioAccessor(take);
-    if (!accessor) continue;
-
-    static const int CHUNK = 65536;
-    int loaded = 0;
-    while (loaded < frames) {
-      int chunk = std::min(CHUNK, frames - loaded);
-      double t = (double)loaded / (double)m_sampleRate;
-      g_GetAudioAccessorSamples(accessor, m_sampleRate, m_numChannels, t, chunk,
-        m_audioData.data() + (size_t)(startFrame + loaded) * m_numChannels);
-      loaded += chunk;
-    }
-    g_DestroyAudioAccessor(accessor);
-
-    // Bake D_VOL
-    double vol = g_GetMediaItemInfo_Value(it, "D_VOL");
-    if (g_GetSetMediaItemTakeInfo && take) {
-      double* pv = (double*)g_GetSetMediaItemTakeInfo(take, "D_VOL", nullptr);
-      if (pv) vol *= *pv;
-    }
-    if (vol != 1.0 && vol > 0.0) {
-      size_t off = (size_t)startFrame * m_numChannels;
-      size_t count = (size_t)frames * m_numChannels;
-      for (size_t s = 0; s < count; s++)
-        m_audioData[off + s] *= vol;
-    }
 
     ItemSegment seg;
     seg.item = it;
@@ -460,7 +428,8 @@ void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
   m_takePlayrate = TakePlayrate(m_take);
   m_itemPosition = firstPos;
   m_itemDuration = totalSpan;
-  m_audioSampleCount = totalFrames;
+  m_plannedFrames = totalFrames;   // loader target
+  m_audioSampleCount = 0;          // buffer arrives from the loader
   m_takeOffset = 0.0;
   m_timelineViewActive = true;
   m_timelineOrigin = firstPos;
@@ -511,6 +480,7 @@ const ItemSegment* WaveformView::GetSegmentAtTime(double relTime) const
 
 void WaveformView::ClearItem()
 {
+  m_loadGeneration++;
   if (m_liveAccessor && g_DestroyAudioAccessor) {
     g_DestroyAudioAccessor(m_liveAccessor);
     m_liveAccessor = nullptr;
@@ -560,9 +530,11 @@ void WaveformView::ReloadAfterExternalChange()
   // background loader - display falls back to .reapeaks meanwhile (which
   // REAPER refreshes itself on source changes). No code depends on the
   // buffer being back synchronously here (unlike post-edit ReloadAudio).
-  if (g_GetMediaItemTake_Peaks && !m_standaloneMode && m_segments.size() <= 1) {
+  if (!m_standaloneMode) {
     m_audioData.clear();
     m_audioSampleCount = 0;
+    m_multiItem.DropAudio();
+    m_loadGeneration++;
   } else if (m_audioSampleCount > 0) {
     LoadAudioData();
   }
@@ -629,27 +601,32 @@ void WaveformView::RestoreFromMemory(const std::string& path, std::vector<double
 // Shared read plan for the synchronous loader below and the background item
 // loader (SneakPeak::StepItemAudioLoad) - single source of truth, including
 // the 10M-frame downsample cap for very long items.
-bool WaveformView::ComputeItemLoadPlan(int& readRate, int& readFrames) const
+bool WaveformView::PlanRead(double seconds, int srcRate, int& readRate, int& readFrames)
 {
-  if (!m_take || m_itemDuration <= 0.0 || m_sampleRate <= 0) return false;
-
-  int totalFrames = (int)(m_itemDuration * (double)m_sampleRate);
+  if (seconds <= 0.0 || srcRate <= 0) return false;
+  int totalFrames = (int)(seconds * (double)srcRate);
   // Safety cap: 30 minutes of stereo 96kHz = ~346M samples, ~2.6GB
   // For practical use, cap at 10M frames (~3.5 min stereo 48kHz)
   // Beyond that, we'll downsample on load
   static const int MAX_FRAMES = 10000000;
 
-  readRate = m_sampleRate;
+  readRate = srcRate;
   readFrames = totalFrames;
 
   // If too many frames, read at lower rate to keep memory sane
   if (totalFrames > MAX_FRAMES) {
     int ratio = (totalFrames + MAX_FRAMES - 1) / MAX_FRAMES;
-    readRate = m_sampleRate / ratio;
+    readRate = srcRate / ratio;
     if (readRate < 8000) readRate = 8000;
-    readFrames = (int)(m_itemDuration * (double)readRate) + 1;
+    readFrames = (int)(seconds * (double)readRate) + 1;
   }
   return readFrames > 0;
+}
+
+bool WaveformView::ComputeItemLoadPlan(int& readRate, int& readFrames) const
+{
+  if (!m_take) return false;
+  return PlanRead(m_itemDuration, m_sampleRate, readRate, readFrames);
 }
 
 // Install a finished background item load (buffer already channel-folded).
@@ -720,11 +697,15 @@ void WaveformView::LoadAudioData()
 void WaveformView::ReloadAudio()
 {
   m_peaksValid = false;
-  // SDK-peaks phase: no buffer to reload - the background loader owns the
-  // refill (caller restarts it) and the display re-fetches .reapeaks.
-  if (g_GetMediaItemTake_Peaks && !m_standaloneMode && m_segments.size() <= 1 &&
-      m_audioSampleCount <= 0)
+  // ITEM views: drop the buffer and bump the generation - the background
+  // loader (OnTimer pump) re-plans and refills it; .reapeaks serve meanwhile.
+  if (!m_standaloneMode) {
+    m_audioData.clear();
+    m_audioSampleCount = 0;
+    m_multiItem.DropAudio();
+    m_loadGeneration++;
     return;
+  }
   LoadAudioData();
 }
 
