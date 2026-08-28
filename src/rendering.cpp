@@ -786,10 +786,9 @@ static void FormatTimeHMS(double sec, char* buf, int sz)
   int s = totalSec % 60;
   int m = (totalSec / 60) % 60;
   int h = totalSec / 3600;
-  char tmp[40];   // provably wide for any int fields - GCC's -Wformat-truncation
-  snprintf(tmp, sizeof(tmp), "%02d:%02d:%02d.%03d", h, m, s, ms);
-  buf[0] = '\0';
-  strncat(buf, tmp, (size_t)sz - 1);   // strncat: no truncation diagnostics
+  if (h > 99) h = 99;   // display cap: with every field range-bounded, GCC can
+                        // prove "hh:mm:ss.mmm" fits the callers' buffers
+  snprintf(buf, sz, "%02d:%02d:%02d.%03d", h, m, s, ms);
 }
 
 // --- Solo button ---
@@ -1632,14 +1631,14 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
       bool tv = (m_rulerMode != RulerMode::Relative);
       double s1 = tv ? m_waveform.RelTimeToAbsTime(sel.startTime) : sel.startTime;
       double s2 = tv ? m_waveform.RelTimeToAbsTime(sel.endTime) : sel.endTime;
-      char sStart[16], sEnd[16], sDur[16];
+      char sStart[40], sEnd[40], sDur[40];
       FormatTimeHMS(s1, sStart, sizeof(sStart));
       FormatTimeHMS(s2, sEnd, sizeof(sEnd));
       FormatTimeHMS(std::abs(s2 - s1), sDur, sizeof(sDur));
       snprintf(line, sizeof(line), "Sel: %s - %s  Dur: %s", sStart, sEnd, sDur);
       SetTextColor(hdc, RGB(210, 210, 210));
     } else {
-      char sCur[16];
+      char sCur[40];
       double ct = (m_rulerMode != RulerMode::Relative)
         ? m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime())
         : m_waveform.GetCursorTime();
@@ -1653,7 +1652,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
   // Row 2: View range
   {
     RECT r = { infoLeft, panelTop + rowH, infoRight, panelTop + rowH * 2 };
-    char vStart[16], vEnd[16], vDur[16];
+    char vStart[40], vEnd[40], vDur[40];
     double vs = (m_rulerMode != RulerMode::Relative) ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewStart()) : m_waveform.GetViewStart();
     double ve = (m_rulerMode != RulerMode::Relative) ? m_waveform.RelTimeToAbsTime(m_waveform.GetViewEnd()) : m_waveform.GetViewEnd();
     FormatTimeHMS(vs, vStart, sizeof(vStart));
@@ -1671,7 +1670,7 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
 
     double fileSizeMB = m_cachedFileSizeMB;
 
-    char tTotal[16];
+    char tTotal[40];
     FormatTimeHMS(m_waveform.GetItemDuration(), tTotal, sizeof(tTotal));
 
     const char* fmtName = (m_wavAudioFormat == 3) ? "Float" : "PCM";
