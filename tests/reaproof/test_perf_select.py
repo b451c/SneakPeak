@@ -62,6 +62,9 @@ def test_select_and_reselect_long_item(sess, request, media_fixture, label):
     assert first["max_stall"] <= STALL_BUDGET, f"first select froze: {first}"
     assert again["max_stall"] <= STALL_BUDGET, f"reselect froze: {again}"
     assert first["t_loaded"] is not None, f"audio never finished loading: {first}"
+    # phase 2c: re-clicking the same unchanged take reuses the retained buffer -
+    # no background decode, no "Loading" title
+    assert not again["seen_loading"], f"reselect re-decoded the item: {again}"
     for m in (first, again):
         if m["t_first"] is not None:
             assert m["t_first"] <= FIRST_PAINT_BUDGET, f"waveform late: {m}"

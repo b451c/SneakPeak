@@ -532,6 +532,22 @@ private:
     bool active = false;
   };
   ItemAudioLoad m_itemLoad;
+
+  // Phase 2b (dynamics_pipeline.cpp): knob drags never run the engine inline.
+  struct DynWorker {
+    DynamicsEngine engine;             // computes here; swapped with m_dynamics on completion
+    std::thread thread;
+    std::atomic<bool> busy{false};
+    std::atomic<bool> hasResult{false};
+  };
+  DynWorker m_dynWorker;
+  bool m_dynParamsDirty = false;       // knob moved since the last job
+  DWORD m_dynLiveWriteDue = 0;         // debounced Live write deadline (0 = none)
+  void StepDynamicsPipeline();         // OnTimer: start/collect jobs, debounced Live write
+  void FlushDynamicsPipeline();        // mouse-up: finish + write the final position
+  bool TakeDynamicsResult();
+  void LiveWriteEnvelope();
+  void JoinDynamicsWorker(bool discardResult); // before the sample buffer changes
   unsigned m_itemLoadFailedGen = ~0u;  // generation that produced no jobs (no retry loop)
   void StartItemAudioLoad();
   void StepItemAudioLoad();     // OnTimer slice + progress title

@@ -69,6 +69,7 @@ add_library(reaper_sneakpeak SHARED
   src/globals.cpp
   src/edit_view.cpp
   src/standalone_file.cpp
+  src/dynamics_pipeline.cpp
   src/audio_commands.cpp
   src/context_menu.cpp
   src/drag_export.cpp

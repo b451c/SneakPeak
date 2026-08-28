@@ -97,6 +97,15 @@ def wait_loaded(s, name_substring: str, timeout: float = 20.0):
         "return reaper.JS_Window_GetTitle(h)")), timeout=timeout)
 
 
+def wait_audio_loaded(s, name_substring: str, timeout: float = 90.0):
+    """Loaded item AND the background loader finished (no 'Loading' in the title)."""
+    def done():
+        t = str(s.eval(f"local h = {window_handle_lua()} if not h then return '' end "
+                       "return reaper.JS_Window_GetTitle(h)"))
+        return name_substring in t and "Loading" not in t
+    s.wait_until(done, timeout=timeout)
+
+
 def client_size(s) -> tuple[int, int]:
     l, t, r, b = s.eval(f"local h = {window_handle_lua()} "
                         "local _, l, t, r, b = reaper.JS_Window_GetClientRect(h) "
@@ -390,6 +399,7 @@ def measure_after(s, action_lua: str, *, loaded_marker: str, first_marker: str =
     return {"max_stall": round(max_stall, 3),
             "t_first": None if t_first is None else round(t_first, 3),
             "t_loaded": None if t_loaded is None else round(t_loaded, 3),
+            "seen_loading": seen_loading,
             "ticks": len(samples)}
 
 

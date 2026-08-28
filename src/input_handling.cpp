@@ -1339,6 +1339,7 @@ void SneakPeak::OnMouseUp(int x, int y)
   }
   if (m_dynamicsPanel.IsDragging()) {
     m_dynamicsPanel.OnMouseUp();
+    FlushDynamicsPipeline();   // phase 2b: final analysis + Live write for this position
     // Persist panel size/position if a resize or panel-drag changed it.
     if (m_dynamicsPanel.GeomChanged()) {
       m_dynamicsPanel.ClearGeomChanged();
@@ -2147,30 +2148,12 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 
   if (m_dynamicsPanel.IsDragging()) {
     m_dynamicsPanel.OnMouseMove(x, y, m_waveformRect);
-    // Real-time reanalysis on slider drag
+    // Phase 2b: never run the engine inline - mark the params dirty; the
+    // OnTimer pipeline analyses the LATEST value on a worker thread and
+    // debounces Live writes (dynamics_pipeline.cpp).
     if (m_dynamicsPanel.ParamsChanged()) {
       m_dynamicsPanel.ClearParamsChanged();
-      m_dynamics.SetParams(m_dynamicsPanel.GetParams());
-      if (m_waveform.GetAudioSampleCount() > 0) {
-        double ivDb = 20.0 * log10(std::max(m_waveform.GetFadeCache().itemVol, 1e-12));
-        m_dynamics.Analyze(m_waveform.GetAudioData().data(),
-                           m_waveform.GetAudioSampleCount(),
-                           m_waveform.GetNumChannels(),
-                           m_waveform.GetSampleRate(),
-                           ivDb, m_dynamicsPanel.GetParams());
-        // Update GR meter (compute compression to get avg GR)
-        m_dynamics.ComputeCompression();
-        m_dynamicsPanel.SetAvgGainReduction(m_dynamics.GetAvgGainReduction());
-
-        // Live mode: write envelope points in real-time
-        if (m_dynamicsPanel.IsLive()) {
-          if (!m_dynamicsPanel.LiveUndoOpen()) {
-            if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-            m_dynamicsPanel.SetLiveUndoOpen(true);
-          }
-          ApplyDynamicsToEnvelope();
-        }
-      }
+      m_dynParamsDirty = true;
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }

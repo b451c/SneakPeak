@@ -333,6 +333,20 @@ private:
   bool m_sdkPeaksPending = false;   // last SDK fetch returned no peaks yet
   unsigned m_loadGeneration = 0;    // see GetLoadGeneration()
   int m_plannedFrames = 0;          // timeline/SET: frames the loader must deliver
+  // Phase 2c: the last single-item buffer survives a deselect so re-clicking
+  // the same (unchanged) take is instant instead of a full re-decode.
+  struct RetainedAudio {
+    MediaItem_Take* take = nullptr;
+    AudioAccessor* accessor = nullptr;   // state check on reuse
+    std::vector<double> data;
+    int frames = 0, rate = 0, nch = 0, srcCh = 0;
+    double duration = 0.0, offset = 0.0, playrate = 1.0;
+    int chanMode = 0;
+  };
+  RetainedAudio m_retained;
+  void RetainCurrentAudio();
+  bool ReuseRetainedAudio();
+  void DropRetainedAudio();
 
   // View state
   double m_viewStartTime = 0.0;
@@ -374,6 +388,13 @@ private:
   // Volume envelope overlay
   bool m_envShowVolume = false;
   double m_envMaxGain = 2.0; // MAXVAL from envelope chunk (updated in DrawVolumeEnvelope)
+  // MAXVAL cache key (profile 2026-07-09): GetEnvelopeStateChunk makes REAPER
+  // serialize the WHOLE envelope (tens of thousands of points after Live
+  // writes) - ~6 s of a 50 s slider drag went into re-reading this one static
+  // value every paint. Re-query only when the envelope handle changes; reset
+  // on SetItem/ClearItem. (A mid-session change of REAPER's envelope range
+  // preference goes stale until the next item switch - acceptable.)
+  TrackEnvelope* m_envMaxGainSrc = nullptr;
   bool m_envBypassed = false;      // A/B: skip envGain in rendering
   double m_envRevealStart = 0.0; // reveal range for dense envelopes (time coords)
   double m_envRevealEnd = 0.0;   // both 0 = inactive

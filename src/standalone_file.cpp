@@ -344,6 +344,7 @@ void SneakPeak::StepStandaloneLoad()
 // previous state untouched.
 void SneakPeak::FinishStandaloneLoad()
 {
+  JoinDynamicsWorker(true);
   m_stdLoading = false;
   if (m_stdLoad.framesRead <= 0 || m_stdLoad.info.numChannels <= 0) {
     AudioEngine::AbortStream(m_stdLoad);
@@ -1326,6 +1327,7 @@ void SneakPeak::StepItemAudioLoad()
 
 void SneakPeak::FinishItemAudioLoad()
 {
+  JoinDynamicsWorker(true);   // a job may still read the (empty->replaced) buffer
   ItemAudioLoad& L = m_itemLoad;
   if (L.single) {
     // Fold I_CHANMODE mono modes exactly like the legacy synchronous path.

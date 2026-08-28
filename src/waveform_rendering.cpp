@@ -1496,10 +1496,15 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
   if (m_multiItemActive) return; // multi-item: multiple tracks, skip for now
   if (!g_Envelope_Evaluate || !g_ScaleFromEnvelopeMode) return;
 
-  // Query envelope's actual display range (MAXVAL from chunk)
+  // Query envelope's actual display range (MAXVAL from chunk) - cached per
+  // envelope handle: the chunk query serializes the whole envelope on the
+  // REAPER side, far too heavy for a per-paint read (see m_envMaxGainSrc).
   if (g_GetTakeEnvelopeByName) {
     TrackEnvelope* envQ = g_GetTakeEnvelopeByName(m_take, "Volume");
-    if (envQ) m_envMaxGain = QueryEnvelopeMaxGain(envQ);
+    if (envQ && envQ != m_envMaxGainSrc) {
+      m_envMaxGain = QueryEnvelopeMaxGain(envQ);
+      m_envMaxGainSrc = envQ;
+    }
   }
 
   int waveL = m_rect.left;

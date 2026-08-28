@@ -1228,14 +1228,19 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   double secsPerPx = viewDur / (double)waveW;
   int stride = std::max(1, (int)(secsPerPx / resultDt));
 
-  // Helper: compute fade-adjusted dB for a dynamics point
+  // Helper: compute fade-adjusted dB for a dynamics point. Runs per visible
+  // analysis point (~1M on a zoomed-out 17-min item), so no unconditional
+  // libm: outside fades fadeGain is exactly 1.0 and the log10 term is 0
+  // (profile 2026-07-09: the always-on log10(1.0) alone was ~3.6 s of a 50 s
+  // slider drag).
   auto getAdjDb = [&](const DynamicsPoint& pt) -> double {
     double fadeGain = 1.0;
     if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
       fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
     if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
       fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
-    return pt.db + gainOffsetDb + 20.0 * log10(std::max(fadeGain, 1e-12));
+    return pt.db + gainOffsetDb +
+           ((fadeGain == 1.0) ? 0.0 : 20.0 * log10(std::max(fadeGain, 1e-12)));
   };
 
   // Helper: find the index of the point with max dB in a stride window (matches
@@ -1259,34 +1264,47 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   // Silence threshold: don't draw curves below this (prevents ugly spikes to bottom)
   static constexpr double SILENCE_FLOOR_DB = -45.0;
 
-  // --- Gain reduction shading (filled area between original and compressed curves) ---
-  bool showGR = showComp && (!m_dynamicsPanel.IsVisible() || m_dynamicsPanel.GetShowGR());
-  if (showGR) {
-    OwnedPen grPen(PS_SOLID, 1, RGB(100, 38, 28));
-    DCPenScope scope(hdc, grPen);
+  // Per-pixel curve samples, computed ONCE and shared by the three passes
+  // below (GR shading, original curve, compression curve). Each pass used to
+  // redo the identical max-in-stride scan over every visible analysis point
+  // (profile 2026-07-09: ~5 s of a 50 s slider drag on a 17-min item, x3).
+  // Selection, ordering and pixel dedupe are byte-for-byte the old per-pass
+  // logic, so the drawn output is identical.
+  struct ColPt { int px; int idx; double adjDb; };
+  std::vector<ColPt> colPts;
+  colPts.reserve((size_t)waveW + 1);
+  {
     int lastPx = -2;
-
     for (int i = startIdx; i < count; i += stride) {
       int idx = getMaxIdxInStride(i);
       const auto& pt = results[idx];
-      double adjDb = getAdjDb(pt);
       if (pt.time > viewEnd + 0.01) break;
       int px = m_waveform.TimeToX(pt.time);
       if (px < waveL || px > waveR) continue;
       if (px == lastPx) continue;
       lastPx = px;
+      colPts.push_back({ px, idx, getAdjDb(pt) });
+    }
+  }
 
-      if (adjDb < SILENCE_FLOOR_DB) continue;
+  // --- Gain reduction shading (filled area between original and compressed curves) ---
+  bool showGR = showComp && (!m_dynamicsPanel.IsVisible() || m_dynamicsPanel.GetShowGR());
+  if (showGR) {
+    OwnedPen grPen(PS_SOLID, 1, RGB(100, 38, 28));
+    DCPenScope scope(hdc, grPen);
 
-      int origY = dbToY(adjDb);
-      double compDb = adjDb + pt.smoothedGR + makeupDb;
+    for (const auto& cp : colPts) {
+      if (cp.adjDb < SILENCE_FLOOR_DB) continue;
+
+      int origY = dbToY(cp.adjDb);
+      double compDb = cp.adjDb + results[cp.idx].smoothedGR + makeupDb;
       int compY = dbToY(compDb);
 
       // Only shade where compression reduces level (compY below origY = lower amplitude)
       // Skip every other column for semi-transparent look (GDI has no alpha blending)
-      if (compY > origY + 1 && (px & 1) == 0) {
-        MoveToEx(hdc, px, origY, nullptr);
-        LineTo(hdc, px, compY);
+      if (compY > origY + 1 && (cp.px & 1) == 0) {
+        MoveToEx(hdc, cp.px, origY, nullptr);
+        LineTo(hdc, cp.px, compY);
       }
     }
   }
@@ -1296,23 +1314,14 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     OwnedPen dynPen(PS_SOLID, 1, RGB(200, 130, 50));
     DCPenScope scope(hdc, dynPen);
     bool first = true;
-    int lastPx = -2;
 
-    for (int i = startIdx; i < count; i += stride) {
-      int idx = getMaxIdxInStride(i);
-      double adjDb = getAdjDb(results[idx]);
-      if (results[idx].time > viewEnd + 0.01) break;
-      int px = m_waveform.TimeToX(results[idx].time);
-      if (px < waveL || px > waveR) continue;
-      if (px == lastPx) continue;
-      lastPx = px;
+    for (const auto& cp : colPts) {
+      if (cp.adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
 
-      if (adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
+      int py = dbToY(cp.adjDb);
 
-      int py = dbToY(adjDb);
-
-      if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
-      else LineTo(hdc, px, py);
+      if (first) { MoveToEx(hdc, cp.px, py, nullptr); first = false; }
+      else LineTo(hdc, cp.px, py);
     }
   }
 
@@ -1321,26 +1330,16 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     OwnedPen compPen(PS_SOLID, 1, RGB(140, 100, 200));
     DCPenScope scope(hdc, compPen);
     bool first = true;
-    int lastPx = -2;
 
-    for (int i = startIdx; i < count; i += stride) {
-      int idx = getMaxIdxInStride(i);
-      const auto& pt = results[idx];
-      double adjDb = getAdjDb(pt);
-      if (pt.time > viewEnd + 0.01) break;
-      int px = m_waveform.TimeToX(pt.time);
-      if (px < waveL || px > waveR) continue;
-      if (px == lastPx) continue;
-      lastPx = px;
-
-      if (adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
+    for (const auto& cp : colPts) {
+      if (cp.adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
 
       // Use precomputed gain-smoothed GR from ComputeCompression
-      double compDb = adjDb + pt.smoothedGR + makeupDb;
+      double compDb = cp.adjDb + results[cp.idx].smoothedGR + makeupDb;
       int py = dbToY(compDb);
 
-      if (first) { MoveToEx(hdc, px, py, nullptr); first = false; }
-      else LineTo(hdc, px, py);
+      if (first) { MoveToEx(hdc, cp.px, py, nullptr); first = false; }
+      else LineTo(hdc, cp.px, py);
     }
   }
 

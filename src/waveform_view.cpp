@@ -50,6 +50,7 @@ void WaveformView::SetItem(MediaItem* item)
   m_selection = {};
   m_audioData.clear();
   m_audioSampleCount = 0;
+  m_envMaxGainSrc = nullptr;
 
   if (!item) return;
 
@@ -81,6 +82,15 @@ void WaveformView::SetItem(MediaItem* item)
   m_srcChannels = srcChannels;
 
   m_cursorTime = 0.0;
+
+  // Phase 2c: same take, unchanged - reinstall the retained buffer, no load.
+  if (ReuseRetainedAudio()) {
+    UpdateFadeCache();
+    m_viewStartTime = 0.0;
+    m_viewDuration = m_itemDuration;
+    return;
+  }
+  DropRetainedAudio();
 
   // SDK-peaks hybrid (INC-PK1): skip the synchronous full decode - the
   // waveform draws from REAPER's .reapeaks immediately and the sample buffer
@@ -481,6 +491,7 @@ const ItemSegment* WaveformView::GetSegmentAtTime(double relTime) const
 void WaveformView::ClearItem()
 {
   m_loadGeneration++;
+  RetainCurrentAudio();
   if (m_liveAccessor && g_DestroyAudioAccessor) {
     g_DestroyAudioAccessor(m_liveAccessor);
     m_liveAccessor = nullptr;
@@ -496,6 +507,7 @@ void WaveformView::ClearItem()
   m_multiItem.Clear();
   m_batchGainOffset = 1.0;
   m_peaksValid = false;
+  m_envMaxGainSrc = nullptr;
   ClearEnvRevealRange();
   m_selection = {};
   m_numChannels = 0;
@@ -933,3 +945,65 @@ double WaveformView::RelTimeToAbsTime(double relTime) const
 }
 
 // --- Peaks from cached audio data (pure math, no API calls) ---
+
+// --- Phase 2c: retained single-item buffer across deselect/reselect ---------
+
+static int TakeChanMode(MediaItem_Take* take)
+{
+  if (!take || !g_GetSetMediaItemTakeInfo) return 0;
+  int* p = (int*)g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", nullptr);
+  return p ? *p : 0;
+}
+
+void WaveformView::RetainCurrentAudio()
+{
+  // Only a loaded single-item ITEM view is worth keeping (segment/multi/
+  // standalone buffers are rebuilt from their own plans).
+  if (m_standaloneMode || m_multiItemActive || m_segments.size() > 1 ||
+      !m_take || m_audioSampleCount <= 0 || m_audioData.empty()) return;
+  DropRetainedAudio();
+  m_retained.take = m_take;
+  m_retained.accessor = m_liveAccessor;   // ownership moves to the cache
+  m_liveAccessor = nullptr;
+  m_retained.data = std::move(m_audioData);
+  m_audioData.clear();
+  m_retained.frames = m_audioSampleCount;
+  m_retained.rate = m_sampleRate;
+  m_retained.nch = m_numChannels;
+  m_retained.srcCh = m_srcChannels;
+  m_retained.duration = m_itemDuration;
+  m_retained.offset = m_takeOffset;
+  m_retained.playrate = m_takePlayrate;
+  m_retained.chanMode = TakeChanMode(m_take);
+  DBG("[SneakPeak] RetainCurrentAudio: %d frames kept for take %p\n", m_retained.frames, (void*)m_take);
+}
+
+bool WaveformView::ReuseRetainedAudio()
+{
+  if (!m_retained.take || m_retained.take != m_take || m_retained.frames <= 0) return false;
+  if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)m_take, "MediaItem_Take*")) return false;
+  if (fabs(m_retained.duration - m_itemDuration) > 1e-9 ||
+      fabs(m_retained.offset - m_takeOffset) > 1e-9 ||
+      fabs(m_retained.playrate - m_takePlayrate) > 1e-9 ||
+      m_retained.chanMode != TakeChanMode(m_take)) return false;
+  if (m_retained.accessor && g_AudioAccessorStateChanged &&
+      g_AudioAccessorStateChanged(m_retained.accessor)) return false;
+
+  m_audioData = std::move(m_retained.data);
+  m_audioSampleCount = m_retained.frames;
+  m_sampleRate = m_retained.rate;
+  m_numChannels = m_retained.nch;
+  m_srcChannels = m_retained.srcCh;
+  m_liveAccessor = m_retained.accessor;   // ownership back to the view
+  m_retained.accessor = nullptr;
+  m_retained = RetainedAudio();
+  m_peaksValid = false;
+  DBG("[SneakPeak] ReuseRetainedAudio: %d frames reinstalled\n", m_audioSampleCount);
+  return true;
+}
+
+void WaveformView::DropRetainedAudio()
+{
+  if (m_retained.accessor && g_DestroyAudioAccessor) g_DestroyAudioAccessor(m_retained.accessor);
+  m_retained = RetainedAudio();
+}

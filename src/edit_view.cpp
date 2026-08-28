@@ -148,6 +148,7 @@ void SneakPeak::Destroy()
   m_stdLoading = false;
   AudioEngine::AbortStream(m_stdLoad);
   AbortItemAudioLoad(); // releases the background item-load accessor
+  JoinDynamicsWorker(true);
   // Save floating window position/size
   if (!m_isDocked && g_SetExtState) {
     RECT wr;
@@ -576,6 +577,7 @@ bool SneakPeak::LoadSelectedItemMulti(int count)
 
 void SneakPeak::LoadSelectedItem()
 {
+  JoinDynamicsWorker(true);   // the sample buffer may be replaced below
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
   // Clear stale envelope drag state (item may have changed)
@@ -767,6 +769,7 @@ void SneakPeak::OnTimer()
 
   // Motion pass: pump a repaint only while the premium dynamics panel has an animation
   // in flight (caret blink, Live pulse, tab-slide, value-ease). Idle -> no extra repaint.
+  StepDynamicsPipeline();   // phase 2b
   if (m_dynamicsPanel.WantsAnimationFrame())
     InvalidateRect(m_hwnd, nullptr, FALSE);
 
@@ -1045,6 +1048,7 @@ void SneakPeak::UpdateItemState()
       m_waveform.SetItemPosition(pos);
       m_waveform.SetItemDuration(len);
       if (lenChanged) {
+        JoinDynamicsWorker(true);
         m_waveform.ReloadAudio();
         StartItemAudioLoad(); // SDK phase: re-plan the background load for the new length
         if (m_waveform.GetViewStart() + m_waveform.GetViewDuration() > len)
@@ -1079,6 +1083,7 @@ void SneakPeak::UpdateItemState()
       m_audioChangeCheckCounter = 0;
       if (m_waveform.CheckAudioChanged()) {
         DBG("[SneakPeak] External audio change detected, reloading\n");
+        JoinDynamicsWorker(true);
         m_waveform.ReloadAfterExternalChange();
         StartItemAudioLoad(); // hybrid: buffer dropped above, refill in background
         m_spectral.ClearSpectrum();
@@ -1395,6 +1400,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     case WM_LBUTTONDOWN: {
+      if (m_dynWorker.busy.load()) JoinDynamicsWorker(false);
 #ifdef _WIN32
       if (GetFocus() != m_hwnd) SetFocus(m_hwnd);
 #endif
@@ -1464,6 +1470,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       return 0;
 
     case WM_KEYDOWN:
+      if (m_dynWorker.busy.load()) JoinDynamicsWorker(false);
       OnKeyDown(wParam);
       return 0;
 
@@ -1475,6 +1482,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     case WM_COMMAND: {
+      if (m_dynWorker.busy.load()) JoinDynamicsWorker(false);
       int id = LOWORD(wParam);
       if (id == IDCANCEL) {
         // Docker [x] button sends IDCANCEL — defer destruction to OnTimer
