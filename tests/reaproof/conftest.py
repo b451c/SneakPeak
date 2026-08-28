@@ -261,3 +261,174 @@ def write_floor_burst_wav(path: Path, *, seconds: float = 10.0, sr: int = 44100,
     b0, b1 = int(burst[0] * sr), int(burst[1] * sr)
     y[b0:b1] = np.sin(2 * np.pi * freq * t[b0:b1]) * burst_amp
     sf.write(str(path), y.astype(np.float32), sr)
+
+
+# --------------------------------------------------------------------------
+# Performance probes (main-thread stall via the bridge heartbeat)
+# --------------------------------------------------------------------------
+def _heartbeat_t(s) -> float | None:
+    import json
+    try:
+        return float(json.loads(s.bridge.heartbeat.read_text(encoding="utf-8",
+                                                             errors="replace")).get("t"))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def window_title(s) -> str:
+    return str(s.eval(f"local h = {window_handle_lua()} if not h then return '' end "
+                      "return reaper.JS_Window_GetTitle(h)", hang_timeout=120))
+
+
+def _cg_window_title(pid: int) -> str:
+    """Our window's title straight from the window server - no bridge round
+    trip, so it can be polled at kHz rates without touching REAPER."""
+    from reaproof.observe.visual.capture import _find_window_macos
+    _, name, _ = _find_window_macos(pid, WINDOW_TITLE)
+    return name or ""
+
+
+def measure_after(s, action_lua: str, *, loaded_marker: str, first_marker: str = "SneakPeak: ",
+                  max_wait: float = 120.0, quiet: float = 1.5) -> dict:
+    """Run `action_lua` and measure how REAPER's main thread behaves afterwards.
+
+    A probe THREAD samples two bridge-free observables every few ms:
+      - heartbeat.json (tick, t): written by the bridge's defer loop at the
+        top of every REAPER main-loop tick, `t` = reaper.time_precise()
+      - the SneakPeak window title via CGWindowList
+    The action itself returns reaper.time_precise() so everything is placed
+    on REAPER's own clock (a bridge round trip costs ~0.5 s and would
+    otherwise pollute the numbers). Returns:
+      max_stall  longest gap between consecutive heartbeat ticks after the
+                 action (s) = longest main-thread freeze
+      t_first    action -> title left idle ("SneakPeak: ..." incl. Loading)
+      t_loaded   action -> title shows the source name with no "Loading"
+    """
+    import threading
+    import time as _t
+    import json as _json
+
+    hb_path = s.bridge.heartbeat
+    pid = s.handle.pid
+    samples: list[tuple[float, int, float]] = []     # (wall, tick, t)
+    titles: list[tuple[float, str]] = []              # (wall, title) on change
+    stop = threading.Event()
+
+    def probe():
+        last_tick = None
+        last_title = None
+        n = 0
+        while not stop.is_set():
+            try:
+                d = _json.loads(hb_path.read_text(encoding="utf-8", errors="replace"))
+                tick, t = int(d["tick"]), float(d["t"])
+                if tick != last_tick:
+                    samples.append((_t.monotonic(), tick, t))
+                    last_tick = tick
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+            n += 1
+            if n % 4 == 0:                            # ~every 12 ms
+                title = _cg_window_title(pid)
+                if title != last_title:
+                    titles.append((_t.monotonic(), title))
+                    last_title = title
+            _t.sleep(0.003)
+
+    th = threading.Thread(target=probe, daemon=True)
+    th.start()
+    _t.sleep(0.2)                                     # settle: a few idle ticks
+    wall0 = _t.monotonic()
+    action_t = float(s.eval(action_lua.replace("return true", "return reaper.time_precise()"),
+                            hang_timeout=120))
+    # wait for the loaded state + a quiet tail, on wall clock
+    t_end = None
+    while _t.monotonic() - wall0 < max_wait:
+        if titles and loaded_marker in titles[-1][1] and "Loading" not in titles[-1][1]:
+            if t_end is None:
+                t_end = _t.monotonic()
+            elif _t.monotonic() - t_end > quiet:
+                break
+        _t.sleep(0.02)
+    stop.set()
+    th.join(timeout=2)
+
+    # wall -> REAPER clock via the nearest heartbeat before the event
+    def to_reaper(wall):
+        best = None
+        for w, _, t in samples:
+            if w <= wall:
+                best = t + (wall - w)
+            else:
+                break
+        return best
+
+    max_stall = 0.0
+    for (w0, k0, t0), (w1, k1, t1) in zip(samples, samples[1:]):
+        if t1 <= action_t or k1 <= k0:
+            continue
+        gap = (t1 - t0) / (k1 - k0)                   # per missed-sample fairness
+        if gap > max_stall:
+            max_stall = gap
+
+    t_first = t_loaded = None
+    for w, title in titles:
+        tr = to_reaper(w)
+        if tr is None or tr < action_t:
+            continue
+        if t_first is None and first_marker in title:
+            t_first = tr - action_t
+        if t_loaded is None and loaded_marker in title and "Loading" not in title:
+            t_loaded = tr - action_t
+    return {"max_stall": round(max_stall, 3),
+            "t_first": None if t_first is None else round(t_first, 3),
+            "t_loaded": None if t_loaded is None else round(t_loaded, 3),
+            "ticks": len(samples)}
+
+
+def perf_media_dir() -> Path:
+    d = Path("/tmp/sneakpeak-perf-media")
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def write_long_wav(path: Path, *, minutes: float, sr: int = 44100, channels: int = 2):
+    """Music-like long file (sines + slow AM so peaks vary), 16-bit PCM."""
+    if path.exists():
+        return path
+    n = int(minutes * 60 * sr)
+    chunk = sr * 10
+    with sf.SoundFile(str(path), "w", samplerate=sr, channels=channels, subtype="PCM_16") as f:
+        for start in range(0, n, chunk):
+            m = min(chunk, n - start)
+            t = (np.arange(m) + start) / sr
+            am = 0.5 + 0.5 * np.sin(2 * np.pi * 0.1 * t)
+            y = 0.6 * am * (np.sin(2 * np.pi * 220 * t) + 0.5 * np.sin(2 * np.pi * 331 * t))
+            block = np.stack([y] * channels, axis=1).astype(np.float32)
+            f.write(block)
+    return path
+
+
+def write_long_aac(path: Path, *, minutes: float, sr: int = 48000):
+    """17-minute AAC (m4a) like the forum #103 item: compressed AND at a
+    samplerate different from the 44.1k project -> decode + resample on load."""
+    if path.exists():
+        return path
+    import subprocess
+    tmp = path.with_suffix(".src.wav")
+    write_long_wav(tmp, minutes=minutes, sr=sr, channels=2)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp),
+                    "-c:a", "aac", "-b:a", "128k", str(path)], check=True)
+    tmp.unlink(missing_ok=True)
+    return path
+
+
+def insert_item_unselected(s, media: Path, *, position: float = 0.0):
+    info = insert_item(s, media, position=position)
+    s.eval("reaper.SelectAllMediaItems(0, false) reaper.UpdateArrange() return true")
+    return info
+
+
+SELECT_ITEM0 = ("local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0) "
+                "reaper.SetMediaItemSelected(it, true) reaper.UpdateArrange() return true")
+DESELECT_ALL = "reaper.SelectAllMediaItems(0, false) reaper.UpdateArrange() return true"
