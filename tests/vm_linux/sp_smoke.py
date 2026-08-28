@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path.home() / "reaproof" / "src"))
 from reaproof.control.bridge_client import BridgeClient, BridgeHang, BridgeTimeout
 
+HERE = Path(__file__).resolve().parent   # helper scripts live next to this file
 RES = Path.home() / ".config" / "REAPER"
 RUN = RES / "_reaproof"
 WAV = Path.home() / "sp_smoke" / "long20.wav"
@@ -18,8 +19,8 @@ OUT = Path.home() / "sp_smoke" / "smoke_result.json"
 DBGLOG = Path("/tmp/sneakpeak_debug.log")
 LAUNCH_ARGS = sys.argv[1:]
 R = {"steps": [], "stalls": {}, "ok": True}
-TITLES = Path.home().joinpath("probe_titles.lua").read_text()
-ACC = Path.home().joinpath("acc.lua").read_text()
+TITLES = (HERE / "probe_titles.lua").read_text()
+ACC = (HERE / "acc.lua").read_text()
 
 def alive():
     return subprocess.run(["pgrep", "-x", "reaper"], capture_output=True).returncode == 0
@@ -31,10 +32,10 @@ def step(name, ok, **kw):
     if not ok: R["ok"] = False
     print(("PASS " if ok else "FAIL ") + name + (" " + json.dumps(kw) if kw else ""), flush=True)
 def xwin(sub):
-    out = subprocess.run(["python3", str(Path.home() / "xwin.py")], capture_output=True, text=True).stdout
+    out = subprocess.run(["python3", str(HERE / "xwin.py")], capture_output=True, text=True).stdout
     return [l.strip() for l in out.splitlines() if sub in l and "cls=('REAPER'" in l]
 def xfocus(sub, key):
-    r = subprocess.run(["python3", str(Path.home() / "xfocus.py"), sub, key], capture_output=True, text=True)
+    r = subprocess.run(["python3", str(HERE / "xfocus.py"), sub, key], capture_output=True, text=True)
     return (r.stdout + r.stderr).strip().replace("\n", " | ")
 def dbg_tail(pos):
     try: s = DBGLOG.read_text()
