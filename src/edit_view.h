@@ -474,6 +474,7 @@ private:
 
   GainPanel m_gainPanel;
   LevelsPanel m_levels;
+  std::vector<double> m_meterLiveBuf;   // 8g: meter window read through the live accessor
   SpectralView m_spectral;
   MinimapView m_minimap;
   DynamicsEngine m_dynamics;

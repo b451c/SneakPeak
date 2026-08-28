@@ -167,3 +167,28 @@ def test_copy_paste_on_a_lazy_item_streams_at_the_source_rate(sess):
     assert rates == [SR_SOURCE], f"the pasted audio is not at the source rate: {m}"
     assert m["rss_delta_mb"] < RSS_BUDGET_MB + 40, f"Copy decoded a working buffer: {m}"   # +clipboard
 
+
+def test_level_meter_follows_playback_on_a_lazy_item(sess):
+    """With no working buffer the item meter used to sit flat; it now reads
+    its window through the view's live take accessor. Observable: the bottom
+    panel's meter pixels light up while REAPER plays the item, with no
+    Loading title at any point."""
+    media = write_long_wav(perf_media_dir() / "long20min_stereo.wav", minutes=20)
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=30)
+    assert_no_loading(sess, 1.5)
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    stopped = _bottom_panel_lit_fraction(sess, SHOTS / "meter_stopped.png")
+    sess.eval("reaper.SetEditCurPos(30.0, false, false) reaper.Main_OnCommand(1007, 0) return true")
+    try:
+        time.sleep(2.0)
+        playing = _bottom_panel_lit_fraction(sess, SHOTS / "meter_playing.png")
+        last = assert_no_loading(sess, 1.0)
+    finally:
+        sess.eval("reaper.Main_OnCommand(1016, 0) return true")
+    m = {"lit_stopped": round(stopped, 3), "lit_playing": round(playing, 3), "title": last}
+    _record("lazy.meter_20min", m)
+    assert playing > stopped + 0.01, f"the meter stayed flat on a lazy item: {m}"

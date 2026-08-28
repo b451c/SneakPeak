@@ -284,6 +284,10 @@ public:
   // Full-rate chunked reads over [t0, t1) of view time (audio_stream.h,
   // view_stream.cpp): what the loader would build without the 10M-frame cap.
   bool OpenStream(AudioStream& stream, double t0, double t1, bool applyItemVolume) const;
+  // 8g: one window of the item through the view's live take accessor (source
+  // rate, display channels folded like the loader) for the level meter while a
+  // lazy item has no buffer. Main thread only; false without an accessor.
+  bool ReadLiveWindow(double t0, int frames, std::vector<double>& out) const;
   int GetSrcChannels() const { return m_srcChannels; }
   bool SdkPeaksPending() const { return m_sdkPeaksPending; }  // .reapeaks absent -> pump builder
   // The background loader's read plan == LoadAudioData's (incl. the 10M-frame

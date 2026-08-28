@@ -642,6 +642,22 @@ bool WaveformView::ComputeItemLoadPlan(int& readRate, int& readFrames) const
   return PlanRead(m_itemDuration, m_sampleRate, readRate, readFrames);
 }
 
+bool WaveformView::ReadLiveWindow(double t0, int frames, std::vector<double>& out) const
+{
+  if (!m_liveAccessor || m_standaloneMode || !m_take || m_sourceRate <= 0 || frames <= 0 ||
+      !g_GetAudioAccessorSamples) return false;
+  const int srcNch = std::max(1, m_srcChannels);
+  out.assign((size_t)frames * (size_t)srcNch, 0.0);
+  if (g_GetAudioAccessorSamples(m_liveAccessor, m_sourceRate, srcNch, t0, frames, out.data()) < 0)
+    return false;
+  const int chanMode = TakeChanMode(m_take);
+  if (FoldedChannels(srcNch, chanMode) != srcNch) {   // audio_stream.h: loader parity
+    FoldChanMode(out.data(), frames, chanMode);
+    out.resize((size_t)frames);
+  }
+  return true;
+}
+
 bool WaveformView::ItemBufferIsLazy() const
 {
   if (m_standaloneMode || m_multiItemActive || !m_take || m_sourceRate <= 0) return false;

@@ -1256,6 +1256,17 @@ void SneakPeak::UpdateItemState()
           std::vector<double> mixBuf;
           m_waveform.GetMultiItemView().GetMixedAudio(startFrame, endFrame, nch, mixBuf);
           m_levels.Update(mixBuf, 0, (int)mixBuf.size() / std::max(1, nch), sr, nch, itemVol, playing, chActive);
+        } else if (m_waveform.GetAudioSampleCount() <= 0 && playing && !m_dynTraceJob.active &&
+                   m_waveform.ReadLiveWindow(std::max(0.0, (double)startFrame / sr),
+                                             (int)((double)(endFrame - std::max(0, startFrame)) / sr *
+                                                   m_waveform.GetSourceSampleRate() + 0.5),
+                                             m_meterLiveBuf)) {
+          // 8g: a lazy item has no working buffer - meter the window through the
+          // live take accessor at the source rate (skipped while the Dynamics
+          // trace worker reads its accessors: no concurrent accessor calls).
+          const int liveFrames = (int)(m_meterLiveBuf.size() / (size_t)std::max(1, nch));
+          m_levels.Update(m_meterLiveBuf, 0, liveFrames, m_waveform.GetSourceSampleRate(), nch,
+                          itemVol, playing, chActive);
         } else {
           m_levels.Update(m_waveform.GetAudioData(), startFrame, endFrame, sr, nch, itemVol, playing, chActive);
         }
