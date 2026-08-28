@@ -9,6 +9,10 @@ the stream reproduces what the loader built.
 """
 from __future__ import annotations
 
+import sys as _sys
+
+import pytest as _pytest
+
 import numpy as np
 import soundfile as sf
 
@@ -163,6 +167,8 @@ def _best_shift(got: np.ndarray, media, start_frame: int, atol: float, shifts=ra
     return best
 
 
+@_pytest.mark.skipif(_sys.platform != "darwin",
+                     reason="the OS drag session (OLE on Windows) needs a real mouse; covered by the VM-side real-mouse drag check")
 def test_drag_export_of_a_five_minute_selection_keeps_the_source_rate(sess):
     media = burst_fixture("long5min_burst24.wav", seconds=300, channels=2)
     clear_project(sess)

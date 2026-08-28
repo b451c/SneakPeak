@@ -138,7 +138,29 @@ def assert_no_loading(s, seconds: float = 2.0) -> str:
 
 
 def rss_mb(s) -> float:
-    """REAPER's resident set (MB) - the memory observable for the buffer specs."""
+    """REAPER's resident set (MB) - the memory observable for the buffer specs.
+    Windows: GetProcessMemoryInfo working set (there is no ps)."""
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        class PMC(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                        ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                        ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+
+        h = ctypes.windll.kernel32.OpenProcess(0x0410, False, s.handle.pid)  # QUERY_INFORMATION | VM_READ
+        if not h:
+            raise RuntimeError(f"OpenProcess failed for pid {s.handle.pid}")
+        try:
+            pmc = PMC(); pmc.cb = ctypes.sizeof(PMC)
+            if not ctypes.windll.psapi.GetProcessMemoryInfo(h, ctypes.byref(pmc), pmc.cb):
+                raise RuntimeError("GetProcessMemoryInfo failed")
+            return pmc.WorkingSetSize / (1024.0 * 1024.0)
+        finally:
+            ctypes.windll.kernel32.CloseHandle(h)
     import subprocess as _sp
     out = _sp.check_output(["ps", "-o", "rss=", "-p", str(s.handle.pid)])
     return int(out.strip()) / 1024.0
@@ -170,9 +192,88 @@ def client_size(s) -> tuple[int, int]:
     return abs(r - l), abs(b - t)
 
 
+class _WinCapture:
+    """Duck-typed stand-in for reaproof's Capture on Windows: the pixel
+    locators here only read .image (HxWx3 RGB) and .height."""
+    def __init__(self, image, path, title):
+        self.image = image
+        self.height, self.width = image.shape[:2]
+        self.path = path
+        self.window_title = title
+
+
+def _capture_window_windows(pid: int, out_path: Path, *, settle: float = 0.4,
+                            retries: int = 20):
+    """PrintWindow(PW_RENDERFULLCONTENT) of our top-level - SneakPeak renders
+    with plain GDI, which PrintWindow captures faithfully; includes the frame,
+    like screencapture on macOS (the titlebar offset math stays identical)."""
+    import ctypes
+    import time as _t
+    from ctypes import wintypes
+    import numpy as _np
+    from PIL import Image as _Image
+    u32, g32 = ctypes.windll.user32, ctypes.windll.gdi32
+    hwnd = None
+    deadline = _t.monotonic() + retries * 0.25
+    while _t.monotonic() < deadline and not hwnd:
+        found = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def cb(h, _):
+            wpid = wintypes.DWORD()
+            u32.GetWindowThreadProcessId(h, ctypes.byref(wpid))
+            if wpid.value == pid and u32.IsWindowVisible(h):
+                buf = ctypes.create_unicode_buffer(512)
+                u32.GetWindowTextW(h, buf, 512)
+                if buf.value.lstrip("* ").startswith(WINDOW_TITLE) and "Operation" not in buf.value:
+                    found.append((h, buf.value))
+                    return False
+            return True
+
+        u32.EnumWindows(cb, 0)
+        if found:
+            hwnd, title = found[0]
+            break
+        _t.sleep(0.25)
+    if not hwnd:
+        raise RuntimeError(f"window not found (pid={pid}, title~='{WINDOW_TITLE}')")
+    _t.sleep(settle)
+    r = wintypes.RECT()
+    u32.GetWindowRect(hwnd, ctypes.byref(r))
+    w, h = r.right - r.left, r.bottom - r.top
+    hdcw = u32.GetWindowDC(hwnd)
+    mem = g32.CreateCompatibleDC(hdcw)
+    bmp = g32.CreateCompatibleBitmap(hdcw, w, h)
+    old = g32.SelectObject(mem, bmp)
+    try:
+        u32.PrintWindow(hwnd, mem, 2)                 # PW_RENDERFULLCONTENT
+        class BMIH(ctypes.Structure):
+            _fields_ = [("biSize", wintypes.DWORD), ("biWidth", ctypes.c_long),
+                        ("biHeight", ctypes.c_long), ("biPlanes", wintypes.WORD),
+                        ("biBitCount", wintypes.WORD), ("biCompression", wintypes.DWORD),
+                        ("biSizeImage", wintypes.DWORD), ("biXPelsPerMeter", ctypes.c_long),
+                        ("biYPelsPerMeter", ctypes.c_long), ("biClrUsed", wintypes.DWORD),
+                        ("biClrImportant", wintypes.DWORD)]
+        bmi = BMIH(ctypes.sizeof(BMIH), w, -h, 1, 32, 0, 0, 0, 0, 0, 0)  # top-down BGRA
+        buf = (ctypes.c_ubyte * (w * h * 4))()
+        g32.GetDIBits(mem, bmp, 0, h, buf, ctypes.byref(bmi), 0)
+    finally:
+        g32.SelectObject(mem, old)
+        g32.DeleteObject(bmp)
+        g32.DeleteDC(mem)
+        u32.ReleaseDC(hwnd, hdcw)
+    img = _np.frombuffer(buf, dtype=_np.uint8).reshape(h, w, 4)[..., [2, 1, 0]].copy()
+    if img.std() < 1.0:
+        raise RuntimeError("captured an all-black frame - PrintWindow returned nothing")
+    _Image.fromarray(img).save(str(out_path))
+    return _WinCapture(img, Path(out_path), title)
+
+
 def capture(s, out: Path):
-    from reaproof.observe.visual.capture import capture_window_macos
     Path(out).parent.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":
+        return _capture_window_windows(s.handle.pid, out)
+    from reaproof.observe.visual.capture import capture_window_macos
     return capture_window_macos(s.handle.pid, WINDOW_TITLE, out)
 
 
@@ -349,7 +450,30 @@ def window_title(s) -> str:
 
 def _cg_window_title(pid: int) -> str:
     """Our window's title straight from the window server - no bridge round
-    trip, so it can be polled at kHz rates without touching REAPER."""
+    trip, so it can be polled at kHz rates without touching REAPER.
+    Windows: EnumWindows over the process's visible top-levels, matched by the
+    "SneakPeak" prefix (also "* SneakPeak" when dirty) - same contract."""
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+        u32 = ctypes.windll.user32
+        found = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def cb(hwnd, _):
+            wpid = wintypes.DWORD()
+            u32.GetWindowThreadProcessId(hwnd, ctypes.byref(wpid))
+            if wpid.value == pid and u32.IsWindowVisible(hwnd):
+                buf = ctypes.create_unicode_buffer(512)
+                u32.GetWindowTextW(hwnd, buf, 512)
+                t = buf.value
+                if t.lstrip("* ").startswith(WINDOW_TITLE) and "Operation" not in t:
+                    found.append(t)
+                    return False
+            return True
+
+        u32.EnumWindows(cb, 0)
+        return found[0] if found else ""
     from reaproof.observe.visual.capture import _find_window_macos
     _, name, _ = _find_window_macos(pid, WINDOW_TITLE)
     return name or ""
@@ -550,6 +674,24 @@ def burst_fixture(name: str, *, seconds: float, channels: int, sr: int = 44100,
                 y[burst] = 0.9 * np.sin(2 * np.pi * 220 * t[burst])
                 y += dc
                 f.write(np.repeat(y[:, None], channels, axis=1).astype(np.float32))
+    if sys.platform == "win32":
+        # Windows: REAPER's decoder pool keeps the previous test's copy open and
+        # copyfile over it dies with a sharing violation (PermissionError), so
+        # every call hands out a uniquely named copy instead. The stem still
+        # CONTAINS the base name, so title oracles and _edit globs keep working.
+        import itertools
+        for i in itertools.count():
+            work = perf_media_dir() / (f"{Path(name).stem}_w{i}{Path(name).suffix}" if i else name)
+            try:
+                shutil.copyfile(pristine, work)
+            except PermissionError:
+                continue
+            # specs derive the pristine path as pristine/<media.name> - mirror
+            # the cached original under the unique name too (never held open)
+            mirror = pristine.parent / work.name
+            if not mirror.exists():
+                shutil.copyfile(pristine, mirror)
+            return work
     work = perf_media_dir() / name
     shutil.copyfile(pristine, work)
     return work
