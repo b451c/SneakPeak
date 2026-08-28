@@ -277,20 +277,30 @@ void SneakPeak::LoadWorkingSet()
   }
 }
 
-void SneakPeak::RefreshWorkingSet()
+// Drop dead pointers from the working set (items/track deleted behind our
+// back - undo, project clear, edits in REAPER). Returns false when nothing
+// valid remains: the set is reset so a stale 'active' flag can never lock
+// LoadSelectedItem on a recycled item address (finding F1, 2026-08-28).
+bool SneakPeak::PruneWorkingSet()
 {
+  if (!m_workingSet.active && !m_workingSet.dormant) return false;
   if (!m_workingSet.track || !g_ValidatePtr2 ||
       !g_ValidatePtr2(nullptr, m_workingSet.track, "MediaTrack*")) {
-    ExitWorkingSet();
-    return;
+    m_workingSet = {};
+    return false;
   }
-
-  // Revalidate stored item pointers — may be dangling after split/delete
   auto& items = m_workingSet.items;
   items.erase(std::remove_if(items.begin(), items.end(), [](MediaItem* mi) {
     return !mi || !g_ValidatePtr2(nullptr, mi, "MediaItem*");
   }), items.end());
-  if (items.empty()) { ExitWorkingSet(); return; }
+  if (items.empty()) { m_workingSet = {}; return false; }
+  return true;
+}
+
+void SneakPeak::RefreshWorkingSet()
+{
+  if (!PruneWorkingSet()) { ExitWorkingSet(); return; }
+  auto& items = m_workingSet.items;
 
   // Update bounds from surviving items
   m_workingSet.startPos = 1e30;
@@ -578,6 +588,7 @@ bool SneakPeak::LoadSelectedItemMulti(int count)
 void SneakPeak::LoadSelectedItem()
 {
   JoinDynamicsWorker(true);   // the sample buffer may be replaced below
+  PruneWorkingSet();          // a set whose items died must not lock the view (F1)
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
 
   // Clear stale envelope drag state (item may have changed)

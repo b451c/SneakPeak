@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Re-selecting the same item is instant** - the decoded buffer of the last single item survives a deselect; clicking it again reuses it when the take is unchanged instead of decoding again.
 
 ### Fixed
+- **Working set could lock the view** - after a SET view whose items (or track) were later deleted in REAPER, SneakPeak could refuse to load any newly selected item (stale set flags compared dead item pointers; a new item reusing the address counted as "in the set"). The set is now validated before it is consulted and reset when nothing of it survives.
 - **Envelopes on items with playrate other than 1.0** (forum #107, Lunar Ladder) - REAPER stores take-envelope point times in the take's own timebase (item time x playrate) and SneakPeak read and wrote them in plain item time. On a rate-changed item every envelope written by SneakPeak (Apply Dynamics, Live mode, clicked, dragged and freehand points) landed at the wrong time in REAPER - early on faster items, late on slower ones - and the overlay drew REAPER's own points shifted the other way. All envelope reads and writes now map through the take playrate, per segment in Timeline and SET view.
 
 ## [2.4.0] - 2026-07-10

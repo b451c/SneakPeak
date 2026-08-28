@@ -687,6 +687,7 @@ private:
   WorkingSet m_workingSet;
   void LoadWorkingSet();
   void RefreshWorkingSet();
+  bool PruneWorkingSet();   // drop dead item/track pointers; false = set gone (reset)
   void ExitWorkingSet();
   bool IsWorkingSetItem(MediaItem* item) const;
   void GroupSetItems();

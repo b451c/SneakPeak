@@ -37,6 +37,7 @@ DYLIB = Path(os.environ.get("SNEAKPEAK_DYLIB", REPO / "build" / "reaper_sneakpea
 # Verified by parsing the enum on 2026-08-28; re-derive if the enum changes.
 CM_APPLY_DYNAMICS = 2058
 CM_SHOW_DYNAMICS = 2053
+CM_TRACK_VIEW = 2041          # working set (SET view) from the selected items
 
 WINDOW_TITLE = "SneakPeak"
 
@@ -403,6 +404,29 @@ def measure_after(s, action_lua: str, *, loaded_marker: str, first_marker: str =
             "ticks": len(samples)}
 
 
+def wait_main_thread_idle(s, timeout: float = 120.0, quiet: float = 0.5):
+    """Block (without touching the bridge) until REAPER's defer loop ticks
+    again and has done so regularly for `quiet` s - e.g. after a long
+    synchronous destructive write."""
+    import time as _t
+    t0 = _t.monotonic()
+    last = _heartbeat_t(s)
+    last_change = _t.monotonic()
+    first_change = None
+    while _t.monotonic() - t0 < timeout:
+        hb = _heartbeat_t(s)
+        if hb is not None and hb != last:
+            last = hb
+            now = _t.monotonic()
+            if first_change is None or now - last_change > 0.2:
+                first_change = now      # (re)start the quiet window after any gap
+            last_change = now
+            if now - first_change >= quiet:
+                return
+        _t.sleep(0.01)
+    raise TimeoutError("REAPER main thread did not come back")
+
+
 def perf_media_dir() -> Path:
     d = Path("/tmp/sneakpeak-perf-media")
     d.mkdir(parents=True, exist_ok=True)
@@ -440,9 +464,24 @@ def write_long_aac(path: Path, *, minutes: float, sr: int = 48000):
     return path
 
 
+def hide_window(s):
+    if window_visible(s):
+        toggle_window(s)
+        s.wait_until(lambda: not window_visible(s), timeout=10)
+
+
 def insert_item_unselected(s, media: Path, *, position: float = 0.0):
+    """Insert without SneakPeak ever seeing the (transiently selected) item:
+    with the window open its selection poll would load it in the gap between
+    InsertMedia and the deselect - and the retained buffer (phase 2c) would
+    then make the next select instant, hiding the load under test."""
+    was_visible = window_visible(s)
+    if was_visible:
+        hide_window(s)
     info = insert_item(s, media, position=position)
     s.eval("reaper.SelectAllMediaItems(0, false) reaper.UpdateArrange() return true")
+    if was_visible:
+        ensure_window(s)
     return info
 
 
