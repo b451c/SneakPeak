@@ -126,6 +126,20 @@ void SneakPeak::Create()
       g_uiScale = s;
       if (g_uiScale != 1.0) g_fontsNeedRescale = true;  // first OnPaint recreates fonts atomically
       SaveUiScale();
+    } else if (!m_uiScaleUserSet && atoi(us) == 1000) {
+      // #97/#105 (Ben Zero, Win10): an install that persisted 1.0 before the
+      // first-run seed existed - or seeded it on a 96-DPI monitor - stays tiny
+      // on a scaled display forever ("despite scaling attempts"). Re-seed the
+      // default 1.0 whenever the system clearly asks for more, as long as the
+      // user never chose a scale themselves (the Settings slider sets
+      // ui_scale_user and ends this for good). macOS reports 1.0 here.
+      double s = QuerySystemDefaultUiScale();
+      if (s >= 1.25) {
+        if (s > 2.0) s = 2.0;
+        g_uiScale = s;
+        g_fontsNeedRescale = true;
+        SaveUiScale();
+      }
     }
   }
 
