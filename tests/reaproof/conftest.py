@@ -55,6 +55,7 @@ def sess():
     with ReaperSession("sneakpeak", extensions=[DYLIB]) as s:
         if not bool(s.eval('return reaper.APIExists("JS_Window_Find")')):
             pytest.skip("js_ReaScriptAPI not available in isolated profile")
+        s.eval(SP_WINDOW_LUA)
         yield s
 
 
@@ -65,9 +66,33 @@ def toggle_window(s):
     s.eval('reaper.Main_OnCommand(reaper.NamedCommandLookup("_SneakPeak_Toggle"), 0)')
 
 
+# Our dialog HWND (nil if absent), defined ONCE per session (Lua globals
+# persist across evals). Scans EVERY window whose title contains "SneakPeak"
+# and prefers the visible one with our own title shape: a dismissed native
+# MessageBox ("SneakPeak - Destructive Operation") lingers as an invisible,
+# title-less window that a plain JS_Window_Find returns first, hiding the live
+# window for the rest of the session (finding F9).
+SP_WINDOW_LUA = f"""
+  SP_WINDOW = function()
+    local n, list = reaper.JS_Window_ListFind("{WINDOW_TITLE}", false)
+    if not n or n <= 0 then return nil end
+    local best = nil
+    for addr in string.gmatch(list, "[^,]+") do
+      local h = reaper.JS_Window_HandleFromAddress(addr)
+      local t = reaper.JS_Window_GetTitle(h) or ""
+      if t:match("^%*? ?SneakPeak") and not t:find("Operation") then
+        if reaper.JS_Window_IsVisible(h) then return h end
+        best = best or h
+      end
+    end
+    return best
+  end
+  return true"""
+
+
 def window_handle_lua() -> str:
-    """Lua expression yielding our dialog HWND (nil if absent)."""
-    return f'reaper.JS_Window_Find("{WINDOW_TITLE}", false)'
+    """Lua expression yielding our dialog HWND (nil if absent) - see SP_WINDOW_LUA."""
+    return "SP_WINDOW()"
 
 
 def window_visible(s) -> bool:
@@ -464,10 +489,13 @@ def perf_media_dir() -> Path:
     return d
 
 
-def burst_fixture(name: str, *, seconds: float, channels: int, sr: int = 44100) -> Path:
-    """Fresh working copy of a quiet 220 Hz tone with one loud burst at 0.5-1.5 s,
-    24-bit PCM. Destructive specs rewrite the file they edit, so the pristine
-    original lives under pristine/ and every call hands out a new copy."""
+def burst_fixture(name: str, *, seconds: float, channels: int, sr: int = 44100,
+                  dc: float = 0.0) -> Path:
+    """Fresh working copy of a quiet 220 Hz tone with one loud burst at 0.5-1.5 s
+    (plus a constant offset `dc`), 24-bit PCM. Destructive specs rewrite the file
+    they edit, so the pristine original lives under pristine/ and every call
+    hands out a new copy. The cache is keyed by `name` alone: a different
+    parameter set needs a different name."""
     pristine = perf_media_dir() / "pristine" / name
     if not pristine.exists():
         pristine.parent.mkdir(exist_ok=True)
@@ -477,6 +505,7 @@ def burst_fixture(name: str, *, seconds: float, channels: int, sr: int = 44100) 
                 y = 0.03 * np.sin(2 * np.pi * 220 * t)
                 burst = (t >= 0.5) & (t < 1.5)
                 y[burst] = 0.9 * np.sin(2 * np.pi * 220 * t[burst])
+                y += dc
                 f.write(np.repeat(y[:, None], channels, axis=1).astype(np.float32))
     work = perf_media_dir() / name
     shutil.copyfile(pristine, work)

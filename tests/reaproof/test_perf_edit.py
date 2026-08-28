@@ -50,7 +50,7 @@ def test_delete_range_on_long_item_enters_timeline_without_freeze(sess):
     time.sleep(0.5)
     # the action here is the key press itself (posted from Lua so the probe
     # gets REAPER's clock for it)
-    m = measure_after(sess, "local h = reaper.JS_Window_Find('SneakPeak', false) "
+    m = measure_after(sess, "local h = SP_WINDOW() "
                             f'reaper.JS_WindowMessage_Post(h, "WM_KEYDOWN", {VK_DELETE}, 0, 0, 0) '
                             f'reaper.JS_WindowMessage_Post(h, "WM_KEYUP", {VK_DELETE}, 0, 0, 0) return true',
                       loaded_marker=media.stem, max_wait=90, quiet=1.5)

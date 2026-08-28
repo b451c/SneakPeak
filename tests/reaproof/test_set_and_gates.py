@@ -51,7 +51,7 @@ def test_working_set_view_loads_in_background(sess):
       reaper.UpdateArrange()
       return true""")
     ensure_window(sess)
-    m = measure_after(sess, f"local h = reaper.JS_Window_Find('SneakPeak', false) "
+    m = measure_after(sess, f"local h = SP_WINDOW() "
                             f'reaper.JS_WindowMessage_Post(h, "WM_COMMAND", {CM_TRACK_VIEW}, 0, 0, 0) return true',
                       loaded_marker=media.stem, max_wait=120, quiet=1.0)
     _record("set.enter", m)
@@ -81,7 +81,7 @@ def test_reverse_is_gated_while_loading_then_works(sess):
       SP_GATE_FIRED = nil
       local t0 = reaper.time_precise()
       local function poll()
-        local h = reaper.JS_Window_Find("SneakPeak", false)
+        local h = SP_WINDOW()
         local title = h and reaper.JS_Window_GetTitle(h) or ""
         if title:find("Loading") then
           reaper.Main_OnCommand(reaper.NamedCommandLookup("_SneakPeak_Reverse"), 0)
@@ -145,7 +145,7 @@ def test_working_set_cannot_lock_the_view_after_its_items_die(sess):
           reaper.UpdateArrange()
           return true""")
         ensure_window(sess)
-        sess.eval(f"local h = reaper.JS_Window_Find('SneakPeak', false) "
+        sess.eval(f"local h = SP_WINDOW() "
                   f'reaper.JS_WindowMessage_Post(h, "WM_COMMAND", {CM_TRACK_VIEW}, 0, 0, 0) return true')
         sess.wait_until(lambda: mode_from_capture(sess, SHOTS / f"f1_set{cycle}.png") == "SET", timeout=20)
 
