@@ -127,7 +127,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <nav class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div class="sidebar-logo">SneakPeak</div>
-    <div class="sidebar-version">v2.4.0 User Guide</div>
+    <div class="sidebar-version">v2.5.0 User Guide</div>
   </div>
 
   <div class="nav-group">
@@ -225,11 +225,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Hero -->
 <h1>Sneak<span>Peak</span> User Guide</h1>
-<p class="subtitle">Precision waveform editor for REAPER - v2.4.0</p>
+<p class="subtitle">Precision waveform editor for REAPER - v2.5.0</p>
 
 <img src="images/sneakpeak-hero.png" alt="SneakPeak" style="width:100%;border-radius:var(--radius);margin:0 0 32px;border:1px solid var(--border)">
 
-<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. v2.0 added volume envelope editing, dynamics processing, and multiplatform support. v2.1 polished the release with automatic envelope activation, source replacement back into the timeline, hide RMS/meter toggles and an update checker. v2.2 scales the whole interface from 80% to 200% (Settings panel with DPI auto-detection), adds truthful clip indication, meters that reflect fades and envelopes, and a round of workflow polish. v2.4 is the biggest release yet: the full Dynamics Suite rework (upward compression and BOTH leveling, a complete noise-gate redo, a wideband de-esser, Spectral Repair, curved envelopes), the Game Audio Suite (Loop Lab, One-Shot Factory, True-Peak Hard Limiter), and the two worlds joined up - the Factory and the limiter work directly on timeline items, Dynamics applies destructively on standalone files, Edit Copy bridges an item into every standalone tool, and destructive item edits are finally undoable.</p>
+<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. v2.0 added volume envelope editing, dynamics processing, and multiplatform support. v2.1 polished the release with automatic envelope activation, source replacement back into the timeline, hide RMS/meter toggles and an update checker. v2.2 scales the whole interface from 80% to 200% (Settings panel with DPI auto-detection), adds truthful clip indication, meters that reflect fades and envelopes, and a round of workflow polish. v2.4 is the biggest release yet: the full Dynamics Suite rework (upward compression and BOTH leveling, a complete noise-gate redo, a wideband de-esser, Spectral Repair, curved envelopes), the Game Audio Suite (Loop Lab, One-Shot Factory, True-Peak Hard Limiter), and the two worlds joined up - the Factory and the limiter work directly on timeline items, Dynamics applies destructively on standalone files, Edit Copy bridges an item into every standalone tool, and destructive item edits are finally undoable. v2.5 makes long files first-class: selecting, editing and analysing multi-minute (even hour-long) items is instant - the waveform draws from REAPER's own peak files, exports, Copy and the Dynamics analysis stream the source at its full sample rate, destructive edits rewrite the file in place (with a file-snapshot undo), and a set of Windows-only bugs is gone: silent Standalone playback, drag and drop that never landed, a UI that stayed tiny on scaled displays, and a failing destructive undo.</p>
 
 <div class="hero-modes">
   <div class="hero-mode">
@@ -335,7 +335,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <ul>
   <li><strong>Non-destructive (default):</strong> everything you do in ITEM / SET / Timeline modes - splits, gain, fades, envelopes, Dynamics - goes through the REAPER API and lands in REAPER's undo history. Your audio files are never touched.</li>
-  <li><strong>Destructive on a REAPER item:</strong> the processing entries in the right-click menu (Reverse, DC Remove, Hard Limiter, ...) rewrite the item's source WAV on disk after a confirmation prompt - and can be undone: <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> writes the original audio back (one level). WAV sources only; for MP3/FLAC items use <strong>Edit Copy in Standalone</strong> instead.</li>
+  <li><strong>Destructive on a REAPER item:</strong> the processing entries in the right-click menu (Reverse, DC Remove, Hard Limiter, ...) rewrite the item's source WAV on disk after a confirmation prompt. Since v2.5 they edit the file <em>in place</em> - the same file identity, exactly the item's window of it (trimmed, offset and rate-changed items stay safe), streamed at the file's own sample rate so items of any length work without waiting for anything to load - and can be undone: <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> copies the pre-edit snapshot back (one level). WAV sources only; for MP3/FLAC items use <strong>Edit Copy in Standalone</strong> instead.</li>
   <li><strong>Destructive standalone editor:</strong> drag a file from Finder/Explorer (or any file browser) and drop it ONTO the SneakPeak window - the mode bar switches to the orange STANDALONE tab. Cut, paste, silence, process and draw freely; nothing happens to any file until you Save (<kbd>Ctrl</kbd>+<kbd>S</kbd>) or use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a>. Standalone has its own 20-level undo, independent of REAPER's.</li>
 </ul>
 
@@ -353,6 +353,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>In ITEM mode, SneakPeak follows your item selection. Click a different item on the timeline and the waveform updates. The mode bar shows "ITEM" with a blue diamond indicator.</p>
 
 <p>Everything you do in this mode uses the REAPER API. The audio files on disk are never modified directly. Gain changes use the item's D_VOL parameter. Fades use D_FADEINLEN and D_FADEOUTLEN. Split uses SplitMediaItem. All reversible with REAPER's undo system.</p>
+
+<h3>Long items (v2.5)</h3>
+<p>Selecting an item of any length is instant: the waveform and minimap draw from REAPER's own peak files - the same data the arrange view shows - so nothing is decoded up front and nothing freezes. Items over about 4 minutes stay buffer-free until a tool that actually needs raw samples asks: the Spectral view and the One-Shot Factory open at once and fill in when the audio lands (progress in the title), Normalize and the Hard Limiter show a short "loading" toast and work on the next try. Reverse, DC Remove, Gain on a selection, Copy, every export and the Dynamics analysis never need the buffer at all - they stream the source or edit the file in place. A buffer that would exceed 1 GB is refused with a clear message instead of being allocated, and the level meters keep following playback on such items (they read the played window straight from the item).</p>
 
 <h2 id="waveform-display">Waveform Display</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
@@ -686,7 +689,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Full file (dirty)</strong> - auto-saves first, then drags the saved file</li>
 </ul>
 
-<p>Drop the dragged file onto REAPER's timeline to insert it as a new item.</p>
+<p>Drop the dragged file onto REAPER's timeline to insert it as a new item. In ITEM, SET and Timeline modes the selection is streamed from the item's source at its own sample rate, so exports from long items keep full quality. On Windows the drop session never actually started before v2.5 (the export was written, then silently dropped nowhere) - fixed.</p>
 
 <div class="tip">
   <strong>Tip:</strong>
@@ -742,7 +745,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="dynamics-overview">Dynamics Processing</h2>
 <div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-set">SET</span><span class="mode mode-standalone">STANDALONE</span></div>
 
-<p>SneakPeak includes a built-in dynamics processor that analyzes your audio and writes volume envelope points to achieve compression and gating. Instead of real-time DSP, it works offline - analyzing the audio buffer and generating precise envelope automation. This means zero CPU cost during playback.</p>
+<p>SneakPeak includes a built-in dynamics processor that analyzes your audio and writes volume envelope points to achieve compression and gating. Instead of real-time DSP, it works offline - analyzing the audio and generating precise envelope automation. This means zero CPU cost during playback. Since v2.5 the analysis streams the item's source at its full sample rate on a background thread: full detector fidelity on items of any length (an hour-long file is analysed at 44.1 kHz, not through a reduced buffer), the title shows "Analysing dynamics... N%" while the first pass runs, knob changes recompute from the finished analysis in milliseconds, and only detector changes (Peak/RMS, RMS window, de-ess band) re-stream the file.</p>
 
 <p><strong>In Standalone mode</strong> the same panel works destructively, like a classic offline compressor: there is no envelope, so Apply multiplies the computed gain curve (compressor + gate + de-esser) directly into the audio, with one undo step. Live mode and A/B are envelope concepts and render disabled there; the preview curves stay fully live. Together with the Hard Limiter this completes the standalone "podcast chain": Dynamics &gt; Hard Limiter &gt; Save.</p>
 
@@ -988,7 +991,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   </tbody>
 </table>
 
-<p>Enable <strong>Master Output</strong> from the meter context menu to read levels from the master track instead of the current item. This lets you monitor the master bus while editing individual items.</p>
+<p>Enable <strong>Master Output</strong> from the meter context menu to read levels from the master track instead of the current item. This lets you monitor the master bus while editing individual items. On long items that hold no working buffer (v2.5) the meters read the played window straight from the item at the source rate, so they keep working everywhere.</p>
 
 <h3>Waveform style / Hide Meters</h3>
 
@@ -1218,7 +1221,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h3>Check for Updates</h3>
 
-<p>Click the version label (<code>v2.4.0</code>) in the mode bar. SneakPeak queries GitHub's Releases API via <code>curl</code> (5 s timeout) and reports the result in a toast:</p>
+<p>Click the version label (<code>v2.5.0</code>) in the mode bar. SneakPeak queries GitHub's Releases API via <code>curl</code> (5 s timeout) and reports the result in a toast:</p>
 
 <ul>
   <li><strong>SneakPeak is up to date (vX.Y.Z)</strong> - you are on the latest release</li>
