@@ -91,7 +91,21 @@ void SneakPeak::InitiateDragExport()
     }
   }
 
-  // Selection export (standalone or REAPER) — create temp WAV
+  // Selection export - a temp WAV. ITEM modes stream the view range at the
+  // source rate (export_stream.cpp - the working buffer is downsampled on
+  // long items, F11); Standalone keeps its full-rate buffer path.
+  if (m_dragTempPath.empty() && !isStandalone) {
+    double t0 = 0.0, t1 = m_waveform.GetItemDuration();
+    if (hasSelection) {   // same clamp/fallback as GetSelectionSampleRange
+      WaveformSelection sel = m_waveform.GetSelection();
+      t0 = std::max(0.0, std::min(sel.startTime, sel.endTime));
+      t1 = std::min(m_waveform.GetItemDuration(), std::max(sel.startTime, sel.endTime));
+      if (t1 <= t0) { t0 = 0.0; t1 = m_waveform.GetItemDuration(); }
+    }
+    m_dragTempPath = ExportItemRangeToWav(t0, t1);
+    if (m_dragTempPath.empty()) return;
+    DBG("[SneakPeak] DragExport: streamed temp WAV: %s\n", m_dragTempPath.c_str());
+  }
   if (m_dragTempPath.empty()) {
     int startF, endF;
     if (hasSelection) {
@@ -113,124 +127,38 @@ void SneakPeak::InitiateDragExport()
     std::vector<double> exportBuf(data.begin() + offset,
                                    data.begin() + offset + (size_t)selFrames * nch);
 
-    // Bake fades into export copy
-    if (isStandalone) {
-      // Standalone: use pending fade params
-      auto sf = m_waveform.GetStandaloneFade();
-      int totalFrames = m_waveform.GetAudioSampleCount();
-      if (sf.fadeInLen >= 0.001) {
-        int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
-        if (startF < fadeFrames) {
-          int overlap = std::min(fadeFrames - startF, selFrames);
-          for (int i = 0; i < overlap; i++) {
-            double t = (double)(startF + i) / (double)fadeFrames;
-            double gain = ApplyFadeShape(t, sf.fadeInShape, -sf.fadeInDir);
-            for (int ch = 0; ch < nch; ch++)
-              exportBuf[i * nch + ch] *= gain;
-          }
-        }
-      }
-      if (sf.fadeOutLen >= 0.001) {
-        int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
-        int fadeStart = totalFrames - fadeFrames;
-        int overlapStart = std::max(startF, fadeStart);
-        int overlapEnd = std::min(endF, totalFrames);
-        for (int i = overlapStart; i < overlapEnd; i++) {
-          double t = (double)(i - fadeStart) / (double)fadeFrames;
-          double gain = ApplyFadeShape(1.0 - t, sf.fadeOutShape, sf.fadeOutDir);
-          int bufIdx = i - startF;
+    // Bake the pending standalone fades into the export copy
+    auto sf = m_waveform.GetStandaloneFade();
+    int totalFrames = m_waveform.GetAudioSampleCount();
+    if (sf.fadeInLen >= 0.001) {
+      int fadeFrames = std::min((int)(sf.fadeInLen * sr), totalFrames);
+      if (startF < fadeFrames) {
+        int overlap = std::min(fadeFrames - startF, selFrames);
+        for (int i = 0; i < overlap; i++) {
+          double t = (double)(startF + i) / (double)fadeFrames;
+          double gain = ApplyFadeShape(t, sf.fadeInShape, -sf.fadeInDir);
           for (int ch = 0; ch < nch; ch++)
-            exportBuf[bufIdx * nch + ch] *= gain;
-        }
-      }
-    } else if (g_GetMediaItemInfo_Value) {
-      // REAPER mode: bake item fades from REAPER metadata
-      // D_VOL is already baked into m_audioData at load time.
-      // Fades are visual-only overlays - must bake here for export.
-      const auto& segs = m_waveform.GetSegments();
-      if (segs.empty() && m_waveform.GetItem()) {
-        // Single item - apply its fades to the full export range
-        MediaItem* item = m_waveform.GetItem();
-        double fadeInLen = g_GetMediaItemInfo_Value(item, "D_FADEINLEN");
-        double fadeInDir = g_GetMediaItemInfo_Value(item, "D_FADEINDIR");
-        double fadeOutLen = g_GetMediaItemInfo_Value(item, "D_FADEOUTLEN");
-        double fadeOutDir = g_GetMediaItemInfo_Value(item, "D_FADEOUTDIR");
-        int totalFrames = m_waveform.GetAudioSampleCount();
-
-        if (fadeInLen >= 0.001) {
-          int fadeFrames = std::min((int)(fadeInLen * sr), totalFrames);
-          if (startF < fadeFrames) {
-            int overlap = std::min(fadeFrames - startF, selFrames);
-            for (int i = 0; i < overlap; i++) {
-              double t = (double)(startF + i) / (double)fadeFrames;
-              double gain = ApplyFadeShape(t, 0, -fadeInDir);
-              for (int ch = 0; ch < nch; ch++)
-                exportBuf[i * nch + ch] *= gain;
-            }
-          }
-        }
-        if (fadeOutLen >= 0.001) {
-          int fadeFrames = std::min((int)(fadeOutLen * sr), totalFrames);
-          int fadeStart = totalFrames - fadeFrames;
-          int overlapStart = std::max(startF, fadeStart);
-          int overlapEnd = std::min(endF, totalFrames);
-          for (int i = overlapStart; i < overlapEnd; i++) {
-            double t = (double)(i - fadeStart) / (double)fadeFrames;
-            double gain = ApplyFadeShape(1.0 - t, 0, fadeOutDir);
-            int bufIdx = i - startF;
-            for (int ch = 0; ch < nch; ch++)
-              exportBuf[bufIdx * nch + ch] *= gain;
-          }
-        }
-      } else {
-        // Timeline/SET: apply per-segment fades
-        for (const auto& seg : segs) {
-          if (!seg.item) continue;
-          double fadeInLen = g_GetMediaItemInfo_Value(seg.item, "D_FADEINLEN");
-          double fadeInDir = g_GetMediaItemInfo_Value(seg.item, "D_FADEINDIR");
-          double fadeOutLen = g_GetMediaItemInfo_Value(seg.item, "D_FADEOUTLEN");
-          double fadeOutDir = g_GetMediaItemInfo_Value(seg.item, "D_FADEOUTDIR");
-
-          // Segment frame range in buffer
-          int segStart = seg.audioStartFrame;
-          int segEnd = segStart + seg.audioFrameCount;
-
-          // Fade-in for this segment
-          if (fadeInLen >= 0.001) {
-            int fadeFrames = std::min((int)(fadeInLen * sr), seg.audioFrameCount);
-            int applyStart = std::max(startF, segStart);
-            int applyEnd = std::min(endF, segStart + fadeFrames);
-            for (int i = applyStart; i < applyEnd; i++) {
-              double t = (double)(i - segStart) / (double)fadeFrames;
-              double gain = ApplyFadeShape(t, 0, -fadeInDir);
-              int bufIdx = i - startF;
-              for (int ch = 0; ch < nch; ch++)
-                exportBuf[bufIdx * nch + ch] *= gain;
-            }
-          }
-          // Fade-out for this segment
-          if (fadeOutLen >= 0.001) {
-            int fadeFrames = std::min((int)(fadeOutLen * sr), seg.audioFrameCount);
-            int fadeStart = segEnd - fadeFrames;
-            int applyStart = std::max(startF, fadeStart);
-            int applyEnd = std::min(endF, segEnd);
-            for (int i = applyStart; i < applyEnd; i++) {
-              double t = (double)(i - fadeStart) / (double)fadeFrames;
-              double gain = ApplyFadeShape(1.0 - t, 0, fadeOutDir);
-              int bufIdx = i - startF;
-              for (int ch = 0; ch < nch; ch++)
-                exportBuf[bufIdx * nch + ch] *= gain;
-            }
-          }
+            exportBuf[i * nch + ch] *= gain;
         }
       }
     }
+    if (sf.fadeOutLen >= 0.001) {
+      int fadeFrames = std::min((int)(sf.fadeOutLen * sr), totalFrames);
+      int fadeStart = totalFrames - fadeFrames;
+      int overlapStart = std::max(startF, fadeStart);
+      int overlapEnd = std::min(endF, totalFrames);
+      for (int i = overlapStart; i < overlapEnd; i++) {
+        double t = (double)(i - fadeStart) / (double)fadeFrames;
+        double gain = ApplyFadeShape(1.0 - t, sf.fadeOutShape, sf.fadeOutDir);
+        int bufIdx = i - startF;
+        for (int ch = 0; ch < nch; ch++)
+          exportBuf[bufIdx * nch + ch] *= gain;
+      }
+    }
 
-    const char* srcPath = isStandalone
-        ? m_waveform.GetStandaloneFilePath().c_str() : nullptr;
     m_dragTempPath = AudioEngine::WriteExportWav(exportBuf.data(), selFrames, nch,
                                                   sr, m_wavBitsPerSample, m_wavAudioFormat,
-                                                  srcPath);
+                                                  m_waveform.GetStandaloneFilePath().c_str());
     if (m_dragTempPath.empty()) return;
     DBG("[SneakPeak] DragExport: temp WAV: %s\n", m_dragTempPath.c_str());
   }

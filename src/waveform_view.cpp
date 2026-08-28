@@ -621,7 +621,7 @@ bool WaveformView::PlanRead(double seconds, int srcRate, int& readRate, int& rea
   // Safety cap: 30 minutes of stereo 96kHz = ~346M samples, ~2.6GB
   // For practical use, cap at 10M frames (~3.5 min stereo 48kHz)
   // Beyond that, we'll downsample on load
-  static const int MAX_FRAMES = 10000000;
+  const int MAX_FRAMES = kMaxLoadFrames;
 
   readRate = srcRate;
   readFrames = totalFrames;

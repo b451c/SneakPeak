@@ -2114,9 +2114,11 @@ void SneakPeak::OneShotPreviewTick()
 
   const OneShotParams p = m_oneShotPanel.GetParams();
   m_osSpans.clear();
+  const double* data = m_waveform.GetAudioData().data();
+  const int nch = m_waveform.GetNumChannels(), sr = m_waveform.GetSampleRate();
   for (const auto& s : OneShotBuildSlices(p)) {
     int a, b;
-    if (OneShotTrimBounds(p, s.first, s.second, &a, &b))
+    if (OneShotTrimBounds(p, data, nch, sr, s.first, s.second, &a, &b))
       m_osSpans.push_back({ a, b });
   }
   InvalidateRect(m_hwnd, nullptr, FALSE);

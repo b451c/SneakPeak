@@ -334,7 +334,14 @@ private:
   // exporter and the live preview so they can never disagree), one slice's
   // export, and the native naming-pattern edit dialog.
   std::vector<std::pair<int, int>> OneShotBuildSlices(const OneShotParams& p);
-  bool OneShotTrimBounds(const OneShotParams& p, int s0, int s1, int* a, int* b);
+  // Kept bounds of [s0, s1) inside `data` (interleaved, `nch`, `sr`): the
+  // preview passes the working buffer, the exporter its full-rate slice.
+  static bool OneShotTrimBounds(const OneShotParams& p, const double* data, int nch,
+                                int sr, int s0, int s1, int* a, int* b);
+  // Samples of [t0, t1) of view time at full rate: Standalone copies its
+  // buffer, ITEM modes stream the source (export_stream.cpp). nch/sr = the
+  // result's. False = nothing readable.
+  bool SliceSamples(double t0, double t1, std::vector<double>& out, int* nch, int* sr);
   int  OneShotExportSlice(const OneShotParams& p, int s0, int s1,
                           const std::string& outPath, char* note, size_t noteSz,
                           char* err, size_t errSz);   // 1 written, 0 skip, -1 abort
@@ -575,6 +582,10 @@ private:
   void StartEditCopyExport(const std::string& outPath);
   void StepExportPump();        // OnTimer slice + progress title; installs the tab on finish
   void AbortExportPump();       // item change / destructive write / close
+  // Drag export (ITEM modes): the view range streamed at the source rate into
+  // a WAV in the source's format, item/segment fades baked per chunk.
+  std::string ExportItemRangeToWav(double t0, double t1);
+  void BakeItemFades(double* chunk, int64_t viewFrame0, int n, int nch, int sr) const;
   unsigned m_itemLoadFailedGen = ~0u;  // generation that produced no jobs (no retry loop)
   void StartItemAudioLoad();
   void StepItemAudioLoad();     // OnTimer slice + progress title

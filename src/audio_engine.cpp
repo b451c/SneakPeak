@@ -378,10 +378,7 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
   if (g_UpdateArrange) g_UpdateArrange();
 }
 
-std::string AudioEngine::WriteExportWav(const double* samples, int numFrames,
-                                         int numChannels, int sampleRate,
-                                         int bitsPerSample, int audioFormat,
-                                         const char* sourceFilePath)
+std::string AudioEngine::ExportWavPath(const char* sourceFilePath)
 {
   // Generate filename: [basename]_sel_HHMMSS.wav (includes original name)
   time_t now = time(nullptr);
@@ -436,13 +433,20 @@ std::string AudioEngine::WriteExportWav(const double* samples, int numFrames,
     snprintf(exportPath, sizeof(exportPath), "%s/%s", tmpDir, filename);
     chosen = "tmp";
   }
+  DBG("[AudioEngine] Export destination: %s (%s)\n", exportPath, chosen);
+  return std::string(exportPath);
+}
 
+std::string AudioEngine::WriteExportWav(const double* samples, int numFrames,
+                                         int numChannels, int sampleRate,
+                                         int bitsPerSample, int audioFormat,
+                                         const char* sourceFilePath)
+{
+  const std::string exportPath = ExportWavPath(sourceFilePath);
   if (!WriteWavFile(exportPath, samples, numFrames, numChannels, sampleRate,
                     bitsPerSample, audioFormat)) {
-    DBG("[AudioEngine] WriteExportWav failed: %s\n", exportPath);
+    DBG("[AudioEngine] WriteExportWav failed: %s\n", exportPath.c_str());
     return {};
   }
-
-  DBG("[AudioEngine] Exported to: %s (%s)\n", exportPath, chosen);
-  return std::string(exportPath);
+  return exportPath;
 }

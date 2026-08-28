@@ -2377,12 +2377,9 @@ bool SneakPeak::SingleBufferModeOk() const
 // keeps the frame) + keep-padding, clamped to the slice. Shared by the
 // exporter and the live preview so what is drawn is exactly what Run writes.
 // False = nothing above the threshold in this slice.
-bool SneakPeak::OneShotTrimBounds(const OneShotParams& p, int s0, int s1,
-                                  int* a, int* b)
+bool SneakPeak::OneShotTrimBounds(const OneShotParams& p, const double* data, int nch,
+                                  int sr, int s0, int s1, int* a, int* b)
 {
-  const auto& data = m_waveform.GetAudioData();
-  const int nch = m_waveform.GetNumChannels();
-  const int sr = m_waveform.GetSampleRate();
   if (s1 <= s0 || nch <= 0 || sr <= 0) return false;
   if (!p.trimEnable) {
     *a = s0;
@@ -2562,14 +2559,31 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
                                   const std::string& outPath, char* note,
                                   size_t noteSz, char* err, size_t errSz)
 {
-  const auto& data = m_waveform.GetAudioData();
-  const int nch = m_waveform.GetNumChannels();
-  const int sr = m_waveform.GetSampleRate();
   note[0] = 0;
   err[0] = 0;
 
+  // The slice is [s0, s1) of the WORKING buffer; the samples come from the
+  // source at full rate (F11: that buffer is downsampled on long items), so
+  // trim/fade/normalize below operate on the real audio.
+  const double bufRate = (double)m_waveform.GetSampleRate();
+  const double t0 = s0 / bufRate, t1 = s1 / bufRate;
+  const int srcRate = m_waveform.IsStandaloneMode() ? m_waveform.GetSampleRate()
+                                                    : m_waveform.GetSourceSampleRate();
+  if (srcRate > 0 && (int64_t)((t1 - t0) * srcRate) > WaveformView::kMaxLoadFrames) {
+    snprintf(note, noteSz, "Slice too long for One-Shot (over %d min)",
+             WaveformView::kMaxLoadFrames / srcRate / 60);
+    return 0;
+  }
+  std::vector<double> slice;
+  int nch = 0, sr = 0;
+  if (!SliceSamples(t0, t1, slice, &nch, &sr)) {
+    snprintf(err, errSz, "Could not read the item audio - run aborted");
+    return -1;
+  }
+  const int sliceFrames = (int)(slice.size() / (size_t)nch);
+
   int a = 0, b = 0;
-  if (!OneShotTrimBounds(p, s0, s1, &a, &b)) {
+  if (!OneShotTrimBounds(p, slice.data(), nch, sr, 0, sliceFrames, &a, &b)) {
     snprintf(note, noteSz, "Nothing above the trim threshold");
     return 0;
   }
@@ -2579,8 +2593,10 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
     return 0;
   }
 
-  std::vector<double> work(data.begin() + (size_t)a * nch,
-                           data.begin() + (size_t)b * nch);
+  std::vector<double> work(slice.begin() + (size_t)a * nch,
+                           slice.begin() + (size_t)b * nch);
+  slice.clear();
+  slice.shrink_to_fit();
 
   // Edge micro-fades (linear in v1 - the click-killers).
   const int inF = std::min((int)(p.fadeInMs * 0.001 * sr + 0.5), len);
