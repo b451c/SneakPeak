@@ -4,7 +4,7 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [Unreleased] - v2.5.0 (in development)
 
 ### Changed
 - **Long items no longer freeze REAPER** - selecting an item now paints the waveform from REAPER's own peak files immediately and decodes the audio in the background (title shows the progress); the same applies to Timeline view after an edit, to SET view and to Multi-item view, which used to decode every segment or layer synchronously. Timeline view also drops its old 600-second span limit: a long item split by a delete now stays in Timeline view instead of falling back to a full reload. Measured on a 20-minute WAV and a 17-minute AAC: the longest main-thread stall on select/reselect/delete/multi-select went from 0.4-1.5 s to under 0.1 s. Operations that need the raw samples (destructive edits, drag export, dynamics apply, spectral) show a short "still loading" toast until the audio is in.
