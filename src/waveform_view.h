@@ -9,6 +9,8 @@
 #include <string>
 #include <cmath>
 
+class AudioStream;
+
 struct WaveformSelection {
   double startTime = 0.0;
   double endTime = 0.0;
@@ -268,6 +270,9 @@ public:
   // Read plan shared by every loader (single, timeline, SET, multi-item):
   // the 10M-frame cap downsamples long spans instead of refusing them.
   static bool PlanRead(double seconds, int srcRate, int& readRate, int& readFrames);
+  // Full-rate chunked reads over [t0, t1) of view time (audio_stream.h,
+  // view_stream.cpp): what the loader would build without the 10M-frame cap.
+  bool OpenStream(AudioStream& stream, double t0, double t1, bool applyItemVolume) const;
   int GetSrcChannels() const { return m_srcChannels; }
   bool SdkPeaksPending() const { return m_sdkPeaksPending; }  // .reapeaks absent -> pump builder
   // The background loader's read plan == LoadAudioData's (incl. the 10M-frame

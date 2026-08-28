@@ -1,6 +1,7 @@
 // waveform_view.cpp — Waveform rendering using GDI
 // Audio data is loaded once into memory, peaks computed from cache (zero API calls per paint)
 #include "waveform_view.h"
+#include "audio_stream.h"
 #include "audio_engine.h"
 #include "audio_ops.h"
 #include "reaper_plugin.h"
@@ -947,13 +948,6 @@ double WaveformView::RelTimeToAbsTime(double relTime) const
 // --- Peaks from cached audio data (pure math, no API calls) ---
 
 // --- Phase 2c: retained single-item buffer across deselect/reselect ---------
-
-static int TakeChanMode(MediaItem_Take* take)
-{
-  if (!take || !g_GetSetMediaItemTakeInfo) return 0;
-  int* p = (int*)g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", nullptr);
-  return p ? *p : 0;
-}
 
 void WaveformView::RetainCurrentAudio()
 {

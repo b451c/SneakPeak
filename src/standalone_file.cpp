@@ -9,6 +9,7 @@
 
 #include "edit_view.h"
 #include "audio_engine.h"
+#include "audio_stream.h"
 #include "wav_smpl.h"
 #include "audio_ops.h"
 #include "theme.h"
@@ -1153,16 +1154,6 @@ void SneakPeak::DoReplaceSourceInTimeline()
 // Anything that needs raw samples gates on RequireItemAudio().
 // ============================================================================
 
-static double ItemTakeVolume(MediaItem* item, MediaItem_Take* take)
-{
-  double vol = (item && g_GetMediaItemInfo_Value) ? g_GetMediaItemInfo_Value(item, "D_VOL") : 1.0;
-  if (take && g_GetSetMediaItemTakeInfo) {
-    double* pv = (double*)g_GetSetMediaItemTakeInfo(take, "D_VOL", nullptr);
-    if (pv) vol *= *pv;
-  }
-  return vol > 0.0 ? vol : 1.0;
-}
-
 void SneakPeak::StartItemAudioLoad()
 {
   AbortItemAudioLoad();
@@ -1340,22 +1331,13 @@ void SneakPeak::FinishItemAudioLoad()
   ItemAudioLoad& L = m_itemLoad;
   if (L.single) {
     // Fold I_CHANMODE mono modes exactly like the legacy synchronous path.
-    int outNch = L.nch;
     MediaItem_Take* take = L.jobs.empty() ? nullptr : L.jobs[0].take;
-    if (outNch == 2 && g_GetSetMediaItemTakeInfo && take) {
-      int* p = (int*)g_GetSetMediaItemTakeInfo(take, "I_CHANMODE", nullptr);
-      int chanMode = p ? *p : 0;
-      if (chanMode >= 2 && chanMode <= 4) {
-        int frames = L.totalFrames;
-        std::vector<double> mono((size_t)frames);
-        for (int i = 0; i < frames; i++) {
-          const double* f = &L.samples[(size_t)i * 2];
-          mono[(size_t)i] = (chanMode == 2) ? (f[0] + f[1]) * 0.5
-                          : (chanMode == 4) ? f[1] : f[0];
-        }
-        L.samples = std::move(mono);
-        outNch = 1;
-      }
+    const int chanMode = TakeChanMode(take);
+    const int outNch = FoldedChannels(L.nch, chanMode);
+    if (outNch != L.nch) {   // audio_stream.h helpers: the stream folds identically
+      FoldChanMode(L.samples.data(), L.totalFrames, chanMode);
+      L.samples.resize((size_t)L.totalFrames);
+      L.samples.shrink_to_fit();
     }
     m_waveform.InstallItemAudio(std::move(L.samples), L.totalFrames, L.readRate, outNch);
   } else if (!L.multi) {
