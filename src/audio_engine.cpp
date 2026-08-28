@@ -10,6 +10,11 @@
 #include <ctime>
 #include <algorithm>
 #include <chrono>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 // --- WAV format structures ---
 
@@ -378,6 +383,34 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
   if (g_UpdateArrange) g_UpdateArrange();
 }
 
+std::string AudioEngine::TempDir()
+{
+#ifdef _WIN32
+  wchar_t w[MAX_PATH] = {};
+  DWORD n = GetTempPathW(MAX_PATH, w);
+  if (n == 0 || n >= MAX_PATH) return ".";
+  char utf8[MAX_PATH * 4] = {};
+  WideCharToMultiByte(CP_UTF8, 0, w, -1, utf8, sizeof(utf8), nullptr, nullptr);
+  std::string dir(utf8);
+  while (!dir.empty() && (dir.back() == '\\' || dir.back() == '/')) dir.pop_back();
+  return dir;
+#else
+  const char* tmpDir = getenv("TMPDIR");
+  std::string dir(tmpDir && tmpDir[0] ? tmpDir : "/tmp");
+  while (dir.size() > 1 && dir.back() == '/') dir.pop_back();
+  return dir;
+#endif
+}
+
+int AudioEngine::ProcessId()
+{
+#ifdef _WIN32
+  return _getpid();
+#else
+  return (int)getpid();
+#endif
+}
+
 std::string AudioEngine::ExportWavPath(const char* sourceFilePath)
 {
   // Generate filename: [basename]_sel_HHMMSS.wav (includes original name)
@@ -387,6 +420,10 @@ std::string AudioEngine::ExportWavPath(const char* sourceFilePath)
   if (sourceFilePath && sourceFilePath[0]) {
     const char* fn = sourceFilePath;
     const char* lastSlash = strrchr(fn, '/');
+#ifdef _WIN32
+    const char* lastBackslash = strrchr(fn, '\\');   // REAPER hands us native separators
+    if (lastBackslash && (!lastSlash || lastBackslash > lastSlash)) lastSlash = lastBackslash;
+#endif
     if (lastSlash) fn = lastSlash + 1;
     snprintf(baseName, sizeof(baseName), "%s", fn);
     // Strip extension
@@ -418,7 +455,7 @@ std::string AudioEngine::ExportWavPath(const char* sourceFilePath)
   if (!chosen && sourceFilePath && sourceFilePath[0]) {
     // Extract directory from source path
     std::string srcDir(sourceFilePath);
-    size_t lastSlash = srcDir.rfind('/');
+    size_t lastSlash = srcDir.find_last_of("/\\");
     if (lastSlash != std::string::npos) {
       srcDir.resize(lastSlash);
       snprintf(exportPath, sizeof(exportPath), "%s/%s", srcDir.c_str(), filename);
@@ -428,9 +465,7 @@ std::string AudioEngine::ExportWavPath(const char* sourceFilePath)
 
   // Priority 3: temp directory
   if (!chosen) {
-    const char* tmpDir = getenv("TMPDIR");
-    if (!tmpDir) tmpDir = "/tmp";
-    snprintf(exportPath, sizeof(exportPath), "%s/%s", tmpDir, filename);
+    snprintf(exportPath, sizeof(exportPath), "%s/%s", TempDir().c_str(), filename);
     chosen = "tmp";
   }
   DBG("[AudioEngine] Export destination: %s (%s)\n", exportPath, chosen);

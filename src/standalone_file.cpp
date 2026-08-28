@@ -686,10 +686,9 @@ bool SneakPeak::StandaloneWritePreviewFile(int startFrame, int endFrame)
 
   // Preview is temporary — always use temp dir (file deleted after playback)
   {
-    const char* tmpDir = getenv("TMPDIR");
-    if (!tmpDir) tmpDir = "/tmp";
     char tmpPath[512];
-    snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_preview_%d.wav", tmpDir, (int)getpid());
+    snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_preview_%d.wav",
+             AudioEngine::TempDir().c_str(), AudioEngine::ProcessId());
     if (AudioEngine::WriteWavFile(tmpPath, previewData.data(), endFrame - startFrame,
                                   nch, sr, m_wavBitsPerSample, m_wavAudioFormat))
       m_previewTempPath = tmpPath;
@@ -984,10 +983,9 @@ void SneakPeak::StandaloneAuditionSeam()
 
   if (!m_previewTempPath.empty()) remove(m_previewTempPath.c_str());
   {
-    const char* tmpDir = getenv("TMPDIR");
-    if (!tmpDir) tmpDir = "/tmp";
     char tmpPath[512];
-    snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_preview_%d.wav", tmpDir, (int)getpid());
+    snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_preview_%d.wav",
+             AudioEngine::TempDir().c_str(), AudioEngine::ProcessId());
     if (AudioEngine::WriteWavFile(tmpPath, seam.data(), pre + post + gap, nch,
                                   sr, m_wavBitsPerSample, m_wavAudioFormat))
       m_previewTempPath = tmpPath;

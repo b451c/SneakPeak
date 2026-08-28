@@ -487,9 +487,22 @@ def dismiss_native_modal(s, *, timeout: float = 15.0):
     """SneakPeak's destructive-op confirmation is a native MessageBox (an app-
     modal NSAlert on macOS): REAPER's defer loop - and with it the bridge -
     stops until it is answered. Wait for the heartbeat to stall, bring the
-    isolated REAPER to the front and press Return (= the default 'Yes')."""
+    isolated REAPER to the front and press Return (= the default 'Yes').
+    Windows: the dialog is a plain top-level window in our own window station,
+    so find it by caption and post WM_COMMAND/IDYES - no focus, no key events."""
     import subprocess
     import time as _t
+    if sys.platform == "win32":
+        import ctypes
+        u32 = ctypes.windll.user32
+        t0 = _t.monotonic()
+        while _t.monotonic() - t0 < timeout:
+            h = u32.FindWindowW(None, "SneakPeak - Destructive Operation")
+            if h:
+                u32.PostMessageW(h, 0x0111, 6, 0)   # WM_COMMAND, IDYES
+                return True
+            _t.sleep(0.02)
+        return False
     import Quartz
     t0 = _t.monotonic()
     last = _heartbeat_t(s)

@@ -20,6 +20,14 @@ public:
   // Get the source file path for a take
   static std::string GetSourceFilePath(MediaItem_Take* take);
 
+  // Scratch directory for temp WAVs (preview, undo snapshot, paste, One-Shot
+  // LUFS, export fallback): %TEMP% on Windows, $TMPDIR or /tmp elsewhere; no
+  // trailing separator. A "/tmp" fallback pointed at a non-existent C:\tmp on
+  // Windows (forum #105: silent Standalone preview). Paired with ProcessId()
+  // for per-instance file names.
+  static std::string TempDir();
+  static int ProcessId();
+
   // Read WAV header info (does not read audio data)
   static bool ReadWavHeader(const std::string& path, WavInfo& info);
 

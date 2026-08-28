@@ -57,10 +57,9 @@ void SneakPeak::UndoSave()
   if (!m_waveform.IsStandaloneMode() && m_waveform.GetTake()) {
     DiscardItemUndo();
     m_itemUndoPath = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
-    const char* tmpDir = getenv("TMPDIR");
-    if (!tmpDir) tmpDir = "/tmp";
     char buf[512];
-    snprintf(buf, sizeof(buf), "%s/sneakpeak_undo_%d.wav", tmpDir, (int)getpid());
+    snprintf(buf, sizeof(buf), "%s/sneakpeak_undo_%d.wav",
+             AudioEngine::TempDir().c_str(), AudioEngine::ProcessId());
     m_itemUndoFile = buf;
     if (!AudioEngine::CopyFileInto(m_itemUndoPath, m_itemUndoFile)) {
       DBG("[SneakPeak] undo snapshot failed: %s\n", m_itemUndoFile.c_str());
@@ -370,11 +369,24 @@ bool SneakPeak::BeginDestructiveWrite(std::string& path)
   AbortExportPump();
   JoinDynamicsWorker(true);   // the trace job holds accessors on the file being rewritten
   m_waveform.ReleaseTakeAccessors();
+#ifdef _WIN32
+  // Windows keeps the source file open through REAPER's own take decoder and
+  // refuses an in-place overwrite while it is held ("target is in use"), so the
+  // destructive edit silently failed and popped the "Failed to write" box
+  // (forum #105 platform). Take the selected item's media offline for the
+  // duration of the write - EndDestructiveWrite brings it back online. macOS and
+  // Linux overwrite an open file fine, so this is Windows-only. The item we edit
+  // is REAPER's selected item in ITEM mode (the selection poll loads it).
+  if (g_Main_OnCommand) g_Main_OnCommand(40440, 0);  // Item: set selected media offline
+#endif
   return true;
 }
 
 void SneakPeak::EndDestructiveWrite(bool written)
 {
+#ifdef _WIN32
+  if (g_Main_OnCommand) g_Main_OnCommand(40439, 0);  // Item: set selected media online
+#endif
   if (!written) {
     m_waveform.RecreateLiveAccessor();
     MessageBox(m_hwnd, "Failed to write WAV file.", "SneakPeak", MB_OK | MB_ICONERROR);
@@ -612,8 +624,8 @@ void SneakPeak::DoPaste()
 
   // Write clipboard to temp WAV
   char tempPath[512];
-  snprintf(tempPath, sizeof(tempPath), "/tmp/sneakpeak_paste_%d_%lld.wav",
-           (int)getpid(), (long long)time(nullptr));
+  snprintf(tempPath, sizeof(tempPath), "%s/sneakpeak_paste_%d_%lld.wav",
+           AudioEngine::TempDir().c_str(), AudioEngine::ProcessId(), (long long)time(nullptr));
   if (!AudioEngine::WriteWavFile(tempPath, s_clipboard.samples.data(),
       s_clipboard.numFrames, s_clipboard.numChannels, s_clipboard.sampleRate, 32, 3))
     return;
@@ -2654,11 +2666,9 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
   } else if (p.normMode == 2) {   // LUFS-I via REAPER's own measurement
     bool ok = false;
     if (g_PCM_Source_CreateFromFile && g_CalculateNormalization) {
-      const char* tmpDir = getenv("TMPDIR");
-      if (!tmpDir) tmpDir = "/tmp";
       char tmpPath[512];
-      snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_oneshot_%d.wav", tmpDir,
-               (int)getpid());
+      snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_oneshot_%d.wav",
+               AudioEngine::TempDir().c_str(), AudioEngine::ProcessId());
       if (AudioEngine::WriteWavFile(tmpPath, work.data(), len, nch, sr, 32, 3)) {
         if (PCM_source* src = g_PCM_Source_CreateFromFile(tmpPath)) {
           const double gainDb =

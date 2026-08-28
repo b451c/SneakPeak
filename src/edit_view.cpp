@@ -39,6 +39,10 @@ void SneakPeak::Create()
   m_hwnd = CreateSneakPeakDialog(g_reaperMainHwnd, DlgProc, (LPARAM)this);
 #endif
   if (!m_hwnd) return;
+  // The SWELL dialog resource carries the "SneakPeak" caption; the Win32
+  // DLGTEMPLATE has none, and nothing else titles the window until an item
+  // loads (forum #105 platform: an unnamed window in the taskbar).
+  UpdateTitle();
 
 #ifdef _WIN32
   // Forum #83: Windows delivers WM_DROPFILES only after explicit registration
