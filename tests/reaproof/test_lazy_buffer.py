@@ -28,7 +28,9 @@ from conftest import (SELECT_ITEM0, assert_no_loading, capture, clear_project,
 RESULTS = Path("/tmp/sneakpeak-perf-results.json")
 SHOTS = Path("/tmp/sneakpeak-reaproof-shots/lazy")
 CM_TOGGLE_SPECTRAL = 2028      # edit_view.h enum ContextMenuID (CM_UNDO = 2000)
+CM_COPY, CM_PASTE = 2002, 2003
 RSS_BUDGET_MB = 50
+SR_SOURCE = 44100
 
 
 def _record(name: str, m: dict):
@@ -109,4 +111,59 @@ def test_item_over_the_buffer_cap_is_refused_without_allocating(sess):
     assert m["rss_delta_mb"] < RSS_BUDGET_MB, f"an over-cap item allocated its buffer: {m}"
     # the pane rows still show the waveform lane (a placeholder would be all dark)
     assert before > 0.1 and after > 0.1, f"the spectral pane opened on an over-cap item: {m}"
+
+
+def _bottom_panel_lit_fraction(s, out: Path) -> float:
+    """Fraction of non-dark pixels in the bottom panel (52 px at UI scale 1):
+    the level meter bars live there; stopped, they decay to nothing."""
+    cap = capture(s, out)
+    cw, ch = client_size(s)
+    titlebar = cap.height - ch
+    band = cap.image[titlebar + ch - 50:titlebar + ch - 2, 2:cw - 2, :3].astype(int)
+    return float((band.max(axis=2) > 60).mean())
+
+
+def _paste_source_rates(s) -> list[int]:
+    return list(s.eval("""
+      local out = {}
+      local tr = reaper.GetTrack(0, 0)
+      for i = 0, reaper.CountTrackMediaItems(tr) - 1 do
+        local tk = reaper.GetActiveTake(reaper.GetTrackMediaItem(tr, i))
+        local src = reaper.GetMediaItemTake_Source(tk)
+        local path = reaper.GetMediaSourceFileName(src, "")
+        if path:find("sneakpeak_paste") then out[#out + 1] = reaper.GetMediaSourceSampleRate(src) end
+      end
+      return out""", hang_timeout=120) or [])
+
+
+def test_copy_paste_on_a_lazy_item_streams_at_the_source_rate(sess):
+    """Copy used to lift the selection out of the working buffer - 8 kHz on a
+    20-minute item - and Paste then inserted that 8 kHz temp WAV into the
+    project. Copy now streams the selection at the source rate and needs no
+    buffer at all: ground truth = the pasted item's source sample rate."""
+    from conftest import WAVE_Y, click_client, drag_client, track_item_count
+    media = write_long_wav(perf_media_dir() / "long20min_stereo.wav", minutes=20)
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=30)
+    assert_no_loading(sess, 1.5)
+    rss0 = rss_mb(sess)
+
+    drag_client(sess, 200, WAVE_Y, 220, WAVE_Y)      # ~30 s of the item
+    time.sleep(0.3)
+    send_command(sess, CM_COPY)
+    assert_no_loading(sess, 2.0)                      # streamed, not decoded
+    click_client(sess, 700, WAVE_Y)                   # cursor deep in the item
+    time.sleep(0.3)
+    n0 = track_item_count(sess)
+    send_command(sess, CM_PASTE)
+    sess.wait_until(lambda: track_item_count(sess) > n0, timeout=30)
+    sess.wait_until(lambda: len(_paste_source_rates(sess)) == 1, timeout=10)
+    rates = _paste_source_rates(sess)
+    m = {"paste_rates": rates, "rss_delta_mb": round(rss_mb(sess) - rss0, 1)}
+    _record("lazy.copy_paste_20min", m)
+    assert rates == [SR_SOURCE], f"the pasted audio is not at the source rate: {m}"
+    assert m["rss_delta_mb"] < RSS_BUDGET_MB + 40, f"Copy decoded a working buffer: {m}"   # +clipboard
 

@@ -481,10 +481,44 @@ void SneakPeak::SyncSelectionToReaper()
 void SneakPeak::DoCopy()
 {
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
-  if (!RequireItemAudio("Copy")) return;
 
   // Sync selection to REAPER so native copy works on the right range
   SyncSelectionToReaper();
+
+  if (!m_waveform.IsStandaloneMode() && !m_waveform.IsMultiItemActive()) {
+    // Single-item / timeline / SET: stream the selection from the source at
+    // its own rate (8e SliceSamples, item volume baked like every export) -
+    // the working buffer is downsampled on long items (F11: an 8 kHz
+    // clipboard) and absent on lazy ones (8g). Bounded by the buffer cap.
+    WaveformSelection sel = m_waveform.GetSelection();
+    const double t0 = std::max(0.0, std::min(sel.startTime, sel.endTime));
+    const double t1 = std::min(m_waveform.GetItemDuration(), std::max(sel.startTime, sel.endTime));
+    const int nch = std::max(1, m_waveform.GetNumChannels());
+    const int srcRate = m_waveform.GetSourceSampleRate();
+    if (t1 <= t0 || srcRate <= 0) return;
+    if ((int64_t)((t1 - t0) * srcRate) * nch * (int64_t)sizeof(double) > WaveformView::kMaxBufferBytes) {
+      const int maxMin = (int)(WaveformView::kMaxBufferBytes / (nch * (int64_t)sizeof(double)) / srcRate / 60);
+      char msg[96];
+      snprintf(msg, sizeof(msg), "Selection too long to copy (about %d min max at this rate)", maxMin);
+      ShowToast(msg);
+      return;
+    }
+    std::vector<double> out;
+    int outNch = 0, outRate = 0;
+    if (!SliceSamples(t0, t1, out, &outNch, &outRate) || outNch <= 0) {
+      ShowToast("Could not read the item audio - nothing copied");
+      return;
+    }
+    s_clipboard.numFrames = 0;   // fill samples first, set numFrames last
+    s_clipboard.samples = std::move(out);
+    s_clipboard.numChannels = outNch;
+    s_clipboard.sampleRate = outRate;
+    s_clipboard.numFrames = (int)(s_clipboard.samples.size() / (size_t)outNch);
+    if (g_Main_OnCommand) g_Main_OnCommand(40060, 0);   // REAPER's native copy too
+    DBG("[SneakPeak] Copied %d frames @ %d Hz to clipboard (streamed)\n", s_clipboard.numFrames, outRate);
+    return;
+  }
+  if (!RequireItemAudio("Copy")) return;   // multi-item layers (eager); Standalone is always ready
 
   int startF, endF;
   GetSelectionSampleRange(startF, endF);
@@ -497,7 +531,7 @@ void SneakPeak::DoCopy()
     // Multi-item view only: mix all layers in selected range
     m_waveform.GetMultiItemView().GetMixedAudio(startF, endF, nch, s_clipboard.samples);
   } else {
-    // Single-item / timeline / SET: copy from m_audioData
+    // Standalone: copy from the full-rate buffer
     const auto& data = m_waveform.GetAudioData();
     size_t srcOffset = (size_t)startF * nch;
     size_t copyLen = (size_t)selFrames * nch;
