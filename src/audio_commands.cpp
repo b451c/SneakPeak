@@ -427,14 +427,41 @@ bool SneakPeak::BeginDestructiveWrite(std::string& path)
   return true;
 }
 
+// The pre-edit copy UndoSave took, back over the take's file (UndoRestore
+// keeps its own copy-back: it brackets the file offline itself).
+bool SneakPeak::RestoreFromSnapshot()
+{
+  return m_hasUndo && !m_itemUndoFile.empty() && m_waveform.GetTake() &&
+         AudioEngine::GetSourceFilePath(m_waveform.GetTake()) == m_itemUndoPath &&
+         AudioEngine::CopyFileInto(m_itemUndoFile, m_itemUndoPath);
+}
+
 void SneakPeak::EndDestructiveWrite(bool written)
 {
+  // Rollback (audit A1.4): an in-place edit that fails part-way (a read past
+  // a truncated data chunk, a disk that fills up) leaves the chunks already
+  // written; the snapshot taken moments ago goes back - inside the Windows
+  // offline bracket, like the write itself.
+  const bool restored = !written && RestoreFromSnapshot();
 #ifdef _WIN32
   if (g_Main_OnCommand) g_Main_OnCommand(40439, 0);  // Item: set selected media online
 #endif
   if (!written) {
-    m_waveform.RecreateLiveAccessor();
-    MessageBox(m_hwnd, "Failed to write WAV file.", "SneakPeak", MB_OK | MB_ICONERROR);
+    if (!restored) {
+      m_waveform.RecreateLiveAccessor();
+      char msg[640];
+      snprintf(msg, sizeof(msg), "Write failed and the file could NOT be restored.\n%s%s",
+               m_itemUndoFile.empty() ? "There is no pre-edit copy." : "The pre-edit copy is at:\n",
+               m_itemUndoFile.c_str());
+      MessageBox(m_hwnd, msg, "SneakPeak", MB_OK | MB_ICONERROR);
+      return;
+    }
+    AudioEngine::RefreshItemSource(m_waveform.GetItem(), m_waveform.GetTake());
+    DiscardItemUndo();   // the file IS the snapshot again: nothing to undo
+    m_hasUndo = false;
+    m_waveform.ClearItem();
+    LoadSelectedItem();  // the display buffer already carries the edit - reload from disk
+    ShowToast("Write failed - the file was restored from the pre-edit copy");
     return;
   }
   AudioEngine::RefreshItemSource(m_waveform.GetItem(), m_waveform.GetTake());

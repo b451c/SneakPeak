@@ -387,6 +387,7 @@ private:
   bool BeginDestructiveWrite(std::string& path);
   bool DestructiveSourceOk();   // false + toast on SECTION / reversed sources (A1.2)
   void EndDestructiveWrite(bool written);
+  bool RestoreFromSnapshot();   // pre-edit copy back over the current take's file (A1.4)
   void GetSelectionSourceRange(int64_t& startFrame, int64_t& endFrame) const;
   void DiscardItemUndo();
   void SyncSelectionToReaper();

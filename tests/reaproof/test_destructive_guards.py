@@ -248,3 +248,65 @@ def test_snapshot_failure_cancels_the_edit():
         assert "pre-edit copy" in toast and "cancelled" in toast, f"cancel toast missing: {toast!r}"
     finally:
         s.stop()
+
+
+# --- A1.4: a write that fails part-way is rolled back -------------------------
+CM_SELECT_ALL, CM_GAIN_UP = 2007, 2013   # edit_view.h enum ContextMenuID (compiled 2026-08-28)
+GAIN_UP = ('reaper.defer(function() reaper.JS_WindowMessage_Send(SP_WINDOW(), "WM_COMMAND", '
+           f'{CM_GAIN_UP}, 0, 0, 0) end) return true')
+
+
+def _claim_double_data(path: Path):
+    """Patch the RIFF and data chunk sizes to twice the real sample bytes - a
+    truncated WAV (interrupted copy, disk that filled up). The in-place
+    editors size the edit from the header and hit EOF half-way through."""
+    b = bytearray(path.read_bytes())
+    pos = 12
+    while pos + 8 <= len(b):
+        cid, size = bytes(b[pos:pos + 4]), int.from_bytes(b[pos + 4:pos + 8], "little")
+        if cid == b"data":
+            real = len(b) - (pos + 8)
+            b[pos + 4:pos + 8] = (real * 2).to_bytes(4, "little")
+            b[4:8] = (len(b) - 8 + real).to_bytes(4, "little")
+            path.write_bytes(b)
+            return
+        pos += 8 + size + (size & 1)
+    raise AssertionError("no data chunk")
+
+
+def test_partial_write_rolls_back_to_the_pre_edit_copy(sess):
+    """Gain on a selection edits the file chunk by chunk; when a read fails
+    half-way (the data chunk claims twice the bytes the file holds, and the
+    item is extended over the claimed length) the first half is already
+    rewritten. The failed write must put the pre-edit copy back: bytes
+    identical to before, a message saying so. Control (cb48cd5): bytes differ
+    (first half gained) behind a "Failed to write WAV file" box."""
+    clear_project(sess)
+    media = burst_fixture("guard_truncated_30s.wav", seconds=30, channels=2)
+    _claim_double_data(media)
+    insert_item_unselected(sess, media)
+    sess.eval("""
+      local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0)
+      reaper.SetMediaItemLength(it, 60.0, false)
+      reaper.UpdateItemInProject(it)""")
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=90)
+    time.sleep(0.5)
+    sha0 = _sha(media)
+    sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    send_command(sess, CM_SELECT_ALL)
+    time.sleep(0.3)
+
+    sess.eval(GAIN_UP)
+    time.sleep(0.6)
+    capture(sess, SHOTS / "truncated_1_pressed.png")
+    modal = dismiss_native_modal(sess, timeout=6)
+    wait_main_thread_idle(sess, timeout=120)
+    time.sleep(1.0)
+
+    assert _sha(media) == sha0, "the half-written file was not restored"
+    assert not modal, "an error box appeared although the file was restored"
+    toast = _last_toast(sess)
+    assert "restored from the pre-edit copy" in toast, f"rollback toast missing: {toast!r}"
