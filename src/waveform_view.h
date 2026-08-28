@@ -236,6 +236,12 @@ public:
   const std::vector<double>& GetAudioData() const { return m_audioData; }
   int GetAudioSampleCount() const { return m_audioSampleCount; }
   int GetSampleRate() const { return m_sampleRate; }
+  int GetSourceSampleRate() const { return m_sourceRate; }
+  // Long items load DOWNSAMPLED (PlanRead's 10M-frame cap): such a buffer
+  // must never be written back to the source (finding F6).
+  bool IsItemBufferDownsampled() const {
+    return !m_standaloneMode && m_take && m_sourceRate > 0 && m_sampleRate != m_sourceRate;
+  }
   MediaItem_Take* GetTake() const { return m_take; }
   double GetTakeOffset() const { return m_takeOffset; }
   double GetTakePlayrate() const { return m_takePlayrate; }
@@ -323,6 +329,7 @@ private:
   double m_takePlayrate = 1.0; // D_PLAYRATE of m_take (single-item envelope timebase)
   int m_numChannels = 0;
   int m_sampleRate = 44100;
+  int m_sourceRate = 0;   // the take source's own rate (m_sampleRate may be the read rate)
 
   // Cached audio samples (loaded once per item; in single-item ITEM mode the
   // buffer arrives via the background loader - empty until then, display

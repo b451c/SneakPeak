@@ -26,6 +26,7 @@
 #include <thread>
 #include <vector>
 #include <string>
+#include <functional>
 
 // Standalone undo/redo entry (STA-2). Whole-file and length-changing edits
 // snapshot the FULL buffer; bounded selection edits (heal, click repair,
@@ -365,6 +366,15 @@ private:
   // Helpers for destructive ops
   void GetSelectionSampleRange(int& startFrame, int& endFrame) const;
   void WriteAndRefresh();
+  // In-place file edit: op runs on the source WAV over the selection mapped to
+  // FILE frames (wav_inplace.h) - the working buffer is never written back
+  // (downsampled on long items - F6; covers only the item's window - F12).
+  void WriteAndRefreshInplace(
+      const std::function<bool(const std::string& path, int64_t s0, int64_t s1)>& op);
+  bool BeginDestructiveWrite(std::string& path);
+  void EndDestructiveWrite(bool written);
+  void GetSelectionSourceRange(int64_t& startFrame, int64_t& endFrame) const;
+  void DiscardItemUndo();
   void SyncSelectionToReaper();
   void UpdateTitle();
   void UndoSave();
@@ -596,12 +606,11 @@ private:
   bool m_hasUndo = false;
   // Destructive ITEM undo (single level, 2026-07-02): destructive edits
   // rewrite the source FILE, which REAPER's native undo cannot restore -
-  // so UndoSave snapshots the pre-edit buffer + the file it belongs to
-  // (path-checked at restore) + the WAV format it was written with.
-  std::vector<double> m_itemUndoData;
-  std::string m_itemUndoPath;
-  int m_itemUndoNch = 0, m_itemUndoSr = 0;
-  int m_itemUndoBits = 16, m_itemUndoFmt = 1;
+  // so UndoSave snapshots the pre-edit FILE (byte copy in the temp dir; never
+  // the working buffer, which is downsampled on long items - F6) and
+  // UndoRestore copies it back into the same inode (path-checked).
+  std::string m_itemUndoPath;   // the source file the snapshot belongs to
+  std::string m_itemUndoFile;   // the snapshot copy (empty = no snapshot)
   // Standalone undo/redo stacks (full or range snapshots - StandaloneUndoEntry)
   std::vector<StandaloneUndoEntry> m_standaloneUndoStack;
   std::vector<StandaloneUndoEntry> m_standaloneRedoStack;

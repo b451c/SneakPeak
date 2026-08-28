@@ -53,7 +53,8 @@ public:
   static bool ReadStreamStep(StreamLoad& s, double budgetSec);
   static void AbortStream(StreamLoad& s);
 
-  // Write audio data to WAV file (atomic: writes to .tmp then renames)
+  // Write audio data to WAV file (writes .tmp, then overwrites the destination
+  // IN PLACE - same inode - so REAPER's pooled decoders see the new audio)
   // samples are interleaved doubles, will be converted to original format
   // loopStartFrame/loopEndFrame (END-EXCLUSIVE): when both valid, a `smpl`
   // sustain-loop chunk is appended after the data chunk (v2.4 INC-A4) so game
@@ -62,6 +63,10 @@ public:
                            int numFrames, int numChannels, int sampleRate,
                            int bitsPerSample, int audioFormat,
                            int loopStartFrame = -1, int loopEndFrame = -1);
+
+  // Copy src into dst opened for truncate+write: dst keeps its inode (created
+  // when absent). False on any I/O error - dst may then be incomplete.
+  static bool CopyFileInto(const std::string& src, const std::string& dst);
 
   // Refresh REAPER's source after modifying the file on disk
   static void RefreshItemSource(MediaItem* item, MediaItem_Take* take);

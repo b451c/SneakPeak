@@ -286,22 +286,7 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
   // inode, still serving the pre-edit audio (F7, forum #47). The tmp file is a
   // complete image, so the original is only touched once the encode succeeded;
   // if the copy fails the tmp is kept as the recovery copy.
-  FILE* src = fopen(tmpPath.c_str(), "rb");
-  FILE* dst = src ? fopen(path.c_str(), "wb") : nullptr;
-  if (!src || !dst) {
-    DBG("[AudioEngine] in-place overwrite: cannot open %s\n", (src ? path : tmpPath).c_str());
-    if (src) fclose(src);
-    remove(tmpPath.c_str());
-    return false;
-  }
-  std::vector<char> buf(1 << 20);
-  bool copied = true;
-  size_t n;
-  while (copied && (n = fread(buf.data(), 1, buf.size(), src)) > 0)
-    copied = fwrite(buf.data(), 1, n, dst) == n;
-  fclose(src);
-  copied = (fclose(dst) == 0) && copied;
-  if (!copied) {
+  if (!CopyFileInto(tmpPath, path)) {
     DBG("[AudioEngine] in-place overwrite failed, tmp kept: %s\n", tmpPath.c_str());
     return false;
   }
@@ -310,6 +295,24 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
   DBG("[AudioEngine] Wrote WAV: %s (%d frames, %dch, %dHz, %dbit)\n",
       path.c_str(), numFrames, numChannels, sampleRate, bitsPerSample);
   return true;
+}
+
+bool AudioEngine::CopyFileInto(const std::string& src, const std::string& dst)
+{
+  FILE* in = fopen(src.c_str(), "rb");
+  FILE* out = in ? fopen(dst.c_str(), "wb") : nullptr;
+  if (!in || !out) {
+    DBG("[AudioEngine] CopyFileInto: cannot open %s\n", (in ? dst : src).c_str());
+    if (in) fclose(in);
+    return false;
+  }
+  std::vector<char> buf(1 << 20);
+  bool ok = true;
+  size_t n;
+  while (ok && (n = fread(buf.data(), 1, buf.size(), in)) > 0)
+    ok = fwrite(buf.data(), 1, n, out) == n;
+  fclose(in);
+  return (fclose(out) == 0) && ok;
 }
 
 bool AudioEngine::ReadAudioFile(const std::string& path, WavInfo& info,

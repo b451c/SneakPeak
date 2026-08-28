@@ -144,6 +144,7 @@ void SneakPeak::Destroy()
   StandaloneCleanupPreview();
   if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
   CleanupDragTemp();
+  DiscardItemUndo();
   // Cancel an in-flight incremental load (closes its PCM_source)
   m_stdLoading = false;
   AudioEngine::AbortStream(m_stdLoad);

@@ -73,7 +73,7 @@ void WaveformView::SetItem(MediaItem* item)
     PCM_source* src = g_GetMediaItemTake_Source(m_take);
     if (src) {
       srcChannels = src->GetNumChannels();
-      m_sampleRate = (int)src->GetSampleRate();
+      m_sourceRate = m_sampleRate = (int)src->GetSampleRate();
       if (srcChannels < 1) srcChannels = 1;
       if (srcChannels > 2) srcChannels = 2;
     }
@@ -241,7 +241,7 @@ void WaveformView::LoadConcatenated(const std::vector<MediaItem*>& items)
   m_takePlayrate = TakePlayrate(m_take);
   PCM_source* src0 = g_GetMediaItemTake_Source(m_take);
   if (!src0) { m_item = nullptr; m_take = nullptr; return; }
-  m_sampleRate = (int)src0->GetSampleRate();
+  m_sourceRate = m_sampleRate = (int)src0->GetSampleRate();
   m_numChannels = src0->GetNumChannels();
   if (m_numChannels < 1) m_numChannels = 1;
   if (m_numChannels > 2) m_numChannels = 2;
@@ -379,7 +379,7 @@ void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
   PCM_source* src = g_GetMediaItemTake_Source(firstTake);
   if (!src) return;
 
-  m_sampleRate = (int)src->GetSampleRate();
+  m_sourceRate = m_sampleRate = (int)src->GetSampleRate();
   m_numChannels = src->GetNumChannels();
   if (m_numChannels < 1) m_numChannels = 1;
   if (m_numChannels > 2) m_numChannels = 2;

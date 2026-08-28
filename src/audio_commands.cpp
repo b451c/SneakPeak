@@ -10,6 +10,7 @@
 #include "edit_view.h"
 #include "audio_engine.h"
 #include "audio_ops.h"
+#include "wav_inplace.h"
 #include "spectral_repair.h"
 #include "debug.h"
 #include "reaper_plugin.h"
@@ -18,6 +19,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
 #include <algorithm>
 
@@ -49,17 +51,30 @@ void SneakPeak::UndoSave()
   // Destructive ITEM edits rewrite the source FILE - REAPER's native undo
   // cannot restore that, so these edits were effectively one-way (user
   // report 2026-07-02; the confirm prompt was the only guard). Snapshot the
-  // pre-edit buffer + the file it belongs to + the WAV format the edit will
-  // write with; UndoRestore writes it back. Single level.
+  // pre-edit FILE as a byte copy in the temp dir - never the working buffer:
+  // on long items that buffer is DOWNSAMPLED and writing it back on undo
+  // would destroy the source (finding F6). Single level.
   if (!m_waveform.IsStandaloneMode() && m_waveform.GetTake()) {
+    DiscardItemUndo();
     m_itemUndoPath = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
-    m_itemUndoData = m_waveform.GetAudioData();
-    m_itemUndoNch = m_waveform.GetNumChannels();
-    m_itemUndoSr = m_waveform.GetSampleRate();
-    m_itemUndoBits = m_wavBitsPerSample;
-    m_itemUndoFmt = m_wavAudioFormat;
+    const char* tmpDir = getenv("TMPDIR");
+    if (!tmpDir) tmpDir = "/tmp";
+    char buf[512];
+    snprintf(buf, sizeof(buf), "%s/sneakpeak_undo_%d.wav", tmpDir, (int)getpid());
+    m_itemUndoFile = buf;
+    if (!AudioEngine::CopyFileInto(m_itemUndoPath, m_itemUndoFile)) {
+      DBG("[SneakPeak] undo snapshot failed: %s\n", m_itemUndoFile.c_str());
+      DiscardItemUndo();
+    }
   }
   m_hasUndo = true;
+}
+
+void SneakPeak::DiscardItemUndo()
+{
+  if (!m_itemUndoFile.empty()) remove(m_itemUndoFile.c_str());
+  m_itemUndoFile.clear();
+  m_itemUndoPath.clear();
 }
 
 void SneakPeak::UndoRestore()
@@ -69,23 +84,21 @@ void SneakPeak::UndoRestore()
     return;
   }
   // Destructive-edit restore: if the snapshot belongs to the CURRENT take's
-  // source file, write the pre-edit audio back and reload from disk. REAPER's
-  // own undo point for the edit stays in its history as a no-op label - we
-  // deliberately do NOT pop it (the user may have made project changes since;
-  // popping would undo those instead).
-  if (m_hasUndo && !m_itemUndoData.empty() && m_itemUndoNch > 0 &&
-      m_waveform.GetTake() &&
+  // source file, copy the pre-edit file back (same inode - F7) and reload
+  // from disk. REAPER's own undo point for the edit stays in its history as
+  // a no-op label - we deliberately do NOT pop it (the user may have made
+  // project changes since; popping would undo those instead).
+  if (m_hasUndo && !m_itemUndoFile.empty() && m_waveform.GetTake() &&
       AudioEngine::GetSourceFilePath(m_waveform.GetTake()) == m_itemUndoPath) {
-    const int frames = (int)(m_itemUndoData.size() / (size_t)m_itemUndoNch);
-    if (!AudioEngine::WriteWavFile(m_itemUndoPath, m_itemUndoData.data(),
-                                   frames, m_itemUndoNch, m_itemUndoSr,
-                                   m_itemUndoBits, m_itemUndoFmt)) {
+    AbortItemAudioLoad();
+    m_waveform.ReleaseTakeAccessors();
+    if (!AudioEngine::CopyFileInto(m_itemUndoFile, m_itemUndoPath)) {
+      m_waveform.RecreateLiveAccessor();
       ShowToast("Undo failed - check the file permissions");
       return;
     }
     AudioEngine::RefreshItemSource(m_waveform.GetItem(), m_waveform.GetTake());
-    m_itemUndoData = std::vector<double>();
-    m_itemUndoPath.clear();
+    DiscardItemUndo();
     m_hasUndo = false;
     m_waveform.ClearItem();
     LoadSelectedItem();
@@ -331,48 +344,35 @@ void SneakPeak::DoLoopSelection()
 
 // --- Write back to disk and refresh ---
 
-void SneakPeak::WriteAndRefresh()
+// Destructive-write bracket shared by the buffer write and the in-place file
+// ops: WAV sources only, and our own readers (live accessor, retained cache,
+// background loader) are dropped while the file changes under them. F7: every
+// write lands in the SAME inode so REAPER's pooled decoders serve the new
+// audio at once.
+bool SneakPeak::BeginDestructiveWrite(std::string& path)
 {
-  if (!m_waveform.HasItem() || !m_waveform.GetTake()) return;
+  if (!m_waveform.HasItem() || !m_waveform.GetTake()) return false;
+  path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+  if (path.empty()) return false;
 
-  std::string path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
-  if (path.empty()) return;
-
-  // Block non-WAV destructive editing
-  {
-    std::string ext;
-    auto dotPos = path.find_last_of('.');
-    if (dotPos != std::string::npos)
-      ext = path.substr(dotPos + 1);
-    for (auto& c : ext) c = (char)tolower((unsigned char)c);
-    if (ext != "wav" && ext != "wave") {
-      MessageBox(m_hwnd, "Destructive editing only supports WAV files.\nConvert source to WAV first.",
-                 "SneakPeak", MB_OK | MB_ICONWARNING);
-      return;
-    }
+  std::string ext;
+  auto dotPos = path.find_last_of('.');
+  if (dotPos != std::string::npos)
+    ext = path.substr(dotPos + 1);
+  for (auto& c : ext) c = (char)tolower((unsigned char)c);
+  if (ext != "wav" && ext != "wave") {
+    MessageBox(m_hwnd, "Destructive editing only supports WAV files.\nConvert source to WAV first.",
+               "SneakPeak", MB_OK | MB_ICONWARNING);
+    return false;
   }
-
-  const auto& data = m_waveform.GetAudioData();
-  int nch = m_waveform.GetNumChannels();
-  int sr = m_waveform.GetSampleRate();
-  int frames = m_waveform.GetAudioSampleCount();
-
-  // Write back in the SOURCE file's own format. m_wavBitsPerSample tracks
-  // standalone loads only (default 16): using it here silently re-encoded a
-  // 24-bit or float item as 16-bit PCM on Reverse/DC Remove.
-  WavInfo srcInfo;
-  int outBits = 32, outFmt = 3;   // lossless fallback for the double buffer
-  if (AudioEngine::ReadWavHeader(path, srcInfo) && srcInfo.bitsPerSample > 0) {
-    outBits = srcInfo.bitsPerSample;
-    outFmt = srcInfo.audioFormat;
-  }
-  // F7: the write overwrites the source IN PLACE (same inode) so REAPER's pooled
-  // decoders serve the new audio at once. Drop our own readers first (live
-  // accessor, retained cache, background loader) so nothing of ours reads the
-  // file while it is being truncated and rewritten.
   AbortItemAudioLoad();
   m_waveform.ReleaseTakeAccessors();
-  if (!AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr, outBits, outFmt)) {
+  return true;
+}
+
+void SneakPeak::EndDestructiveWrite(bool written)
+{
+  if (!written) {
     m_waveform.RecreateLiveAccessor();
     MessageBox(m_hwnd, "Failed to write WAV file.", "SneakPeak", MB_OK | MB_ICONERROR);
     return;
@@ -385,6 +385,68 @@ void SneakPeak::WriteAndRefresh()
   m_waveform.Invalidate();
   m_dirty = true;
   UpdateTitle();
+}
+
+void SneakPeak::WriteAndRefresh()
+{
+  std::string path;
+  if (!BeginDestructiveWrite(path)) return;
+
+  const auto& data = m_waveform.GetAudioData();
+  int nch = m_waveform.GetNumChannels();
+  int sr = m_waveform.GetSampleRate();
+  int frames = m_waveform.GetAudioSampleCount();
+
+  // The buffer covers the ITEM and this write replaces the WHOLE file, so it
+  // is only valid when the two coincide: never a downsampled buffer (10M-frame
+  // cap - F6) and never a trimmed, offset or rate-changed item, which would
+  // truncate the source to the item's window (F12). Reverse / Gain / DC Remove
+  // edit the file in place instead (WriteAndRefreshInplace).
+  WavInfo srcInfo;
+  const bool haveSrc = AudioEngine::ReadWavHeader(path, srcInfo) && srcInfo.bitsPerSample > 0;
+  const bool wholeFile = haveSrc && sr == srcInfo.sampleRate &&
+                         m_waveform.GetTakeOffset() == 0.0 && m_waveform.GetTakePlayrate() == 1.0 &&
+                         std::abs((int64_t)frames - (int64_t)srcInfo.numFrames) <= 1;
+  if (m_waveform.IsItemBufferDownsampled() || !wholeFile) {
+    m_waveform.RecreateLiveAccessor();
+    ShowToast(m_waveform.IsItemBufferDownsampled()
+                  ? "Item too long for this edit - the file was not changed"
+                  : "This edit needs the item to cover the whole source file - the file was not changed");
+    return;
+  }
+  // Write back in the SOURCE file's own format. m_wavBitsPerSample tracks
+  // standalone loads only (default 16): using it here silently re-encoded a
+  // 24-bit or float item as 16-bit PCM on Reverse/DC Remove.
+  EndDestructiveWrite(AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr,
+                                                srcInfo.bitsPerSample, srcInfo.audioFormat));
+}
+
+void SneakPeak::WriteAndRefreshInplace(
+    const std::function<bool(const std::string& path, int64_t s0, int64_t s1)>& op)
+{
+  std::string path;
+  if (!BeginDestructiveWrite(path)) return;
+  int64_t s0, s1;
+  GetSelectionSourceRange(s0, s1);
+  EndDestructiveWrite(op(path, s0, s1));
+}
+
+// The selection (whole item when none) in FILE frames: item time -> source
+// time through the take's start offset and playrate, at the source's own rate.
+void SneakPeak::GetSelectionSourceRange(int64_t& startFrame, int64_t& endFrame) const
+{
+  double t0 = 0.0, t1 = m_waveform.GetItemDuration();
+  if (m_waveform.HasSelection()) {
+    WaveformSelection sel = m_waveform.GetSelection();
+    t0 = std::max(0.0, std::min(sel.startTime, sel.endTime));
+    t1 = std::min(m_waveform.GetItemDuration(), std::max(sel.startTime, sel.endTime));
+    if (t1 <= t0) { t0 = 0.0; t1 = m_waveform.GetItemDuration(); }
+  }
+  const double rate = m_waveform.GetTakePlayrate() > 0.0 ? m_waveform.GetTakePlayrate() : 1.0;
+  const double sr = (double)m_waveform.GetSourceSampleRate();
+  const double off = m_waveform.GetTakeOffset();
+  startFrame = (int64_t)((off + t0 * rate) * sr + 0.5);
+  endFrame = (int64_t)((off + t1 * rate) * sr + 0.5);
 }
 
 // --- Sync SneakPeak selection to REAPER time selection ---
@@ -1323,9 +1385,11 @@ void SneakPeak::DoReverse()
   int selFrames = endF - startF;
 
   auto& data = m_waveform.GetAudioData();
-  AudioOps::Reverse(data.data() + (size_t)startF * nch, selFrames, nch);
+  AudioOps::Reverse(data.data() + (size_t)startF * nch, selFrames, nch);   // the display
 
-  WriteAndRefresh();
+  WriteAndRefreshInplace([](const std::string& p, int64_t a, int64_t b) {
+    return WavInplace::Reverse(p, a, b);
+  });
 
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Reverse (destructive)", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
@@ -1430,7 +1494,10 @@ void SneakPeak::DoGain(double factor)
       }
     }
 
-    WriteAndRefresh();
+    const int fade = m_waveform.GetSourceSampleRate() / 200;   // ~5 ms at the file's rate
+    WriteAndRefreshInplace([factor, fade](const std::string& p, int64_t a, int64_t b) {
+      return WavInplace::Gain(p, a, b, factor, fade);
+    });
 
     char desc[64];
     snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", 20.0 * log10(factor));
@@ -1483,9 +1550,11 @@ void SneakPeak::DoDCRemove()
   int selFrames = endF - startF;
 
   auto& data = m_waveform.GetAudioData();
-  AudioOps::DCOffsetRemove(data.data() + (size_t)startF * nch, selFrames, nch);
+  AudioOps::DCOffsetRemove(data.data() + (size_t)startF * nch, selFrames, nch);   // the display
 
-  WriteAndRefresh();
+  WriteAndRefreshInplace([](const std::string& p, int64_t a, int64_t b) {
+    return WavInplace::DCRemove(p, a, b);
+  });
 
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: DC Offset Remove (destructive)", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
@@ -1728,6 +1797,10 @@ void SneakPeak::DoApplyLimiterItem()
   const int sr = m_waveform.GetSampleRate();
   const int frames = m_waveform.GetAudioSampleCount();
   if (frames <= 0 || nch <= 0 || sr <= 0) return;
+  if (m_waveform.IsItemBufferDownsampled()) {   // F6: the limiter has no file-streamed path
+    ShowToast("Item too long for the Hard Limiter (working buffer is downsampled)");
+    return;
+  }
 
   // WAV sources only - refuse BEFORE the prompt and the compute, not after
   // (WriteAndRefresh would otherwise reject a buffer we already limited).

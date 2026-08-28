@@ -99,6 +99,7 @@ add_library(reaper_sneakpeak SHARED
   src/looplab_panel.cpp
   src/loop_finder.cpp
   src/wav_smpl.cpp
+  src/wav_inplace.cpp
   src/ui_render.cpp
   ${SNEAKPEAK_FONT_GEN}
 )
