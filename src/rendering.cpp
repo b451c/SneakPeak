@@ -1691,6 +1691,9 @@ void SneakPeak::ShowToast(const char* text)
 {
   snprintf(m_toastText, sizeof(m_toastText), "%s", text);
   m_toastStartTick = GetTickCount();
+  // Session-only probe for the ReaProof specs (never persisted): the last
+  // toast is the only trace a refused destructive edit leaves behind.
+  if (g_SetExtState) g_SetExtState("SneakPeak", "last_toast", m_toastText, false);
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
@@ -1707,6 +1710,8 @@ void SneakPeak::DrawToastPremium(HDC hdc)
   if (elapsed > 1500) alpha = 1.0 - (double)(elapsed - 1500) / 500.0;
 
   int pillW = textLen * SP(9) + SP(24);
+  const int maxW = m_waveformRect.right - m_waveformRect.left - SP(8);
+  if (maxW > SP(32) && pillW > maxW) pillW = maxW;   // long toast on a narrow window: never off-screen
   int pillH = SP(26);
   int cx = (m_waveformRect.left + m_waveformRect.right) / 2;
   int cy = m_waveformRect.top + SP(30);
@@ -1738,6 +1743,8 @@ void SneakPeak::DrawToast(HDC hdc)
   if (textLen == 0) return;
 
   int pillW = textLen * SP(9) + SP(24);
+  const int maxW = m_waveformRect.right - m_waveformRect.left - SP(8);
+  if (maxW > SP(32) && pillW > maxW) pillW = maxW;   // long toast on a narrow window: never off-screen
   int pillH = SP(26);
   int cx = (m_waveformRect.left + m_waveformRect.right) / 2;
   int cy = m_waveformRect.top + SP(30);

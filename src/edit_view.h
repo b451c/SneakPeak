@@ -376,6 +376,9 @@ private:
   // Helpers for destructive ops
   void GetSelectionSampleRange(int& startFrame, int& endFrame) const;
   void WriteAndRefresh();
+  // True when the working buffer maps 1:1 onto the source file (rate, offset,
+  // playrate, length, CHANNELS) - the only case a whole-file write is valid.
+  bool BufferCoversWholeFile(const std::string& path, WavInfo& srcInfo) const;
   // In-place file edit: op runs on the source WAV over the selection mapped to
   // FILE frames (wav_inplace.h) - the working buffer is never written back
   // (downsampled on long items - F6; covers only the item's window - F12).
@@ -698,7 +701,7 @@ private:
 
   // Toast overlay (e.g. "Saved!")
   DWORD m_toastStartTick = 0;
-  char m_toastText[64] = {};
+  char m_toastText[128] = {};   // refusal messages run to ~90 chars
   UiCanvas m_toastCanvas;   // premium toast renderer (Inc F)
   void ShowToast(const char* text);
   void DrawToast(HDC hdc);

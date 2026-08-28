@@ -419,6 +419,20 @@ void SneakPeak::EndDestructiveWrite(bool written)
   UpdateTitle();
 }
 
+// The working buffer is capped at 2 channels and folded to 1 by the take's
+// mono channel modes (audio_stream.h FoldedChannels), so a whole-file write
+// of it over a 6-channel file drops channels 3-6 and a mono-mode stereo item
+// collapses its file to mono (audit A1.1, P0): the channel count is part of
+// "covers the whole file", not a detail the caller may skip.
+bool SneakPeak::BufferCoversWholeFile(const std::string& path, WavInfo& srcInfo) const
+{
+  if (!AudioEngine::ReadWavHeader(path, srcInfo) || srcInfo.bitsPerSample <= 0) return false;
+  return m_waveform.GetSampleRate() == srcInfo.sampleRate &&
+         m_waveform.GetNumChannels() == srcInfo.numChannels &&
+         m_waveform.GetTakeOffset() == 0.0 && m_waveform.GetTakePlayrate() == 1.0 &&
+         std::abs((int64_t)m_waveform.GetAudioSampleCount() - (int64_t)srcInfo.numFrames) <= 1;
+}
+
 void SneakPeak::WriteAndRefresh()
 {
   std::string path;
@@ -435,11 +449,7 @@ void SneakPeak::WriteAndRefresh()
   // truncate the source to the item's window (F12). Reverse / Gain / DC Remove
   // edit the file in place instead (WriteAndRefreshInplace).
   WavInfo srcInfo;
-  const bool haveSrc = AudioEngine::ReadWavHeader(path, srcInfo) && srcInfo.bitsPerSample > 0;
-  const bool wholeFile = haveSrc && sr == srcInfo.sampleRate &&
-                         m_waveform.GetTakeOffset() == 0.0 && m_waveform.GetTakePlayrate() == 1.0 &&
-                         std::abs((int64_t)frames - (int64_t)srcInfo.numFrames) <= 1;
-  if (m_waveform.IsItemBufferDownsampled() || !wholeFile) {
+  if (m_waveform.IsItemBufferDownsampled() || !BufferCoversWholeFile(path, srcInfo)) {
     m_waveform.RecreateLiveAccessor();
     ShowToast(m_waveform.IsItemBufferDownsampled()
                   ? "Item too long for this edit - the file was not changed"
@@ -1897,6 +1907,17 @@ void SneakPeak::DoApplyLimiterItem()
       MessageBox(m_hwnd,
                  "Destructive editing only supports WAV files.\nConvert source to WAV first.",
                  "SneakPeak", MB_OK | MB_ICONWARNING);
+      return;
+    }
+    // Whole-file rewrite: the buffer must map 1:1 onto the file (rate, offset,
+    // playrate, length, channels - audit A1.1) and the take must play the file's
+    // channels as they are (normal / reversed stereo; the mono modes fold the
+    // buffer to one channel). WriteAndRefresh re-checks the same predicate as
+    // the last line of defence, but by then the buffer is already limited.
+    WavInfo srcInfo;
+    const int chanMode = TakeChanMode(m_waveform.GetTake());
+    if (!BufferCoversWholeFile(path, srcInfo) || chanMode < 0 || chanMode > 1) {
+      ShowToast("Hard Limiter needs the whole file in all channels - the file was not changed");
       return;
     }
   }
