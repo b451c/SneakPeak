@@ -124,13 +124,23 @@ def wait_loaded(s, name_substring: str, timeout: float = 20.0):
         "return reaper.JS_Window_GetTitle(h)")), timeout=timeout)
 
 
-def wait_audio_loaded(s, name_substring: str, timeout: float = 90.0):
-    """Loaded item AND the background loader finished (no 'Loading' in the title)."""
+def wait_audio_loaded(s, name_substring: str, timeout: float = 90.0, stable: float = 1.0):
+    """Loaded item AND the background loader finished (no 'Loading' in the
+    title) - held for `stable` seconds: the plain name is on the title for a
+    moment between the select and the loader's first progress retitle."""
+    import time as _t
+    since = None
     def done():
+        nonlocal since
         t = str(s.eval(f"local h = {window_handle_lua()} if not h then return '' end "
                        "return reaper.JS_Window_GetTitle(h)"))
-        return name_substring in t and "Loading" not in t
-    s.wait_until(done, timeout=timeout)
+        ok = name_substring in t and "Loading" not in t
+        if not ok:
+            since = None
+            return False
+        since = since or _t.monotonic()
+        return _t.monotonic() - since >= stable
+    s.wait_until(done, timeout=timeout + stable)
 
 
 def client_size(s) -> tuple[int, int]:

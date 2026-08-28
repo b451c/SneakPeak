@@ -19,10 +19,11 @@ void MinimapView::ComputePeaks(const WaveformView& wv)
 
   if (m_peaksValid && m_cachedWidth == w) return;
 
-  // SDK-peaks hybrid (INC-PK1): while the item buffer loads in the background
-  // the overview comes straight from .reapeaks, like the main waveform.
+  // SDK-peaks hybrid (INC-PK1): while the item buffer loads in the background -
+  // and for good when that buffer is downsampled (8d) - the overview comes
+  // straight from .reapeaks, like the main waveform.
   if (!wv.IsStandaloneMode() && !wv.IsMultiItem() && wv.GetTake() &&
-      wv.GetAudioSampleCount() <= 0 && g_GetMediaItemTake_Peaks) {
+      (wv.GetAudioSampleCount() <= 0 || wv.IsItemBufferDownsampled()) && g_GetMediaItemTake_Peaks) {
     ComputePeaksFromSDK(wv);
     return;
   }

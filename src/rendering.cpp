@@ -1667,9 +1667,12 @@ void SneakPeak::DrawBottomPanel(HDC hdc)
     FormatTimeHMS(m_waveform.GetItemDuration(), tTotal, sizeof(tTotal));
 
     const char* fmtName = (m_wavAudioFormat == 3) ? "Float" : "PCM";
+    // The SOURCE rate, not the working buffer's (downsampled on long items).
+    const int srcRate = m_waveform.GetSourceSampleRate() > 0 ? m_waveform.GetSourceSampleRate()
+                                                              : m_waveform.GetSampleRate();
     char line[256];
     snprintf(line, sizeof(line), "%dHz %s%d %dCh  %.1fMB  %s",
-             m_waveform.GetSampleRate(), fmtName, m_wavBitsPerSample,
+             srcRate, fmtName, m_wavBitsPerSample,
              m_waveform.GetNumChannels(), fileSizeMB, tTotal);
     SetTextColor(hdc, RGB(110, 110, 110));
     DrawTextUTF8(hdc, line, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);

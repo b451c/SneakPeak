@@ -1204,7 +1204,7 @@ void SneakPeak::StartItemAudioLoad()
       L.totalFrames += seg.audioFrameCount;
       if (seg.audioStartFrame + seg.audioFrameCount > total) total = seg.audioStartFrame + seg.audioFrameCount;
     }
-    if (total > 0) L.samples.assign((size_t)total * (size_t)L.nch, 0.0);
+    if (total > 0) L.samples.reserve((size_t)total * (size_t)L.nch);
     L.totalFrames = total;
   } else if (m_waveform.GetTake()) {
     int readRate = 0, readFrames = 0;
@@ -1217,7 +1217,7 @@ void SneakPeak::StartItemAudioLoad()
       j.frames = readFrames; j.srcNch = L.nch;
       L.jobs.push_back(std::move(j));
       L.totalFrames = readFrames;
-      L.samples.assign((size_t)readFrames * (size_t)L.nch, 0.0);
+      L.samples.reserve((size_t)readFrames * (size_t)L.nch);
     }
   }
 
@@ -1270,6 +1270,15 @@ void SneakPeak::StepItemAudioLoad()
 
     int n = std::min(chunkMax, j.frames - L.framesRead);
     double t = (double)L.framesRead / (double)L.readRate;
+    // The shared buffer grows chunk by chunk inside its reserved capacity: an
+    // upfront zero-fill of the whole thing (460 MB for an hour of stereo at
+    // the 8 kHz floor) cost a 0.15 s main-thread stall on select; growing it
+    // here touches only this chunk's pages per tick (gaps of skipped jobs
+    // are zero-filled by the same resize).
+    if (!L.multi) {
+      const size_t need = (size_t)(j.dstFrame + L.framesRead + n) * (size_t)L.nch;
+      if (L.samples.size() < need) L.samples.resize(need, 0.0);
+    }
     double* dst = L.multi ? j.staging.data() + (size_t)L.framesRead * L.nch
                           : L.samples.data() + (size_t)(j.dstFrame + L.framesRead) * L.nch;
     if (j.srcNch < L.nch) {
@@ -1350,6 +1359,7 @@ void SneakPeak::FinishItemAudioLoad()
     }
     m_waveform.InstallItemAudio(std::move(L.samples), L.totalFrames, L.readRate, outNch);
   } else if (!L.multi) {
+    L.samples.resize((size_t)L.totalFrames * (size_t)L.nch, 0.0);   // trailing skipped jobs
     m_waveform.InstallItemAudio(std::move(L.samples), L.totalFrames, L.readRate, L.nch);
   }
   AbortItemAudioLoad(); // releases accessors, clears state, restores title

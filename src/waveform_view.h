@@ -389,6 +389,7 @@ private:
   // happened in the file (independent of any gain applied on top).
   std::vector<unsigned char> m_clipFlags;
   bool m_peaksValid = false;
+  bool m_peaksFromSdk = false;   // current peaks came from .reapeaks (no RMS / flat-top scan)
   double m_peaksCachedStart = 0.0;
   double m_peaksCachedDuration = 0.0;
   int m_peaksCachedWidth = 0;

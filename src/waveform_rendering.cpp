@@ -47,6 +47,7 @@ void WaveformView::UpdatePeaks()
       }
     }
     m_peaksValid = true;
+    m_peaksFromSdk = false;
     m_peaksCachedStart = m_viewStartTime;
     m_peaksCachedDuration = m_viewDuration;
     m_peaksCachedWidth = w;
@@ -63,11 +64,15 @@ void WaveformView::UpdatePeaks()
     return;
   }
 
-  // SDK-peaks hybrid (INC-PK1): single-item ITEM mode with no sample buffer
-  // yet - serve the display from REAPER's .reapeaks while the background
-  // loader fills m_audioData. Once installed (count > 0) the audio path below
-  // takes over permanently (byte-identical to the pre-hybrid pipeline).
-  if (!m_standaloneMode && m_take && m_audioSampleCount <= 0 && g_GetMediaItemTake_Peaks) {
+  // SDK-peaks hybrid (INC-PK1): serve the display from REAPER's .reapeaks
+  // while the background loader fills m_audioData - and permanently when the
+  // installed buffer is DOWNSAMPLED (10M-frame cap): a 8 kHz buffer shows a
+  // click at 0.16 instead of 0.9 and loses everything above 4 kHz (measured
+  // 2026-08-28, increment 8d), while .reapeaks are what the arrange view
+  // draws. Full-rate buffers keep the audio path below (byte-identical to
+  // the pre-hybrid pipeline: RMS band + source flat-top scan).
+  if (!m_standaloneMode && m_take && g_GetMediaItemTake_Peaks &&
+      (m_audioSampleCount <= 0 || IsItemBufferDownsampled())) {
     UpdatePeaksFromSDK();
     return;
   }
@@ -161,6 +166,7 @@ void WaveformView::UpdatePeaks()
   }
 
   m_peaksValid = true;
+  m_peaksFromSdk = false;
   m_peaksCachedStart = m_viewStartTime;
   m_peaksCachedDuration = m_viewDuration;
   m_peaksCachedWidth = w;
@@ -274,6 +280,7 @@ void WaveformView::UpdatePeaksFromSDK()
   }
 
   m_peaksValid = true;
+  m_peaksFromSdk = true;
   m_peaksCachedStart = m_viewStartTime;
   m_peaksCachedDuration = m_viewDuration;
   m_peaksCachedWidth = w;
@@ -552,9 +559,9 @@ void WaveformView::DrawWaveformChannel(HDC hdc, int channel, int yTop, int heigh
   }
 
   // Draw RMS overlay (narrower, darker) - skipped if user hid RMS via View
-  // menu, and while only SDK peaks are available (RMS is never faked from
-  // peak values; it returns when the background sample load installs).
-  if (m_showRMS && m_audioSampleCount > 0) {
+  // menu, and whenever the peaks came from .reapeaks (RMS is never faked from
+  // peak values: while the sample load runs, and for good on downsampled items).
+  if (m_showRMS && !m_peaksFromSdk && m_audioSampleCount > 0) {
   curPen = rmsNormPen;
   SelectObject(hdc, curPen);
   colTime = viewStart;
@@ -1735,6 +1742,7 @@ void WaveformView::UpdatePeaksFromSDKSegments(int w)
 
   m_sdkPeaksPending = anyMissing;
   m_peaksValid = true;
+  m_peaksFromSdk = true;
   m_peaksCachedStart = m_viewStartTime;
   m_peaksCachedDuration = m_viewDuration;
   m_peaksCachedWidth = w;
