@@ -229,6 +229,19 @@ public:
 
   // Called directly from accelerator callback (SWS pattern - no SendMessage bounce)
   void OnKeyDown(WPARAM key);
+  // Update check (A5.4): curl runs on a worker, the result is picked up in
+  // OnTimer; the shared state outlives the window so a late reply is harmless.
+  struct UpdateCheck {
+    std::atomic<bool> done{false};
+    std::string response;
+    int rc = -1;
+  };
+  std::shared_ptr<UpdateCheck> m_updateCheck;
+  void PollUpdateCheck();
+  // True when OnKeyDown would act on `key` in the current state - the
+  // accelerator eats a key only then, everything else reaches REAPER (A5.1).
+  bool KeyHasAction(WPARAM key) const;
+  bool AnyDragActive() const;      // any mouse-capture drag (waveform, envelope, panels)
   // Inline dynamics type-value editor (Inc 8): the accelerator routes keys here while
   // an editor is open, so typed digits/Enter/ESC never trigger global shortcuts.
   bool IsDynamicsEditingValue() const { return m_dynamicsPanel.IsEditingValue(); }
@@ -420,6 +433,7 @@ private:
   int m_timelineEditGuard = 0; // ticks to suppress timeline exit after edit operation
   WaveformSelection m_pendingSelRestore = {}; // selection to restore after guarded reload
   bool m_dragging = false;
+  bool m_inMouseUp = false;         // re-entrancy guard: ReleaseCapture() inside OnMouseUp raises WM_CAPTURECHANGED
   int m_envDragGrabDy = 0; // env point drag: point screen Y - cursor Y at grab
   // T2-1 (#51): Alt+drag on an envelope segment edits its bezier tension.
   bool m_envTensionDragging = false;

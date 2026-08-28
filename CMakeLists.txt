@@ -6,6 +6,11 @@ else()
   project(reaper_sneakpeak VERSION 2.5.0 LANGUAGES CXX)
 endif()
 
+# The release tag this build ships as ("v2.5.0-rc1"; CI passes the git ref
+# name). Local builds are "dev" and the update check never offers them
+# anything (audit A5.4).
+set(SNEAKPEAK_BUILD_TAG "dev" CACHE STRING "release tag of this build (CI: the git ref name), dev for local builds")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -124,6 +129,7 @@ target_compile_definitions(reaper_sneakpeak PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
   WDL_NO_DEFINE_MINMAX
   SNEAKPEAK_VERSION="${PROJECT_VERSION}"
+  SNEAKPEAK_BUILD_TAG="${SNEAKPEAK_BUILD_TAG}"
 )
 
 if(MSVC)
@@ -223,6 +229,15 @@ else()
     -Wconversion -Wno-sign-conversion
     -fsigned-char
   )
+endif()
+
+# --- v2.5.0 audit A5.4: update-check version ordering (header-only, offline) ---
+add_executable(version_compare_test tests/version_compare_test.cpp)
+target_include_directories(version_compare_test PRIVATE src)
+if(MSVC)
+  target_compile_options(version_compare_test PRIVATE /W3)
+else()
+  target_compile_options(version_compare_test PRIVATE -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion)
 endif()
 
 # --- v2.4.0 INC-A2: offline loop-finder correctness check ---

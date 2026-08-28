@@ -1,6 +1,10 @@
 // edit_view.cpp — Main SneakPeak window, double-buffered GDI rendering
 // Includes: markers, clipboard ops, destructive editing, context menu
 #include "edit_view.h"
+#include "version_compare.h"
+#ifndef WM_CANCELMODE
+#define WM_CANCELMODE 0x001F   // Win32 only; SWELL never sends it, the case is inert there
+#endif
 #include "audio_engine.h"
 #include "audio_ops.h"
 #include "theme.h"
@@ -61,8 +65,31 @@ void SneakPeak::Create()
       const char* wr = g_GetExtState("SneakPeak", "win_rect");
       if (wr && wr[0]) {
         int x, y, w, h;
-        if (sscanf(wr, "%d %d %d %d", &x, &y, &w, &h) == 4 && w > 100 && h > 80)
+        if (sscanf(wr, "%d %d %d %d", &x, &y, &w, &h) == 4 && w > 100 && h > 80) {
+          // A rect saved on a monitor that is gone (unplugged display, a
+          // different desktop) restores off-screen and the window cannot be
+          // reached: clamp it into the nearest monitor's work area (A5.5).
+          RECT r = { x, y, x + w, y + h };
+          RECT work = r;
+#ifdef _WIN32
+          HMONITOR mon = MonitorFromRect(&r, MONITOR_DEFAULTTONEAREST);
+          MONITORINFO mi = {};
+          mi.cbSize = sizeof(mi);
+          if (mon && GetMonitorInfo(mon, &mi)) work = mi.rcWork;
+#else
+          SWELL_GetViewPort(&work, &r, true);
+#endif
+          const int ww = work.right - work.left, wh = work.bottom - work.top;
+          if (ww > 0 && wh > 0) {
+            if (w > ww) w = ww;
+            if (h > wh) h = wh;
+            if (x + w > work.right) x = work.right - w;
+            if (y + h > work.bottom) y = work.bottom - h;
+            if (x < work.left) x = work.left;
+            if (y < work.top) y = work.top;
+          }
           SetWindowPos(m_hwnd, nullptr, x, y, w, h, SWP_NOZORDER);
+        }
       }
     }
     ShowWindow(m_hwnd, SW_SHOW);
@@ -771,6 +798,7 @@ void SneakPeak::OnTimer()
 {
   if (HandlePendingClose()) return;
   if (!m_hwnd || !IsVisible()) return;
+  PollUpdateCheck();   // A5.4: the worker's reply lands here, on the main thread
   if (m_timelineEditGuard > 0) m_timelineEditGuard--;
 
   // dpr-watchdog (v2.2.0): a monitor drag / OS-scale change can change the device-
@@ -1516,7 +1544,21 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       OnKeyDown(wParam);
       return 0;
 
+    case WM_CAPTURECHANGED:
+    case WM_CANCELMODE:
+      // The capture went away under a drag (another window took it, a modal,
+      // Alt+Tab): finish the drag like a release so no flag and no undo block
+      // stays open (audit A5.3). Our own ReleaseCapture() inside OnMouseUp
+      // arrives here too - m_inMouseUp keeps that from re-entering.
+      if (!m_inMouseUp && AnyDragActive()) OnMouseUp(m_lastMouseX, m_lastMouseY);
+      return 0;
+
+    case WM_RBUTTONDOWN:
+      if (AnyDragActive()) return 0;   // a right-click cannot interrupt a drag (A5.3)
+      break;
+
     case WM_RBUTTONUP: {
+      if (AnyDragActive()) return 0;   // (A5.3) the drag keeps its capture and its undo block
       if (m_dynWorker.busy.load()) JoinDynamicsWorker(false);   // the menu's commands mutate the buffer (A4.3)
       int x = (short)LOWORD(lParam);
       int y = (short)HIWORD(lParam);
@@ -1675,45 +1717,96 @@ TrackEnvelope* SneakPeak::EnsureVolumeEnvelope(MediaItem_Take* take, MediaItem* 
 
 // --- Update check ---
 
+// The version this build ships as: the CI tag ("v2.5.0-rc1" -> "2.5.0-rc1")
+// or "<version>-dev" for a local build, which is never offered anything.
+static std::string LocalVersionString()
+{
+  const char* tag = SNEAKPEAK_BUILD_TAG;
+  if (tag && tag[0] && strcmp(tag, "dev") != 0) return tag[0] == 'v' ? tag + 1 : tag;
+  return std::string(SNEAKPEAK_VERSION) + "-dev";
+}
+
 void SneakPeak::DoCheckForUpdate()
 {
-  const char* cmd = "curl -sfL -m 5 https://api.github.com/repos/b451c/SneakPeak/releases/latest";
+  // Audit A5.4: this used to run curl synchronously on the UI thread (a 5 s
+  // freeze on a slow or blocked network). The worker fetches the release
+  // list; PollUpdateCheck (OnTimer) parses and toasts on the main thread.
+  if (m_updateCheck && !m_updateCheck->done.load()) {
+    ShowToast("Checking for updates...");
+    return;
+  }
+  const std::string local = LocalVersionString();
+  const char* urlEnv = getenv("SNEAKPEAK_UPDATE_URL");   // specs point this at a dead address
+  const bool forced = urlEnv && urlEnv[0];
+  if (!forced && local.size() > 4 && local.compare(local.size() - 4, 4, "-dev") == 0) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "Development build (v%s) - update check skipped", local.c_str());
+    ShowToast(msg);
+    return;
+  }
+  const std::string url = forced
+      ? urlEnv : "https://api.github.com/repos/b451c/SneakPeak/releases?per_page=10";
+  auto check = std::make_shared<UpdateCheck>();
+  m_updateCheck = check;
+  ShowToast("Checking for updates...");
+  std::thread([check, url]() {
+    const std::string cmd = "curl -sfL -m 5 \"" + url + "\"";
 #ifdef _WIN32
-  FILE* pipe = _popen(cmd, "r");
+    FILE* pipe = _popen(cmd.c_str(), "r");
 #else
-  FILE* pipe = popen(cmd, "r");
+    FILE* pipe = popen(cmd.c_str(), "r");
 #endif
-  if (!pipe) { ShowToast("Update check failed (curl missing?)"); return; }
-
-  std::string response;
-  char buf[4096];
-  while (fgets(buf, sizeof(buf), pipe)) response += buf;
+    if (pipe) {
+      char buf[4096];
+      while (fgets(buf, sizeof(buf), pipe)) check->response += buf;
 #ifdef _WIN32
-  int rc = _pclose(pipe);
+      check->rc = _pclose(pipe);
 #else
-  int rc = pclose(pipe);
+      check->rc = pclose(pipe);
 #endif
-  if (rc != 0 || response.empty()) { ShowToast("Update check failed (no response)"); return; }
+    }
+    check->done.store(true);
+  }).detach();
+}
 
-  // Minimal JSON parse for "tag_name":"vX.Y.Z"
-  size_t key = response.find("\"tag_name\"");
-  if (key == std::string::npos) { ShowToast("Update check failed (parse)"); return; }
-  size_t colon = response.find(':', key);
-  size_t q1 = (colon == std::string::npos) ? std::string::npos : response.find('"', colon);
-  size_t q2 = (q1 == std::string::npos) ? std::string::npos : response.find('"', q1 + 1);
-  if (q2 == std::string::npos) { ShowToast("Update check failed (parse)"); return; }
-  std::string tag = response.substr(q1 + 1, q2 - q1 - 1);
+void SneakPeak::PollUpdateCheck()
+{
+  if (!m_updateCheck || !m_updateCheck->done.load()) return;
+  const std::shared_ptr<UpdateCheck> check = m_updateCheck;
+  m_updateCheck.reset();
+  if (check->rc == -1) { ShowToast("Update check failed (curl missing?)"); return; }
+  if (check->rc != 0 || check->response.empty()) { ShowToast("Update check failed (no response)"); return; }
 
-  const char* local = SNEAKPEAK_VERSION;
-  const char* remote = tag.c_str();
-  if (remote[0] == 'v') remote++;  // strip leading 'v' if present
+  // Minimal JSON scan: every "tag_name":"vX.Y.Z" with its "prerelease" flag
+  // (the fields sit in that order in a release object). Stable builds look at
+  // releases only; a prerelease build also sees newer prereleases.
+  const std::string local = LocalVersionString();
+  const bool localPre = IsPrerelease(local.c_str());
+  std::string best;
+  const std::string& r = check->response;
+  for (size_t pos = r.find("\"tag_name\""); pos != std::string::npos; pos = r.find("\"tag_name\"", pos + 1)) {
+    const size_t colon = r.find(':', pos);
+    const size_t q1 = colon == std::string::npos ? std::string::npos : r.find('"', colon);
+    const size_t q2 = q1 == std::string::npos ? std::string::npos : r.find('"', q1 + 1);
+    if (q2 == std::string::npos) break;
+    std::string tag = r.substr(q1 + 1, q2 - q1 - 1);
+    if (!tag.empty() && tag[0] == 'v') tag.erase(0, 1);
+    const size_t pre = r.find("\"prerelease\"", q2);
+    const size_t nextTag = r.find("\"tag_name\"", q2);
+    const bool isPre = pre != std::string::npos && (nextTag == std::string::npos || pre < nextTag) &&
+                       r.compare(r.find(':', pre) + 1, 5, " true") == 0;
+    if (isPre && !localPre) continue;
+    ParsedVersion pv;
+    if (!ParseVersion(tag.c_str(), &pv)) continue;
+    if (best.empty() || CompareVersions(tag.c_str(), best.c_str()) > 0) best = tag;
+  }
+  if (best.empty()) { ShowToast("Update check failed (parse)"); return; }
 
   char msg[256];
-  if (strcmp(remote, local) == 0) {
-    snprintf(msg, sizeof(msg), "SneakPeak is up to date (v%s)", local);
-  } else {
-    snprintf(msg, sizeof(msg), "Update available: v%s (you have v%s)", remote, local);
-  }
+  if (CompareVersions(best.c_str(), local.c_str()) > 0)
+    snprintf(msg, sizeof(msg), "Update available: v%s (you have v%s)", best.c_str(), local.c_str());
+  else
+    snprintf(msg, sizeof(msg), "SneakPeak is up to date (v%s)", local.c_str());
   ShowToast(msg);
 }
 

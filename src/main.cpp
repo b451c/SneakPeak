@@ -319,17 +319,22 @@ static int translateAccelSneakPeak(MSG* msg, accelerator_register_t* ctx)
       return 1;
     }
     bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
     WPARAM k = msg->wParam;
     bool handled = false;
     if (k == VK_HOME || k == VK_END || k == VK_SPACE || k == VK_ESCAPE || k == VK_TAB) handled = true;
     else if (k == VK_DELETE || k == VK_BACK) handled = true;
     else if (k == VK_UP || k == VK_DOWN || k == VK_LEFT || k == VK_RIGHT) handled = true;
-    else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'N' || k == 'A' || k == 'S')) handled = true;
-    else if (!ctrl && (k == 'M' || k == 'G' || k == 'E' || k == 'S' || k == 'T' || k == 'D')) handled = true;
+    else if (ctrl && (k == 'C' || k == 'X' || k == 'V' || k == 'Z' || k == 'Y' || k == 'N' || k == 'A' || k == 'S')) handled = true;   // Ctrl+Y = redo (A5.2)
+    else if (!ctrl && !alt && (k == 'M' || k == 'G' || k == 'E' || k == 'S' || k == 'T' || k == 'D')) handled = true;   // Alt+letter is never ours
     if (handled) {
       // #83: the user's own SneakPeak action binding always wins over our
       // internal editor keys - force it to the main window so it fires.
       if (keyMatchesOurBinding(k)) return -666;
+      // Eat the key only when SneakPeak actually does something with it here
+      // (a bare arrow, Ctrl+S outside Standalone ...): REAPER keeps its own
+      // shortcut otherwise (audit A5.1).
+      if (!g_sneakPeak->KeyHasAction(k)) return -666;
       g_sneakPeak->OnKeyDown(msg->wParam);
       return 1; // we ate this key
     }
@@ -447,6 +452,12 @@ static int toggleActionCallback(int command)
 static void onAtExit()
 {
   DBG("[SneakPeak] onAtExit\n");
+  if (g_plugin_register) {   // no callbacks into us once REAPER is tearing down (A5.6)
+    g_plugin_register("-accelerator", &g_accelReg);
+    g_plugin_register("-hookcommand", (void*)hookCommandProc);
+    g_plugin_register("-toggleaction", (void*)toggleActionCallback);
+    g_plugin_register("-timer", (void*)(void(*)())pollSelectionTimer);
+  }
   Theme_DestroyFonts();
   if (g_sneakPeak) {
     if (g_SetExtState) {
@@ -490,6 +501,16 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   HINSTANCE hInstance, reaper_plugin_info_t* rec)
 {
   if (!rec) {
+    // Unload: take our hooks out of REAPER's tables before the code goes
+    // away (a stale accelerator/hookcommand pointer is a crash on the next
+    // key or action - audit A5.6).
+    if (g_plugin_register) {
+      g_plugin_register("-accelerator", &g_accelReg);
+      g_plugin_register("-hookcommand", (void*)hookCommandProc);
+      g_plugin_register("-toggleaction", (void*)toggleActionCallback);
+      g_plugin_register("-timer", (void*)(void(*)())pollSelectionTimer);
+      g_plugin_register("-timer", (void*)(void(*)())startupTimerFunc);
+    }
     if (g_sneakPeak) {
       g_sneakPeak->Destroy();
       g_sneakPeak.reset();

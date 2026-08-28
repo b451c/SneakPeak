@@ -1172,6 +1172,10 @@ int SneakPeak::HitSelectionEdge(int x, int y)
 
 void SneakPeak::OnMouseUp(int x, int y)
 {
+  // A lost capture (WM_CAPTURECHANGED) replays this function so the drag
+  // flags and open undo blocks close exactly as on a release; the flag keeps
+  // our own ReleaseCapture() calls below from re-entering (A5.3).
+  struct InFlag { bool& f; explicit InFlag(bool& b) : f(b) { f = true; } ~InFlag() { f = false; } } inMouseUp(m_inMouseUp);
   // Finalize envelope selection rectangle (Cmd+drag)
   if (m_envRectStartX != 0 || m_envRectStartY != 0) {
     bool wasSelecting = m_envRectSelecting;
@@ -2610,6 +2614,46 @@ void SneakPeak::CloseDynamicsPanel()
   InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
+// Mirrors the gates of OnKeyDown's switch (keep them in step): the accelerator
+// used to eat every listed key even when nothing here would happen - a bare
+// arrow, Ctrl+S outside Standalone, Ctrl+C without a selection - and REAPER's
+// own shortcut was lost (audit A5.1).
+bool SneakPeak::KeyHasAction(WPARAM key) const
+{
+  const bool ctrl  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+  const bool alt   = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+  const bool item  = m_waveform.HasItem();
+  const bool sa    = m_waveform.IsStandaloneMode();
+  switch (key) {
+    case VK_HOME: case VK_END: case VK_TAB:      return item;
+    case VK_SPACE: case VK_ESCAPE:               return true;
+    case VK_DELETE: case VK_BACK:                return item;
+    case 'A':                                    return ctrl && item;
+    case 'C': case 'X':                          return ctrl && item && m_waveform.HasSelection();
+    case 'V': case 'N':                          return ctrl && item;
+    case 'Z': case 'Y':                          return ctrl;
+    case 'S': case 's':                          return ctrl ? sa : (item && !sa);
+    case 'E': case 'e': case 'M': case 'm':      return !ctrl && item;
+    case 'G': case 'T': case 'D': case 'd':      return !ctrl;
+    case VK_UP: case VK_DOWN:                    return m_gainPanel.IsVisible();
+    case VK_LEFT: case VK_RIGHT:
+      return alt && (m_waveform.IsTimelineOrMultiItem() || m_waveform.IsTrackView()) &&
+             m_waveform.GetSegments().size() >= 2;
+    default:                                     return false;
+  }
+}
+
+bool SneakPeak::AnyDragActive() const
+{
+  return m_dragging || m_envDragging || m_envFreehand || m_envRectSelecting ||
+         m_envTensionDragging || m_slipDragging || m_scrollbarDragging ||
+         m_minimapDragging || m_minimapScrollDragging || m_splitterDragging ||
+         m_spectralFreqDragging || m_standaloneFadeDrag ||
+         m_gainPanel.IsDragging() || m_dynamicsPanel.IsDragging() ||
+         m_limiterPanel.IsDragging() || m_loopLabPanel.IsDragging() ||
+         m_settingsPanel.IsDragging() || m_oneShotPanel.IsDragging();
+}
+
 void SneakPeak::OnKeyDown(WPARAM key)
 {
   bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -2670,6 +2714,10 @@ void SneakPeak::OnKeyDown(WPARAM key)
         m_dynamicsPanel.OnEditKey(VK_ESCAPE);
         InvalidateRect(m_hwnd, nullptr, FALSE);
       } else if (m_settingsPanel.IsVisible()) {
+        if (m_settingsPanel.IsDragging()) {   // ESC mid-drag: end the drag first (A5.5)
+          m_settingsPanel.OnMouseUp();
+          ReleaseCapture();
+        }
         m_settingsPanel.Hide();
         InvalidateRect(m_hwnd, nullptr, FALSE);
       } else if (m_dynamicsPanel.IsVisible()) {
