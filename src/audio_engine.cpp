@@ -1,6 +1,6 @@
 // audio_engine.cpp — WAV file I/O and REAPER source management
 #include "audio_engine.h"
-#include "wav_smpl.h"
+#include "wav_writer.h"
 #include "reaper_plugin.h"
 #include "debug.h"
 #include <cstdio>
@@ -31,10 +31,6 @@ struct FmtChunk {
   uint16_t bitsPerSample;
 };
 
-struct DataChunkHeader {
-  char dataId[4];       // "data"
-  uint32_t dataSize;
-};
 #pragma pack(pop)
 
 // --- Implementation ---
@@ -175,126 +171,16 @@ bool AudioEngine::ReadWavFile(const std::string& path, WavInfo& info,
   return true;
 }
 
-static inline int16_t doubleToS16(double v)
-{
-  v = std::max(-1.0, std::min(1.0, v));
-  return (int16_t)(v * 32767.0);
-}
-
-static inline void doubleToS24(double v, uint8_t* out)
-{
-  v = std::max(-1.0, std::min(1.0, v));
-  int32_t i = (int32_t)(v * 8388607.0);
-  out[0] = (uint8_t)(i & 0xFF);
-  out[1] = (uint8_t)((i >> 8) & 0xFF);
-  out[2] = (uint8_t)((i >> 16) & 0xFF);
-}
-
-static inline float doubleToF32(double v)
-{
-  return (float)v;
-}
-
 bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
                                 int numFrames, int numChannels, int sampleRate,
                                 int bitsPerSample, int audioFormat,
                                 int loopStartFrame, int loopEndFrame)
 {
-  // Loop points ride along only when they form a valid in-range region.
-  const bool writeLoop = loopStartFrame >= 0 && loopEndFrame > loopStartFrame &&
-                         loopEndFrame <= numFrames;
-  std::string tmpPath = path + ".sneakpeak.tmp";
-  FILE* f = fopen(tmpPath.c_str(), "wb");
-  if (!f) {
-    DBG("[AudioEngine] Failed to open tmp file for writing: %s\n", tmpPath.c_str());
-    return false;
-  }
-
-  // Force unsupported bit depths to 16-bit PCM for consistency
-  if (!(audioFormat == 3 && bitsPerSample == 32) &&
-      bitsPerSample != 16 && bitsPerSample != 24) {
-    bitsPerSample = 16;
-    audioFormat = 1;
-  }
-
-  int bytesPerSample = bitsPerSample / 8;
-  int bytesPerFrame = bytesPerSample * numChannels;
-  int64_t dataSizeCheck = (int64_t)numFrames * (int64_t)bytesPerFrame;
-  if (dataSizeCheck > UINT32_MAX) {
-    DBG("[AudioEngine] WAV size overflow: %lld bytes\n", (long long)dataSizeCheck);
-    fclose(f); remove(tmpPath.c_str()); return false;
-  }
-  uint32_t dataSize = (uint32_t)dataSizeCheck;
-
-  // RIFF header
-  RiffHeader riff;
-  memcpy(riff.riffId, "RIFF", 4);
-  riff.fileSize = 36 + dataSize + (writeLoop ? (uint32_t)kSmplChunkBytes : 0);
-  memcpy(riff.waveId, "WAVE", 4);
-  fwrite(&riff, sizeof(riff), 1, f);
-
-  // fmt chunk
-  FmtChunk fmt;
-  memcpy(fmt.fmtId, "fmt ", 4);
-  fmt.chunkSize = 16;
-  fmt.audioFormat = (uint16_t)audioFormat;
-  fmt.numChannels = (uint16_t)numChannels;
-  fmt.sampleRate = (uint32_t)sampleRate;
-  fmt.byteRate = (uint32_t)(sampleRate * bytesPerFrame);
-  fmt.blockAlign = (uint16_t)bytesPerFrame;
-  fmt.bitsPerSample = (uint16_t)bitsPerSample;
-  fwrite(&fmt, sizeof(fmt), 1, f);
-
-  // data chunk header
-  DataChunkHeader data;
-  memcpy(data.dataId, "data", 4);
-  data.dataSize = dataSize;
-  fwrite(&data, sizeof(data), 1, f);
-
-  // Write sample data
-  size_t totalSamples = (size_t)numFrames * (size_t)numChannels;
-
-  if (audioFormat == 3 && bitsPerSample == 32) {
-    // 32-bit float
-    for (size_t i = 0; i < totalSamples; i++) {
-      float v = doubleToF32(samples[i]);
-      fwrite(&v, sizeof(float), 1, f);
-    }
-  } else if (bitsPerSample == 16) {
-    for (size_t i = 0; i < totalSamples; i++) {
-      int16_t v = doubleToS16(samples[i]);
-      fwrite(&v, sizeof(int16_t), 1, f);
-    }
-  } else if (bitsPerSample == 24) {
-    for (size_t i = 0; i < totalSamples; i++) {
-      uint8_t v[3];
-      doubleToS24(samples[i], v);
-      fwrite(v, 3, 1, f);
-    }
-  }
-
-  if (writeLoop) {   // one forward sustain loop, infinite (INC-A4)
-    unsigned char smpl[kSmplChunkBytes];
-    BuildSmplChunk(sampleRate, loopStartFrame, loopEndFrame, smpl);
-    fwrite(smpl, 1, sizeof(smpl), f);
-  }
-
-  fclose(f);
-
-  // Overwrite the ORIGINAL file in place (same inode). REAPER pools decoders per
-  // path: a rename() over the path leaves every already-open decoder on the old
-  // inode, still serving the pre-edit audio (F7, forum #47). The tmp file is a
-  // complete image, so the original is only touched once the encode succeeded;
-  // if the copy fails the tmp is kept as the recovery copy.
-  if (!CopyFileInto(tmpPath, path)) {
-    DBG("[AudioEngine] in-place overwrite failed, tmp kept: %s\n", tmpPath.c_str());
-    return false;
-  }
-  remove(tmpPath.c_str());
-
-  DBG("[AudioEngine] Wrote WAV: %s (%d frames, %dch, %dHz, %dbit)\n",
-      path.c_str(), numFrames, numChannels, sampleRate, bitsPerSample);
-  return true;
+  // One encoder for whole buffers and streamed exports (wav_writer.h).
+  WavWriter w;
+  if (!w.Begin(path, numChannels, sampleRate, bitsPerSample, audioFormat)) return false;
+  if (!w.Write(samples, numFrames)) return false;
+  return w.End(loopStartFrame, loopEndFrame);
 }
 
 bool AudioEngine::CopyFileInto(const std::string& src, const std::string& dst)
