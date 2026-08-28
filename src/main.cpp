@@ -148,6 +148,7 @@ static int g_cmdToggle = 0;
 static int g_cmdLoadItem = 0;
 static int g_cmdTrackView = 0;
 static int g_cmdMasterView = 0;
+static int g_cmdOpenStandalone = 0;   // path in ExtState SneakPeak/open_path
 
 // Toolbar commands as named actions (forum #51): every toolbar button is
 // bindable in REAPER's Action List, so the Action List is the keymap editor.
@@ -410,6 +411,17 @@ static bool hookCommandProc(int command, int flag)
     if (g_sneakPeak && g_sneakPeak->GetHwnd()) g_sneakPeak->ToggleMasterView();
     return true;
   }
+  if (command == g_cmdOpenStandalone) {
+    // Scriptable drop: ReaScripts (and the specs) set SneakPeak/open_path and
+    // run this - the same entry the file drop uses.
+    const char* path = g_GetExtState ? g_GetExtState("SneakPeak", "open_path") : nullptr;
+    if (path && path[0]) {
+      if (!g_sneakPeak) g_sneakPeak = std::make_unique<SneakPeak>();
+      if (!g_sneakPeak->GetHwnd()) g_sneakPeak->Create();
+      g_sneakPeak->AddStandaloneFile(path);
+    }
+    return true;
+  }
   for (int i = 0; i < kToolbarActionCount; ++i) {
     if (command && command == g_cmdToolbar[i]) {
       // Only act on a live, visible window: the commands target the loaded audio
@@ -630,6 +642,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_cmdLoadItem = rec->Register("command_id", (void*)"SneakPeak_LoadSelectedItem");
   g_cmdTrackView = rec->Register("command_id", (void*)"SneakPeak_ToggleTrackView");
   g_cmdMasterView = rec->Register("command_id", (void*)"SneakPeak_ToggleMasterView");
+  g_cmdOpenStandalone = rec->Register("command_id", (void*)"SneakPeak_OpenStandalone");
 
   static gaccel_register_t accelToggle = {{0, 0, 0}, "SneakPeak: Open/Close SneakPeak"};
   accelToggle.accel.cmd = static_cast<unsigned short>(g_cmdToggle);
@@ -647,6 +660,11 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   static gaccel_register_t accelMasterView = {{0, 0, 0}, "SneakPeak: Toggle Master Track View"};
   accelMasterView.accel.cmd = static_cast<unsigned short>(g_cmdMasterView);
   rec->Register("gaccel", &accelMasterView);
+
+  static gaccel_register_t accelOpen =
+      {{0, 0, 0}, "SneakPeak: Open file in Standalone (path in ExtState SneakPeak/open_path)"};
+  accelOpen.accel.cmd = static_cast<unsigned short>(g_cmdOpenStandalone);
+  rec->Register("gaccel", &accelOpen);
 
   // Toolbar commands as named actions (forum #51): bindable in the Action List.
   static gaccel_register_t accelToolbar[kToolbarActionCount] = {};
