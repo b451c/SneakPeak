@@ -281,12 +281,31 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
 
   fclose(f);
 
-  // Atomic rename
-  if (rename(tmpPath.c_str(), path.c_str()) != 0) {
-    DBG("[AudioEngine] rename failed: %s -> %s\n", tmpPath.c_str(), path.c_str());
+  // Overwrite the ORIGINAL file in place (same inode). REAPER pools decoders per
+  // path: a rename() over the path leaves every already-open decoder on the old
+  // inode, still serving the pre-edit audio (F7, forum #47). The tmp file is a
+  // complete image, so the original is only touched once the encode succeeded;
+  // if the copy fails the tmp is kept as the recovery copy.
+  FILE* src = fopen(tmpPath.c_str(), "rb");
+  FILE* dst = src ? fopen(path.c_str(), "wb") : nullptr;
+  if (!src || !dst) {
+    DBG("[AudioEngine] in-place overwrite: cannot open %s\n", (src ? path : tmpPath).c_str());
+    if (src) fclose(src);
     remove(tmpPath.c_str());
     return false;
   }
+  std::vector<char> buf(1 << 20);
+  bool copied = true;
+  size_t n;
+  while (copied && (n = fread(buf.data(), 1, buf.size(), src)) > 0)
+    copied = fwrite(buf.data(), 1, n, dst) == n;
+  fclose(src);
+  copied = (fclose(dst) == 0) && copied;
+  if (!copied) {
+    DBG("[AudioEngine] in-place overwrite failed, tmp kept: %s\n", tmpPath.c_str());
+    return false;
+  }
+  remove(tmpPath.c_str());
 
   DBG("[AudioEngine] Wrote WAV: %s (%d frames, %dch, %dHz, %dbit)\n",
       path.c_str(), numFrames, numChannels, sampleRate, bitsPerSample);

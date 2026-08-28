@@ -17,6 +17,7 @@ controls run the same specs against an OLD binary and must go RED).
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -461,6 +462,25 @@ def perf_media_dir() -> Path:
     d = Path("/tmp/sneakpeak-perf-media")
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def burst_fixture(name: str, *, seconds: float, channels: int, sr: int = 44100) -> Path:
+    """Fresh working copy of a quiet 220 Hz tone with one loud burst at 0.5-1.5 s,
+    24-bit PCM. Destructive specs rewrite the file they edit, so the pristine
+    original lives under pristine/ and every call hands out a new copy."""
+    pristine = perf_media_dir() / "pristine" / name
+    if not pristine.exists():
+        pristine.parent.mkdir(exist_ok=True)
+        with sf.SoundFile(str(pristine), "w", samplerate=sr, channels=channels, subtype="PCM_24") as f:
+            for start in range(0, int(seconds * sr), sr * 10):
+                t = (np.arange(sr * 10) + start) / sr
+                y = 0.03 * np.sin(2 * np.pi * 220 * t)
+                burst = (t >= 0.5) & (t < 1.5)
+                y[burst] = 0.9 * np.sin(2 * np.pi * 220 * t[burst])
+                f.write(np.repeat(y[:, None], channels, axis=1).astype(np.float32))
+    work = perf_media_dir() / name
+    shutil.copyfile(pristine, work)
+    return work
 
 
 def write_long_wav(path: Path, *, minutes: float, sr: int = 44100, channels: int = 2):

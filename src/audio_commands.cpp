@@ -366,10 +366,10 @@ void SneakPeak::WriteAndRefresh()
     outBits = srcInfo.bitsPerSample;
     outFmt = srcInfo.audioFormat;
   }
-  // F7: the write replaces the file (tmp + rename -> new inode). Any accessor
-  // still open on the take pins a decoder on the OLD inode and REAPER keeps
-  // serving the pre-edit audio through its per-path decoder pool - so drop
-  // ours (live accessor, retained cache, background loader) before the swap.
+  // F7: the write overwrites the source IN PLACE (same inode) so REAPER's pooled
+  // decoders serve the new audio at once. Drop our own readers first (live
+  // accessor, retained cache, background loader) so nothing of ours reads the
+  // file while it is being truncated and rewritten.
   AbortItemAudioLoad();
   m_waveform.ReleaseTakeAccessors();
   if (!AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr, outBits, outFmt)) {

@@ -9,28 +9,12 @@ bit depth, length) plus the reversal itself via the track audio accessor.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
-from conftest import (SELECT_ITEM0, clear_project, db, dismiss_native_modal, ensure_window,
-                      insert_item_unselected, perf_media_dir, track_rms_windows,
+from conftest import (SELECT_ITEM0, burst_fixture, clear_project, db, dismiss_native_modal,
+                      ensure_window, insert_item_unselected, track_rms_windows,
                       wait_audio_loaded, wait_main_thread_idle)
 
 MINUTES = 5
-
-
-def _fixture() -> Path:
-    media = perf_media_dir() / "long5min_burst24.wav"
-    if not media.exists():
-        import numpy as np, soundfile as sf
-        sr = 44100
-        with sf.SoundFile(str(media), "w", samplerate=sr, channels=2, subtype="PCM_24") as f:
-            for start in range(0, MINUTES * 60 * sr, sr * 10):
-                t = (np.arange(sr * 10) + start) / sr
-                y = 0.03 * np.sin(2 * np.pi * 220 * t)
-                burst = (t >= 0.5) & (t < 1.5)
-                y[burst] = 0.9 * np.sin(2 * np.pi * 220 * t[burst])
-                f.write(np.stack([y, y], axis=1).astype(np.float32))
-    return media
 
 
 def _source_info(sess) -> dict:
@@ -43,8 +27,8 @@ def _source_info(sess) -> dict:
 
 
 def test_reverse_on_a_five_minute_item_keeps_rate_depth_and_length(sess):
-    media = _fixture()
     clear_project(sess)
+    media = burst_fixture("long5min_burst24.wav", seconds=MINUTES * 60, channels=2)
     insert_item_unselected(sess, media)
     ensure_window(sess)
     sess.eval(SELECT_ITEM0)
@@ -71,16 +55,8 @@ def test_reverse_on_a_short_item_is_audible_in_reaper(sess):
     """F7 isolated from the length question: after a destructive Reverse the
     NEW audio must be what REAPER serves for the take (take + track accessor),
     not the pre-edit file pinned by an open decoder."""
-    import numpy as np, soundfile as sf
-    media = perf_media_dir() / "short_burst24.wav"
-    if not media.exists():
-        sr = 44100
-        t = np.arange(sr * 10) / sr
-        y = 0.03 * np.sin(2 * np.pi * 220 * t)
-        burst = (t >= 0.5) & (t < 1.5)
-        y[burst] = 0.9 * np.sin(2 * np.pi * 220 * t[burst])
-        sf.write(str(media), np.stack([y, y], axis=1).astype(np.float32), sr, subtype="PCM_24")
     clear_project(sess)
+    media = burst_fixture("short_burst24.wav", seconds=10, channels=2)
     insert_item_unselected(sess, media)
     ensure_window(sess)
     sess.eval(SELECT_ITEM0)
