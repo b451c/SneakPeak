@@ -37,6 +37,12 @@ struct DeEssBiquad {
 
 enum { DEESS_MODE_BANDPASS = 0, DEESS_MODE_HIGHPASS = 1 };
 
+// Exact 4th-order Butterworth section Qs: 1/(2cos(3pi/8)), 1/(2cos(pi/8)).
+// A naive same-Q double application would droop the knee by 6 dB; this pair is
+// maximally flat in the passband at exactly 24 dB/oct. Shared with dyn_trace.
+constexpr double DEESS_BUTTERWORTH4_Q1 = 0.54119610014619698;
+constexpr double DEESS_BUTTERWORTH4_Q2 = 1.30656296487637653;
+
 // Band-level trace: max |filtered| per channel per stepSec window, window loop
 // IDENTICAL to DynamicsEngine::CollectPeaks so index i of the result aligns
 // 1:1 with m_rawPeaks[i] / m_results[i].

@@ -40,12 +40,6 @@ void DeEssBiquad::SetHighpass(double fs, double f0, double q)
   a2 = (1.0 - alpha) / a0;
 }
 
-// Exact 4th-order Butterworth section Qs: 1/(2cos(3pi/8)), 1/(2cos(pi/8)).
-// A naive same-Q double application would droop the knee by 6 dB; this pair is
-// maximally flat in the passband at exactly 24 dB/oct.
-static constexpr double BUTTERWORTH4_Q1 = 0.54119610014619698;
-static constexpr double BUTTERWORTH4_Q2 = 1.30656296487637653;
-
 void DeEssBandTrace(const double* audioData, int numFrames, int numChannels,
                     int sampleRate, double stepSec, int mode, double f0,
                     double q, std::vector<double>& outBandPeaks)
@@ -63,8 +57,8 @@ void DeEssBandTrace(const double* audioData, int numFrames, int numChannels,
   std::vector<DeEssBiquad> filt((size_t)nch * (size_t)nStages);
   for (int ch = 0; ch < nch; ch++) {
     if (mode == DEESS_MODE_HIGHPASS) {
-      filt[(size_t)ch * 2 + 0].SetHighpass(fs, f0, BUTTERWORTH4_Q1);
-      filt[(size_t)ch * 2 + 1].SetHighpass(fs, f0, BUTTERWORTH4_Q2);
+      filt[(size_t)ch * 2 + 0].SetHighpass(fs, f0, DEESS_BUTTERWORTH4_Q1);
+      filt[(size_t)ch * 2 + 1].SetHighpass(fs, f0, DEESS_BUTTERWORTH4_Q2);
     } else {
       filt[(size_t)ch].SetBandpass(fs, f0, q);
     }

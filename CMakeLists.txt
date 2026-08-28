@@ -90,6 +90,7 @@ add_library(reaper_sneakpeak SHARED
   src/multi_item_view.cpp
   src/dynamics_engine.cpp
   src/deess_engine.cpp
+  src/dyn_trace.cpp
   src/dynamics_panel.cpp
   src/spectral_repair.cpp
   src/settings_panel.cpp
@@ -285,5 +286,30 @@ elseif(UNIX)
   target_link_libraries(reaper_sneakpeak PRIVATE
     dl
     pthread
+  )
+endif()
+
+# --- v2.5 8f: chunked-detector equivalence check ---
+# Pure-DSP test binary (no REAPER/SWELL/Blend2D deps): DynTraceBuilder fed in
+# chunks of every awkward size must equal one whole-buffer pass AND the legacy
+# CollectPeaks / DeEssBandTrace loops bit for bit. Machine-independent (exact
+# compares, exit code). Run via tests/run_dyn_chunk_test.sh.
+add_executable(dyn_chunk_test
+  tests/dyn_chunk_test.cpp
+  src/dyn_trace.cpp
+  src/deess_engine.cpp
+)
+target_include_directories(dyn_chunk_test PRIVATE src)
+target_compile_definitions(dyn_chunk_test PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+)
+if(MSVC)
+  target_compile_options(dyn_chunk_test PRIVATE /W3)
+else()
+  target_compile_options(dyn_chunk_test PRIVATE
+    -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
+    -Wshadow
+    -Wconversion -Wno-sign-conversion
+    -fsigned-char
   )
 endif()
