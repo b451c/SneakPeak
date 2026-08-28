@@ -182,7 +182,7 @@ void SneakPeak::LoadStandaloneFile(const char* path)
 {
   if (!path || !path[0]) return;
   StandaloneCleanupPreview();
-  if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
+  if (!m_previewTempPath.empty()) { AudioEngine::RemoveFile(m_previewTempPath); m_previewTempPath.clear(); }
   m_standaloneUndoStack.clear();
   m_standaloneRedoStack.clear();
   m_waveform.ClearStandaloneFade();
@@ -359,7 +359,7 @@ void SneakPeak::FinishStandaloneLoad()
   EvictStandaloneTabIfFull();
 
   StandaloneCleanupPreview();
-  if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
+  if (!m_previewTempPath.empty()) { AudioEngine::RemoveFile(m_previewTempPath); m_previewTempPath.clear(); }
   m_standaloneUndoStack.clear();
   m_standaloneRedoStack.clear();
   m_waveform.ClearStandaloneFade();
@@ -682,7 +682,7 @@ bool SneakPeak::StandaloneWritePreviewFile(int startFrame, int endFrame)
   }
 
   // Clean up old temp file
-  if (!m_previewTempPath.empty()) remove(m_previewTempPath.c_str());
+  if (!m_previewTempPath.empty()) AudioEngine::RemoveFile(m_previewTempPath);
 
   // Preview is temporary — always use temp dir (file deleted after playback)
   {
@@ -981,7 +981,7 @@ void SneakPeak::StandaloneAuditionSeam()
               faded.begin() + (size_t)(s + post) * nch);
   seam.insert(seam.end(), (size_t)gap * (size_t)nch, 0.0);
 
-  if (!m_previewTempPath.empty()) remove(m_previewTempPath.c_str());
+  if (!m_previewTempPath.empty()) AudioEngine::RemoveFile(m_previewTempPath);
   {
     char tmpPath[512];
     snprintf(tmpPath, sizeof(tmpPath), "%s/sneakpeak_preview_%d.wav",

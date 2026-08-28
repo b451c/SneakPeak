@@ -67,7 +67,7 @@ bool SneakPeak::UndoSave()
              AudioEngine::ProcessId(), m_itemUndoSlot ? 'b' : 'a');
     if (!AudioEngine::CopyFileInto(path, buf)) {
       DBG("[SneakPeak] undo snapshot failed: %s\n", buf);
-      remove(buf);   // whatever a partial copy left behind
+      AudioEngine::RemoveFile(buf);   // whatever a partial copy left behind
       char msg[sizeof(m_toastText)];
       snprintf(msg, sizeof(msg), "Could not create the pre-edit copy in %s - the edit was cancelled",
                dir.c_str());
@@ -85,7 +85,7 @@ bool SneakPeak::UndoSave()
 
 void SneakPeak::DiscardItemUndo()
 {
-  if (!m_itemUndoFile.empty()) remove(m_itemUndoFile.c_str());
+  if (!m_itemUndoFile.empty()) AudioEngine::RemoveFile(m_itemUndoFile);
   m_itemUndoFile.clear();
   m_itemUndoPath.clear();
 }
@@ -2820,7 +2820,7 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
             ok = true;
           }
         }
-        remove(tmpPath);
+        AudioEngine::RemoveFile(tmpPath);
       }
     }
     if (!ok) {

@@ -1,4 +1,5 @@
 // wav_inplace.cpp — in-place WAV sample edits (see wav_inplace.h)
+#include "platform.h"   // fopen -> fopenUTF8 on Windows (non-ASCII source paths, audit A3.1)
 #include "wav_inplace.h"
 #include "debug.h"
 #include <cstdio>

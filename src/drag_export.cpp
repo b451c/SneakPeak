@@ -54,7 +54,7 @@ public:
 void SneakPeak::CleanupDragTemp()
 {
   if (!m_dragTempPath.empty() && !m_dragIsOriginal) {
-    remove(m_dragTempPath.c_str());
+    AudioEngine::RemoveFile(m_dragTempPath);
   }
   m_dragTempPath.clear();
   m_dragIsOriginal = false;

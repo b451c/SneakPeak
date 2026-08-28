@@ -125,7 +125,7 @@ bool WavWriter::End(int loopStartFrame, int loopEndFrame)
   m_f = nullptr;
   if (!ok) {
     DBG("[WavWriter] finalize failed: %s\n", m_tmp.c_str());
-    remove(m_tmp.c_str());
+    AudioEngine::RemoveFile(m_tmp);
     return false;
   }
 
@@ -138,7 +138,7 @@ bool WavWriter::End(int loopStartFrame, int loopEndFrame)
     DBG("[WavWriter] in-place overwrite failed, tmp kept: %s\n", m_tmp.c_str());
     return false;
   }
-  remove(m_tmp.c_str());
+  AudioEngine::RemoveFile(m_tmp);
   DBG("[WavWriter] Wrote WAV: %s (%lld frames, %dch, %dHz, %dbit)\n",
       m_path.c_str(), (long long)m_frames, m_nch, m_sr, m_bits);
   return true;
@@ -149,5 +149,5 @@ void WavWriter::Abort()
   if (!m_f) return;
   fclose(m_f);
   m_f = nullptr;
-  remove(m_tmp.c_str());
+  AudioEngine::RemoveFile(m_tmp);
 }

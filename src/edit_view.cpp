@@ -160,7 +160,7 @@ void SneakPeak::Destroy()
   if (g_SetExtState)
     g_SetExtState("SneakPeak", "was_docked", m_isDocked ? "1" : "0", true);
   StandaloneCleanupPreview();
-  if (!m_previewTempPath.empty()) { remove(m_previewTempPath.c_str()); m_previewTempPath.clear(); }
+  if (!m_previewTempPath.empty()) { AudioEngine::RemoveFile(m_previewTempPath); m_previewTempPath.clear(); }
   CleanupDragTemp();
   DiscardItemUndo();
   // Cancel an in-flight incremental load (closes its PCM_source)

@@ -196,6 +196,16 @@ bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
   return w.End(loopStartFrame, loopEndFrame);
 }
 
+bool AudioEngine::RemoveFile(const std::string& path)
+{
+  if (path.empty()) return false;
+#ifdef _WIN32
+  return DeleteFileUTF8(path.c_str()) != 0;
+#else
+  return remove(path.c_str()) == 0;
+#endif
+}
+
 bool AudioEngine::CopyFileInto(const std::string& src, const std::string& dst)
 {
   FILE* in = fopen(src.c_str(), "rb");

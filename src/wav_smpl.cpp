@@ -5,8 +5,30 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace {
+
+// This TU is shared with the offline loop_finder_test (no SWELL / win32_utf8
+// on its include path), so the UTF-8 open is spelled out here instead of
+// pulling platform.h: the ANSI fopen could not find a source under a
+// non-ASCII path on Windows (audit A3.1).
+FILE* OpenUtf8(const char* path, const char* mode)
+{
+#ifdef _WIN32
+  wchar_t wpath[1024], wmode[16];
+  if (!MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, 1024) ||
+      !MultiByteToWideChar(CP_UTF8, 0, mode, -1, wmode, 16))
+    return nullptr;
+  return _wfopen(wpath, wmode);
+#else
+  return fopen(path, mode);
+#endif
+}
 
 void PutU32(unsigned char* p, uint32_t v)
 {
@@ -55,7 +77,7 @@ bool ParseWavSmplFile(const char* path, int* loopStartFrame,
                       int* loopEndFrameExcl)
 {
   if (!path || !loopStartFrame || !loopEndFrameExcl) return false;
-  FILE* f = fopen(path, "rb");
+  FILE* f = OpenUtf8(path, "rb");
   if (!f) return false;
 
   unsigned char hdr[12];

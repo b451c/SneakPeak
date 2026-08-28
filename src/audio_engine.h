@@ -78,6 +78,9 @@ public:
   // Copy src into dst opened for truncate+write: dst keeps its inode (created
   // when absent). False on any I/O error - dst may then be incomplete.
   static bool CopyFileInto(const std::string& src, const std::string& dst);
+  // remove() is the ANSI CRT call on Windows: a temp path under a non-ASCII
+  // user name leaves the file behind. DeleteFileUTF8 there, remove() elsewhere.
+  static bool RemoveFile(const std::string& path);
 
   // Refresh REAPER's source after modifying the file on disk
   static void RefreshItemSource(MediaItem* item, MediaItem_Take* take);
