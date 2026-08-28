@@ -9,7 +9,6 @@
 // last window is partial and RMS windows straddle every chunk boundary.
 
 #include "dyn_trace.h"
-#include "deess_engine.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -99,6 +98,52 @@ void LegacyCollectPeaks(const double* audioData, int numFrames, int numChannels,
   }
 }
 
+// Verbatim copy of deess_engine.cpp DeEssBandTrace @ 8912905.
+void LegacyDeEssBandTrace(const double* audioData, int numFrames, int numChannels,
+                    int sampleRate, double stepSec, int mode, double f0,
+                    double q, std::vector<double>& outBandPeaks)
+{
+  outBandPeaks.clear();
+  if (!audioData || numFrames <= 0 || numChannels <= 0 || sampleRate <= 0) return;
+
+  const int nch = std::max(1, numChannels);
+  const double fs = (double)sampleRate;
+  f0 = std::max(200.0, std::min(0.45 * fs, f0));
+  q = std::max(0.1, std::min(16.0, q));
+
+  // Per-channel filter chains: BP = one section, HP = Butterworth pair.
+  const int nStages = (mode == DEESS_MODE_HIGHPASS) ? 2 : 1;
+  std::vector<DeEssBiquad> filt((size_t)nch * (size_t)nStages);
+  for (int ch = 0; ch < nch; ch++) {
+    if (mode == DEESS_MODE_HIGHPASS) {
+      filt[(size_t)ch * 2 + 0].SetHighpass(fs, f0, DEESS_BUTTERWORTH4_Q1);
+      filt[(size_t)ch * 2 + 1].SetHighpass(fs, f0, DEESS_BUTTERWORTH4_Q2);
+    } else {
+      filt[(size_t)ch].SetBandpass(fs, f0, q);
+    }
+  }
+
+  // Window loop mirrors DynamicsEngine::CollectPeaks exactly, so the trace
+  // index aligns 1:1 with the raw-peak / results grid.
+  const int samplesPerStep = std::max(1, (int)(stepSec * sampleRate));
+  outBandPeaks.reserve((size_t)(numFrames / samplesPerStep + 1));
+
+  for (int frame = 0; frame < numFrames; frame += samplesPerStep) {
+    int windowEnd = std::min(numFrames, frame + samplesPerStep);
+    double value = 0.0;
+    for (int s = frame; s < windowEnd; s++) {
+      for (int ch = 0; ch < nch; ch++) {
+        double y = audioData[(size_t)s * nch + ch];
+        DeEssBiquad* f = &filt[(size_t)ch * (size_t)nStages];
+        for (int st = 0; st < nStages; st++) y = f[st].Process(y);
+        double a = std::fabs(y);
+        if (a > value) value = a;
+      }
+    }
+    outBandPeaks.push_back(value);
+  }
+}
+
 bool SameDoubles(const std::vector<double>& a, const std::vector<double>& b)
 {
   return a.size() == b.size() &&
@@ -157,7 +202,7 @@ void RunRate(int sr)
     snprintf(label, sizeof(label), "%d Hz %s: whole-buffer peak lane == legacy CollectPeaks", sr, m.name);
     Check(SameDoubles(whole->peak, legacyPeak), label);
     if (m.ds) {
-      DeEssBandTrace(sig.data(), frames, kNch, sr, kStep, m.dsMode, m.f0, m.q, legacyBand);
+      LegacyDeEssBandTrace(sig.data(), frames, kNch, sr, kStep, m.dsMode, m.f0, m.q, legacyBand);
       snprintf(label, sizeof(label), "%d Hz %s: whole-buffer band lane == legacy DeEssBandTrace", sr, m.name);
       Check(SameDoubles(whole->band, legacyBand), label);
     } else {

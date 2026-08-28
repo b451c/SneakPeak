@@ -1,18 +1,16 @@
-// deess_engine.h — De-esser sidechain detector (v2.3.0 INC-3)
+// deess_engine.h — De-esser sidechain filter (v2.3.0 INC-3)
 // Pure computation — no REAPER API calls, no GDI (dynamics_engine contract).
 //
 // Wideband de-esser topology: a band-filtered sidechain (RBJ biquad band-pass
 // or 24 dB/oct Butterworth high-pass cascade) measures the sibilance band on
-// the same 1 ms grid as DynamicsEngine::CollectPeaks; the band trace drives a
-// third gain-reduction pass inside ComputeCompression. The whole signal ducks
-// (take volume envelope) — the classic broadband de-esser design, NOT a
-// dynamic EQ (honest-docs rule).
+// the same 1 ms grid as the peak detector (DynTraceBuilder, dyn_trace.h, runs
+// both lanes); the band trace drives a third gain-reduction pass inside
+// ComputeCompression. The whole signal ducks (take volume envelope) — the
+// classic broadband de-esser design, NOT a dynamic EQ (honest-docs rule).
 //
 // Filter math: RBJ "Audio EQ Cookbook" (W3C edition) — formulas reimplemented
 // from the specification. Double-precision Direct Form 1.
 #pragma once
-
-#include <vector>
 
 // One RBJ biquad section, Direct Form 1, double precision.
 struct DeEssBiquad {
@@ -42,17 +40,8 @@ enum { DEESS_MODE_BANDPASS = 0, DEESS_MODE_HIGHPASS = 1 };
 // maximally flat in the passband at exactly 24 dB/oct. Shared with dyn_trace.
 constexpr double DEESS_BUTTERWORTH4_Q1 = 0.54119610014619698;
 constexpr double DEESS_BUTTERWORTH4_Q2 = 1.30656296487637653;
-
-// Band-level trace: max |filtered| per channel per stepSec window, window loop
-// IDENTICAL to DynamicsEngine::CollectPeaks so index i of the result aligns
-// 1:1 with m_rawPeaks[i] / m_results[i].
-//
-// mode = DEESS_MODE_BANDPASS: single RBJ band-pass at (f0, q).
-// mode = DEESS_MODE_HIGHPASS: 4th-order Butterworth high-pass at f0 — a
-// cascade of two RBJ sections with Q = 0.54119610 and 1.30656296 (the exact
-// maximally-flat pair 1/(2cos(3pi/8)), 1/(2cos(pi/8))), q ignored.
-// f0 is clamped to [200 Hz, 0.45 * sampleRate]. Filters start at zero state
-// (first ~1-2 ms read low — attenuation-safe).
-void DeEssBandTrace(const double* audioData, int numFrames, int numChannels,
-                    int sampleRate, double stepSec, int mode, double f0,
-                    double q, std::vector<double>& outBandPeaks);
+// Band lane (DynTraceBuilder): DEESS_MODE_BANDPASS = one RBJ band-pass at
+// (f0, q); DEESS_MODE_HIGHPASS = 4th-order Butterworth high-pass at f0, the
+// cascade of two sections with the Qs above, q ignored. f0 is clamped to
+// [200 Hz, 0.45 * sampleRate]. Filters start at zero state (first ~1-2 ms read
+// low — attenuation-safe).

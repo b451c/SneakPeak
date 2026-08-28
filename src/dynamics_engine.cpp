@@ -1,7 +1,6 @@
 // dynamics_engine.cpp — Professional dynamics processor
 // Standard compressor: threshold + ratio + soft knee + attack/release + makeup
 #include "dynamics_engine.h"
-#include "deess_engine.h"
 #include <algorithm>
 #include <cstring>
 #include <cstdlib>
@@ -117,22 +116,37 @@ bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
   return true;
 }
 
+DynTraceKey DynamicsEngine::TraceKeyFor(const DynamicsParams& p, int sampleRate,
+                                        int numChannels, int64_t numFrames,
+                                        unsigned long long contentHash)
+{
+  DynTraceKey key;
+  key.sampleRate = sampleRate;
+  key.numChannels = numChannels;
+  key.numFrames = numFrames;
+  key.rmsMode = p.rmsMode;
+  key.rmsWindowMs = p.rmsWindowMs;
+  key.dsEnable = p.dsEnable;
+  key.dsMode = p.dsMode;
+  key.dsFreqHz = p.dsFreqHz;
+  key.dsQ = p.dsQ;
+  key.contentHash = contentHash;
+  return key;
+}
+
+// Buffer path (Standalone, the regression harness): the trace is built here in
+// ONE Feed - byte-identical to the legacy whole-buffer scan (dyn_chunk_test) -
+// and cached across Analyze calls (forum #103: Live re-analyzes on every knob
+// tick; only detector params or the audio itself rebuild it).
 void DynamicsEngine::Analyze(const double* audioData, int numFrames, int numChannels,
                              int sampleRate, double itemVolDb, const DynamicsParams& params)
 {
-  m_params = params;
-  m_results.clear();
-  m_avgGR = 0.0;
-  m_itemVolDb = itemVolDb;
-
   if (!audioData || numFrames <= 0 || sampleRate <= 0) {
-    m_rawPeaks.clear();
-    m_peakKey = PeakCacheKey();
+    Analyze(std::shared_ptr<const DynTrace>(), itemVolDb, params);
     return;
   }
 
-  // Sparse FNV-1a content hash, shared by the raw-peak cache and the de-esser
-  // band-trace cache below. Catches same-length destructive edits (e.g.
+  // Sparse FNV-1a content hash: catches same-length destructive edits (e.g.
   // normalize) that the dimensions alone would miss.
   unsigned long long contentHash = 1469598103934665603ULL;
   const size_t totalSamples = (size_t)numFrames * (size_t)std::max(1, numChannels);
@@ -142,113 +156,61 @@ void DynamicsEngine::Analyze(const double* audioData, int numFrames, int numChan
     contentHash = (contentHash ^ bits) * 1099511628211ULL;
   }
 
-  // Raw-peak cache (forum #103): skip the full-buffer scan when only
-  // non-detection params changed - the common case for every Live knob tick.
-  PeakCacheKey pkey;
-  pkey.numFrames = numFrames;
-  pkey.numChannels = numChannels;
-  pkey.sampleRate = sampleRate;
-  pkey.rmsMode = params.rmsMode;
-  pkey.rmsWindowMs = params.rmsWindowMs;
-  pkey.contentHash = contentHash;
-  if (!(pkey == m_peakKey) || m_rawPeaks.empty()) {
-    m_rawPeaks.clear();
-    CollectPeaks(audioData, numFrames, numChannels, sampleRate,
-                 params.rmsMode, params.rmsWindowMs);
-    m_peakKey = pkey;
+  const DynTraceKey key = TraceKeyFor(params, sampleRate, numChannels, numFrames, contentHash);
+  std::shared_ptr<const DynTrace> trace = m_trace;
+  if (!trace || !(trace->key == key)) {
+    DynTraceBuilder builder;
+    builder.Begin(key);
+    builder.Feed(audioData, numFrames);
+    trace = builder.Finish();
   }
-  if (m_rawPeaks.empty()) return;
+  Analyze(trace, itemVolDb, params);
+}
+
+// Trace path (item views: the trace comes from AudioStream on the DynWorker).
+void DynamicsEngine::Analyze(std::shared_ptr<const DynTrace> trace, double itemVolDb,
+                             const DynamicsParams& params)
+{
+  m_params = params;
+  m_db.clear();
+  m_gr.clear();
+  m_avgGR = 0.0;
+  m_itemVolDb = itemVolDb;
+  m_trace = std::move(trace);
+  if (!m_trace || m_trace->Count() == 0) return;
+  const DynTrace& T = *m_trace;
 
   // Average peak dB (for auto-threshold when sentinel -100)
   double sumPeak = 0.0;
-  for (const auto& p : m_rawPeaks) sumPeak += p.peak;
-  double meanLinear = sumPeak / (double)m_rawPeaks.size();
+  for (double p : T.peak) sumPeak += p;
+  double meanLinear = sumPeak / (double)T.peak.size();
   m_avgPeakDb = 20.0 * log10(std::max(meanLinear, EPSILON)) + itemVolDb;
 
   BuildEnvelope(itemVolDb, params);
 
-  // De-esser band trace (v2.3.0 INC-3). Cache-keyed: Live re-analyzes on every
-  // knob tick, but the trace depends only on the audio and (mode, f0, Q) -
-  // threshold/ratio/attack/release tweaks reuse it (load-bearing for Live
-  // CPU). Reuses the sparse content hash computed above.
+  // De-esser (v2.3.0 INC-3): auto-threshold reference = mean band level
+  // (mirrors m_avgPeakDb).
   if (params.dsEnable) {
-    BandTraceKey key;
-    key.numFrames = numFrames;
-    key.numChannels = numChannels;
-    key.sampleRate = sampleRate;
-    key.mode = params.dsMode;
-    key.freqHz = params.dsFreqHz;
-    key.q = params.dsQ;
-    key.contentHash = contentHash;
-
-    if (!(key == m_bandKey) || m_bandPeaks.size() != m_rawPeaks.size()) {
-      DeEssBandTrace(audioData, numFrames, numChannels, sampleRate, STEP_SIZE,
-                     params.dsMode, params.dsFreqHz, params.dsQ, m_bandPeaks);
-      m_bandKey = key;
-    }
-
-    // Auto-threshold reference: mean band level (mirrors m_avgPeakDb).
     double sum = 0.0;
-    for (double v : m_bandPeaks) sum += v;
-    double mean = m_bandPeaks.empty() ? 0.0 : sum / (double)m_bandPeaks.size();
+    for (double v : T.band) sum += v;
+    double mean = T.band.empty() ? 0.0 : sum / (double)T.band.size();
     m_avgBandDb = 20.0 * log10(std::max(mean, EPSILON)) + itemVolDb;
   }
 }
 
-// Stage 1: Collect peaks from audio buffer in 1ms windows
-void DynamicsEngine::CollectPeaks(const double* audioData, int numFrames, int numChannels,
-                                  int sampleRate, bool rmsMode, double rmsWindowMs)
+const std::vector<double>& DynamicsEngine::GetBandPeaks() const
 {
-  int samplesPerStep = std::max(1, (int)(STEP_SIZE * sampleRate));
-  int nch = std::max(1, numChannels);
-
-  // RMS: wider window for averaging (default 5ms, but never smaller than step)
-  int rmsWindow = rmsMode
-    ? std::max(samplesPerStep, (int)(rmsWindowMs / 1000.0 * sampleRate))
-    : 0;
-
-  m_rawPeaks.reserve((size_t)(numFrames / samplesPerStep + 1));
-
-  for (int frame = 0; frame < numFrames; frame += samplesPerStep) {
-    int windowEnd = std::min(numFrames, frame + samplesPerStep);
-    double value = 0.0;
-
-    if (rmsMode) {
-      // RMS: root mean square over rmsWindow centered on this step
-      int rmsStart = std::max(0, frame - rmsWindow / 2);
-      int rmsEnd = std::min(numFrames, rmsStart + rmsWindow);
-      double sumSq = 0.0;
-      int count = 0;
-      for (int s = rmsStart; s < rmsEnd; s++) {
-        for (int ch = 0; ch < nch; ch++) {
-          double v = audioData[(size_t)s * nch + ch];
-          sumSq += v * v;
-        }
-        count++;
-      }
-      value = (count > 0) ? sqrt(sumSq / (double)(count * nch)) : 0.0;
-    } else {
-      // Peak: max(abs) per channel
-      for (int s = frame; s < windowEnd; s++) {
-        for (int ch = 0; ch < nch; ch++) {
-          double v = fabs(audioData[(size_t)s * nch + ch]);
-          if (v > value) value = v;
-        }
-      }
-    }
-
-    double time = (double)frame / (double)sampleRate;
-    m_rawPeaks.push_back({time, value});
-  }
+  static const std::vector<double> kNone;
+  return m_trace ? m_trace->band : kNone;
 }
 
 // Stage 2: Asymmetric attack/release envelope follower with lookahead
 void DynamicsEngine::BuildEnvelope(double itemVolDb, const DynamicsParams& params)
 {
-  if (m_rawPeaks.empty()) return;
+  const DynTrace& T = *m_trace;
+  if (T.Count() == 0) return;
 
-  double dt = (m_rawPeaks.size() > 1)
-    ? (m_rawPeaks[1].time - m_rawPeaks[0].time) : STEP_SIZE;
+  double dt = (T.Count() > 1) ? (T.TimeAt(1) - T.TimeAt(0)) : STEP_SIZE;
 
   double attCoeff = (params.attackMs > 0.0)
     ? exp(-dt / (params.attackMs / 1000.0)) : 0.0;
@@ -258,18 +220,19 @@ void DynamicsEngine::BuildEnvelope(double itemVolDb, const DynamicsParams& param
   int lookaheadFrames = (params.lookaheadMs > 0.0)
     ? (int)(params.lookaheadMs / 1000.0 / dt + 0.5) : 0;
 
-  int count = (int)m_rawPeaks.size();
-  m_results.resize((size_t)count);
+  int count = (int)T.Count();
+  m_db.resize((size_t)count);
+  m_gr.assign((size_t)count, 0.0);
 
-  double env = m_rawPeaks[0].peak;
+  double env = T.peak[0];
 
   for (int i = 0; i < count; i++) {
-    double x = m_rawPeaks[i].peak;
+    double x = T.peak[(size_t)i];
 
     if (lookaheadFrames > 0) {
       int ahead_end = std::min(count, i + 1 + lookaheadFrames);
       for (int j = i + 1; j < ahead_end; j++) {
-        if (m_rawPeaks[j].peak > x) x = m_rawPeaks[j].peak;
+        if (T.peak[(size_t)j] > x) x = T.peak[(size_t)j];
       }
     }
 
@@ -279,11 +242,7 @@ void DynamicsEngine::BuildEnvelope(double itemVolDb, const DynamicsParams& param
       env = relCoeff * env + (1.0 - relCoeff) * x;
     }
 
-    double db = 20.0 * log10(std::max(env, EPSILON)) + itemVolDb;
-    double norm = (db - params.minDb) / (params.maxDb - params.minDb);
-    norm = std::max(0.0, std::min(1.0, norm));
-
-    m_results[i] = {m_rawPeaks[i].time, m_rawPeaks[i].peak, db, norm, 0.0};
+    m_db[(size_t)i] = 20.0 * log10(std::max(env, EPSILON)) + itemVolDb;
   }
 }
 
@@ -298,7 +257,8 @@ double DynamicsEngine::GetThreshold() const
 std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
 {
   std::vector<CompressPoint> out;
-  if (m_results.empty()) return out;
+  if (m_db.empty()) return out;
+  const DynTrace& T = *m_trace;
 
   double thresh = GetThreshold();
   double knee = std::max(0.0, m_params.kneeDb);
@@ -312,8 +272,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   const bool hasUp   = (compMode != COMP_MODE_DOWN);
 
   // Attack/release coefficients for GR smoothing
-  double dt = (m_results.size() > 1)
-    ? (m_results[1].time - m_results[0].time) : STEP_SIZE;
+  double dt = (T.Count() > 1) ? (T.TimeAt(1) - T.TimeAt(0)) : STEP_SIZE;
   double attCoeff = (m_params.attackMs > 0.0)
     ? exp(-dt / (m_params.attackMs / 1000.0)) : 0.0;
   double relCoeff = (m_params.releaseMs > 0.0)
@@ -345,26 +304,27 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   int gateHoldFrames = (m_params.gateHoldMs > 0.0 && dt > 0.0)
     ? (int)(m_params.gateHoldMs / 1000.0 / dt + 0.5) : 0;
 
-  out.reserve(m_results.size());
+  out.reserve(m_db.size());
   double grSum = 0.0;
   int grCount = 0;
   double smoothGR = 0.0; // smoothed compressor gain reduction (dB, <=0)
   double smoothGateGR = 0.0; // smoothed gate gain reduction (dB, <=0)
   int gateHoldCounter = 0;   // hold timer (frames remaining)
-  int n = (int)m_results.size();
+  int n = (int)m_db.size();
 
-  // First pass: compute compressor GR + auto-makeup (needed before gate)
-  std::vector<double> compGRs(n);
+  // First pass: compute compressor GR + auto-makeup (needed before gate).
+  // Written into m_gr in place; the second pass adds gate + de-ess on top.
+  std::vector<double>& compGRs = m_gr;
   for (int i = 0; i < n; i++) {
-    auto& pt = m_results[i];
+    const double peakLinear = T.peak[(size_t)i];
 
     // With lookahead: use max peak from current position to lookahead window
-    double peakVal = pt.peakLinear;
+    double peakVal = peakLinear;
     if (lookaheadFrames > 0) {
       int end = std::min(n, i + 1 + lookaheadFrames);
       for (int j = i + 1; j < end; j++) {
-        if (m_results[j].peakLinear > peakVal)
-          peakVal = m_results[j].peakLinear;
+        if (T.peak[(size_t)j] > peakVal)
+          peakVal = T.peak[(size_t)j];
       }
     }
 
@@ -409,7 +369,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
       // lookahead) so "the gate always wins" holds exactly; lookahead keeps
       // driving only the early REMOVAL of boost before transients.
       if (gateEnabled) {
-        double rawNoLaDb = 20.0 * log10(std::max(pt.peakLinear, EPSILON)) + m_itemVolDb;
+        double rawNoLaDb = 20.0 * log10(std::max(peakLinear, EPSILON)) + m_itemVolDb;
         if (rawNoLaDb < gateThresh) gUp = 0.0;
       }
       instantGR += gUp;
@@ -437,8 +397,8 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   // would explode the output (v2.3 addendum: cap auto-makeup in that zone).
   if (slope < -1.0 && makeup > 24.0) makeup = 24.0;
 
-  // De-ess pass (v2.3.0 INC-3): the band-filtered sidechain (m_bandPeaks,
-  // 1:1 with the results grid) drives a third GR component with its own gain
+  // De-ess pass (v2.3.0 INC-3): the band-filtered sidechain (the trace's band
+  // lane, 1:1 with the results grid) drives a third GR component with its own gain
   // computer and attack/release smoothing; dB GRs sum because the envelope
   // multiplies linearly. De-ess reduction is deliberate signal shaping, so it
   // does NOT feed auto-makeup (m_avgGR stays comp-only) and the gate keeps
@@ -447,7 +407,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   std::vector<double>& dsGRs = m_dsGRs; // member: the Listen overlay reads it
   dsGRs.clear();
   m_avgDsGR = 0.0;
-  const bool dsOn = m_params.dsEnable && m_bandPeaks.size() == m_results.size();
+  const bool dsOn = m_params.dsEnable && T.band.size() == m_db.size();
   if (dsOn) {
     dsGRs.resize((size_t)n);
     const double dsThresh = GetDeEssThreshold();
@@ -465,7 +425,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
     int dsCount = 0;
     for (int i = 0; i < n; i++) {
       double bandDb =
-        20.0 * log10(std::max(m_bandPeaks[(size_t)i], EPSILON)) + m_itemVolDb;
+        20.0 * log10(std::max(T.band[(size_t)i], EPSILON)) + m_itemVolDb;
       double overshoot = bandDb - dsThresh;
       double g = 0.0;
       if (overshoot > -dsHalfKnee && overshoot < dsHalfKnee) {
@@ -491,7 +451,7 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   // gate starts closed - identical to the legacy hold-exhausted start state.
   bool gateOpen = false;
   if (gateEnabled && n > 0) {
-    double rawDb0 = 20.0 * log10(std::max(m_results[0].peakLinear, EPSILON)) + m_itemVolDb;
+    double rawDb0 = 20.0 * log10(std::max(T.peak[0], EPSILON)) + m_itemVolDb;
     gateOpen = ((hasUp ? rawDb0 : rawDb0 + compGRs[0]) >= tClose);
   }
 
@@ -504,12 +464,11 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   // transfer-curve gate node at input=threshold always sits on the cliff). At makeup==0
   // this is byte-identical to the previous post-makeup detection.
   for (int i = 0; i < n; i++) {
-    auto& pt = m_results[i];
-    double compGR = compGRs[i];
+    const double compGR = compGRs[(size_t)i];
     double totalGR = compGR;
 
     if (gateEnabled) {
-      double rawDb = 20.0 * log10(std::max(pt.peakLinear, EPSILON)) + m_itemVolDb;
+      double rawDb = 20.0 * log10(std::max(T.peak[(size_t)i], EPSILON)) + m_itemVolDb;
       // Down: post-comp, pre-makeup (breath-reduction intent). Up/Both: RAW
       // input - boosted noise must never hold the gate open (gate coupling).
       double detectLevel = hasUp ? rawDb : rawDb + compGR;
@@ -550,8 +509,8 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
 
     if (dsOn) totalGR += dsGRs[(size_t)i]; // third component (de-ess)
 
-    pt.smoothedGR = totalGR;
-    out.push_back({pt.time, totalGR + makeup});
+    m_gr[(size_t)i] = totalGR;
+    out.push_back({T.TimeAt((size_t)i), totalGR + makeup});
   }
 
   return out;

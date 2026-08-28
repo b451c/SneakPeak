@@ -159,6 +159,7 @@ add_executable(dyn_regression
   tests/dyn_regression.cpp
   src/dynamics_engine.cpp
   src/deess_engine.cpp
+  src/dyn_trace.cpp
 )
 target_include_directories(dyn_regression PRIVATE src)
 target_compile_definitions(dyn_regression PRIVATE

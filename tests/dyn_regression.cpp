@@ -187,8 +187,8 @@ void RunScenario(const Scenario& sc, const Signal& sig)
     snprintf(line, sizeof(line), "%.17g %.17g\n", cp.time, cp.dbAdjust);
     curveHash.Add(line);
   }
-  for (const auto& pt : engine.GetResults()) {
-    snprintf(line, sizeof(line), "%.17g\n", pt.smoothedGR);
+  for (size_t i = 0, n = engine.PointCount(); i < n; i++) {
+    snprintf(line, sizeof(line), "%.17g\n", engine.GrAt(i));
     grHash.Add(line);
   }
   printf("full: n=%d hash=%016llx grhash=%016llx\n",

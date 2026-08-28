@@ -1141,8 +1141,8 @@ void SneakPeak::DrawLimiterOverlay(HDC hdc)
 void SneakPeak::DrawDynamicsCurve(HDC hdc)
 {
   if (!m_dynamics.HasResults()) return;
-  const auto& results = m_dynamics.GetResults();
-  int count = (int)results.size();
+  const DynamicsEngine& dyn = m_dynamics;
+  int count = (int)dyn.PointCount();
   if (count == 0) return;
 
   RECT wr = m_waveform.GetRect();
@@ -1188,7 +1188,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     int lo = 0, hi = count;
     while (lo < hi) {
       int mid = (lo + hi) / 2;
-      if (results[mid].time < viewStart) lo = mid + 1;
+      if (dyn.TimeAt((size_t)mid) < viewStart) lo = mid + 1;
       else hi = mid;
     }
     startIdx = std::max(0, lo - 1); // one before for line continuity
@@ -1200,13 +1200,13 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   {
     const auto& dsGRs = m_dynamics.GetDeEssGRs();
     if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.GetDsListen() &&
-        dsGRs.size() == results.size()) {
+        dsGRs.size() == (size_t)count) {
       HBRUSH amber = CreateSolidBrush(RGB(255, 170, 40));
       const int laneTop = wr.top + 1, laneBot = laneTop + SPmin(4);
       int spanX0 = -1;
-      for (int i = startIdx; i < count && results[i].time <= viewEnd; i++) {
+      for (int i = startIdx; i < count && dyn.TimeAt((size_t)i) <= viewEnd; i++) {
         bool hot = dsGRs[(size_t)i] < -1.0;
-        int x = waveL + (int)((results[i].time - viewStart) / viewDur * (double)waveW);
+        int x = waveL + (int)((dyn.TimeAt((size_t)i) - viewStart) / viewDur * (double)waveW);
         x = std::max(waveL, std::min(waveR, x));
         if (hot && spanX0 < 0) spanX0 = x;
         if (!hot && spanX0 >= 0) {
@@ -1224,7 +1224,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   }
 
   // Stride: how many analysis points map to one pixel column
-  double resultDt = (count > 1) ? (results[count - 1].time - results[0].time) / (double)(count - 1) : 0.001;
+  double resultDt = (count > 1) ? (dyn.TimeAt((size_t)count - 1) - dyn.TimeAt(0)) / (double)(count - 1) : 0.001;
   double secsPerPx = viewDur / (double)waveW;
   int stride = std::max(1, (int)(secsPerPx / resultDt));
 
@@ -1232,14 +1232,18 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
   // analysis point (~1M on a zoomed-out 17-min item), so no unconditional
   // libm: outside fades fadeGain is exactly 1.0 and the log10 term is 0
   // (profile 2026-07-09: the always-on log10(1.0) alone was ~3.6 s of a 50 s
-  // slider drag).
-  auto getAdjDb = [&](const DynamicsPoint& pt) -> double {
+  // slider drag); the point time (a divide) is only computed when a fade exists.
+  const bool anyFade = fp.fadeInLen > 0.0 || fp.fadeOutLen > 0.0;
+  auto getAdjDb = [&](int idx) -> double {
     double fadeGain = 1.0;
-    if (fp.fadeInLen > 0.0 && pt.time < fp.fadeInLen)
-      fadeGain *= ApplyFadeShape(pt.time / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
-    if (fp.fadeOutLen > 0.0 && pt.time > itemDur - fp.fadeOutLen)
-      fadeGain *= ApplyFadeShape((itemDur - pt.time) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
-    return pt.db + gainOffsetDb +
+    if (anyFade) {
+      const double t = dyn.TimeAt((size_t)idx);
+      if (fp.fadeInLen > 0.0 && t < fp.fadeInLen)
+        fadeGain *= ApplyFadeShape(t / fp.fadeInLen, fp.fadeInShape, -fp.fadeInDir);
+      if (fp.fadeOutLen > 0.0 && t > itemDur - fp.fadeOutLen)
+        fadeGain *= ApplyFadeShape((itemDur - t) / fp.fadeOutLen, fp.fadeOutShape, fp.fadeOutDir);
+    }
+    return dyn.DbAt((size_t)idx) + gainOffsetDb +
            ((fadeGain == 1.0) ? 0.0 : 20.0 * log10(std::max(fadeGain, 1e-12)));
   };
 
@@ -1250,7 +1254,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     int maxIdx = baseIdx;
     int end = std::min(count, baseIdx + stride);
     for (int j = baseIdx; j < end; j++) {
-      double db = getAdjDb(results[j]);
+      double db = getAdjDb(j);
       if (db > maxDb) { maxDb = db; maxIdx = j; }
     }
     return maxIdx;
@@ -1277,13 +1281,13 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
     int lastPx = -2;
     for (int i = startIdx; i < count; i += stride) {
       int idx = getMaxIdxInStride(i);
-      const auto& pt = results[idx];
-      if (pt.time > viewEnd + 0.01) break;
-      int px = m_waveform.TimeToX(pt.time);
+      const double t = dyn.TimeAt((size_t)idx);
+      if (t > viewEnd + 0.01) break;
+      int px = m_waveform.TimeToX(t);
       if (px < waveL || px > waveR) continue;
       if (px == lastPx) continue;
       lastPx = px;
-      colPts.push_back({ px, idx, getAdjDb(pt) });
+      colPts.push_back({ px, idx, getAdjDb(idx) });
     }
   }
 
@@ -1297,7 +1301,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
       if (cp.adjDb < SILENCE_FLOOR_DB) continue;
 
       int origY = dbToY(cp.adjDb);
-      double compDb = cp.adjDb + results[cp.idx].smoothedGR + makeupDb;
+      double compDb = cp.adjDb + dyn.GrAt((size_t)cp.idx) + makeupDb;
       int compY = dbToY(compDb);
 
       // Only shade where compression reduces level (compY below origY = lower amplitude)
@@ -1335,7 +1339,7 @@ void SneakPeak::DrawDynamicsCurve(HDC hdc)
       if (cp.adjDb < SILENCE_FLOOR_DB) { first = true; continue; }
 
       // Use precomputed gain-smoothed GR from ComputeCompression
-      double compDb = cp.adjDb + results[cp.idx].smoothedGR + makeupDb;
+      double compDb = cp.adjDb + dyn.GrAt((size_t)cp.idx) + makeupDb;
       int py = dbToY(compDb);
 
       if (first) { MoveToEx(hdc, cp.px, py, nullptr); first = false; }

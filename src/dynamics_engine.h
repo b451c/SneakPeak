@@ -3,6 +3,9 @@
 // Pure computation — no REAPER API calls, no GDI.
 #pragma once
 
+#include "dyn_trace.h"
+#include <cstdint>
+#include <memory>
 #include <vector>
 #include <cmath>
 
@@ -92,14 +95,6 @@ inline double DynSlopeFromRatio(double r)
   return 1.0 / (r < 1.0 ? 1.0 : r) - 1.0;
 }
 
-struct DynamicsPoint {
-  double time;       // seconds from item start
-  double peakLinear; // raw peak amplitude (0..1+)
-  double db;         // smoothed amplitude in dB (includes item vol) - for orange curve
-  double norm;       // normalized 0..1 within minDb..maxDb range
-  double smoothedGR; // gain-smoothed GR in dB (negative, 0=no compression) - set by ComputeCompression
-};
-
 // Built-in presets (researched from professional sources)
 struct DynamicsPreset {
   const char* name;
@@ -128,22 +123,42 @@ static constexpr const char* PEXT_DYNAMICS_KEY = "P_EXT:SneakPeak_Dynamics";
 void DynamicsParamsToString(const DynamicsParams& p, char* buf, int bufSize);
 bool DynamicsParamsFromString(const char* str, DynamicsParams& out);
 
+// The engine analyses a DynTrace (dyn_trace.h): the 1 ms detector lanes built
+// either from a sample buffer here (Standalone, the regression harness) or
+// chunk by chunk from an AudioStream on a worker (item views, v2.5 8f). Per
+// point it keeps only the follower level (m_db) and the total smoothed GR
+// (m_gr); time is the trace's implicit grid and the raw peak is the trace's.
 class DynamicsEngine {
 public:
+  // Buffer path: builds (and caches, keyed by detector params + a sparse
+  // content hash) the trace from the samples in one Feed, then analyses it.
   void Analyze(const double* audioData, int numFrames, int numChannels,
                int sampleRate, double itemVolDb, const DynamicsParams& params);
+  // Trace path: analyse a trace built elsewhere (shared, immutable).
+  void Analyze(std::shared_ptr<const DynTrace> trace, double itemVolDb,
+               const DynamicsParams& params);
+  // The detector key a trace must match for these params (contentHash = 0 for
+  // streams; the owner invalidates those explicitly on audio changes).
+  static DynTraceKey TraceKeyFor(const DynamicsParams& p, int sampleRate, int numChannels,
+                                 int64_t numFrames, unsigned long long contentHash = 0);
+  const std::shared_ptr<const DynTrace>& GetTrace() const { return m_trace; }
 
-  const std::vector<DynamicsPoint>& GetResults() const { return m_results; }
+  // Per-point results (1:1 with the trace grid), valid after Analyze;
+  // GrAt() after ComputeCompression.
+  size_t PointCount() const { return m_db.size(); }
+  double TimeAt(size_t i) const { return m_trace->TimeAt(i); }
+  double DbAt(size_t i) const { return m_db[i]; }   // follower level, dB (incl. item vol)
+  double GrAt(size_t i) const { return m_gr[i]; }   // total smoothed GR, dB (<= 0 down)
   double GetAveragePeakDb() const { return m_avgPeakDb; }
   double GetThreshold() const;
-  bool HasResults() const { return !m_results.empty(); }
-  void Clear() { m_results.clear(); }
+  bool HasResults() const { return !m_db.empty(); }
+  void Clear() { m_db.clear(); m_gr.clear(); }
   const DynamicsParams& GetParams() const { return m_params; }
   void SetParams(const DynamicsParams& p) { m_params = p; }
 
   // Compute gain reduction per point (gain-smoothing compressor model).
   // Attack/release smooth the GR signal, not the input level.
-  // Also populates smoothedGR on each DynamicsPoint for rendering.
+  // Also fills the per-point total GR (GrAt) for rendering.
   // Returns {time, dbAdjustment} pairs. Includes makeup gain.
   struct CompressPoint {
     double time;
@@ -158,8 +173,8 @@ public:
   // band trace (Listen overlay). Both valid after Analyze + ComputeCompression
   // with dsEnable on.
   double GetAvgDeEssGR() const { return m_avgDsGR; }
-  const std::vector<double>& GetBandPeaks() const { return m_bandPeaks; }
-  // Per-point smoothed ds GR (1:1 with GetResults()); empty when ds is off.
+  const std::vector<double>& GetBandPeaks() const;   // the trace's band lane
+  // Per-point smoothed ds GR (1:1 with the point grid); empty when ds is off.
   const std::vector<double>& GetDeEssGRs() const { return m_dsGRs; }
   double GetDeEssThreshold() const
   { return (m_params.dsThreshDb <= -99.0) ? m_avgBandDb : m_params.dsThreshDb; }
@@ -169,59 +184,17 @@ public:
                                                   double epsilonDb);
 
 private:
-  void CollectPeaks(const double* audioData, int numFrames, int numChannels,
-                    int sampleRate, bool rmsMode, double rmsWindowMs);
   void BuildEnvelope(double itemVolDb, const DynamicsParams& params);
 
-  struct RawPeak {
-    double time;
-    double peak;
-  };
-
-  // Raw-peak cache (forum #103): Live re-analyzes on every knob tick, but the
-  // 1ms peak/RMS scan depends only on the audio and (rmsMode, rmsWindowMs) -
-  // threshold/ratio/attack/release tweaks reuse it. On long items the scan
-  // dominates the tick (a 4-minute stereo file is ~23M samples, far more in
-  // RMS mode), so this cache is load-bearing for Live UI responsiveness.
-  // Same sparse-content-hash invalidation as the band-trace cache below.
-  struct PeakCacheKey {
-    int numFrames = -1, numChannels = 0, sampleRate = 0;
-    bool rmsMode = false;
-    double rmsWindowMs = 0.0;
-    unsigned long long contentHash = 0;
-    bool operator==(const PeakCacheKey& o) const
-    {
-      return numFrames == o.numFrames && numChannels == o.numChannels &&
-             sampleRate == o.sampleRate && rmsMode == o.rmsMode &&
-             rmsWindowMs == o.rmsWindowMs && contentHash == o.contentHash;
-    }
-  };
-  PeakCacheKey m_peakKey;
-  std::vector<RawPeak> m_rawPeaks;
-  std::vector<DynamicsPoint> m_results;
+  std::shared_ptr<const DynTrace> m_trace;
+  std::vector<double> m_db;   // follower level per point (BuildEnvelope)
+  std::vector<double> m_gr;   // total smoothed GR per point (ComputeCompression)
   double m_avgPeakDb = -60.0;
   double m_avgGR = 0.0;
   double m_itemVolDb = 0.0; // cached for ComputeCompression (gain smoothing needs raw dB)
   DynamicsParams m_params;
 
-  // De-esser band trace (v2.3.0 INC-3), cached across Analyze calls: Live
-  // re-analyzes on every knob tick, but the trace depends only on the audio
-  // and (mode, f0, Q) - threshold/ratio/attack/release tweaks reuse it. The
-  // key includes a sparse content hash so same-length destructive edits
-  // (e.g. normalize) still invalidate it.
-  struct BandTraceKey {
-    int numFrames = -1, numChannels = 0, sampleRate = 0, mode = 0;
-    double freqHz = 0.0, q = 0.0;
-    unsigned long long contentHash = 0;
-    bool operator==(const BandTraceKey& o) const
-    {
-      return numFrames == o.numFrames && numChannels == o.numChannels &&
-             sampleRate == o.sampleRate && mode == o.mode &&
-             freqHz == o.freqHz && q == o.q && contentHash == o.contentHash;
-    }
-  };
-  BandTraceKey m_bandKey;
-  std::vector<double> m_bandPeaks;
+  // De-esser (v2.3.0 INC-3): the band lane lives in the trace.
   std::vector<double> m_dsGRs;  // per-point smoothed ds GR (Listen overlay)
   double m_avgBandDb = -60.0; // mean band level (dB, incl item vol) for Auto threshold
   double m_avgDsGR = 0.0;
