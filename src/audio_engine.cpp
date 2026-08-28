@@ -434,7 +434,13 @@ std::string AudioEngine::ExportWavPath(const char* sourceFilePath)
 {
   // Generate filename: [basename]_sel_HHMMSS.wav (includes original name)
   time_t now = time(nullptr);
-  struct tm* t = localtime(&now);
+  struct tm tmv = {};
+#ifdef _WIN32
+  localtime_s(&tmv, &now);
+#else
+  localtime_r(&now, &tmv);
+#endif
+  const struct tm* t = &tmv;
   char baseName[128] = "sneakpeak";
   if (sourceFilePath && sourceFilePath[0]) {
     const char* fn = sourceFilePath;
@@ -456,17 +462,16 @@ std::string AudioEngine::ExportWavPath(const char* sourceFilePath)
   char exportPath[512] = {};
   const char* chosen = nullptr;
 
-  // Priority 1: project recording folder (if project is saved)
-  if (g_GetProjectPathEx && g_EnumProjects) {
-    char projFile[512] = {};
-    g_EnumProjects(-1, projFile, sizeof(projFile));
-    if (projFile[0]) {
-      char projPath[512] = {};
-      g_GetProjectPathEx(nullptr, projPath, sizeof(projPath));
-      if (projPath[0]) {
-        snprintf(exportPath, sizeof(exportPath), "%s/%s", projPath, filename);
-        chosen = "project";
-      }
+  // Priority 1: the project's recording folder. GetProjectPathEx answers for
+  // an unsaved project too (REAPER's default recording path), so an export
+  // from a fresh project no longer lands in the OS temp folder, which gets
+  // purged under a saved project's feet (audit A2.3).
+  if (g_GetProjectPathEx) {
+    char projPath[512] = {};
+    g_GetProjectPathEx(nullptr, projPath, sizeof(projPath));
+    if (projPath[0]) {
+      snprintf(exportPath, sizeof(exportPath), "%s/%s", projPath, filename);
+      chosen = "project";
     }
   }
 

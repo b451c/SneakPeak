@@ -306,7 +306,7 @@ private:
   void DoCheckForUpdate();
 
   // Clipboard operations
-  void DoCopy();
+  bool DoCopy();   // false = nothing reached the clipboard (A2.1: Cut must not delete)
   void DoCut();
   void DoPaste();
   void DoPasteDestructive();

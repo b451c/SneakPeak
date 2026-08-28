@@ -445,7 +445,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="key"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></div><div class="desc">Redo</div>
 </div>
 
-<p><strong>Paste</strong> is non-destructive: it writes the clipboard to a temporary WAV file, splits the item at the cursor position, shifts subsequent items right, and inserts the new audio in the gap. The pasted region is automatically selected. Works in single-item, timeline, and SET modes.</p>
+<p><strong>Paste</strong> is non-destructive: it writes the clipboard to a new WAV file in the project's recording folder (so the clip is saved with the project, like a recording), splits the item at the cursor position, shifts subsequent items right, and inserts the new audio in the gap. The pasted region is automatically selected. Works in single-item, timeline, and SET modes.</p>
 
 <p><strong>Ripple Delete</strong> removes the selection and shifts all subsequent items left to close the gap. Standard Delete preserves gaps. Cut (<kbd>Cmd</kbd>+<kbd>X</kbd>) uses ripple delete by default, matching standard waveform editor behavior.</p>
 

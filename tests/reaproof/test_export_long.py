@@ -122,16 +122,17 @@ def test_edit_copy_folds_the_take_channel_mode(sess):
 # --------------------------------------------------------------------------
 # Drag export (ITEM mode) + accessor offset/playrate rendering
 # --------------------------------------------------------------------------
-import os
 import time
 from pathlib import Path
 
 from conftest import WAVE_Y, drag_client, wait_main_thread_idle
 
-def _export_dir() -> Path:
-    # AudioEngine::ExportWavPath priority 3 (unsaved project, ITEM mode = no
-    # source path): $TMPDIR or /tmp - REAPER inherits our environment.
-    return Path(os.environ.get("TMPDIR", "/tmp"))
+def _export_dir(sess) -> Path:
+    # AudioEngine::ExportWavPath priority 1: the project's recording path,
+    # which GetProjectPathEx answers for an UNSAVED project too (audit A2.3 -
+    # the export used to fall through to $TMPDIR, purged under a saved
+    # project's feet). Control (cb48cd5): files under TMPDIR, none here.
+    return Path(str(sess.eval("return reaper.GetProjectPathEx(0)")))
 
 
 def _os_drag_client(sess, x0: int, y0: int, x1: int, y1: int, *, steps: int = 24):
@@ -184,7 +185,7 @@ def test_drag_export_of_a_five_minute_selection_keeps_the_source_rate(sess):
     t0, t1 = _reaper_time_selection(sess)
     assert t1 - t0 > 60.0, f"selection too short: {t0}..{t1}"
 
-    before = set(_export_dir().glob("sneakpeak_sel_*.wav"))
+    before = set(_export_dir(sess).glob("sneakpeak_sel_*.wav"))
     # Drag from inside the selection out of the waveform lane (no modifier =
     # export the moment the pointer leaves the lane, then the OS drag session).
     # REAL mouse events (CGEvent): the OS drag session that SneakPeak starts
@@ -195,7 +196,7 @@ def test_drag_export_of_a_five_minute_selection_keeps_the_source_rate(sess):
     _os_drag_client(sess, 350, WAVE_Y, 350, -12, steps=24)
     new = []
     def appeared():
-        new[:] = sorted(set(_export_dir().glob("sneakpeak_sel_*.wav")) - before)
+        new[:] = sorted(set(_export_dir(sess).glob("sneakpeak_sel_*.wav")) - before)
         return bool(new)
     sess.wait_until(appeared, timeout=30)
     wall = time.monotonic() - wall0
@@ -328,3 +329,52 @@ def test_one_shot_slices_of_a_long_item_keep_the_source_rate(sess):
         shift, diff = _best_shift(got, media, int(round(r0 * SR)), atol=2e-7)
         print(f"[export] one-shot {out.name}: aligned at shift {shift}, max |diff| = {diff:.3g}")
         assert diff <= 2e-7, f"{out.name} differs from the source region (shift {shift}): {diff}"
+
+
+# --- A2.4: exports bake the item volume (contract lock) ------------------------
+def _rms(x: np.ndarray) -> float:
+    return float(np.sqrt(np.mean(np.square(x.astype(np.float64)))))
+
+
+@_pytest.mark.skipif(_sys.platform != "darwin",
+                     reason="the OS drag session needs a real mouse (see the drag export spec above)")
+def test_drag_export_bakes_the_item_volume(sess):
+    """Locked decision (2026-08-28 s7): what you hear is what you export. An
+    item at D_VOL -6 dB drags out 6 dB below its source. This spec documents
+    the contract - it is GREEN on the cb48cd5 control by design (no RED
+    needed: the behaviour is being locked, not fixed). The file is looked for
+    in the project path AND in $TMPDIR so the destination change (A2.3) does
+    not leak into this contract."""
+    media = burst_fixture("vol_30s.wav", seconds=30, channels=2)
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    sess.eval("""
+      local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0)
+      reaper.SetMediaItemInfo_Value(it, "D_VOL", 0.5)
+      reaper.UpdateItemInProject(it)""")
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=60)
+
+    drag_client(sess, 200, WAVE_Y, 500, WAVE_Y)
+    time.sleep(0.5)
+    t0, t1 = _reaper_time_selection(sess)
+    assert t1 - t0 > 5.0, f"selection too short: {t0}..{t1}"
+    import os
+    dirs = {_export_dir(sess), Path(os.environ.get("TMPDIR", "/tmp"))}
+    def exports():
+        return {p for d in dirs for p in d.glob("sneakpeak_sel_*.wav")}   # ITEM mode: no source path in the name
+    before = exports()
+    _os_drag_client(sess, 350, WAVE_Y, 350, -12, steps=24)
+    new = []
+    def appeared():
+        new[:] = sorted(exports() - before)
+        return bool(new)
+    sess.wait_until(appeared, timeout=30)
+    wait_main_thread_idle(sess, timeout=30)
+
+    got = sf.read(str(new[-1]), dtype="float64", always_2d=True)[0]
+    want = _source_window(media, int(round(t0 * SR)), int(round(t0 * SR)) + len(got))
+    ratio = _rms(got) / _rms(want)
+    print(f"\n[export] D_VOL 0.5: export/source RMS ratio = {ratio:.4f}")
+    assert abs(ratio - 0.5) < 0.01, f"item volume not baked (ratio {ratio:.4f}, want 0.5)"

@@ -572,9 +572,9 @@ void SneakPeak::SyncSelectionToReaper()
 
 // --- Clipboard operations ---
 
-void SneakPeak::DoCopy()
+bool SneakPeak::DoCopy()
 {
-  if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
+  if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return false;
 
   // Sync selection to REAPER so native copy works on the right range
   SyncSelectionToReaper();
@@ -589,19 +589,19 @@ void SneakPeak::DoCopy()
     const double t1 = std::min(m_waveform.GetItemDuration(), std::max(sel.startTime, sel.endTime));
     const int nch = std::max(1, m_waveform.GetNumChannels());
     const int srcRate = m_waveform.GetSourceSampleRate();
-    if (t1 <= t0 || srcRate <= 0) return;
+    if (t1 <= t0 || srcRate <= 0) return false;
     if ((int64_t)((t1 - t0) * srcRate) * nch * (int64_t)sizeof(double) > WaveformView::kMaxBufferBytes) {
       const int maxMin = (int)(WaveformView::kMaxBufferBytes / (nch * (int64_t)sizeof(double)) / srcRate / 60);
       char msg[96];
       snprintf(msg, sizeof(msg), "Selection too long to copy (about %d min max at this rate)", maxMin);
       ShowToast(msg);
-      return;
+      return false;
     }
     std::vector<double> out;
     int outNch = 0, outRate = 0;
     if (!SliceSamples(t0, t1, out, &outNch, &outRate) || outNch <= 0) {
       ShowToast("Could not read the item audio - nothing copied");
-      return;
+      return false;
     }
     s_clipboard.numFrames = 0;   // fill samples first, set numFrames last
     s_clipboard.samples = std::move(out);
@@ -610,15 +610,15 @@ void SneakPeak::DoCopy()
     s_clipboard.numFrames = (int)(s_clipboard.samples.size() / (size_t)outNch);
     if (g_Main_OnCommand) g_Main_OnCommand(40060, 0);   // REAPER's native copy too
     DBG("[SneakPeak] Copied %d frames @ %d Hz to clipboard (streamed)\n", s_clipboard.numFrames, outRate);
-    return;
+    return true;
   }
-  if (!RequireItemAudio("Copy")) return;   // multi-item layers (eager); Standalone is always ready
+  if (!RequireItemAudio("Copy")) return false;   // multi-item layers (eager); Standalone is always ready
 
   int startF, endF;
   GetSelectionSampleRange(startF, endF);
   int nch = m_waveform.GetNumChannels();
   int selFrames = endF - startF;
-  if (selFrames <= 0) return;
+  if (selFrames <= 0) return false;
 
   // Internal clipboard - fill samples first, set numFrames last
   if (m_waveform.IsMultiItemActive()) {
@@ -629,7 +629,7 @@ void SneakPeak::DoCopy()
     const auto& data = m_waveform.GetAudioData();
     size_t srcOffset = (size_t)startF * nch;
     size_t copyLen = (size_t)selFrames * nch;
-    if (srcOffset + copyLen > data.size()) return;
+    if (srcOffset + copyLen > data.size()) return false;
     s_clipboard.samples.resize(copyLen);
     std::copy(data.begin() + (long)srcOffset,
               data.begin() + (long)(srcOffset + copyLen),
@@ -643,6 +643,7 @@ void SneakPeak::DoCopy()
   if (g_Main_OnCommand) g_Main_OnCommand(40060, 0);
 
   DBG("[SneakPeak] Copied %d frames to clipboard\n", selFrames);
+  return true;
 }
 
 void SneakPeak::DoCut()
@@ -650,8 +651,9 @@ void SneakPeak::DoCut()
   // Copy + ripple delete (standard waveform editor behavior: cut closes the gap)
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
 
-  DoCopy();
-  DoDelete(true); // ripple
+  // A refused copy (over the buffer cap, unreadable audio) must not delete:
+  // the selection would be gone and the clipboard stale (audit A2.1).
+  if (DoCopy()) DoDelete(true); // ripple
 }
 
 void SneakPeak::DoPaste()
@@ -704,13 +706,32 @@ void SneakPeak::DoPaste()
   }
   if (!track) return;
 
-  // Write clipboard to temp WAV
-  char tempPath[512];
-  snprintf(tempPath, sizeof(tempPath), "%s/sneakpeak_paste_%d_%lld.wav",
-           AudioEngine::TempDir().c_str(), AudioEngine::ProcessId(), (long long)time(nullptr));
-  if (!AudioEngine::WriteWavFile(tempPath, s_clipboard.samples.data(),
-      s_clipboard.numFrames, s_clipboard.numChannels, s_clipboard.sampleRate, 32, 3))
+  // The pasted clip becomes project media, so it lives in the project's
+  // recording path (GetProjectPathEx: REAPER's default recording folder while
+  // the project is unsaved) - the OS temp folder gets purged and the saved
+  // project would lose the clip (audit A2.2). The name carries the source's
+  // base name and a per-session counter (two pastes within one second used
+  // to overwrite each other's media).
+  static int s_pasteSerial = 0;
+  char clipPath[512];
+  {
+    std::string base = "clip";
+    const std::string src = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+    const size_t slash = src.find_last_of("/\\");
+    const std::string fn = slash == std::string::npos ? src : src.substr(slash + 1);
+    const size_t dot = fn.find_last_of('.');
+    if (!fn.empty()) base = dot == std::string::npos ? fn : fn.substr(0, dot);
+    char dir[512] = {};
+    if (g_GetProjectPathEx) g_GetProjectPathEx(nullptr, dir, sizeof(dir));
+    const std::string projDir = dir[0] ? dir : AudioEngine::TempDir();
+    snprintf(clipPath, sizeof(clipPath), "%s/sneakpeak_paste_%s_%d_%d.wav", projDir.c_str(),
+             base.c_str(), AudioEngine::ProcessId(), ++s_pasteSerial);
+  }
+  if (!AudioEngine::WriteWavFile(clipPath, s_clipboard.samples.data(),
+      s_clipboard.numFrames, s_clipboard.numChannels, s_clipboard.sampleRate, 32, 3)) {
+    ShowToast("Could not write the pasted clip into the project folder - nothing pasted");
     return;
+  }
 
   double clipDur = (double)s_clipboard.numFrames / (double)s_clipboard.sampleRate;
 
@@ -756,7 +777,7 @@ void SneakPeak::DoPaste()
   if (newItem) {
     MediaItem_Take* newTake = g_AddTakeToMediaItem(newItem);
     if (newTake) {
-      PCM_source* src = g_PCM_Source_CreateFromFile(tempPath);
+      PCM_source* src = g_PCM_Source_CreateFromFile(clipPath);
       if (src) g_GetSetMediaItemTakeInfo(newTake, "P_SOURCE", src);
     }
     g_SetMediaItemInfo_Value(newItem, "D_POSITION", absPos);
