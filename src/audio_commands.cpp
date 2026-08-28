@@ -87,12 +87,28 @@ void SneakPeak::UndoRestore()
   // from disk. REAPER's own undo point for the edit stays in its history as
   // a no-op label - we deliberately do NOT pop it (the user may have made
   // project changes since; popping would undo those instead).
+  DBG("[SneakPeak] UndoRestore: hasUndo=%d undoFile='%s' pathMatch=%d\n",
+      m_hasUndo ? 1 : 0, m_itemUndoFile.c_str(),
+      (m_waveform.GetTake() &&
+       AudioEngine::GetSourceFilePath(m_waveform.GetTake()) == m_itemUndoPath) ? 1 : 0);
   if (m_hasUndo && !m_itemUndoFile.empty() && m_waveform.GetTake() &&
       AudioEngine::GetSourceFilePath(m_waveform.GetTake()) == m_itemUndoPath) {
     AbortItemAudioLoad();
     AbortExportPump();
+    JoinDynamicsWorker(true);   // the trace job holds accessors on the file being restored
     m_waveform.ReleaseTakeAccessors();
-    if (!AudioEngine::CopyFileInto(m_itemUndoFile, m_itemUndoPath)) {
+#ifdef _WIN32
+    // Same file-locking bracket as BeginDestructiveWrite (F22): Windows keeps
+    // the source open through REAPER's decoder, so the snapshot copy-back
+    // failed with a sharing violation and undo showed "Undo failed".
+    if (g_Main_OnCommand) g_Main_OnCommand(40440, 0);  // Item: set selected media offline
+    const bool restored = AudioEngine::CopyFileInto(m_itemUndoFile, m_itemUndoPath);
+    if (g_Main_OnCommand) g_Main_OnCommand(40439, 0);  // Item: set selected media online
+#else
+    const bool restored = AudioEngine::CopyFileInto(m_itemUndoFile, m_itemUndoPath);
+#endif
+    DBG("[SneakPeak] UndoRestore: restore copy %s\n", restored ? "ok" : "FAILED");
+    if (!restored) {
       m_waveform.RecreateLiveAccessor();
       ShowToast("Undo failed - check the file permissions");
       return;

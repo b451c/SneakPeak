@@ -10,6 +10,7 @@
 #include <ctime>
 #include <algorithm>
 #include <chrono>
+#include <cerrno>
 #ifdef _WIN32
 #include <process.h>
 #else
@@ -193,7 +194,8 @@ bool AudioEngine::CopyFileInto(const std::string& src, const std::string& dst)
   FILE* in = fopen(src.c_str(), "rb");
   FILE* out = in ? fopen(dst.c_str(), "wb") : nullptr;
   if (!in || !out) {
-    DBG("[AudioEngine] CopyFileInto: cannot open %s\n", (in ? dst : src).c_str());
+    DBG("[AudioEngine] CopyFileInto: cannot open %s (errno=%d)\n",
+        (in ? dst : src).c_str(), errno);
     if (in) fclose(in);
     return false;
   }
@@ -365,6 +367,7 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
   // Use P_SOURCE via GetSetMediaItemTakeInfo for proper ownership management.
   // SetMediaItemTake_Source leaks the old source (REAPER SDK docs: "C/C++ code
   // should not use this and instead use GetSetMediaItemTakeInfo with P_SOURCE").
+#ifndef _WIN32
   if (g_PCM_Source_CreateFromFile && g_GetSetMediaItemTakeInfo) {
     PCM_source* newSrc = g_PCM_Source_CreateFromFile(path.c_str());
     if (newSrc) {
@@ -372,6 +375,15 @@ void AudioEngine::RefreshItemSource(MediaItem* item, MediaItem_Take* take)
       g_GetSetMediaItemTakeInfo(take, "P_SOURCE", newSrc);
     }
   }
+#else
+  // Windows: the swap leaves a deny-write handle on the file (the replaced
+  // source's decoder never lets go), so every LATER in-place write - the undo
+  // restore above all - dies with a sharing violation for the rest of the
+  // session. Since F7 the edit rewrites the SAME inode, and on Windows
+  // UpdateItemInProject + the peak rebuild below are enough for REAPER to
+  // serve the new audio (proven by the reverse spec's track-accessor oracle),
+  // so the swap is skipped here.
+#endif
 
   // Invalidate REAPER's cached media data. On macOS UpdateArrange alone is enough, but on Linux the audio cache survives until UpdateItemInProject fires, leaving destructive edits (Reverse, DC remove, Normalize) inaudible until REAPER restart.
   if (g_UpdateItemInProject) g_UpdateItemInProject(item);
