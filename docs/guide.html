@@ -625,10 +625,12 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Standalone mode is fully destructive - operations modify the audio data in memory. Each file has its own undo stack (20 levels). Changes are not saved to disk until you explicitly save.</p>
 
+<p>Standalone edits mono and stereo files; a file with more channels is refused with a message (edit it as an item instead). The same working-buffer limit as for items applies: a file that would need more than 1 GB of samples (about 100 minutes of stereo at 44.1 kHz) is refused rather than loaded.</p>
+
 <h2 id="standalone-files">File Management</h2>
 
 <ul>
-  <li><strong>Open a file</strong> - drag and drop WAV, MP3, or FLAC into the window</li>
+  <li><strong>Open a file</strong> - drag and drop WAV, MP3, or FLAC into the window. Scripts can open a file with the action <em>SneakPeak: Open file in Standalone</em> after setting the path in ExtState <code>SneakPeak/open_path</code>.</li>
   <li><strong>Edit Copy in Standalone</strong> - in ITEM mode, right-click a selected timeline item &gt; <strong>Edit Copy in Standalone</strong>: the item's audio is written as <code>{name}_edit.wav</code> (32-bit float) next to its media file and opens as a new standalone tab - the fastest route from the timeline into Loop Lab, Spectral Repair, the Hard Limiter and destructive editing. The original item is untouched; use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a> to bring the result back.</li>
   <li><strong>Switch tabs</strong> - click a tab in the mode bar</li>
   <li><strong>Close a tab</strong> - click the X on the active tab. If the file has unsaved changes, you'll be asked to save first.</li>

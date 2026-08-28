@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cerrno>
+#include <climits>
 #ifdef _WIN32
 #include <process.h>
 #else
@@ -240,7 +241,7 @@ bool AudioEngine::ReadAudioFile(const std::string& path, WavInfo& info,
       int totalFrames = (int)(length * sr);
 
       if (nch > 0 && sr > 0 && totalFrames > 0) {
-        if (nch > 2) nch = 2; // cap at stereo
+        if (nch > 2) { delete src; return false; }   // mono/stereo only (A4.1), never folded
 
         info.numChannels = nch;
         info.sampleRate = sr;
@@ -296,6 +297,18 @@ bool AudioEngine::ReadAudioFile(const std::string& path, WavInfo& info,
 
 // --- Incremental streaming load (STA-1) ---
 
+bool AudioEngine::ProbeSource(const std::string& path, int* nch, int* sr, int64_t* frames)
+{
+  if (!g_PCM_Source_CreateFromFile) return false;
+  PCM_source* src = g_PCM_Source_CreateFromFile(path.c_str());
+  if (!src) return false;
+  *nch = src->GetNumChannels();
+  *sr = (int)src->GetSampleRate();
+  *frames = (int64_t)(src->GetLength() * (double)*sr);
+  delete src;
+  return *nch > 0 && *sr > 0 && *frames > 0;
+}
+
 bool AudioEngine::BeginStream(const std::string& path, StreamLoad& s)
 {
   AbortStream(s);
@@ -305,9 +318,13 @@ bool AudioEngine::BeginStream(const std::string& path, StreamLoad& s)
   int nch = src->GetNumChannels();
   int sr = (int)src->GetSampleRate();
   double length = src->GetLength();
-  int totalFrames = (int)(length * sr);
-  if (nch <= 0 || sr <= 0 || totalFrames <= 0) { delete src; return false; }
-  if (nch > 2) nch = 2; // cap at stereo (matches ReadAudioFile)
+  const int64_t frames64 = (int64_t)(length * sr);   // int math overflowed past 2^31 frames (A4.2)
+  if (nch <= 0 || sr <= 0 || frames64 <= 0 || frames64 > INT_MAX) { delete src; return false; }
+  // Mono/stereo only: a 6-channel file used to be folded to its first two
+  // channels here and Save wrote that back (A4.1). AddStandaloneFile refuses
+  // with a message before it gets here; this is the defensive line.
+  if (nch > 2) { delete src; return false; }
+  const int totalFrames = (int)frames64;
 
   s.src = src;
   s.path = path;

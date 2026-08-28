@@ -2142,7 +2142,11 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     // debounces Live writes (dynamics_pipeline.cpp).
     if (m_dynamicsPanel.ParamsChanged()) {
       m_dynamicsPanel.ClearParamsChanged();
-      m_dynParamsDirty = true;
+      // Standalone analyses its full-rate buffer synchronously (the worker
+      // would read a buffer the mutators may replace - A4.3); item views go
+      // through the pipeline.
+      if (m_waveform.IsStandaloneMode()) RequestDynamicsAnalysis();
+      else m_dynParamsDirty = true;
     }
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }

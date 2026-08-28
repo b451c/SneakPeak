@@ -1517,6 +1517,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       return 0;
 
     case WM_RBUTTONUP: {
+      if (m_dynWorker.busy.load()) JoinDynamicsWorker(false);   // the menu's commands mutate the buffer (A4.3)
       int x = (short)LOWORD(lParam);
       int y = (short)HIWORD(lParam);
       OnRightClick(x, y);

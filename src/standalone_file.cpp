@@ -248,6 +248,30 @@ void SneakPeak::AddStandaloneFile(const char* path)
     }
   }
 
+  // Refuse what Standalone cannot hold BEFORE any buffer exists: a file with
+  // more than two channels used to load as stereo and Save wrote channels 3+
+  // away (A4.1); a file over the working-buffer cap allocated gigabytes or
+  // overflowed the int frame count (A4.2). Same cap and wording as ITEM mode.
+  {
+    int nch = 0, sr = 0;
+    int64_t frames = 0;
+    if (AudioEngine::ProbeSource(spath, &nch, &sr, &frames)) {
+      char toast[300];
+      if (nch > 2) {
+        snprintf(toast, sizeof(toast), "Standalone edits mono and stereo files - %s has %d channels",
+                 FileNameFromPath(path), nch);
+        ShowToast(toast);
+        return;
+      }
+      if (frames * nch * (int64_t)sizeof(double) > WaveformView::kMaxBufferBytes) {
+        const int maxMin = (int)(WaveformView::kMaxBufferBytes / (nch * (int64_t)sizeof(double)) / sr / 60);
+        snprintf(toast, sizeof(toast), "File too long for Standalone (about %d min max at this rate)", maxMin);
+        ShowToast(toast);
+        return;
+      }
+    }
+  }
+
   // STA-1: decode incrementally. Long files stream in OnTimer slices with a
   // progress title while the CURRENT view keeps working; the new tab installs
   // at completion (FinishStandaloneLoad owns all bookkeeping). Small files
@@ -669,8 +693,10 @@ bool SneakPeak::StandaloneWritePreviewFile(int startFrame, int endFrame)
   if (endFrame - startFrame <= 0) return false;
 
   if (!m_previewCacheDirty && !m_previewTempPath.empty() &&
-      m_previewCacheStart == startFrame && m_previewCacheEnd == endFrame)
-    return true;
+      m_previewCacheStart == startFrame && m_previewCacheEnd == endFrame) {
+    FILE* still = fopen(m_previewTempPath.c_str(), "rb");   // the OS purges temp files; a tab
+    if (still) { fclose(still); return true; }               // restored after cleanup has none
+  }
 
   std::vector<double> previewData = StandaloneFadedCopy();
   if (previewData.empty()) return false;

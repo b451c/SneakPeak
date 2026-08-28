@@ -78,6 +78,9 @@ public:
   // Copy src into dst opened for truncate+write: dst keeps its inode (created
   // when absent). False on any I/O error - dst may then be incomplete.
   static bool CopyFileInto(const std::string& src, const std::string& dst);
+  // Channel count / rate / length of a file through REAPER's decoders, no
+  // samples read - the Standalone gates (mono/stereo, buffer cap) run on it.
+  static bool ProbeSource(const std::string& path, int* nch, int* sr, int64_t* frames);
   // remove() is the ANSI CRT call on Windows: a temp path under a non-ASCII
   // user name leaves the file behind. DeleteFileUTF8 there, remove() elsewhere.
   static bool RemoveFile(const std::string& path);

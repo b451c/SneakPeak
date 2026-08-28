@@ -279,6 +279,7 @@ void SneakPeak::StandaloneFinishRestore(const char* what)
 void SneakPeak::StandaloneUndoRestore()
 {
   if (m_standaloneUndoStack.empty()) return;
+  JoinDynamicsWorker(true);   // the buffer is about to be replaced (A4.3)
   StandaloneApplyUndoEntry(m_standaloneUndoStack.back(), m_standaloneRedoStack);
   m_standaloneUndoStack.pop_back();
   StandaloneFinishRestore("undo");
@@ -287,6 +288,7 @@ void SneakPeak::StandaloneUndoRestore()
 void SneakPeak::StandaloneRedoRestore()
 {
   if (m_standaloneRedoStack.empty()) return;
+  JoinDynamicsWorker(true);
   // No redo clear here - only a NEW edit in StandaloneUndoSave* cuts the branch
   StandaloneApplyUndoEntry(m_standaloneRedoStack.back(), m_standaloneUndoStack);
   m_standaloneRedoStack.pop_back();
@@ -841,6 +843,29 @@ void SneakPeak::DoPasteDestructive()
 {
   if (!RequireItemAudio("Paste")) return;
   if (s_clipboard.numChannels != m_waveform.GetNumChannels()) return;
+  if (m_waveform.IsStandaloneMode()) {
+    // Standalone: an in-memory edit with its own undo stack - no file prompt,
+    // no item, no ITEM-mode snapshot (audit A4.4: UndoSave took none here and
+    // the item path wrote D_LENGTH to a null item).
+    JoinDynamicsWorker(true);
+    StandaloneUndoSave();
+    const int nch = m_waveform.GetNumChannels();
+    const int insertFrame = std::max(0, std::min(m_waveform.GetAudioSampleCount(),
+                             (int)(m_waveform.GetCursorTime() * (double)m_waveform.GetSampleRate())));
+    auto& data = m_waveform.GetAudioData();
+    data.insert(data.begin() + (long)((size_t)insertFrame * nch),
+                s_clipboard.samples.begin(), s_clipboard.samples.end());
+    const int newFrames = m_waveform.GetAudioSampleCount() + s_clipboard.numFrames;
+    m_waveform.SetAudioSampleCount(newFrames);
+    m_waveform.SetItemDuration((double)newFrames / (double)m_waveform.GetSampleRate());
+    m_dirty = true;
+    m_previewCacheDirty = true;
+    UpdateTitle();
+    m_waveform.Invalidate();
+    m_minimap.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
   if (!DestructiveSourceOk()) return;
 
   int ret = MessageBox(m_hwnd,
@@ -1541,6 +1566,21 @@ void SneakPeak::DoReverse()
     MessageBox(m_hwnd, "Reverse is not supported in multi-item view.", "SneakPeak", MB_OK);
     return;
   }
+  if (m_waveform.IsStandaloneMode()) {   // in-memory edit, own undo stack (A4.4)
+    JoinDynamicsWorker(true);
+    StandaloneUndoSave();
+    int startF, endF;
+    GetSelectionSampleRange(startF, endF);
+    const int nch = m_waveform.GetNumChannels();
+    if (endF > startF && nch > 0)
+      AudioOps::Reverse(m_waveform.GetAudioData().data() + (size_t)startF * nch, endF - startF, nch);
+    m_dirty = true;
+    m_previewCacheDirty = true;
+    UpdateTitle();
+    m_waveform.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
 
   if (!DestructiveSourceOk()) return;
   int ret = MessageBox(m_hwnd,
@@ -1705,6 +1745,21 @@ void SneakPeak::DoDCRemove()
   if (!m_waveform.HasItem()) return;
   if (m_waveform.IsMultiItem()) {
     MessageBox(m_hwnd, "DC Remove is not supported in multi-item view.", "SneakPeak", MB_OK);
+    return;
+  }
+  if (m_waveform.IsStandaloneMode()) {   // in-memory edit, own undo stack (A4.4)
+    JoinDynamicsWorker(true);
+    StandaloneUndoSave();
+    int startF, endF;
+    GetSelectionSampleRange(startF, endF);
+    const int nch = m_waveform.GetNumChannels();
+    if (endF > startF && nch > 0)
+      AudioOps::DCOffsetRemove(m_waveform.GetAudioData().data() + (size_t)startF * nch, endF - startF, nch);
+    m_dirty = true;
+    m_previewCacheDirty = true;
+    UpdateTitle();
+    m_waveform.Invalidate();
+    InvalidateRect(m_hwnd, nullptr, FALSE);
     return;
   }
 
@@ -2123,6 +2178,7 @@ void SneakPeak::LimiterApplyTick()
     return;
   }
 
+  JoinDynamicsWorker(true);   // the live buffer is swapped below (A4.3)
   auto& data = m_waveform.GetAudioData();
   if (m_limApplyS0 == 0 && m_limApplyS1 == m_limApplyFrames) {
     StandaloneUndoPushFull(std::move(data));   // zero-copy: old buffer -> undo
@@ -2793,7 +2849,10 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
   if (outF > 0)
     AudioOps::FadeOutShaped(work.data() + (size_t)(len - outF) * nch, outF, nch, 0);
 
-  // Normalize.
+  // Normalize. PCM output (Standalone keeps the file's 16/24-bit format)
+  // cannot hold anything above 0 dBFS: a LUFS-I gain that pushes a peak over
+  // full scale is limited instead of clipped flat by the writer (A4.5).
+  const bool pcmOut = m_waveform.IsStandaloneMode() && m_wavAudioFormat != 3;
   char normNote[48] = "";
   if (p.normMode == 1) {   // Peak dBFS
     double pk = 0.0;
@@ -2818,6 +2877,15 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
           if (g > 0.001 && g < 100.0) {
             for (double& v : work) v *= g;
             ok = true;
+            if (pcmOut) {
+              double pk = 0.0;
+              for (double v : work) pk = std::max(pk, fabs(v));
+              if (pk > 0.999) {
+                LimiterParams lp;
+                lp.ceilingDb = -0.1;
+                LimiterProcess(work.data(), len, nch, sr, lp);
+              }
+            }
           }
         }
         AudioEngine::RemoveFile(tmpPath);
@@ -2857,6 +2925,10 @@ void SneakPeak::DoRunOneShot()
 {
   if (!SingleItemViewOk() || !RequireItemAudio("One-Shot Factory")) return;   // slices = buffer frames
   const OneShotParams p = m_oneShotPanel.GetParams();
+  if (p.sliceMode == 1 && m_waveform.IsStandaloneMode()) {   // A4.6
+    ShowToast("REGIONS uses the project's regions - open the file as an item to slice by regions");
+    return;
+  }
 
   const std::vector<std::pair<int, int>> slices = OneShotBuildSlices(p);
   if (slices.empty()) {

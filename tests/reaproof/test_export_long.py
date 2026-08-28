@@ -284,7 +284,7 @@ REGIONS = [(10.0, 11.0), (20.0, 21.5)]
 
 
 def test_one_shot_slices_of_a_long_item_keep_the_source_rate(sess):
-    media = burst_fixture("long5min_burst24.wav", seconds=300, channels=2)
+    media = _silent_burst_wav("long5min_silentbursts.wav", 300)
     clear_project(sess)
     for p in media.parent.glob(f"{media.stem}_0*.wav"):
         p.unlink()
@@ -378,3 +378,107 @@ def test_drag_export_bakes_the_item_volume(sess):
     ratio = _rms(got) / _rms(want)
     print(f"\n[export] D_VOL 0.5: export/source RMS ratio = {ratio:.4f}")
     assert abs(ratio - 0.5) < 0.01, f"item volume not baked (ratio {ratio:.4f}, want 0.5)"
+
+
+def _silent_burst_wav(name: str, seconds: float, every: float = 10.0) -> Path:
+    """Digital silence (-90 dB noise floor) with a 1 s 220 Hz burst at 0.9 from
+    0.5 s of every `every`-second block, 24-bit stereo. Fresh copy per call."""
+    from conftest import perf_media_dir
+    pristine = perf_media_dir() / "pristine" / name
+    if not pristine.exists():
+        pristine.parent.mkdir(exist_ok=True)
+        rng = np.random.default_rng(7)
+        with sf.SoundFile(str(pristine), "w", samplerate=SR, channels=2, subtype="PCM_24") as f:
+            for start in range(0, int(seconds * SR), SR * 10):
+                t = (np.arange(SR * 10) + start) / SR
+                y = rng.standard_normal(SR * 10) * 3e-5
+                burst = ((t % every) >= 0.5) & ((t % every) < 1.5)
+                y[burst] = 0.9 * np.sin(2 * np.pi * 220 * t[burst])
+                f.write(np.stack([y, y], axis=1).astype(np.float32))
+    work = perf_media_dir() / name
+    import shutil
+    shutil.copyfile(pristine, work)
+    return work
+
+
+# --- A4.6: One-Shot SILENCE slicing on a long item ----------------------------
+def test_one_shot_silence_slices_of_a_long_item_land_on_the_burst_edges(sess):
+    """Slice-by-silence scans the WORKING buffer, which on a long item is the
+    reduced-rate one (33 kHz on 5 minutes, 8 kHz on 20): this measures how far the slice
+    edges land from the true burst edges (bursts at 0.5-1.5 s of every 10 s
+    block, -20 dB threshold, no trim/pad). Reported in ms; the assertion is
+    the 1 ms bar from the audit plan."""
+    media = _silent_burst_wav("long5min_silentbursts.wav", 300)
+    clear_project(sess)
+    for p in media.parent.glob(f"{media.stem}_0*.wav"):
+        p.unlink()
+    for p in media.parent.glob(f"{media.stem}_1*.wav"):
+        p.unlink()
+    insert_item_unselected(sess, media)
+    sess.eval("""
+      local function set(k, v) reaper.SetExtState("SneakPeak", k, v, false) end
+      set("os_trim_thr", "-60000") set("os_pad", "0") set("os_fade_in", "0")
+      set("os_fade_out", "0") set("os_target", "-1000") set("os_norm_mode", "0")
+      set("os_trim", "0") set("os_slice_mode", "2") set("os_pattern", "{name}_{nnn}")
+      return true""")
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=120)
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    send_command(sess, CM_ONESHOT_FACTORY)
+    wait_audio_loaded(sess, media.stem, timeout=180)   # lazy buffer lands
+    sess.wait_until(lambda: locate_apply_button(sess, SHOTS / "oneshot_silence.png") is not None,
+                    timeout=10)
+    click_client(sess, *locate_apply_button(sess, SHOTS / "oneshot_silence.png"))
+    n_bursts = 30
+    outs = [media.parent / f"{media.stem}_{i + 1:03d}.wav" for i in range(n_bursts)]
+    try:
+        sess.wait_until(lambda: outs[-1].exists(), timeout=120)
+    except Exception:
+        print(f"\n[oneshot] only {len(list(media.parent.glob(media.stem + '_[0-9]*.wav')))} files; toast "
+              f"{sess.eval('return reaper.GetExtState(\"SneakPeak\", \"last_toast\")')!r}")
+        raise
+    wait_main_thread_idle(sess, timeout=60)
+
+    written = sorted(media.parent.glob(f"{media.stem}_[0-9][0-9][0-9].wav"))
+    assert len(written) == n_bursts, f"{len(written)} slices, expected {n_bursts}"
+    offsets_ms = []
+    for i, out in enumerate(written[:12] + written[-3:]):
+        got = sf.read(str(out), dtype="float64", always_2d=True)[0]
+        k = int(out.stem.rsplit("_", 1)[1]) - 1
+        start = int(round((k * 10.0 + 0.5) * SR))
+        shift, diff = _best_shift(got[:2048], media, start, atol=2e-6, shifts=range(-200, 201))
+        offsets_ms.append(shift * 1000.0 / SR)
+    worst = max(abs(o) for o in offsets_ms)
+    print(f"\n[oneshot] silence edges vs bursts: offsets ms {['%.3f' % o for o in offsets_ms]} worst {worst:.3f}")
+    assert worst < 1.0, f"slice edges up to {worst:.3f} ms off the burst edges"
+
+
+def test_one_shot_silence_slices_of_a_short_item_sanity(sess):
+    """Same settings on a 30 s full-rate item: 3 bursts -> 3 slices. A control
+    for the long-item measurement above (buffer path vs reduced-rate buffer)."""
+    media = _silent_burst_wav("short30s_silentbursts.wav", 30)
+    clear_project(sess)
+    for p in media.parent.glob(f"{media.stem}_[0-9]*.wav"):
+        p.unlink()
+    insert_item_unselected(sess, media)
+    sess.eval("""
+      local function set(k, v) reaper.SetExtState("SneakPeak", k, v, false) end
+      set("os_trim_thr", "-60000") set("os_pad", "0") set("os_fade_in", "0")
+      set("os_fade_out", "0") set("os_target", "-1000") set("os_norm_mode", "0")
+      set("os_trim", "0") set("os_slice_mode", "2") set("os_pattern", "{name}_{nnn}")
+      return true""")
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=60)
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    send_command(sess, CM_ONESHOT_FACTORY)
+    sess.wait_until(lambda: locate_apply_button(sess, SHOTS / "oneshot_silence_short.png") is not None,
+                    timeout=10)
+    click_client(sess, *locate_apply_button(sess, SHOTS / "oneshot_silence_short.png"))
+    time.sleep(3.0)
+    wait_main_thread_idle(sess, timeout=60)
+    written = sorted(p.name for p in media.parent.glob(f"{media.stem}_[0-9]*.wav"))
+    toast = sess.eval('return reaper.GetExtState("SneakPeak", "last_toast")')
+    print(f"\n[oneshot] short item silence: {written} toast {toast!r}")
+    assert len(written) == 3, f"expected 3 burst slices, got {written} ({toast!r})"
