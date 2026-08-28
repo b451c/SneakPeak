@@ -778,6 +778,7 @@ void SneakPeak::DrawScrollbar(HDC hdc)
 
 static void FormatTimeHMS(double sec, char* buf, int sz)
 {
+  if (sz <= 0) return;
   if (sec < 0) sec = 0;
   int totalMs = static_cast<int>(sec * 1000.0 + 0.5);
   int ms = totalMs % 1000;
@@ -787,7 +788,8 @@ static void FormatTimeHMS(double sec, char* buf, int sz)
   int h = totalSec / 3600;
   char tmp[40];   // provably wide for any int fields - GCC's -Wformat-truncation
   snprintf(tmp, sizeof(tmp), "%02d:%02d:%02d.%03d", h, m, s, ms);
-  snprintf(buf, sz, "%s", tmp);
+  buf[0] = '\0';
+  strncat(buf, tmp, (size_t)sz - 1);   // strncat: no truncation diagnostics
 }
 
 // --- Solo button ---

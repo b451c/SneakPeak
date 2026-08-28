@@ -19,6 +19,23 @@
 #endif
 
 // Helper: portable AppendMenu (SWELL doesn't have it directly)
+#ifndef _WIN32
+// Support links: /usr/bin/open is macOS-only - on Linux the menu entries
+// silently did nothing (xdg-open is the opener there). The return value is
+// consumed for glibc's warn_unused_result.
+static void OpenUrlExternal(const char* url)
+{
+  char cmd[512];
+#ifdef __APPLE__
+  snprintf(cmd, sizeof(cmd), "/usr/bin/open '%s'", url);
+#else
+  snprintf(cmd, sizeof(cmd), "xdg-open '%s' >/dev/null 2>&1 &", url);
+#endif
+  int rc = system(cmd);
+  (void)rc;
+}
+#endif
+
 static void MenuAppend(HMENU menu, unsigned int flags, UINT_PTR id, const char* str)
 {
 #ifdef _WIN32
@@ -939,28 +956,28 @@ void SneakPeak::OnContextMenuCommand(int id)
 #ifdef _WIN32
       ShellExecute(nullptr, "open", "https://ko-fi.com/quickmd", nullptr, nullptr, SW_SHOWNORMAL);
 #else
-      system("/usr/bin/open 'https://ko-fi.com/quickmd'");
+      OpenUrlExternal("https://ko-fi.com/quickmd");
 #endif
       break;
     case CM_SUPPORT_BMAC:
 #ifdef _WIN32
       ShellExecute(nullptr, "open", "https://buymeacoffee.com/bsroczynskh", nullptr, nullptr, SW_SHOWNORMAL);
 #else
-      system("/usr/bin/open 'https://buymeacoffee.com/bsroczynskh'");
+      OpenUrlExternal("https://buymeacoffee.com/bsroczynskh");
 #endif
       break;
     case CM_SUPPORT_PAYPAL:
 #ifdef _WIN32
       ShellExecute(nullptr, "open", "https://www.paypal.com/paypalme/b451c", nullptr, nullptr, SW_SHOWNORMAL);
 #else
-      system("/usr/bin/open 'https://www.paypal.com/paypalme/b451c'");
+      OpenUrlExternal("https://www.paypal.com/paypalme/b451c");
 #endif
       break;
     case CM_SUPPORT_GITHUB:
 #ifdef _WIN32
       ShellExecute(nullptr, "open", "https://github.com/b451c/SneakPeak", nullptr, nullptr, SW_SHOWNORMAL);
 #else
-      system("/usr/bin/open 'https://github.com/b451c/SneakPeak'");
+      OpenUrlExternal("https://github.com/b451c/SneakPeak");
 #endif
       break;
     case CM_ENV_SHAPE_LINEAR:

@@ -1637,7 +1637,7 @@ void UiCanvas::RenderLimiterPanel(HDC hdc, int x, int y, int w, int h, double dp
         ctx.fill_round_rect(BLRoundRect(L.apply.x, L.apply.y, fw, L.apply.h,
                                         dynui::kRadiusCtrl), col(dynui::kAmber));
       if (gfx.fontsReady) {
-        char pct[8];
+        char pct[16];
         std::snprintf(pct, sizeof(pct), "%d%%", vm.applyPct > 100 ? 100 : vm.applyPct);
         TextCentered(ctx, gfx.fValue, L.apply, pct, dynui::kInkPrimary);
       }

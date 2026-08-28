@@ -230,7 +230,7 @@ void LoopLabPanel::DrawPremium(HDC hdc, RECT wr, double dpr, const LoopLabState&
 
   LoopLabVM vm;
   char sBuf[24], eBuf[24], lBuf[24], wBuf[16];
-  char rowBuf[kLoopLabMaxRows][64];
+  char rowBuf[kLoopLabMaxRows][96];
   if (st.hasLoop) {
     FmtLoopTime(st.startSec, sBuf, sizeof(sBuf));
     FmtLoopTime(st.endSec, eBuf, sizeof(eBuf));
