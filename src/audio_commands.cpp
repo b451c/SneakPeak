@@ -366,9 +366,24 @@ void SneakPeak::DoLoopSelection()
 // background loader) are dropped while the file changes under them. F7: every
 // write lands in the SAME inode so REAPER's pooled decoders serve the new
 // audio at once.
+// A take reversed in REAPER, or trimmed to a section of its file, plays
+// through a SECTION source whose parent is the WAV: GetSourceFilePath names
+// the parent and the item-to-file mapping (offset, playrate, direction) no
+// longer describes what plays, so an in-place edit lands on the wrong region
+// of the parent (audit A1.2). Refused up front - before any prompt or
+// snapshot - by every destructive entry point, and again in
+// BeginDestructiveWrite as the last line of defence.
+bool SneakPeak::DestructiveSourceOk()
+{
+  if (!AudioEngine::IsSectionSource(m_waveform.GetTake())) return true;
+  ShowToast("This take uses a section or reversed source - destructive edits are not available");
+  return false;
+}
+
 bool SneakPeak::BeginDestructiveWrite(std::string& path)
 {
   if (!m_waveform.HasItem() || !m_waveform.GetTake()) return false;
+  if (!DestructiveSourceOk()) return false;
   path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
   if (path.empty()) return false;
 
@@ -765,6 +780,7 @@ void SneakPeak::DoPasteDestructive()
 {
   if (!RequireItemAudio("Paste")) return;
   if (s_clipboard.numChannels != m_waveform.GetNumChannels()) return;
+  if (!DestructiveSourceOk()) return;
 
   int ret = MessageBox(m_hwnd,
     "Paste modifies the audio file on disk. Continue?",
@@ -1465,6 +1481,7 @@ void SneakPeak::DoReverse()
     return;
   }
 
+  if (!DestructiveSourceOk()) return;
   int ret = MessageBox(m_hwnd,
     "Reverse modifies the audio file on disk. Continue?",
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
@@ -1550,6 +1567,7 @@ void SneakPeak::DoGain(double factor)
   if (m_waveform.HasSelection()) {
     // Partial selection: destructive gain on selection only
     if (m_waveform.IsMultiItem()) return; // not supported for multi-item yet
+    if (!DestructiveSourceOk()) return;
 
     if (g_PreventUIRefresh) g_PreventUIRefresh(1);
     if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
@@ -1629,6 +1647,7 @@ void SneakPeak::DoDCRemove()
     return;
   }
 
+  if (!DestructiveSourceOk()) return;
   int ret = MessageBox(m_hwnd,
     "DC Offset Remove modifies the audio file on disk. Continue?",
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
@@ -1909,6 +1928,7 @@ void SneakPeak::DoApplyLimiterItem()
                  "SneakPeak", MB_OK | MB_ICONWARNING);
       return;
     }
+    if (!DestructiveSourceOk()) return;
     // Whole-file rewrite: the buffer must map 1:1 onto the file (rate, offset,
     // playrate, length, channels - audit A1.1) and the take must play the file's
     // channels as they are (normal / reversed stereo; the mono modes fold the

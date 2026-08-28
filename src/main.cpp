@@ -21,6 +21,7 @@
 #define REAPERAPI_WANT_SetMediaItemSelected
 #define REAPERAPI_WANT_GetActiveTake
 #define REAPERAPI_WANT_GetMediaItemTake_Source
+#define REAPERAPI_WANT_GetMediaSourceParent
 #define REAPERAPI_WANT_GetMediaItemInfo_Value
 #define REAPERAPI_WANT_GetSetMediaItemTakeInfo
 #define REAPERAPI_WANT_GetSetMediaItemTakeInfo_String
@@ -502,6 +503,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_SetMediaItemSelected = SetMediaItemSelected;
   g_GetActiveTake = GetActiveTake;
   g_GetMediaItemTake_Source = GetMediaItemTake_Source;
+  g_GetMediaSourceParent = GetMediaSourceParent;
   g_GetMediaItemInfo_Value = GetMediaItemInfo_Value;
   g_GetSetMediaItemTakeInfo = GetSetMediaItemTakeInfo;
   g_GetSetMediaItemTakeInfo_String = GetSetMediaItemTakeInfo_String;

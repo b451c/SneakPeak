@@ -385,6 +385,7 @@ private:
   void WriteAndRefreshInplace(
       const std::function<bool(const std::string& path, int64_t s0, int64_t s1)>& op);
   bool BeginDestructiveWrite(std::string& path);
+  bool DestructiveSourceOk();   // false + toast on SECTION / reversed sources (A1.2)
   void EndDestructiveWrite(bool written);
   void GetSelectionSourceRange(int64_t& startFrame, int64_t& endFrame) const;
   void DiscardItemUndo();

@@ -53,6 +53,13 @@ std::string AudioEngine::GetSourceFilePath(MediaItem_Take* take)
   return std::string(buf);
 }
 
+bool AudioEngine::IsSectionSource(MediaItem_Take* take)
+{
+  if (!take || !g_GetMediaItemTake_Source || !g_GetMediaSourceParent) return false;
+  PCM_source* src = g_GetMediaItemTake_Source(take);
+  return src && g_GetMediaSourceParent(src) != nullptr;
+}
+
 bool AudioEngine::ReadWavHeader(const std::string& path, WavInfo& info)
 {
   FILE* f = fopen(path.c_str(), "rb");

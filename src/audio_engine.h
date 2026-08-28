@@ -19,6 +19,9 @@ class AudioEngine {
 public:
   // Get the source file path for a take
   static std::string GetSourceFilePath(MediaItem_Take* take);
+  // True when the take plays through a SECTION source (a section of a file or
+  // a take reversed in REAPER): GetSourceFilePath then names the PARENT file.
+  static bool IsSectionSource(MediaItem_Take* take);
 
   // Scratch directory for temp WAVs (preview, undo snapshot, paste, One-Shot
   // LUFS, export fallback): %TEMP% on Windows, $TMPDIR or /tmp elsewhere; no

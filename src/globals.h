@@ -49,6 +49,7 @@ extern MediaItem* (*g_GetSelectedMediaItem)(ReaProject* proj, int selitem);
 extern void (*g_SetMediaItemSelected)(MediaItem* item, bool selected);
 extern MediaItem_Take* (*g_GetActiveTake)(MediaItem* item);
 extern PCM_source* (*g_GetMediaItemTake_Source)(MediaItem_Take* take);
+extern PCM_source* (*g_GetMediaSourceParent)(PCM_source* src);
 extern double (*g_GetMediaItemInfo_Value)(MediaItem* item, const char* parmname);
 extern void* (*g_GetSetMediaItemTakeInfo)(MediaItem_Take* tk, const char* parmname, void* setNewValue);
 extern bool (*g_GetSetMediaItemTakeInfo_String)(MediaItem_Take* tk, const char* parmname, char* stringNeedBig, bool setNewValue);

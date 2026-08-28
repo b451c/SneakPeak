@@ -136,3 +136,56 @@ def test_mono_channel_mode_item_limiter_leaves_the_file_alone(sess):
     assert not confirmed, "the destructive prompt appeared before the eligibility check"
     toast = _last_toast(sess)
     assert "channels" in toast and "not changed" in toast, f"refusal toast missing: {toast!r}"
+
+
+# --- A1.2: SECTION / reversed sources -----------------------------------------
+REVERSE = ('reaper.defer(function() reaper.Main_OnCommand('
+           'reaper.NamedCommandLookup("_SneakPeak_Reverse"), 0) end) return true')
+TOGGLE_TAKE_REVERSE = 41051   # Item properties: Toggle take reverse (wraps the source in a SECTION)
+
+
+def test_reverse_on_a_reversed_take_leaves_the_parent_file_alone(sess):
+    """A take reversed in REAPER (or a section of a file) plays through a
+    SECTION source whose parent is the WAV. SneakPeak resolved the path to the
+    parent and edited the parent's region as if the take played it directly -
+    on a reversed take that reversed the wrong audio in the file. Destructive
+    edits on such takes are refused before the prompt; the parent's bytes and
+    the reversed playback stay as they were. Control (cb48cd5): parent file
+    hash differs after the prompt."""
+    from conftest import db, track_rms_windows
+    clear_project(sess)
+    media = burst_fixture("guard_reversed_30s.wav", seconds=30, channels=2)
+    insert_item_unselected(sess, media)
+    sess.eval(SELECT_ITEM0)
+    sess.eval(f"reaper.Main_OnCommand({TOGGLE_TAKE_REVERSE}, 0)")
+    sess.eval("reaper.Main_OnCommand(40289, 0)")   # unselect all items
+    parent = sess.eval("""
+      local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0)
+      local src = reaper.GetMediaItemTake_Source(reaper.GetActiveTake(it))
+      return reaper.GetMediaSourceParent(src) ~= nil""")
+    assert parent, "precondition: the toggled take does not play through a SECTION source"
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=60)
+    time.sleep(0.5)
+    # reversed: the 0.5-1.5 s burst of the last 10 s block now sits at 28.5-29.5 s
+    w_head, w_tail = (0.6, 1.4), (28.6, 29.4)
+    head, tail = track_rms_windows(sess, [w_head, w_tail])
+    assert db(tail) > db(head) + 20, f"precondition: take not reversed (head {db(head):.1f} tail {db(tail):.1f})"
+    sha0 = _sha(media)
+    sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+    SHOTS.mkdir(parents=True, exist_ok=True)
+
+    sess.eval(REVERSE)
+    time.sleep(0.4)
+    capture(sess, SHOTS / "reversed_1_pressed.png")
+    confirmed = dismiss_native_modal(sess, timeout=6)
+    wait_main_thread_idle(sess, timeout=120)
+    time.sleep(1.0)
+
+    assert _sha(media) == sha0, "the parent file's bytes changed"
+    assert not confirmed, "the destructive prompt appeared before the source check"
+    head, tail = track_rms_windows(sess, [w_head, w_tail])
+    assert db(tail) > db(head) + 20, f"playback no longer reversed (head {db(head):.1f} tail {db(tail):.1f})"
+    toast = _last_toast(sess)
+    assert "section or reversed" in toast, f"refusal toast missing: {toast!r}"
