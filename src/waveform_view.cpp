@@ -11,6 +11,16 @@
 
 // ApplyFadeShape is now shared via audio_ops.h
 
+// Take-envelope point times are item time * D_PLAYRATE (REAPER convention; SWS
+// BR_Envelope does the same) - cached per take/segment for the view<->envelope
+// time mapping (forum #107: envelope landed early on rate != 1.0 items).
+static double TakePlayrate(MediaItem_Take* take)
+{
+  if (!take || !g_GetSetMediaItemTakeInfo) return 1.0;
+  double* p = (double*)g_GetSetMediaItemTakeInfo(take, "D_PLAYRATE", nullptr);
+  return (p && *p > 0.0) ? *p : 1.0;
+}
+
 WaveformView::WaveformView() {}
 WaveformView::~WaveformView() {}
 
@@ -54,6 +64,7 @@ void WaveformView::SetItem(MediaItem* item)
     double* pOffset = (double*)g_GetSetMediaItemTakeInfo(m_take, "D_STARTOFFS", nullptr);
     if (pOffset) m_takeOffset = *pOffset;
   }
+  m_takePlayrate = TakePlayrate(m_take);
 
   int srcChannels = 1;
   if (g_GetMediaItemTake_Source) {
@@ -156,6 +167,7 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
 
     // Set m_take to first item's take for compatibility
     if (g_GetActiveTake) m_take = g_GetActiveTake(items[0]);
+    m_takePlayrate = TakePlayrate(m_take);
 
     // Build segments for compatibility (AbsTimeToRelTime etc.)
     for (const auto& layer : m_multiItem.GetLayers()) {
@@ -165,6 +177,7 @@ void WaveformView::SetItems(const std::vector<MediaItem*>& items)
       seg.position = layer.position;
       seg.duration = layer.duration;
       seg.relativeOffset = layer.position - m_itemPosition;
+      seg.playrate = TakePlayrate(layer.take);
       seg.audioStartFrame = layer.audioStartFrame;
       seg.audioFrameCount = layer.audioFrameCount;
       m_segments.push_back(seg);
@@ -190,6 +203,7 @@ void WaveformView::LoadConcatenated(const std::vector<MediaItem*>& items)
 
   m_take = g_GetActiveTake(items[0]);
   if (!m_take) { m_item = nullptr; return; }
+  m_takePlayrate = TakePlayrate(m_take);
   PCM_source* src0 = g_GetMediaItemTake_Source(m_take);
   if (!src0) { m_item = nullptr; m_take = nullptr; return; }
   m_sampleRate = (int)src0->GetSampleRate();
@@ -235,6 +249,7 @@ void WaveformView::LoadConcatenated(const std::vector<MediaItem*>& items)
     seg.position = pos;
     seg.duration = effectiveDur;
     seg.relativeOffset = totalDuration;
+    seg.playrate = TakePlayrate(take);
     seg.audioStartFrame = m_audioSampleCount;
 
     int frames = (int)(effectiveDur * (double)m_sampleRate);
@@ -412,6 +427,7 @@ void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
     seg.position = pos;
     seg.duration = dur;
     seg.relativeOffset = relOff;
+    seg.playrate = TakePlayrate(take);
     seg.audioStartFrame = startFrame;
     seg.audioFrameCount = frames;
     m_segments.push_back(seg);
@@ -419,6 +435,7 @@ void WaveformView::LoadTimelineView(const std::vector<MediaItem*>& items)
 
   m_item = sorted[0];
   m_take = firstTake;
+  m_takePlayrate = TakePlayrate(m_take);
   m_itemPosition = firstPos;
   m_itemDuration = totalSpan;
   m_audioSampleCount = totalFrames;
@@ -478,6 +495,7 @@ void WaveformView::ClearItem()
   }
   m_item = nullptr;
   m_take = nullptr;
+  m_takePlayrate = 1.0;
   m_segments.clear();
   m_multiItemActive = false;
   m_trackViewActive = false;

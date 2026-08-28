@@ -4,6 +4,11 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **Envelopes on items with playrate other than 1.0** (forum #107, Lunar Ladder) - REAPER stores take-envelope point times in the take's own timebase (item time x playrate) and SneakPeak read and wrote them in plain item time. On a rate-changed item every envelope written by SneakPeak (Apply Dynamics, Live mode, clicked, dragged and freehand points) landed at the wrong time in REAPER - early on faster items, late on slower ones - and the overlay drew REAPER's own points shifted the other way. All envelope reads and writes now map through the take playrate, per segment in Timeline and SET view.
+
 ## [2.4.0] - 2026-07-10
 <!-- User decision 2026-07-02: v2.3.0 is SKIPPED - the Dynamics Suite ships
      together with the Game Audio Suite (Loop Lab, One-Shot Factory, True-Peak

@@ -2034,7 +2034,7 @@ void SneakPeak::ApplyDynamicsToEnvelope()
       for (const auto& cp : comp) {
         if (cp.time >= segStart && cp.time < segEnd) {
           DynamicsEngine::CompressPoint sp;
-          sp.time = cp.time - segStart; // convert to segment-relative
+          sp.time = (cp.time - segStart) * seg.playrate; // segment-relative take-envelope time
           sp.dbAdjust = cp.dbAdjust;
           segPts.push_back(sp);
         }
@@ -2045,7 +2045,10 @@ void SneakPeak::ApplyDynamicsToEnvelope()
     TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
     if (env) {
       anyEnv = true;
-      applyToEnv(env, comp); // single-item: times already correct
+      double rate = m_waveform.GetTakePlayrate();
+      if (rate != 1.0)
+        for (auto& cp : comp) cp.time *= rate; // take-envelope time = item time * playrate
+      applyToEnv(env, comp);
     }
   }
 

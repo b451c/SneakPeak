@@ -437,6 +437,7 @@ private:
   TrackEnvelope* m_envDragEnv = nullptr;     // envelope being edited (correct segment in timeline/SET)
   double m_envDragSegOffset = 0.0;           // segment's relativeOffset for viewTime<->envTime
   double m_envDragSegDuration = 0.0;         // duration of segment being edited
+  double m_envDragPlayrate = 1.0;            // take D_PLAYRATE: view time -> take-envelope time
   bool m_envFreehand = false;  // freehand drawing mode (add points on mousemove)
   int m_envFreehandLastX = 0;  // throttle: last X where point was added
 

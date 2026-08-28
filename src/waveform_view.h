@@ -21,6 +21,7 @@ struct ItemSegment {
   double position = 0.0;       // absolute timeline position
   double duration = 0.0;
   double relativeOffset = 0.0; // offset within concatenated view
+  double playrate = 1.0;       // take D_PLAYRATE (take-envelope time = item time * playrate)
   int audioStartFrame = 0;
   int audioFrameCount = 0;
 };
@@ -165,7 +166,8 @@ public:
   // Returns nullptr env if in gap region or no envelope exists.
   struct EnvSegmentInfo {
     TrackEnvelope* env = nullptr; // envelope handle (nullptr = gap/no envelope)
-    double envTime = 0.0;         // time relative to take start (for Envelope_Evaluate)
+    double envTime = 0.0;         // take-envelope time = (viewTime - segOffset) * playrate
+    double playrate = 1.0;        // take D_PLAYRATE (envelope timebase scale)
     int segmentIdx = -1;          // segment index (-1 = gap or single-item)
     MediaItem_Take* take = nullptr;
     int scalingMode = 0;          // cached GetEnvelopeScalingMode result
@@ -236,6 +238,7 @@ public:
   int GetSampleRate() const { return m_sampleRate; }
   MediaItem_Take* GetTake() const { return m_take; }
   double GetTakeOffset() const { return m_takeOffset; }
+  double GetTakePlayrate() const { return m_takePlayrate; }
 
   // Update after destructive edit
   void SetAudioSampleCount(int count) { m_audioSampleCount = count; }
@@ -290,6 +293,7 @@ private:
   double m_itemPosition = 0.0;
   double m_itemDuration = 0.0;
   double m_takeOffset = 0.0;
+  double m_takePlayrate = 1.0; // D_PLAYRATE of m_take (single-item envelope timebase)
   int m_numChannels = 0;
   int m_sampleRate = 44100;
 

@@ -797,7 +797,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             }
             // Compute time bounds from non-selected neighbors (segment-relative)
             m_envDragMinTime = 0.0;
-            m_envDragMaxTime = segDuration;
+            m_envDragMaxTime = segDuration * ei.playrate; // take-envelope time
             if (g_CountEnvelopePoints && g_GetEnvelopePoint) {
               int cnt = g_CountEnvelopePoints(env);
               // Find leftmost selected time and rightmost selected time
@@ -821,6 +821,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             m_envDragPointIdx = hitIdx;
             m_envDragEnv = env;
             m_envDragSegOffset = segOffset;
+            m_envDragPlayrate = ei.playrate;
             m_envDragSegDuration = segDuration;
             // Grab offset: point's on-screen Y minus cursor Y. The move handler
             // maps the anchor point ABSOLUTELY from cursor Y + this offset, so
@@ -898,6 +899,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
                 m_envDragPointIdx = -1;
                 m_envDragEnv = env;
                 m_envDragSegOffset = segOffset;
+                m_envDragPlayrate = ei.playrate;
                 m_envDragSegDuration = segDuration;
                 SetCapture(m_hwnd);
               } else {
@@ -913,7 +915,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
                   // New point inserted unselected; deselect others and select only it (drag loop filters by psel==true).
                   // Also compute drag clamp bounds from non-selected neighbors (hit-branch pattern, lines 519-537).
                   m_envDragMinTime = 0.0;
-                  m_envDragMaxTime = segDuration;
+                  m_envDragMaxTime = segDuration * ei.playrate; // take-envelope time
                   if (g_SetEnvelopePoint && g_CountEnvelopePoints && g_GetEnvelopePoint) {
                     int ptCount = g_CountEnvelopePoints(env);
                     bool noSortSel = true;
@@ -932,6 +934,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
                   m_envDragPointIdx = newIdx;
                   m_envDragEnv = env;
                   m_envDragSegOffset = segOffset;
+                  m_envDragPlayrate = ei.playrate;
                   m_envDragSegDuration = segDuration;
                   m_envDragGrabDy = lineY - y; // new point sits on the line
                   SetCapture(m_hwnd);
@@ -1196,7 +1199,7 @@ void SneakPeak::OnMouseUp(int x, int y)
       bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
       int totalCount = 0;
       // Select points from each segment's envelope (correct for timeline/SET)
-      auto selectFromEnv = [&](TrackEnvelope* env, int sm, double segOff) {
+      auto selectFromEnv = [&](TrackEnvelope* env, int sm, double segOff, double playrate) {
         int cnt = g_CountEnvelopePoints(env);
         totalCount += cnt;
         bool noSort = true;
@@ -1204,7 +1207,7 @@ void SneakPeak::OnMouseUp(int x, int y)
           double pt = 0, pv = 0, ptn = 0; int ps = 0; bool psel = false;
           g_GetEnvelopePoint(env, i, &pt, &pv, &ps, &ptn, &psel);
           double gain = g_ScaleFromEnvelopeMode(sm, pv);
-          int px = m_waveform.TimeToX(pt + segOff);
+          int px = m_waveform.TimeToX(pt / playrate + segOff);
           int py = m_waveform.EnvYToGainY(gain, sm);
           bool inside = (px >= rx1 && px <= rx2 && py >= ry1 && py <= ry2);
           bool newSel = shift ? (psel || inside) : inside;
@@ -1220,13 +1223,13 @@ void SneakPeak::OnMouseUp(int x, int y)
           TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
           if (!env) continue;
           int sm = g_GetEnvelopeScalingMode(env);
-          selectFromEnv(env, sm, seg.relativeOffset);
+          selectFromEnv(env, sm, seg.relativeOffset, seg.playrate);
         }
       } else if (m_waveform.GetTake()) {
         TrackEnvelope* env = g_GetTakeEnvelopeByName(m_waveform.GetTake(), "Volume");
         if (env) {
           int sm = g_GetEnvelopeScalingMode(env);
-          selectFromEnv(env, sm, 0.0);
+          selectFromEnv(env, sm, 0.0, m_waveform.GetTakePlayrate());
         }
       }
       // Dense envelope: persist as reveal range so points become visible
@@ -1899,11 +1902,11 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
           g_CountEnvelopePoints && g_GetEnvelopePoint && g_DeleteEnvelopePointEx) {
         // Convert view-relative time to segment-relative envelope time
         double viewTime = m_waveform.XToTime(x);
-        double time = viewTime - m_envDragSegOffset;
-        time = std::max(0.0, std::min(m_envDragSegDuration, time));
+        double time = (viewTime - m_envDragSegOffset) * m_envDragPlayrate;
+        time = std::max(0.0, std::min(m_envDragSegDuration * m_envDragPlayrate, time));
         // Delete existing points between last drawn position and current
         double prevViewTime = m_waveform.XToTime(m_envFreehandLastX);
-        double prevTime = prevViewTime - m_envDragSegOffset;
+        double prevTime = (prevViewTime - m_envDragSegOffset) * m_envDragPlayrate;
         double tMin = std::min(prevTime, time);
         double tMax = std::max(prevTime, time);
         int cnt = g_CountEnvelopePoints(env);
@@ -1951,7 +1954,8 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     TrackEnvelope* env = m_envDragEnv;
     if (env && g_SetEnvelopePoint && g_GetEnvelopePoint && g_CountEnvelopePoints &&
         g_GetEnvelopeScalingMode && g_ScaleToEnvelopeMode && g_ScaleFromEnvelopeMode) {
-      double timeDelta = m_waveform.XToTime(x) - m_waveform.XToTime(m_lastMouseX);
+      double timeDelta = (m_waveform.XToTime(x) - m_waveform.XToTime(m_lastMouseX))
+                         * m_envDragPlayrate; // view -> take-envelope time
       int scalingMode = g_GetEnvelopeScalingMode(env);
       // ANCHORED ABSOLUTE drag (user bug: fader-scale is nonlinear in Y, so
       // per-move deltas taken at the CURSOR's Y made the point lag ever more

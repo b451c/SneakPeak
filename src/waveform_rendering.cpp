@@ -1218,7 +1218,8 @@ WaveformView::EnvSegmentInfo WaveformView::GetEnvelopeAtTime(double viewTime) co
         if (!seg.take) return info;
         info.take = seg.take;
         info.segmentIdx = i;
-        info.envTime = viewTime - seg.relativeOffset; // time relative to take start
+        info.playrate = seg.playrate;
+        info.envTime = (viewTime - seg.relativeOffset) * seg.playrate; // take-envelope time
         info.env = g_GetTakeEnvelopeByName(seg.take, "Volume");
         if (info.env) info.scalingMode = g_GetEnvelopeScalingMode(info.env);
         return info;
@@ -1231,7 +1232,8 @@ WaveformView::EnvSegmentInfo WaveformView::GetEnvelopeAtTime(double viewTime) co
   if (m_take) {
     info.take = m_take;
     info.segmentIdx = -1;
-    info.envTime = viewTime;
+    info.playrate = m_takePlayrate;
+    info.envTime = viewTime * m_takePlayrate;
     info.env = g_GetTakeEnvelopeByName(m_take, "Volume");
     if (info.env) info.scalingMode = g_GetEnvelopeScalingMode(info.env);
   }
@@ -1309,7 +1311,7 @@ int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
   int bestDist = hitRadius * hitRadius + 1;
 
   // Helper: test points from a single envelope
-  auto testEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset) {
+  auto testEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset, double playrate) {
     int count = g_CountEnvelopePoints(env);
     bool dense = (count > 100);
     // Dense without reveal range: no visible points to hit
@@ -1322,12 +1324,12 @@ int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
         continue;
       // Dense mode: only test points inside reveal range
       if (dense) {
-        double absTime = ptTime + segRelOffset;
+        double absTime = ptTime / playrate + segRelOffset;
         if (absTime < m_envRevealStart || absTime > m_envRevealEnd)
           continue;
       }
       double gain = g_ScaleFromEnvelopeMode(scalingMode, ptValue);
-      int px = TimeToX(ptTime + segRelOffset);
+      int px = TimeToX(ptTime / playrate + segRelOffset);
       int py = EnvYToGainY(gain, scalingMode);
       int dx = x - px;
       int dy = y - py;
@@ -1345,13 +1347,13 @@ int WaveformView::HitTestEnvelopePoint(int x, int y, int hitRadius) const
     auto ei = GetEnvelopeAtTime(clickTime);
     if (ei.env) {
       const auto& seg = m_segments[ei.segmentIdx];
-      testEnv(ei.env, ei.scalingMode, seg.relativeOffset);
+      testEnv(ei.env, ei.scalingMode, seg.relativeOffset, seg.playrate);
     }
   } else if (m_take && g_GetTakeEnvelopeByName) {
     TrackEnvelope* env = g_GetTakeEnvelopeByName(m_take, "Volume");
     if (env) {
       int sm = g_GetEnvelopeScalingMode ? g_GetEnvelopeScalingMode(env) : 0;
-      testEnv(env, sm, 0.0);
+      testEnv(env, sm, 0.0, m_takePlayrate);
     }
   }
   return bestIdx;
@@ -1429,7 +1431,7 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
     }
   }
 
-  auto drawPointsForEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset) {
+  auto drawPointsForEnv = [&](TrackEnvelope* env, int scalingMode, double segRelOffset, double playrate) {
     int count = g_CountEnvelopePoints(env);
     bool dense = (count > 100);
     // Very dense: skip circles unless reveal range is active
@@ -1446,12 +1448,12 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
 
       // Dense mode: only draw points inside reveal range
       if (dense) {
-        double absTime = ptTime + segRelOffset;
+        double absTime = ptTime / playrate + segRelOffset;
         if (absTime < m_envRevealStart || absTime > m_envRevealEnd)
           continue;
       }
 
-      int px = TimeToX(ptTime + segRelOffset);
+      int px = TimeToX(ptTime / playrate + segRelOffset);
       if (px < waveL - 4 || px > waveR + 4) continue;
       if (!ptSelected && abs(px - lastPx) < 3) continue;
       lastPx = px;
@@ -1474,13 +1476,13 @@ void WaveformView::DrawVolumeEnvelope(HDC hdc)
       TrackEnvelope* env = g_GetTakeEnvelopeByName(seg.take, "Volume");
       if (!env) continue;
       int sm = g_GetEnvelopeScalingMode ? g_GetEnvelopeScalingMode(env) : 0;
-      drawPointsForEnv(env, sm, seg.relativeOffset);
+      drawPointsForEnv(env, sm, seg.relativeOffset, seg.playrate);
     }
   } else if (m_take) {
     TrackEnvelope* env = g_GetTakeEnvelopeByName ? g_GetTakeEnvelopeByName(m_take, "Volume") : nullptr;
     if (env) {
       int sm = g_GetEnvelopeScalingMode ? g_GetEnvelopeScalingMode(env) : 0;
-      drawPointsForEnv(env, sm, 0.0);
+      drawPointsForEnv(env, sm, 0.0, m_takePlayrate);
     }
   }
 }
