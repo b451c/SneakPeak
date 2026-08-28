@@ -189,3 +189,62 @@ def test_reverse_on_a_reversed_take_leaves_the_parent_file_alone(sess):
     assert db(tail) > db(head) + 20, f"playback no longer reversed (head {db(head):.1f} tail {db(tail):.1f})"
     toast = _last_toast(sess)
     assert "section or reversed" in toast, f"refusal toast missing: {toast!r}"
+
+
+# --- A1.3: the pre-edit snapshot must exist before the file is touched ---------
+def test_snapshot_failure_cancels_the_edit():
+    """UndoSave copied the source into the temp dir and, when that copy failed
+    (temp dir missing, disk full), logged it and let the edit go ahead with no
+    way back. With the temp dir pointed at a directory that does not exist
+    the edit must be cancelled after the prompt: file bytes unchanged, a
+    message naming the copy failure. Own REAPER session (the env is read at
+    launch). Control (cb48cd5): file reversed, no undo."""
+    import os
+    import sys
+    from conftest import DYLIB, SP_WINDOW_LUA, db, track_rms_windows
+    from reaproof.runner.session import ReaperSession
+    if sys.platform == "win32":
+        names, bad = ("TMP", "TEMP"), r"C:\nonexistent\sneakpeak"
+    else:
+        names, bad = ("TMPDIR",), "/nonexistent/sneakpeak"
+    saved = {n: os.environ.get(n) for n in names}
+    for n in names:
+        os.environ[n] = bad
+    try:
+        s = ReaperSession("sneakpeak-badtmp", extensions=[DYLIB]).start()
+    finally:
+        for n, v in saved.items():
+            if v is None:
+                os.environ.pop(n, None)
+            else:
+                os.environ[n] = v
+    try:
+        s.eval(SP_WINDOW_LUA)
+        clear_project(s)
+        media = burst_fixture("guard_badtmp_30s.wav", seconds=30, channels=2)
+        insert_item_unselected(s, media)
+        ensure_window(s)
+        s.eval(SELECT_ITEM0)
+        wait_audio_loaded(s, media.stem, timeout=60)
+        time.sleep(0.5)
+        sha0 = _sha(media)
+        w_head, w_tail = (0.6, 1.4), (28.6, 29.4)
+        head, tail = track_rms_windows(s, [w_head, w_tail])
+        assert db(head) > db(tail) + 20, "precondition: burst not at the head"
+        s.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+        SHOTS.mkdir(parents=True, exist_ok=True)
+
+        s.eval(REVERSE)
+        assert dismiss_native_modal(s, timeout=8), "the Reverse confirmation never appeared"
+        time.sleep(0.4)
+        capture(s, SHOTS / "badtmp_1_after_prompt.png")
+        wait_main_thread_idle(s, timeout=120)
+        time.sleep(1.0)
+
+        assert _sha(media) == sha0, "the file was edited without a pre-edit copy"
+        head, tail = track_rms_windows(s, [w_head, w_tail])
+        assert db(head) > db(tail) + 20, f"playback changed (head {db(head):.1f} tail {db(tail):.1f})"
+        toast = _last_toast(s)
+        assert "pre-edit copy" in toast and "cancelled" in toast, f"cancel toast missing: {toast!r}"
+    finally:
+        s.stop()

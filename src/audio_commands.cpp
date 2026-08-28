@@ -47,7 +47,7 @@ void SneakPeak::GetSelectionSampleRange(int& startFrame, int& endFrame) const
 
 // --- Undo ---
 
-void SneakPeak::UndoSave()
+bool SneakPeak::UndoSave()
 {
   // Destructive ITEM edits rewrite the source FILE - REAPER's native undo
   // cannot restore that, so these edits were effectively one-way (user
@@ -55,19 +55,32 @@ void SneakPeak::UndoSave()
   // pre-edit FILE as a byte copy in the temp dir - never the working buffer:
   // on long items that buffer is DOWNSAMPLED and writing it back on undo
   // would destroy the source (finding F6). Single level.
+  // A failed copy (temp dir missing, disk full) used to be logged and the
+  // edit went ahead with no way back (audit A1.3): now it cancels the edit,
+  // and the copy goes to the free slot first so the previous snapshot is
+  // dropped only once the new one exists.
   if (!m_waveform.IsStandaloneMode() && m_waveform.GetTake()) {
-    DiscardItemUndo();
-    m_itemUndoPath = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+    const std::string path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+    const std::string dir = AudioEngine::TempDir();
     char buf[512];
-    snprintf(buf, sizeof(buf), "%s/sneakpeak_undo_%d.wav",
-             AudioEngine::TempDir().c_str(), AudioEngine::ProcessId());
-    m_itemUndoFile = buf;
-    if (!AudioEngine::CopyFileInto(m_itemUndoPath, m_itemUndoFile)) {
-      DBG("[SneakPeak] undo snapshot failed: %s\n", m_itemUndoFile.c_str());
-      DiscardItemUndo();
+    snprintf(buf, sizeof(buf), "%s/sneakpeak_undo_%d_%c.wav", dir.c_str(),
+             AudioEngine::ProcessId(), m_itemUndoSlot ? 'b' : 'a');
+    if (!AudioEngine::CopyFileInto(path, buf)) {
+      DBG("[SneakPeak] undo snapshot failed: %s\n", buf);
+      remove(buf);   // whatever a partial copy left behind
+      char msg[sizeof(m_toastText)];
+      snprintf(msg, sizeof(msg), "Could not create the pre-edit copy in %s - the edit was cancelled",
+               dir.c_str());
+      ShowToast(msg);
+      return false;
     }
+    DiscardItemUndo();
+    m_itemUndoSlot ^= 1;
+    m_itemUndoPath = path;
+    m_itemUndoFile = buf;
   }
   m_hasUndo = true;
+  return true;
 }
 
 void SneakPeak::DiscardItemUndo()
@@ -787,9 +800,9 @@ void SneakPeak::DoPasteDestructive()
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
+  if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-  UndoSave();
 
   int nch = m_waveform.GetNumChannels();
   double cursorTime = m_waveform.GetCursorTime();
@@ -1487,9 +1500,9 @@ void SneakPeak::DoReverse()
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
+  if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-  UndoSave();
 
   int startF, endF;
   GetSelectionSampleRange(startF, endF);
@@ -1569,9 +1582,9 @@ void SneakPeak::DoGain(double factor)
     if (m_waveform.IsMultiItem()) return; // not supported for multi-item yet
     if (!DestructiveSourceOk()) return;
 
+    if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
     if (g_PreventUIRefresh) g_PreventUIRefresh(1);
     if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-    UndoSave();
 
     int startF, endF;
     GetSelectionSampleRange(startF, endF);
@@ -1653,9 +1666,9 @@ void SneakPeak::DoDCRemove()
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
+  if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-  UndoSave();
 
   int startF, endF;
   GetSelectionSampleRange(startF, endF);
@@ -1983,9 +1996,9 @@ void SneakPeak::DoApplyLimiterItem()
     return;
   }
 
+  if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-  UndoSave();
   m_waveform.GetAudioData() = std::move(out);
   WriteAndRefresh();
   if (g_Undo_EndBlock2)

@@ -391,7 +391,7 @@ private:
   void DiscardItemUndo();
   void SyncSelectionToReaper();
   void UpdateTitle();
-  void UndoSave();
+  bool UndoSave();   // false = no pre-edit copy: the caller must not touch the file (A1.3)
   void UndoRestore();
   void RedoRestore();
 
@@ -678,6 +678,7 @@ private:
   // UndoRestore copies it back into the same inode (path-checked).
   std::string m_itemUndoPath;   // the source file the snapshot belongs to
   std::string m_itemUndoFile;   // the snapshot copy (empty = no snapshot)
+  int m_itemUndoSlot = 0;       // next snapshot name (_a/_b alternate: the old copy outlives a failed new one)
   // Standalone undo/redo stacks (full or range snapshots - StandaloneUndoEntry)
   std::vector<StandaloneUndoEntry> m_standaloneUndoStack;
   std::vector<StandaloneUndoEntry> m_standaloneRedoStack;
