@@ -170,18 +170,28 @@ void SneakPeak::InitiateDragExport()
   // IDropSource; DoDragDrop runs its own modal loop, so release our capture.
   {
     static HRESULT s_oleInit = OleInitialize(nullptr);  // S_OK/S_FALSE both fine
-    (void)s_oleInit;
+    DBG("[SneakPeak] DragExport OLE: OleInitialize=0x%08lx\n", (unsigned long)s_oleInit);
     wchar_t wpath[1024] = {};
     if (MultiByteToWideChar(CP_UTF8, 0, m_dragTempPath.c_str(), -1,
                             wpath, (int)(sizeof(wpath) / sizeof(wpath[0]))) > 0) {
+      // Our paths are built with '/' separators (the CRT accepts them, so
+      // every fopen works) but SHCreateItemFromParsingName rejects them with
+      // E_INVALIDARG - the reason the drop never started on Windows (#105).
+      for (wchar_t* c = wpath; *c; ++c)
+        if (*c == L'/') *c = L'\\';
       IShellItem* si = nullptr;
-      if (SUCCEEDED(SHCreateItemFromParsingName(wpath, nullptr, IID_PPV_ARGS(&si))) && si) {
+      HRESULT hr = SHCreateItemFromParsingName(wpath, nullptr, IID_PPV_ARGS(&si));
+      DBG("[SneakPeak] DragExport OLE: SHCreateItem=0x%08lx si=%p\n", (unsigned long)hr, (void*)si);
+      if (SUCCEEDED(hr) && si) {
         IDataObject* dobj = nullptr;
-        if (SUCCEEDED(si->BindToHandler(nullptr, BHID_DataObject, IID_PPV_ARGS(&dobj))) && dobj) {
+        hr = si->BindToHandler(nullptr, BHID_DataObject, IID_PPV_ARGS(&dobj));
+        DBG("[SneakPeak] DragExport OLE: BindToHandler=0x%08lx dobj=%p\n", (unsigned long)hr, (void*)dobj);
+        if (SUCCEEDED(hr) && dobj) {
           ReleaseCapture();
           Win32DropSource* dsrc = new Win32DropSource();
           DWORD effect = 0;
-          DoDragDrop(dobj, dsrc, DROPEFFECT_COPY, &effect);
+          hr = DoDragDrop(dobj, dsrc, DROPEFFECT_COPY, &effect);
+          DBG("[SneakPeak] DragExport OLE: DoDragDrop=0x%08lx effect=%lu\n", (unsigned long)hr, (unsigned long)effect);
           dsrc->Release();
           dobj->Release();
         }
