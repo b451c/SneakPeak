@@ -521,7 +521,6 @@ void SneakPeak::DoCut()
 {
   // Copy + ripple delete (standard waveform editor behavior: cut closes the gap)
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
-  if (!RequireItemAudio("Cut")) return;
 
   DoCopy();
   DoDelete(true); // ripple
@@ -530,7 +529,6 @@ void SneakPeak::DoCut()
 void SneakPeak::DoPaste()
 {
   if (!m_waveform.HasItem() || s_clipboard.numFrames <= 0) return;
-  if (!RequireItemAudio("Paste")) return;
   // Standalone mode: destructive paste (no REAPER track)
   if (m_waveform.IsStandaloneMode()) {
     DoPasteDestructive();
@@ -1076,7 +1074,6 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
 void SneakPeak::DoSilence()
 {
   if (!m_waveform.HasItem()) return;
-  if (!RequireItemAudio("Silence")) return;
 
   // --- Standalone mode ---
   if (m_waveform.IsStandaloneMode()) {
@@ -1365,9 +1362,10 @@ void SneakPeak::DoFadeOut()
 
 void SneakPeak::DoReverse()
 {
-  // Destructive — no REAPER non-destructive reverse available
+  // Destructive — no REAPER non-destructive reverse available. Needs no
+  // samples: the file is edited in place (8b); the buffer edit below is
+  // display-only and a no-op while a lazy item has none (8g).
   if (!m_waveform.HasItem()) return;
-  if (!RequireItemAudio("Reverse")) return;
   if (m_waveform.IsMultiItem()) {
     MessageBox(m_hwnd, "Reverse is not supported in multi-item view.", "SneakPeak", MB_OK);
     return;
@@ -1530,9 +1528,8 @@ void SneakPeak::DoGain(double factor)
 
 void SneakPeak::DoDCRemove()
 {
-  // Destructive — must modify audio data
+  // Destructive — edits the file in place (8b); no samples needed (8g)
   if (!m_waveform.HasItem()) return;
-  if (!RequireItemAudio("DC Remove")) return;
   if (m_waveform.IsMultiItem()) {
     MessageBox(m_hwnd, "DC Remove is not supported in multi-item view.", "SneakPeak", MB_OK);
     return;
@@ -1568,9 +1565,8 @@ void SneakPeak::DoDCRemove()
 void SneakPeak::DoNormalizeLUFS(double targetLufs)
 {
   if (!m_waveform.HasItem()) return;
-  if (!RequireItemAudio("Normalize")) return;
   if (m_waveform.IsStandaloneMode()) return;
-  if (!g_CalculateNormalization || !g_SetMediaItemInfo_Value) return;
+  if (!g_CalculateNormalization || !g_SetMediaItemInfo_Value) return;   // REAPER measures the source
 
   MediaItem_Take* take = m_waveform.GetTake();
   if (!take) return;
@@ -2363,14 +2359,20 @@ void SneakPeak::SaveLimiterGeom()
 // the Hard Limiter all operate on the single loaded buffer, so Standalone and
 // plain ITEM mode qualify - SET/timeline/multi-item (segmented buffers) and
 // master mode do not.
-bool SneakPeak::SingleBufferModeOk() const
+bool SneakPeak::SingleItemViewOk() const
 {
   if (!m_waveform.HasItem() || m_masterMode) return false;
   if (m_waveform.IsStandaloneMode()) return true;
-  // INC-PK1: ITEM mode qualifies only once the background load installed the
-  // buffer (One-Shot/Edit Copy/limiter all consume raw samples).
-  return !m_waveform.IsMultiItem() && !m_workingSet.active &&
-         m_waveform.GetAudioSampleCount() > 0;
+  return !m_waveform.IsMultiItem() && !m_workingSet.active;
+}
+
+// INC-PK1: ITEM mode qualifies only once the buffer is in (the limiter and the
+// One-Shot preview read raw samples); 8g: Edit Copy and the One-Shot run stream
+// the source and gate on SingleItemViewOk / RequireItemAudio instead.
+bool SneakPeak::SingleBufferModeOk() const
+{
+  return SingleItemViewOk() &&
+         (m_waveform.IsStandaloneMode() || m_waveform.GetAudioSampleCount() > 0);
 }
 
 // Kept bounds of one slice: the trim scan (any channel above the threshold
@@ -2669,7 +2671,7 @@ int SneakPeak::OneShotExportSlice(const OneShotParams& p, int s0, int s1,
 
 void SneakPeak::DoRunOneShot()
 {
-  if (!SingleBufferModeOk()) return;
+  if (!SingleItemViewOk() || !RequireItemAudio("One-Shot Factory")) return;   // slices = buffer frames
   const OneShotParams p = m_oneShotPanel.GetParams();
 
   const std::vector<std::pair<int, int>> slices = OneShotBuildSlices(p);
@@ -2777,7 +2779,7 @@ bool SneakPeak::OneShotSourceParts(std::string* dir, std::string* base)
 // cross-platform path the Support links use (SWELL maps it on macOS/Linux).
 void SneakPeak::OpenOneShotFolder()
 {
-  if (!SingleBufferModeOk()) return;
+  if (!SingleItemViewOk()) return;
   std::string dir, base;
   if (!OneShotSourceParts(&dir, &base)) {
     ShowToast("Item source has no file on disk - no export folder");
@@ -2794,7 +2796,7 @@ void SneakPeak::OpenOneShotFolder()
 // Source in REAPER Timeline closes the round trip afterwards.
 void SneakPeak::DoEditCopyStandalone()
 {
-  if (!SingleBufferModeOk() || m_waveform.IsStandaloneMode()) return;
+  if (!SingleItemViewOk() || m_waveform.IsStandaloneMode()) return;   // streams (8e), no buffer
   if (m_exportPump.active) {
     ShowToast("Edit Copy already in progress");
     return;

@@ -328,7 +328,8 @@ private:
   void DoApplyLimiter();                 // v2.4.0 INC-L1: true-peak hard limiter apply
   void DoApplyLimiterItem();             // INC-L2: ITEM mode, destructive-rewrite path
   void DoRunOneShot();                   // v2.4 INC-B1/B2: per-slice trim/fade/normalize -> WAVs
-  bool SingleBufferModeOk() const;            // INC-B3: Standalone or plain ITEM mode
+  bool SingleBufferModeOk() const;            // INC-B3: Standalone or plain ITEM mode, samples in
+  bool SingleItemViewOk() const;              // 8g: the same view shape, samples not required
   // INC-B2 slice helpers: the slice list for the active mode (whole file /
   // regions-markers / silence gaps), the per-slice kept-bounds (shared by the
   // exporter and the live preview so they can never disagree), one slice's
@@ -616,7 +617,11 @@ private:
   std::string ExportItemRangeToWav(double t0, double t1);
   void BakeItemFades(double* chunk, int64_t viewFrame0, int n, int nch, int sr) const;
   unsigned m_itemLoadFailedGen = ~0u;  // generation that produced no jobs (no retry loop)
-  void StartItemAudioLoad();
+  bool m_itemLoadOverCap = false;      // last start refused: buffer > kMaxBufferBytes
+  // 8g: a lazy view (WaveformView::ItemBufferIsLazy) loads only when `wanted` -
+  // RequireItemAudio, or the OnTimer self-heal while a sample panel is open.
+  void StartItemAudioLoad(bool wanted = false);
+  bool SamplePanelOpen() const { return m_spectralVisible || m_oneShotPanel.IsVisible(); }
   void StepItemAudioLoad();     // OnTimer slice + progress title
   void FinishItemAudioLoad();
   void AbortItemAudioLoad();

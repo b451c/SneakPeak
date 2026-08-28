@@ -299,6 +299,9 @@ def test_one_shot_slices_of_a_long_item_keep_the_source_rate(sess):
 
     SHOTS.mkdir(parents=True, exist_ok=True)
     send_command(sess, CM_ONESHOT_FACTORY)
+    # 8g: opening the panel starts the lazy buffer load (the slice list is in
+    # buffer frames); Run before it lands is a toast, so wait for the title.
+    wait_audio_loaded(sess, media.stem, timeout=90)
     # The panel's amber Run button is the only amber blob with Dynamics closed.
     sess.wait_until(lambda: locate_apply_button(sess, SHOTS / "oneshot_panel.png") is not None,
                     timeout=10)

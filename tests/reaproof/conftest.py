@@ -124,6 +124,26 @@ def wait_loaded(s, name_substring: str, timeout: float = 20.0):
         "return reaper.JS_Window_GetTitle(h)")), timeout=timeout)
 
 
+def assert_no_loading(s, seconds: float = 2.0) -> str:
+    """8g: a lazy item must never retitle to "Loading item audio..." on its own.
+    Polls the window title for `seconds`; returns the last title seen."""
+    import time as _t
+    t_end = _t.monotonic() + seconds
+    last = ""
+    while _t.monotonic() < t_end:
+        last = window_title(s)
+        assert "Loading" not in last, f"the buffer decoded without being asked: {last!r}"
+        _t.sleep(0.05)
+    return last
+
+
+def rss_mb(s) -> float:
+    """REAPER's resident set (MB) - the memory observable for the buffer specs."""
+    import subprocess as _sp
+    out = _sp.check_output(["ps", "-o", "rss=", "-p", str(s.handle.pid)])
+    return int(out.strip()) / 1024.0
+
+
 def wait_audio_loaded(s, name_substring: str, timeout: float = 90.0, stable: float = 1.0):
     """Loaded item AND the background loader finished (no 'Loading' in the
     title) - held for `stable` seconds: the plain name is on the title for a

@@ -22,7 +22,7 @@ from conftest import (DESELECT_ALL, SELECT_ITEM0, clear_project, ensure_window,
 RESULTS = Path("/tmp/sneakpeak-perf-results.json")
 STALL_BUDGET = 0.25       # s - anything longer reads as a hang
 FIRST_PAINT_BUDGET = 0.5  # s - waveform on screen within half a second
-RSS_CEILING_MB = 1500     # catastrophe guard only; the real number is recorded
+RSS_CEILING_MB = 50       # 8g: no working buffer on select (was 1500 = catastrophe guard; +409 MB measured before)
 VK_HOME, VK_END = 0x24, 0x23
 
 
@@ -75,6 +75,7 @@ def test_select_one_hour_item_without_freeze(sess, one_hour):
         assert first["t_first"] <= FIRST_PAINT_BUDGET, f"waveform late: {first}"
     assert again["max_stall"] <= STALL_BUDGET, f"reselect froze: {again}"
     assert not again["seen_loading"], f"reselect re-decoded the item: {again}"
+    assert not first["seen_loading"], f"8g: a one-hour item must not decode a buffer on select: {first}"
     assert first["rss_after_mb"] - first["rss_before_mb"] < RSS_CEILING_MB, f"memory blew up: {first}"
 
 

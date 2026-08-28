@@ -244,6 +244,10 @@ public:
   bool IsItemBufferDownsampled() const {
     return !m_standaloneMode && m_take && m_sourceRate > 0 && m_sampleRate != m_sourceRate;
   }
+  // 8g (design_lazy_buffer.md): a view whose buffer WOULD be downsampled never
+  // decodes on select - display, exports and Dynamics do not need it - only when
+  // a sample consumer asks (SneakPeak::RequireItemAudio). Multi-item stays eager.
+  bool ItemBufferIsLazy() const;
   MediaItem_Take* GetTake() const { return m_take; }
   double GetTakeOffset() const { return m_takeOffset; }
   double GetTakePlayrate() const { return m_takePlayrate; }

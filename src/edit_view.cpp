@@ -786,9 +786,10 @@ void SneakPeak::OnTimer()
   LimiterApplyTick();
   // Loop finder: publish finished candidates (INC-A2).
   LoopFindTick();
-  // One-Shot Prep needs the single loaded buffer (Standalone or plain ITEM
-  // mode, INC-B3): close when the mode stops qualifying.
-  if (m_oneShotPanel.IsVisible() && !SingleBufferModeOk()) {
+  // One-Shot Prep needs a single-item view (Standalone or plain ITEM mode,
+  // INC-B3): close when the mode stops qualifying (8g: the buffer may still be
+  // loading - the preview waits for it).
+  if (m_oneShotPanel.IsVisible() && !SingleItemViewOk()) {
     m_oneShotPanel.Hide();
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
@@ -804,11 +805,13 @@ void SneakPeak::OnTimer()
   // Background ITEM audio load + .reapeaks builder pump (INC-PK1 / phase 2a).
   // Self-healing start: any view whose samples are missing (fresh load,
   // timeline/SET/multi rebuild after an edit, external change) gets its job
-  // set here - no call site can forget it.
+  // set here - no call site can forget it. 8g: a lazy view is left alone
+  // unless a sample panel is open and waiting for the install hook.
   if (!m_itemLoad.active && !ItemAudioReady() && m_waveform.HasItem() &&
       !m_waveform.IsStandaloneMode() &&
+      (!m_waveform.ItemBufferIsLazy() || SamplePanelOpen()) &&
       m_itemLoadFailedGen != m_waveform.GetLoadGeneration())
-    StartItemAudioLoad();
+    StartItemAudioLoad(true);
   StepItemAudioLoad();
   StepSdkPeaksBuild();
   StepExportPump();   // 8e: Edit Copy streaming to its file

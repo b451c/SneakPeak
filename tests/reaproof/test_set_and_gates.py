@@ -1,26 +1,27 @@
-"""SET (working set) view + the "still loading" gates - both rewired in
-phase 2a without a spec of their own.
+"""SET (working set) view + destructive edits on a lazy item.
 
 SET: two items on one track -> "SneakPeak: Toggle track view" -> the view
-concatenates the working set (mode bar reads SET), draws from .reapeaks
-at once and installs the samples in the background.
+concatenates the working set (mode bar reads SET) and draws from .reapeaks
+at once. Since 8g a long set decodes NO working buffer at all (the display,
+exports and Dynamics never need it): no Loading title, no allocation.
 
-Gates: a destructive ITEM op fired while the audio is still loading must be
-a no-op (toast, never a synchronous fallback decode); the same op after the
-load must do its job. Ground truth for Reverse = the track audio accessor:
-the burst that started the file must end it.
+Reverse: since 8b the three in-place edits (Reverse / DC Remove / Gain on a
+selection) stream through the file itself, so they need no buffer either -
+firing Reverse on a lazy item must edit the file in place WITHOUT triggering
+a decode. Ground truth = the track audio accessor: the burst that started the
+file must end it, 24-bit kept. (The pre-8g "gated while loading" spec is
+retired with the gate.)
 """
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
-from conftest import (burst_fixture, clear_project, CM_TRACK_VIEW, db,
-                      dismiss_native_modal, ensure_window,
-                      insert_item_unselected, measure_after,
-                      mode_from_capture, perf_media_dir, track_rms_windows,
-                      wait_audio_loaded, wait_main_thread_idle, write_long_wav)
+from conftest import (SELECT_ITEM0, assert_no_loading, burst_fixture, clear_project,
+                      CM_TRACK_VIEW, db, dismiss_native_modal, ensure_window,
+                      insert_item_unselected, measure_after, mode_from_capture,
+                      perf_media_dir, rss_mb, track_rms_windows, wait_audio_loaded,
+                      wait_main_thread_idle, write_long_wav)
 
 RESULTS = Path("/tmp/sneakpeak-perf-results.json")
 SHOTS = Path("/tmp/sneakpeak-reaproof-shots/set")
@@ -58,10 +59,11 @@ def test_working_set_view_loads_in_background(sess):
     mode = mode_from_capture(sess, SHOTS / "set.png")
     assert mode == "SET", f"expected SET view, got {mode}"
     assert m["max_stall"] <= STALL_BUDGET, f"entering the working set froze REAPER: {m}"
-    assert m["seen_loading"] and m["t_loaded"] is not None, f"background load not observed: {m}"
+    assert m["t_loaded"] is not None, f"the SET view never settled: {m}"
+    assert not m["seen_loading"], f"8g: a 30-minute set must not decode a buffer: {m}"
 
 
-def test_reverse_is_gated_while_loading_then_works(sess):
+def test_reverse_on_a_lazy_item_edits_in_place_without_a_load(sess):
     clear_project(sess)
     # 20 minutes, quiet, one loud burst in the first two seconds; 24-bit so the
     # write-back format is observable (v2.4.0 re-encoded items as 16-bit)
@@ -73,34 +75,10 @@ def test_reverse_is_gated_while_loading_then_works(sess):
     head0, tail0 = track_rms_windows(sess, [w_head, w_tail])
     assert db(head0) > db(tail0) + 20, "fixture: the burst must be at the head"
 
-    # Fire the destructive op INSIDE REAPER the moment the loader retitles the
-    # window (a bridge round trip is ~0.5 s - too coarse to hit a 1-2 s load).
-    fire_lua = """
-      local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0)
-      reaper.SetMediaItemSelected(it, true) reaper.UpdateArrange()
-      SP_GATE_FIRED = nil
-      local t0 = reaper.time_precise()
-      local function poll()
-        local h = SP_WINDOW()
-        local title = h and reaper.JS_Window_GetTitle(h) or ""
-        if title:find("Loading") then
-          reaper.Main_OnCommand(reaper.NamedCommandLookup("_SneakPeak_Reverse"), 0)
-          SP_GATE_FIRED = title
-          return
-        end
-        if reaper.time_precise() - t0 < 20 then reaper.defer(poll) else SP_GATE_FIRED = false end
-      end
-      reaper.defer(poll)
-      return true"""
-    sess.eval(fire_lua)
-    sess.wait_until(lambda: sess.eval("return SP_GATE_FIRED ~= nil", hang_timeout=120), timeout=30)
-    fired = sess.eval("return SP_GATE_FIRED", hang_timeout=120)
-    assert fired, "the background load never showed a Loading title (driver)"
-    wait_audio_loaded(sess, media.stem, timeout=90)
-    time.sleep(2.0)
-    head1, tail1 = track_rms_windows(sess, [w_head, w_tail])
-    assert db(head1) > db(tail1) + 20, (
-        f"Reverse during load must be a no-op: head {db(head1):.1f} dB, tail {db(tail1):.1f} dB")
+    rss0 = rss_mb(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=30)
+    assert_no_loading(sess, 2.0)          # lazy: nothing decodes on select
 
     sess.eval('reaper.defer(function() reaper.Main_OnCommand(reaper.NamedCommandLookup("_SneakPeak_Reverse"), 0) end) return true')
     assert dismiss_native_modal(sess), "the destructive confirmation never appeared"
@@ -108,7 +86,11 @@ def test_reverse_is_gated_while_loading_then_works(sess):
     sess.wait_until(lambda: (lambda h, t: db(t) > db(h) + 20)(*track_rms_windows(sess, [w_head, w_tail])),
                     timeout=60)
     head2, tail2 = track_rms_windows(sess, [w_head, w_tail])
-    assert db(tail2) > db(head2) + 20, "Reverse after the load must reverse the item"
+    assert db(tail2) > db(head2) + 20, "Reverse on a lazy item must reverse the file in place"
+    assert_no_loading(sess, 2.0)          # ...and must not have started a decode
+    delta = rss_mb(sess) - rss0
+    print(f"\n[lazy] reverse 20-min mono: RSS delta {delta:+.1f} MB")
+    assert delta < 50, f"Reverse allocated a working buffer: {delta:+.1f} MB"
     # the file is written back in its own format (24-bit stays 24-bit)
     bits = int(sess.eval("local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0) "
                          "local src = reaper.GetMediaItemTake_Source(reaper.GetActiveTake(it)) "

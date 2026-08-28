@@ -480,7 +480,7 @@ void SneakPeak::OnRightClick(int x, int y)
   // ITEM-mode file tools (INC-B3/B4): design on the timeline -> select the
   // item -> Factory exports assets / Edit Copy bridges into the standalone
   // tools (Loop Lab, Spectral Repair, Hard Limiter).
-  if (SingleBufferModeOk() && !m_waveform.IsStandaloneMode()) {
+  if (SingleItemViewOk() && !m_waveform.IsStandaloneMode()) {   // 8g: both stream / wait
     MenuAppendSeparator(menu);
 #ifdef SNEAKPEAK_BLEND2D_PANEL
     MenuAppend(menu, MF_STRING, CM_ONESHOT_FACTORY, "One-Shot Factory...");
@@ -840,7 +840,10 @@ void SneakPeak::OnContextMenuCommand(int id)
       StandaloneAuditionSeam();
       break;
     case CM_ONESHOT_FACTORY:
-      if (!SingleBufferModeOk()) break;
+      if (!SingleItemViewOk()) break;
+      // 8g: opening starts a lazy item's load; the live preview waits for the
+      // install hook. Only an item over the buffer cap stays closed.
+      if (!RequireItemAudio("One-Shot Factory") && m_itemLoadOverCap) break;
       RestoreOneShotParams();
       m_oneShotPanel.Show();
       m_osPreviewDirty = true;   // trim/fade preview from the first frame
@@ -919,7 +922,9 @@ void SneakPeak::OnContextMenuCommand(int id)
       InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
       break;
     case CM_TOGGLE_SPECTRAL:
-      if (!m_spectralVisible && !RequireItemAudio("Spectral view")) break;
+      // 8g: opening starts a lazy item's load and the view fills when it lands
+      // (FinishItemAudioLoad); only an item over the buffer cap stays closed.
+      if (!m_spectralVisible && !RequireItemAudio("Spectral view") && m_itemLoadOverCap) break;
       m_spectralVisible = !m_spectralVisible;
       m_spectralPainted = false;
       {

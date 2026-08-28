@@ -1,0 +1,112 @@
+"""Lazy working buffer + 1 GB cap (v2.5 increment 8g, design_lazy_buffer.md).
+
+Items whose buffer would be downsampled (over 3.8 min at 44.1k) decode NOTHING
+on select: display and minimap paint from .reapeaks, exports and Dynamics
+stream. The buffer is decoded only when a sample consumer asks - a panel
+(Spectral, One-Shot) opens at once and fills when the buffer lands; an item
+whose buffer would exceed WaveformView::kMaxBufferBytes (1 GB) is refused
+with a toast and never allocated.
+
+Observables: the window title (the loader retitles to "Loading item audio...",
+a lazy select never does), REAPER's resident set (ps), and the client pixels
+of the spectral pane (near-black placeholder -> spectrogram). The companion
+assertions on select / delete / SET / Reverse / Dynamics live in test_perf_1h,
+test_perf_edit, test_set_and_gates and test_dynamics_stream.
+"""
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+
+from conftest import (SELECT_ITEM0, assert_no_loading, capture, clear_project,
+                      client_size, ensure_window, insert_item_unselected,
+                      perf_media_dir, rss_mb, send_command, wait_audio_loaded,
+                      window_title, write_long_wav)
+
+RESULTS = Path("/tmp/sneakpeak-perf-results.json")
+SHOTS = Path("/tmp/sneakpeak-reaproof-shots/lazy")
+CM_TOGGLE_SPECTRAL = 2028      # edit_view.h enum ContextMenuID (CM_UNDO = 2000)
+RSS_BUDGET_MB = 50
+
+
+def _record(name: str, m: dict):
+    data = json.loads(RESULTS.read_text()) if RESULTS.exists() else {}
+    data[name] = m
+    RESULTS.write_text(json.dumps(data, indent=1))
+    print(f"\n[lazy] {name}: {m}")
+
+
+def _pane_lit_fraction(s, out: Path) -> float:
+    """Fraction of non-black pixels inside the SPECTRAL PANE rect (RecalcLayout at
+    UI scale 1: mode bar 20 + ruler 28 above, minimap 20 + scrollbar 14 + bottom
+    panel 52 below, waveform 55% of the content, 5 px splitter; the right dB
+    scale column excluded). With the pane closed those rows are the lower part
+    of the waveform lane (the 0.6-amplitude fixture reaches into them); open
+    without audio they are the (5,5,10) placeholder; computed = spectrogram."""
+    cap = capture(s, out)
+    cw, ch = client_size(s)
+    titlebar = cap.height - ch
+    content_top, content_bot = 48, ch - 86
+    wave_h = int((content_bot - content_top) * 0.55) - 2
+    pane_top, pane_bot = content_top + wave_h + 5, content_bot
+    band = cap.image[titlebar + pane_top:titlebar + pane_bot, 4:cw - 46, :3].astype(int)
+    lit = band.max(axis=2) > 40
+    return float(lit.mean())
+
+
+def test_spectral_opens_at_once_and_fills_when_the_buffer_lands(sess):
+    media = write_long_wav(perf_media_dir() / "long20min_stereo.wav", minutes=20)   # 8 kHz plan = lazy
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=30)
+    assert_no_loading(sess, 1.5)
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    before = _pane_lit_fraction(sess, SHOTS / "spectral_before.png")
+
+    send_command(sess, CM_TOGGLE_SPECTRAL)
+    t0 = time.monotonic()
+    # the pane opens immediately (dark placeholder) and the loader starts
+    sess.wait_until(lambda: "Loading" in window_title(sess), timeout=5)
+    placeholder = _pane_lit_fraction(sess, SHOTS / "spectral_placeholder.png")
+    wait_audio_loaded(sess, media.stem, timeout=90)
+    sess.wait_until(lambda: _pane_lit_fraction(sess, SHOTS / "spectral_after.png") > placeholder + 0.02,
+                    timeout=60)
+    after = _pane_lit_fraction(sess, SHOTS / "spectral_after.png")
+    m = {"lit_before": round(before, 3), "lit_placeholder": round(placeholder, 3),
+         "lit_after": round(after, 3), "t_filled_s": round(time.monotonic() - t0, 2)}
+    _record("lazy.spectral_20min", m)
+    # measured: waveform lane 0.67, placeholder 0.05 (splitter dots + scale
+    # lines), spectrogram 0.17 (a 220/331 Hz tone lights the low band only)
+    assert placeholder < 0.1, f"the spectral pane should open as a dark placeholder: {m}"
+    assert after > placeholder + 0.02, f"the spectrogram never painted after the buffer landed: {m}"
+    send_command(sess, CM_TOGGLE_SPECTRAL)   # leave the view as we found it
+
+
+def test_item_over_the_buffer_cap_is_refused_without_allocating(sess):
+    # 2.5 h stereo at an 8 kHz SOURCE rate: PlanRead's floor keeps the read rate
+    # at 8 kHz (not "downsampled"), yet the buffer would be 1.15 GB of doubles.
+    media = write_long_wav(perf_media_dir() / "long150min_8k_stereo.wav", minutes=150, sr=8000)
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    ensure_window(sess)
+    rss0 = rss_mb(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=60)
+    assert_no_loading(sess, 3.0)
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    before = _pane_lit_fraction(sess, SHOTS / "cap_before.png")
+
+    send_command(sess, CM_TOGGLE_SPECTRAL)   # a sample consumer asks -> refused with a toast
+    last = assert_no_loading(sess, 3.0)
+    after = _pane_lit_fraction(sess, SHOTS / "cap_after.png")
+    m = {"rss_delta_mb": round(rss_mb(sess) - rss0, 1), "title": last,
+         "lit_before": round(before, 3), "lit_after": round(after, 3)}
+    _record("lazy.cap_150min", m)
+    assert m["rss_delta_mb"] < RSS_BUDGET_MB, f"an over-cap item allocated its buffer: {m}"
+    # the pane rows still show the waveform lane (a placeholder would be all dark)
+    assert before > 0.1 and after > 0.1, f"the spectral pane opened on an over-cap item: {m}"
+

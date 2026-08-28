@@ -24,15 +24,20 @@
 // buffer decodes here in OnTimer slices, one job per take, and installs on
 // completion (whole buffer for shared views, per layer for multi-item).
 // Anything that needs raw samples gates on RequireItemAudio().
+// 8g (design_lazy_buffer.md): a view whose buffer would be downsampled is LAZY -
+// it decodes only when a consumer asks (`wanted`) - and no view ever allocates
+// more than WaveformView::kMaxBufferBytes (refused before any reserve).
 // ============================================================================
 
-void SneakPeak::StartItemAudioLoad()
+void SneakPeak::StartItemAudioLoad(bool wanted)
 {
   AbortItemAudioLoad();
+  m_itemLoadOverCap = false;
   if (m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;
   if (!g_CreateTakeAudioAccessor || !g_GetAudioAccessorSamples || !g_DestroyAudioAccessor) return;
   const unsigned gen = m_waveform.GetLoadGeneration();
   if (m_waveform.IsItemAudioLoaded()) return;
+  if (!wanted && m_waveform.ItemBufferIsLazy()) return;
 
   ItemAudioLoad& L = m_itemLoad;
   L.generation = gen;
@@ -67,7 +72,6 @@ void SneakPeak::StartItemAudioLoad()
       L.totalFrames += seg.audioFrameCount;
       if (seg.audioStartFrame + seg.audioFrameCount > total) total = seg.audioStartFrame + seg.audioFrameCount;
     }
-    if (total > 0) L.samples.reserve((size_t)total * (size_t)L.nch);
     L.totalFrames = total;
   } else if (m_waveform.GetTake()) {
     int readRate = 0, readFrames = 0;
@@ -80,7 +84,6 @@ void SneakPeak::StartItemAudioLoad()
       j.frames = readFrames; j.srcNch = L.nch;
       L.jobs.push_back(std::move(j));
       L.totalFrames = readFrames;
-      L.samples.reserve((size_t)readFrames * (size_t)L.nch);
     }
   }
 
@@ -89,6 +92,15 @@ void SneakPeak::StartItemAudioLoad()
     L = ItemAudioLoad();
     return;
   }
+  if ((int64_t)L.totalFrames * (int64_t)L.nch * (int64_t)sizeof(double) > WaveformView::kMaxBufferBytes) {
+    DBG("[SneakPeak] StartItemAudioLoad: %d frames x %d ch over the buffer cap - refused\n",
+        L.totalFrames, L.nch);
+    m_itemLoadFailedGen = gen;   // over the cap: no allocation, RequireItemAudio says why
+    m_itemLoadOverCap = true;
+    L = ItemAudioLoad();
+    return;
+  }
+  if (!L.multi) L.samples.reserve((size_t)L.totalFrames * (size_t)L.nch);
   L.active = true;
   DBG("[SneakPeak] StartItemAudioLoad: %d jobs, %d frames @ %d Hz, %d ch (multi=%d)\n",
       (int)L.jobs.size(), L.totalFrames, L.readRate, L.nch, (int)L.multi);
@@ -222,6 +234,7 @@ void SneakPeak::FinishItemAudioLoad()
   m_waveform.Invalidate();
   m_minimap.Invalidate();
   if (m_spectralVisible) { m_spectral.ClearSpectrum(); m_spectral.Invalidate(); }
+  if (m_oneShotPanel.IsVisible()) m_osPreviewDirty = true;   // 8g: the preview waited for this
   if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
 }
 
@@ -230,16 +243,24 @@ bool SneakPeak::ItemAudioReady() const
   return m_waveform.IsItemAudioLoaded();
 }
 
-// Gate for sample-dependent user actions during the background load: honest
-// toast instead of a multi-second freeze (never a synchronous fallback load).
+// Gate for sample-dependent user actions: starts the load of a lazy view (8g),
+// then an honest toast instead of a multi-second freeze (never a synchronous
+// fallback load). The caller is re-invoked by the user or wakes on the install
+// hook in FinishItemAudioLoad.
 bool SneakPeak::RequireItemAudio(const char* what)
 {
   if (ItemAudioReady()) return true;
+  if (!m_itemLoad.active) StartItemAudioLoad(true);
   char buf[160];
   if (m_itemLoad.active && m_itemLoad.totalFrames > 0)
-    snprintf(buf, sizeof(buf), "%s needs the item audio - still loading (%d%%)", what,
+    snprintf(buf, sizeof(buf), "%s needs the item audio - loading (%d%%)", what,
              (int)(100.0 * (double)m_itemLoad.doneFrames / (double)m_itemLoad.totalFrames));
-  else
+  else if (m_itemLoadOverCap) {
+    const int nch = std::max(1, m_waveform.GetNumChannels());
+    const int rate = std::max(1, m_waveform.GetSampleRate());
+    const int maxMin = (int)(WaveformView::kMaxBufferBytes / (nch * (int64_t)sizeof(double)) / rate / 60);
+    snprintf(buf, sizeof(buf), "Item too long for %s (about %d min max at this rate)", what, maxMin);
+  } else
     snprintf(buf, sizeof(buf), "%s needs the item audio - still loading", what);
   ShowToast(buf);
   return false;

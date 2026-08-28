@@ -16,7 +16,7 @@ from pathlib import Path
 
 from conftest import (SELECT_ITEM0, VK_DELETE, WAVE_Y, clear_project, drag_client,
                       ensure_window, insert_item, insert_item_unselected,
-                      measure_after, mode_from_capture, perf_media_dir,
+                      measure_after, mode_from_capture, perf_media_dir, rss_mb,
                       track_item_count, wait_loaded, write_long_wav)
 
 RESULTS = Path("/tmp/sneakpeak-perf-results.json")
@@ -44,6 +44,7 @@ def test_delete_range_on_long_item_enters_timeline_without_freeze(sess):
     sess.eval(SELECT_ITEM0)
     wait_loaded(sess, media.stem, timeout=60)
     assert mode_from_capture(sess, SHOTS / "before.png") == "ITEM"
+    rss0 = rss_mb(sess)
 
     # select ~25%..62% of the 20-minute item on the waveform, then Delete
     drag_client(sess, 200, WAVE_Y, 500, WAVE_Y)
@@ -54,12 +55,17 @@ def test_delete_range_on_long_item_enters_timeline_without_freeze(sess):
                             f'reaper.JS_WindowMessage_Post(h, "WM_KEYDOWN", {VK_DELETE}, 0, 0, 0) '
                             f'reaper.JS_WindowMessage_Post(h, "WM_KEYUP", {VK_DELETE}, 0, 0, 0) return true',
                       loaded_marker=media.stem, max_wait=90, quiet=1.5)
+    m["rss_delta_mb"] = round(rss_mb(sess) - rss0, 1)
     _record("edit.delete_timeline", m)
 
     assert track_item_count(sess) == 2, "the delete must split the item into two survivors"
     mode = mode_from_capture(sess, SHOTS / "after_delete.png")
     assert mode == "TIMELINE", f"expected Timeline view over the survivors, got {mode}"
     assert m["max_stall"] <= STALL_BUDGET, f"delete froze REAPER: {m}"
+    # 8g: the Timeline rebuild plans its segments but decodes nothing until a
+    # sample consumer asks - no Loading title, no buffer-sized allocation.
+    assert not m["seen_loading"], f"the timeline rebuild re-decoded the item: {m}"
+    assert m["rss_delta_mb"] < 50, f"the timeline rebuild allocated a buffer: {m}"
 
 
 def test_multi_item_select_without_freeze(sess):

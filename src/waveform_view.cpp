@@ -642,6 +642,14 @@ bool WaveformView::ComputeItemLoadPlan(int& readRate, int& readFrames) const
   return PlanRead(m_itemDuration, m_sampleRate, readRate, readFrames);
 }
 
+bool WaveformView::ItemBufferIsLazy() const
+{
+  if (m_standaloneMode || m_multiItemActive || !m_take || m_sourceRate <= 0) return false;
+  if (m_sampleRate != m_sourceRate) return true;   // installed, or planned (timeline/SET)
+  int readRate = 0, readFrames = 0;                // single item: planned on install only
+  return ComputeItemLoadPlan(readRate, readFrames) && readRate != m_sourceRate;
+}
+
 // Install a finished background item load (buffer already channel-folded).
 void WaveformView::InstallItemAudio(std::vector<double>&& data, int frames, int rate, int nch)
 {

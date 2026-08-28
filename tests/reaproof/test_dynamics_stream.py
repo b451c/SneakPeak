@@ -30,7 +30,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from conftest import (CM_APPLY_DYNAMICS, SELECT_ITEM0, apply_dynamics, burst_fixture,
+from conftest import (CM_APPLY_DYNAMICS, SELECT_ITEM0, apply_dynamics, assert_no_loading, burst_fixture,
                       clear_project, click_client, db, ensure_window,
                       insert_item_unselected, locate_apply_button, measure_after,
                       perf_media_dir, send_command, take_envelope_points,
@@ -128,6 +128,7 @@ def test_apply_one_hour_hf_burst_at_full_fidelity(sess, one_hour_hf):
     ensure_window(sess)
     sess.eval(SELECT_ITEM0)
     wait_audio_loaded(sess, media.stem, timeout=600)
+    assert_no_loading(sess, 2.0)   # 8g: Dynamics works with NO working buffer (this is the point)
     rss0 = _rss_mb(sess)
 
     # Open the panel (analysis streams in the background) and press Apply

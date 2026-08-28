@@ -62,8 +62,7 @@ void SneakPeak::CleanupDragTemp()
 
 void SneakPeak::InitiateDragExport()
 {
-  if (!m_waveform.HasItem()) return;
-  if (!RequireItemAudio("Drag export")) return;
+  if (!m_waveform.HasItem()) return;   // ITEM modes stream (8e); Standalone always has its buffer
   CleanupDragTemp();
 
   bool isStandalone = m_waveform.IsStandaloneMode();
