@@ -1,29 +1,29 @@
-build*/
+
+__pycache__/
 .DS_Store
-*.dylib
-sdk/
-WDL/
-
-# Agent harness and internal docs (not for users)
 .harness/
-CLAUDE.md
-ROADMAP_v2.0.md
-ROADMAP_v2.0.1.md
-ROADMAP_v2.1.0.md
-ROADMAP_v2.2.0.md
-ROADMAP_*.md
-AUDIT.md
-REFACTOR_LOG.md
-init.sh
-next_session_prompt.txt
-
+.kiro/
+.pytest_cache/
+*.dylib
+# Agent harness and internal docs (not for users)
 # Forum/messaging drafts
+# IDE
+AUDIT.md
+build*/
+CLAUDE.md
 drafts/
 forum_post*.txt
 forum_reply*.txt
-pm_saxmand*.txt
+init.sh
+next_session_prompt.txt
 pm_*.txt
+pm_saxmand*.txt
+REFACTOR_LOG.md
+ROADMAP_*.md
+ROADMAP_v2.0.1.md
+ROADMAP_v2.0.md
+ROADMAP_v2.1.0.md
+ROADMAP_v2.2.0.md
+sdk/
 telegram*.txt
-
-# IDE
-.kiro/
+WDL/

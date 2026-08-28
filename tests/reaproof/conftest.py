@@ -427,6 +427,36 @@ def wait_main_thread_idle(s, timeout: float = 120.0, quiet: float = 0.5):
     raise TimeoutError("REAPER main thread did not come back")
 
 
+def dismiss_native_modal(s, *, timeout: float = 15.0):
+    """SneakPeak's destructive-op confirmation is a native MessageBox (an app-
+    modal NSAlert on macOS): REAPER's defer loop - and with it the bridge -
+    stops until it is answered. Wait for the heartbeat to stall, bring the
+    isolated REAPER to the front and press Return (= the default 'Yes')."""
+    import subprocess
+    import time as _t
+    import Quartz
+    t0 = _t.monotonic()
+    last = _heartbeat_t(s)
+    last_change = _t.monotonic()
+    while _t.monotonic() - t0 < timeout:
+        hb = _heartbeat_t(s)
+        if hb is not None and hb != last:
+            last, last_change = hb, _t.monotonic()
+        if _t.monotonic() - last_change > 0.4:      # modal up: no ticks for 400 ms
+            subprocess.run(["osascript", "-e",
+                            'tell application "System Events" to set frontmost of '
+                            f'(first process whose unix id is {s.handle.pid}) to true'],
+                           capture_output=True)
+            _t.sleep(0.3)
+            for down in (True, False):
+                Quartz.CGEventPost(Quartz.kCGHIDEventTap,
+                                   Quartz.CGEventCreateKeyboardEvent(None, 36, down))  # kVK_Return
+                _t.sleep(0.05)
+            return True
+        _t.sleep(0.02)
+    return False
+
+
 def perf_media_dir() -> Path:
     d = Path("/tmp/sneakpeak-perf-media")
     d.mkdir(parents=True, exist_ok=True)

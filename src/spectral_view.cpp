@@ -96,9 +96,9 @@ COLORREF SpectralView::MagmaColor(float t)
   for (int i = 1; i < 7; i++) { if (t <= s[i].p) { seg = i - 1; break; } }
   float f = (s[seg+1].p - s[seg].p > 0) ? (t - s[seg].p) / (s[seg+1].p - s[seg].p) : 0;
   f = std::max(0.0f, std::min(1.0f, f));
-  return RGB((int)(s[seg].r + f*(float)(s[seg+1].r-s[seg].r)),
-             (int)(s[seg].g + f*(float)(s[seg+1].g-s[seg].g)),
-             (int)(s[seg].b + f*(float)(s[seg+1].b-s[seg].b)));
+  return RGB((int)((float)s[seg].r + f*(float)(s[seg+1].r-s[seg].r)),
+             (int)((float)s[seg].g + f*(float)(s[seg+1].g-s[seg].g)),
+             (int)((float)s[seg].b + f*(float)(s[seg+1].b-s[seg].b)));
 }
 
 void SpectralView::ClearSpectrum()

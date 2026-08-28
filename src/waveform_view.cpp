@@ -1007,3 +1007,17 @@ void WaveformView::DropRetainedAudio()
   if (m_retained.accessor && g_DestroyAudioAccessor) g_DestroyAudioAccessor(m_retained.accessor);
   m_retained = RetainedAudio();
 }
+
+void WaveformView::ReleaseTakeAccessors()
+{
+  if (m_liveAccessor && g_DestroyAudioAccessor) g_DestroyAudioAccessor(m_liveAccessor);
+  m_liveAccessor = nullptr;
+  DropRetainedAudio();
+}
+
+void WaveformView::RecreateLiveAccessor()
+{
+  if (m_liveAccessor || !m_take || m_standaloneMode || !g_CreateTakeAudioAccessor) return;
+  if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)m_take, "MediaItem_Take*")) return;
+  m_liveAccessor = g_CreateTakeAudioAccessor(m_take);
+}

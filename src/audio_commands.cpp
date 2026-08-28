@@ -357,12 +357,30 @@ void SneakPeak::WriteAndRefresh()
   int sr = m_waveform.GetSampleRate();
   int frames = m_waveform.GetAudioSampleCount();
 
-  if (!AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr,
-                                 m_wavBitsPerSample, m_wavAudioFormat)) {
+  // Write back in the SOURCE file's own format. m_wavBitsPerSample tracks
+  // standalone loads only (default 16): using it here silently re-encoded a
+  // 24-bit or float item as 16-bit PCM on Reverse/DC Remove.
+  WavInfo srcInfo;
+  int outBits = 32, outFmt = 3;   // lossless fallback for the double buffer
+  if (AudioEngine::ReadWavHeader(path, srcInfo) && srcInfo.bitsPerSample > 0) {
+    outBits = srcInfo.bitsPerSample;
+    outFmt = srcInfo.audioFormat;
+  }
+  // F7: the write replaces the file (tmp + rename -> new inode). Any accessor
+  // still open on the take pins a decoder on the OLD inode and REAPER keeps
+  // serving the pre-edit audio through its per-path decoder pool - so drop
+  // ours (live accessor, retained cache, background loader) before the swap.
+  AbortItemAudioLoad();
+  m_waveform.ReleaseTakeAccessors();
+  if (!AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr, outBits, outFmt)) {
+    m_waveform.RecreateLiveAccessor();
     MessageBox(m_hwnd, "Failed to write WAV file.", "SneakPeak", MB_OK | MB_ICONERROR);
     return;
   }
   AudioEngine::RefreshItemSource(m_waveform.GetItem(), m_waveform.GetTake());
+  m_waveform.RecreateLiveAccessor();
+  if (g_AudioAccessorValidateState && m_waveform.GetLiveAccessor())
+    g_AudioAccessorValidateState(m_waveform.GetLiveAccessor()); // our own write is not an external change
 
   m_waveform.Invalidate();
   m_dirty = true;
@@ -1292,7 +1310,7 @@ void SneakPeak::DoReverse()
 
   int ret = MessageBox(m_hwnd,
     "Reverse modifies the audio file on disk. Continue?",
-    "SneakPeak — Destructive Operation", MB_YESNO | MB_ICONWARNING);
+    "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
@@ -1452,7 +1470,7 @@ void SneakPeak::DoDCRemove()
 
   int ret = MessageBox(m_hwnd,
     "DC Offset Remove modifies the audio file on disk. Continue?",
-    "SneakPeak — Destructive Operation", MB_YESNO | MB_ICONWARNING);
+    "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);

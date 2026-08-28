@@ -612,7 +612,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
     if (us && us[0]) {
       char* e = nullptr;
       long v = strtol(us, &e, 10);
-      if (e != us && v >= 800 && v <= 2000) g_uiScale = v / 1000.0;
+      if (e != us && v >= 800 && v <= 2000) g_uiScale = (double)v / 1000.0;
     }
   }
 

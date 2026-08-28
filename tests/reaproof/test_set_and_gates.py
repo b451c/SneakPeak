@@ -18,8 +18,8 @@ from pathlib import Path
 
 from conftest import (CM_TRACK_VIEW, clear_project, db, ensure_window,
                       insert_item_unselected, measure_after, mode_from_capture,
-                      perf_media_dir, track_rms_windows, wait_audio_loaded,
-                      wait_main_thread_idle, write_long_wav)
+                      dismiss_native_modal, perf_media_dir, track_rms_windows,
+                      wait_audio_loaded, wait_main_thread_idle, write_long_wav)
 
 RESULTS = Path("/tmp/sneakpeak-perf-results.json")
 SHOTS = Path("/tmp/sneakpeak-reaproof-shots/set")
@@ -61,12 +61,13 @@ def test_working_set_view_loads_in_background(sess):
 
 
 def test_reverse_is_gated_while_loading_then_works(sess):
-    media = perf_media_dir() / "long20min_burst.wav"
+    media = perf_media_dir() / "long20min_burst24.wav"
     if not media.exists():
-        # 20 minutes, quiet, with one loud burst in the first two seconds
+        # 20 minutes, quiet, with one loud burst in the first two seconds; 24-bit so
+        # the write-back format is observable (v2.4.0 re-encoded items as 16-bit)
         import numpy as np, soundfile as sf
         sr = 44100
-        with sf.SoundFile(str(media), "w", samplerate=sr, channels=1, subtype="PCM_16") as f:
+        with sf.SoundFile(str(media), "w", samplerate=sr, channels=1, subtype="PCM_24") as f:
             for start in range(0, 20 * 60 * sr, sr * 10):
                 t = (np.arange(sr * 10) + start) / sr
                 y = 0.03 * np.sin(2 * np.pi * 220 * t)
@@ -111,11 +112,17 @@ def test_reverse_is_gated_while_loading_then_works(sess):
         f"Reverse during load must be a no-op: head {db(head1):.1f} dB, tail {db(tail1):.1f} dB")
 
     sess.eval('reaper.defer(function() reaper.Main_OnCommand(reaper.NamedCommandLookup("_SneakPeak_Reverse"), 0) end) return true')
+    assert dismiss_native_modal(sess), "the destructive confirmation never appeared"
     wait_main_thread_idle(sess, timeout=240)   # the 20-min rewrite blocks REAPER for a while
     sess.wait_until(lambda: (lambda h, t: db(t) > db(h) + 20)(*track_rms_windows(sess, [w_head, w_tail])),
                     timeout=60)
     head2, tail2 = track_rms_windows(sess, [w_head, w_tail])
     assert db(tail2) > db(head2) + 20, "Reverse after the load must reverse the item"
+    # the file is written back in its own format (24-bit stays 24-bit)
+    bits = int(sess.eval("local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0) "
+                         "local src = reaper.GetMediaItemTake_Source(reaper.GetActiveTake(it)) "
+                         "return reaper.CF_GetMediaSourceBitDepth(src)", hang_timeout=120))
+    assert bits == 24, f"destructive write changed the bit depth: {bits}"
 
 
 def test_working_set_cannot_lock_the_view_after_its_items_die(sess):

@@ -345,6 +345,14 @@ private:
   };
   RetainedAudio m_retained;
   void RetainCurrentAudio();
+public:
+  // Destructive write-back: every accessor we hold on the take must be gone
+  // before the file is replaced (tmp + rename = new inode; an open decoder keeps
+  // serving the OLD inode, and REAPER pools decoders per path - finding F7).
+  void ReleaseTakeAccessors();
+  void RecreateLiveAccessor();
+  AudioAccessor* GetLiveAccessor() const { return m_liveAccessor; }
+private:
   bool ReuseRetainedAudio();
   void DropRetainedAudio();
 
