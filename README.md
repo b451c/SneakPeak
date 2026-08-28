@@ -71,8 +71,8 @@ SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timelin
 
 ### Long Files (new in v2.5)
 - **Instant select at any length** - the waveform and minimap draw from REAPER's own peak files; selecting a 20-minute or hour-long item costs milliseconds and zero memory (measured main-thread stalls under 0.1 s, buffer allocation 0 MB).
-- **Buffer only on demand** - tools that need raw samples (Spectral view, One-Shot Factory, Normalize, Hard Limiter) load in the background with progress in the title; a buffer over 1 GB is refused with a message instead of being allocated.
-- **Everything else streams** - exports, Copy, and the Dynamics analysis read the source at its full sample rate chunk by chunk, so long items no longer produce reduced-rate files or band-limited analysis.
+- **Buffer only on demand** - tools that need raw samples (Spectral view, One-Shot Factory, Hard Limiter) load in the background with progress in the title; a buffer over 1 GB is refused with a message instead of being allocated.
+- **Everything else streams** - exports, Copy, Normalize, and the Dynamics analysis read the source at its full sample rate chunk by chunk, so long items no longer produce reduced-rate files or band-limited analysis.
 - **Destructive edits in place** - Reverse, DC Remove and Gain on a selection stream through the source file itself (exactly the item's window of it), with a pre-edit file snapshot as undo - items of any length, no waiting.
 
 ### Waveform Display

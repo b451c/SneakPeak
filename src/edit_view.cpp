@@ -663,6 +663,8 @@ void SneakPeak::LoadSelectedItem()
     if (!m_workingSet.dormant && !m_workingSet.active) {
       m_waveform.ClearItem();
       m_hasUndo = false;
+      m_dirty = false;
+      UpdateTitle();   // F10: a deleted item left "* SneakPeak: <file>" behind
       if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
     }
     return;

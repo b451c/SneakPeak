@@ -11,6 +11,7 @@
 #include "audio_engine.h"
 #include "audio_ops.h"
 #include "wav_inplace.h"
+#include "audio_stream.h"
 #include "spectral_repair.h"
 #include "debug.h"
 #include "reaper_plugin.h"
@@ -1280,10 +1281,10 @@ void SneakPeak::DoSilence()
 void SneakPeak::DoNormalize()
 {
   // Non-destructive (REAPER) or destructive (standalone)
-  if (!RequireItemAudio("Normalize")) return;
   if (!m_waveform.HasItem()) return;
 
   if (m_waveform.IsStandaloneMode()) {
+    if (!RequireItemAudio("Normalize")) return;   // standalone edits its buffer
     StandaloneUndoSave();
     auto& data = m_waveform.GetAudioData();
     int nch = m_waveform.GetNumChannels();
@@ -1299,16 +1300,37 @@ void SneakPeak::DoNormalize()
 
   if (!g_SetMediaItemInfo_Value) return;
 
-  const auto& data = m_waveform.GetAudioData();
-  int nch = m_waveform.GetNumChannels();
-  int totalSamples = (int)data.size();
-  if (totalSamples == 0 || nch == 0) return;
-
-  // Find peak across all channels
   double peak = 0.0;
-  for (int i = 0; i < totalSamples; i++) {
-    double v = fabs(data[i]);
-    if (v > peak) peak = v;
+  if (m_waveform.ItemBufferIsLazy() || m_waveform.IsItemBufferDownsampled() ||
+      m_waveform.GetAudioSampleCount() == 0) {
+    // F17: a long item's working buffer is downsampled (transients read low, so
+    // the item normalized too hot) or, since 8g, absent. Stream the TRUE peak
+    // from the source at full rate - the same synchronous class as the in-place
+    // edits (the accessor reads an hour of audio in under a second). Raw peak,
+    // no item volume baked in, matching the buffer path (D_VOL is the knob this
+    // command sets).
+    AudioStream stream;
+    if (!m_waveform.OpenStream(stream, 0.0, m_waveform.GetItemDuration(), false)) return;
+    std::vector<double> chunk((size_t)262144 * (size_t)stream.Channels());
+    while (stream.Remaining() > 0) {
+      const int n = (int)std::min<int64_t>(262144, stream.Remaining());
+      if (!stream.Read(chunk.data(), n)) return;
+      const size_t cnt = (size_t)n * (size_t)stream.Channels();
+      for (size_t i = 0; i < cnt; ++i) {
+        const double v = fabs(chunk[i]);
+        if (v > peak) peak = v;
+      }
+    }
+  } else {
+    if (!RequireItemAudio("Normalize")) return;
+    const auto& data = m_waveform.GetAudioData();
+    int nch = m_waveform.GetNumChannels();
+    int totalSamples = (int)data.size();
+    if (totalSamples == 0 || nch == 0) return;
+    for (int i = 0; i < totalSamples; i++) {
+      double v = fabs(data[i]);
+      if (v > peak) peak = v;
+    }
   }
   if (peak < 1e-10) return; // silence
 
@@ -2596,12 +2618,12 @@ static std::string ExpandOneShotPattern(const char* pat, const std::string& base
     }
     char nn[16];
     if (allN && tok.size() <= 6) {
-      const int w = std::max((int)tok.size(), digitsOf(count));
+      const int w = std::min(9, std::max((int)tok.size(), digitsOf(count)));
       snprintf(nn, sizeof(nn), "%0*d", w, idx1);
       out += nn;
     } else if (allDigit && tok.size() <= 6) {
       const int start = atoi(tok.c_str());
-      const int w = std::max((int)tok.size(), digitsOf(start + count - 1));
+      const int w = std::min(9, std::max((int)tok.size(), digitsOf(start + count - 1)));
       snprintf(nn, sizeof(nn), "%0*d", w, start + idx1 - 1);
       out += nn;
     } else {
@@ -2610,7 +2632,7 @@ static std::string ExpandOneShotPattern(const char* pat, const std::string& base
   }
   if (out.empty()) {
     char nn[16];
-    snprintf(nn, sizeof(nn), "%0*d", std::max(2, digitsOf(count)), idx1);
+    snprintf(nn, sizeof(nn), "%0*d", std::min(9, std::max(2, digitsOf(count))), idx1);
     out = base + "_" + nn;
   }
   return out;

@@ -785,7 +785,9 @@ static void FormatTimeHMS(double sec, char* buf, int sz)
   int s = totalSec % 60;
   int m = (totalSec / 60) % 60;
   int h = totalSec / 3600;
-  snprintf(buf, sz, "%02d:%02d:%02d.%03d", h, m, s, ms);
+  char tmp[40];   // provably wide for any int fields - GCC's -Wformat-truncation
+  snprintf(tmp, sizeof(tmp), "%02d:%02d:%02d.%03d", h, m, s, ms);
+  snprintf(buf, sz, "%s", tmp);
 }
 
 // --- Solo button ---
@@ -1057,7 +1059,7 @@ void SneakPeak::DrawLoopPins(HDC hdc)
     if (px < waveL || px > waveR) continue;
     RECT r = { px + 2, top + SP(2), px + 2 + pinW, top + SP(2) + pinH };
     FillRect(hdc, &r, bg);
-    char num[4];
+    char num[16];
     snprintf(num, sizeof(num), "%d", (int)i + 1);
     DrawTextUTF8(hdc, num, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   }
@@ -1842,7 +1844,7 @@ void SneakPeak::DrawRulerBarsBeats(HDC hdc)
 
         // Beat label at higher zoom
         if (beatPx > (double)SP(50)) {
-          char bl[16];
+          char bl[32];
           snprintf(bl, sizeof(bl), "%d:%d", m + 1, b + 1);
           RECT br = { bx + SP(2), y + 1, bx + SP(50), y + h - SP(2) };
           DrawTextUTF8(hdc, bl, -1, &br, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
