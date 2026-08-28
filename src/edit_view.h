@@ -6,6 +6,8 @@
 #include "globals.h"
 #include "waveform_view.h"
 #include "audio_engine.h"
+#include "audio_stream.h"
+#include "wav_writer.h"
 #include "toolbar.h"
 #include "gain_panel.h"
 #include "marker_manager.h"
@@ -558,6 +560,21 @@ private:
   bool TakeDynamicsResult();
   void LiveWriteEnvelope();
   void JoinDynamicsWorker(bool discardResult); // before the sample buffer changes
+  // 8e (export_stream.cpp): Edit Copy streams the item at full rate into its
+  // file in OnTimer slices - the working buffer is downsampled on long items.
+  struct ExportPump {
+    AudioStream stream;
+    WavWriter writer;
+    std::string outPath;
+    std::vector<double> chunk;
+    unsigned generation = 0;           // abort when the view moves on
+    int lastPct = -1;
+    bool active = false;
+  };
+  ExportPump m_exportPump;
+  void StartEditCopyExport(const std::string& outPath);
+  void StepExportPump();        // OnTimer slice + progress title; installs the tab on finish
+  void AbortExportPump();       // item change / destructive write / close
   unsigned m_itemLoadFailedGen = ~0u;  // generation that produced no jobs (no retry loop)
   void StartItemAudioLoad();
   void StepItemAudioLoad();     // OnTimer slice + progress title

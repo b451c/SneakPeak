@@ -149,6 +149,7 @@ void SneakPeak::Destroy()
   m_stdLoading = false;
   AudioEngine::AbortStream(m_stdLoad);
   AbortItemAudioLoad(); // releases the background item-load accessor
+  AbortExportPump();
   JoinDynamicsWorker(true);
   // Save floating window position/size
   if (!m_isDocked && g_SetExtState) {
@@ -816,6 +817,7 @@ void SneakPeak::OnTimer()
     StartItemAudioLoad();
   StepItemAudioLoad();
   StepSdkPeaksBuild();
+  StepExportPump();   // 8e: Edit Copy streaming to its file
 
   // Spectral compute pump: the background thread cannot invalidate the window,
   // so without this the "Computing spectrum..." overlay freezes at its last

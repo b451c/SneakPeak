@@ -91,6 +91,7 @@ void SneakPeak::UndoRestore()
   if (m_hasUndo && !m_itemUndoFile.empty() && m_waveform.GetTake() &&
       AudioEngine::GetSourceFilePath(m_waveform.GetTake()) == m_itemUndoPath) {
     AbortItemAudioLoad();
+    AbortExportPump();
     m_waveform.ReleaseTakeAccessors();
     if (!AudioEngine::CopyFileInto(m_itemUndoFile, m_itemUndoPath)) {
       m_waveform.RecreateLiveAccessor();
@@ -366,6 +367,7 @@ bool SneakPeak::BeginDestructiveWrite(std::string& path)
     return false;
   }
   AbortItemAudioLoad();
+  AbortExportPump();
   m_waveform.ReleaseTakeAccessors();
   return true;
 }
@@ -2777,11 +2779,24 @@ void SneakPeak::OpenOneShotFolder()
 void SneakPeak::DoEditCopyStandalone()
 {
   if (!SingleBufferModeOk() || m_waveform.IsStandaloneMode()) return;
-  const auto& data = m_waveform.GetAudioData();
+  if (m_exportPump.active) {
+    ShowToast("Edit Copy already in progress");
+    return;
+  }
+  // The copy is written at the SOURCE rate through AudioStream (F11: the
+  // working buffer is downsampled on long items). Standalone then loads it
+  // fully into doubles, so refuse what would not fit the buffer cap.
   const int nch = m_waveform.GetNumChannels();
-  const int sr = m_waveform.GetSampleRate();
-  const int frames = m_waveform.GetAudioSampleCount();
+  const int sr = m_waveform.GetSourceSampleRate();
+  const int64_t frames = (int64_t)(m_waveform.GetItemDuration() * sr + 0.5);
   if (frames <= 0 || nch <= 0 || sr <= 0) return;
+  if (frames * nch * (int64_t)sizeof(double) > WaveformView::kMaxBufferBytes) {
+    const int maxMin = (int)(WaveformView::kMaxBufferBytes / (nch * (int64_t)sizeof(double)) / sr / 60);
+    char msg[128];
+    snprintf(msg, sizeof(msg), "Item too long for Edit Copy (about %d min max at this rate)", maxMin);
+    ShowToast(msg);
+    return;
+  }
 
   std::string dir, base;
   if (!OneShotSourceParts(&dir, &base)) {
@@ -2802,18 +2817,7 @@ void SneakPeak::DoEditCopyStandalone()
     snprintf(sfx, sizeof(sfx), "_edit_%d", suffix);
     outPath = dir + "/" + base + sfx + ".wav";
   }
-  // 32-bit float: lossless for the in-memory buffer (see OneShotExportSlice).
-  if (!AudioEngine::WriteWavFile(outPath, data.data(), frames, nch, sr, 32, 3)) {
-    ShowToast("Write failed - check the source folder permissions");
-    return;
-  }
-  const size_t slash = outPath.find_last_of("/\\");
-  char buf[160];
-  snprintf(buf, sizeof(buf), "Edit copy: %s",
-           slash == std::string::npos ? outPath.c_str()
-                                      : outPath.c_str() + slash + 1);
-  ShowToast(buf);
-  AddStandaloneFile(outPath.c_str());
+  StartEditCopyExport(outPath);   // export_stream.cpp: OnTimer pump, tab on finish
 }
 
 // The pattern box opens REAPER's native input dialog - free-text editing in

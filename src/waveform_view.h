@@ -269,6 +269,10 @@ public:
   int GetPlannedFrames() const { return m_plannedFrames; }
   // Read plan shared by every loader (single, timeline, SET, multi-item):
   // the 10M-frame cap downsamples long spans instead of refusing them.
+  // Largest sample buffer SneakPeak will hold for one view (doubles, all
+  // channels): Edit Copy refuses items whose Standalone load would exceed it;
+  // 8g applies the same rule to the working buffer.
+  static constexpr int64_t kMaxBufferBytes = 1LL << 30;
   static bool PlanRead(double seconds, int srcRate, int& readRate, int& readFrames);
   // Full-rate chunked reads over [t0, t1) of view time (audio_stream.h,
   // view_stream.cpp): what the loader would build without the 10M-frame cap.

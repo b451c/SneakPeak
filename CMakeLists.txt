@@ -103,6 +103,7 @@ add_library(reaper_sneakpeak SHARED
   src/wav_writer.cpp
   src/audio_stream.cpp
   src/view_stream.cpp
+  src/export_stream.cpp
   src/ui_render.cpp
   ${SNEAKPEAK_FONT_GEN}
 )
