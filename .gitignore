@@ -10,6 +10,7 @@ __pycache__/
 # IDE
 AUDIT.md
 build*/
+__cmake_systeminformation/
 CLAUDE.md
 drafts/
 forum_post*.txt

@@ -5,11 +5,11 @@ through REAPER's own API (Lua bridge) + in-process window messages. Ground truth
 is always read back a DIFFERENT way than it was set (track audio accessor,
 envelope evaluation, project state) - never SneakPeak's own internal state.
 
-Run (from the project's ReaProof copy):
-  cd /Volumes/@Basic/Projekty/EditView/reaproof
+Run (from the project's ReaProof copy, a sibling of the cpp/ repo):
+  cd ../reaproof
   PYTHONPATH=src LC_ALL=en_US.UTF-8 LC_NUMERIC=C TZ=UTC \
     python3 -m pytest -v -s -p reaproof.runner.pytest_plugin \
-    /Volumes/@Basic/Projekty/EditView/cpp/tests/reaproof --reaproof-repeat=2
+    ../cpp/tests/reaproof --reaproof-repeat=2
 
 Subject override: SNEAKPEAK_DYLIB=/path/to/reaper_sneakpeak.dylib (negative
 controls run the same specs against an OLD binary and must go RED).
