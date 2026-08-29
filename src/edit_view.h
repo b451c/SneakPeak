@@ -773,6 +773,7 @@ private:
   // Working set (locked multi-item edit range)
   struct WorkingSet {
     MediaTrack* track = nullptr;
+    std::string trackGuid;         // REAPER recycles track addresses: identity beyond the pointer
     std::vector<MediaItem*> items; // explicit item list (only user-selected items)
     double startPos = 0.0;         // timeline start (for ripple edit bounds)
     double endPos = 0.0;           // timeline end (for ripple edit bounds)
@@ -783,6 +784,7 @@ private:
   void LoadWorkingSet();
   void RefreshWorkingSet();
   bool PruneWorkingSet();   // drop dead item/track pointers; false = set gone (reset)
+  static std::string TrackGuid(MediaTrack* track);
   void ExitWorkingSet();
   bool IsWorkingSetItem(MediaItem* item) const;
   void GroupSetItems();

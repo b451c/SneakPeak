@@ -58,6 +58,7 @@
 #define REAPERAPI_WANT_GetMediaSourceFileName
 #define REAPERAPI_WANT_SetMediaItemInfo_Value
 #define REAPERAPI_WANT_GetSetMediaItemInfo_String
+#define REAPERAPI_WANT_GetSetMediaTrackInfo_String
 
 // Undo
 #define REAPERAPI_WANT_Undo_BeginBlock2
@@ -595,6 +596,7 @@ REAPER_PLUGIN_DLL_EXPORT int ReaperPluginEntry(
   g_GetMediaSourceFileName = GetMediaSourceFileName;
   g_SetMediaItemInfo_Value = SetMediaItemInfo_Value;
   g_GetSetMediaItemInfo_String = GetSetMediaItemInfo_String;
+  g_GetSetMediaTrackInfo_String = GetSetMediaTrackInfo_String;
 
   g_Undo_BeginBlock2 = Undo_BeginBlock2;
   g_Undo_EndBlock2 = Undo_EndBlock2;

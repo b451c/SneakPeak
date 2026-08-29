@@ -271,6 +271,7 @@ void SneakPeak::ToggleTrackView()
   if (!track || selectedItems.empty() || maxEnd <= minPos) return;
 
   m_workingSet.track = track;
+  m_workingSet.trackGuid = TrackGuid(track);
   m_workingSet.items = std::move(selectedItems);
   m_workingSet.startPos = minPos;
   m_workingSet.endPos = maxEnd;
@@ -328,11 +329,23 @@ void SneakPeak::LoadWorkingSet()
 // back - undo, project clear, edits in REAPER). Returns false when nothing
 // valid remains: the set is reset so a stale 'active' flag can never lock
 // LoadSelectedItem on a recycled item address (finding F1, 2026-08-28).
+std::string SneakPeak::TrackGuid(MediaTrack* track)
+{
+  char guid[64] = {};
+  if (track && g_GetSetMediaTrackInfo_String)
+    g_GetSetMediaTrackInfo_String(track, "GUID", guid, false);
+  return guid;
+}
+
 bool SneakPeak::PruneWorkingSet()
 {
   if (!m_workingSet.active && !m_workingSet.dormant) return false;
+  // A valid pointer is not enough: a new track can reuse the address of the
+  // deleted one (the set then adopted the new track's items, kept the view
+  // locked on one of them and mapped clicks through the old set - A6.11).
   if (!m_workingSet.track || !g_ValidatePtr2 ||
-      !g_ValidatePtr2(nullptr, m_workingSet.track, "MediaTrack*")) {
+      !g_ValidatePtr2(nullptr, m_workingSet.track, "MediaTrack*") ||
+      TrackGuid(m_workingSet.track) != m_workingSet.trackGuid) {
     m_workingSet = {};
     return false;
   }

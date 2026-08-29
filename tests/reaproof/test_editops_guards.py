@@ -17,6 +17,12 @@ copied NOTHING - `GetSelectionSampleRange` clamps to the shared buffer's
 sample count, which the multi view never sets (per-layer buffers), so the
 range collapsed to 0 and Copy returned before touching the clipboard (Paste
 then pasted the previous clipboard, or nothing). Control (c2cf074): no clip.
+A6.11 - a working set (SET view) outlived its track: after the project was
+cleared and new tracks and items inserted, REAPER reused the track's address,
+the pointer validated again and the set adopted the new items - the view
+stayed locked on one of them (no Multi-item view) and drags mapped through
+the old set (no selection). Found by this module's own test order (nudge ->
+... -> multi). Control (7766880): mode ITEM after the select-all.
 A6.7 - zero-crossing snap on a long item: the snap searched the working
 buffer, which a long item does not have (lazy, 8g) or holds at a reduced
 rate, so the selection edges did not snap at all (or snapped to the 8 kHz
@@ -232,7 +238,7 @@ def test_replace_source_shorter_file(sess):
     wait_audio_loaded(sess, media.name, timeout=60)
     time.sleep(0.5)
     assert mode_from_capture(sess, SHOTS / "replace_standalone.png") == "STANDALONE"
-    drag_client(sess, 606, WAVE_Y, 790, WAVE_Y)   # ~8 s to past the right edge: the tail
+    drag_client(sess, 606, WAVE_Y, 750, WAVE_Y)   # EXPERIMENT
     time.sleep(0.5)
     key_sync(sess, VK_DELETE)
     wait_main_thread_idle(sess, timeout=60)
@@ -408,3 +414,46 @@ def test_snap_to_zero_on_short_item(sess):
     from conftest import perf_media_dir
     media = _sine_long_wav(perf_media_dir() / "sine50_10s_stereo.wav", minutes=10 / 60, hz=50)
     _snap_edges_check(sess, media, what="a 10 s item (buffer)")
+
+
+# --- A6.11: a working set does not survive its track -------------------------
+def test_working_set_does_not_survive_its_track(sess):
+    """SET view over two survivors on track 0, then the project is cleared and
+    two new items land on two new tracks (REAPER reuses the freed addresses).
+    Selecting both must open a Multi-item view and a drag must select."""
+    from conftest import CM_TRACK_VIEW, command_sync, mode_from_capture, wait_main_thread_idle
+    media = burst_fixture("editops_set_track_10s.wav", seconds=10, channels=2)
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=60)
+    _delete_range(sess, 200, 300, 2)
+    time.sleep(1.0)
+    sess.eval("reaper.SelectAllMediaItems(0, true) reaper.UpdateArrange() return true")
+    time.sleep(0.5)
+    command_sync(sess, CM_TRACK_VIEW, settle=1.5)
+    assert mode_from_capture(sess, SHOTS / "set_before_clear.png") == "SET"
+
+    mono = _tone_fixture("wset_mono_10s.wav", [0.2])
+    stereo = _tone_fixture("wset_stereo_10s.wav", [0.4, 0.1])
+    clear_project(sess)
+    insert_item_unselected(sess, mono)
+    insert_item(sess, stereo, position=0.0)
+    sess.eval("reaper.SelectAllMediaItems(0, false) reaper.UpdateArrange() return true")
+    ensure_window(sess)
+    sess.eval("reaper.SelectAllMediaItems(0, true) reaper.UpdateArrange() return true")
+    time.sleep(1.0)
+    wait_main_thread_idle(sess, timeout=60)
+    try:
+        sess.wait_until(lambda: mode_from_capture(sess, SHOTS / "set_after_clear.png") == "MULTI", timeout=15)
+    except Exception:
+        raise AssertionError("the new items did not open a Multi-item view: the old working set adopted them "
+                             f"(mode {mode_from_capture(sess, SHOTS / 'set_after_clear.png')})")
+    sess.eval("reaper.GetSet_LoopTimeRange2(0, true, false, 0, 0, false) return true")
+    drag_client(sess, 500, WAVE_Y, 600, WAVE_Y)
+    time.sleep(0.5)
+    s0, s1 = (float(v) for v in sess.eval(
+        "local s, e = reaper.GetSet_LoopTimeRange2(0, false, false, 0, 0, false) return {s, e}"))
+    print(f"\n[editops] after the clear: mode MULTI, drag selected {s0:.2f}-{s1:.2f} s")
+    assert s1 > s0 + 0.5, f"a drag in the new view made no selection ({s0}-{s1}): the old working set still maps clicks"

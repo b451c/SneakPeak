@@ -114,6 +114,7 @@ extern bool (*g_SetMediaItemTake_Source)(MediaItem_Take* take, PCM_source* sourc
 extern void (*g_GetMediaSourceFileName)(PCM_source* source, char* filenamebuf, int filenamebuf_sz);
 extern bool (*g_SetMediaItemInfo_Value)(MediaItem* item, const char* parmname, double newvalue);
 extern bool (*g_GetSetMediaItemInfo_String)(MediaItem* item, const char* parmname, char* stringNeedBig, bool setNewValue);
+extern bool (*g_GetSetMediaTrackInfo_String)(MediaTrack* tr, const char* parmname, char* stringNeedBig, bool setNewValue);
 
 // Undo
 extern void (*g_Undo_BeginBlock2)(ReaProject* proj);
