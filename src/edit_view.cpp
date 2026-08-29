@@ -1927,20 +1927,27 @@ void SneakPeak::DoCheckForUpdate()
   m_updateCheck = check;
   ShowToast("Checking for updates...");
   std::thread([check, url]() {
-    const std::string cmd = "curl -sfL -m 5 \"" + url + "\"";
+    // A detached thread must not throw (std::terminate would take REAPER
+    // down): the string work here can only fail with bad_alloc, which is
+    // reported like a missing curl.
+    try {
+      const std::string cmd = "curl -sfL -m 5 \"" + url + "\"";
 #ifdef _WIN32
-    FILE* pipe = _popen(cmd.c_str(), "r");
+      FILE* pipe = _popen(cmd.c_str(), "r");
 #else
-    FILE* pipe = popen(cmd.c_str(), "r");
+      FILE* pipe = popen(cmd.c_str(), "r");
 #endif
-    if (pipe) {
-      char buf[4096];
-      while (fgets(buf, sizeof(buf), pipe)) check->response += buf;
+      if (pipe) {
+        char buf[4096];
+        while (fgets(buf, sizeof(buf), pipe)) check->response += buf;
 #ifdef _WIN32
-      check->rc = _pclose(pipe);
+        check->rc = _pclose(pipe);
 #else
-      check->rc = pclose(pipe);
+        check->rc = pclose(pipe);
 #endif
+      }
+    } catch (...) {
+      check->rc = -1;
     }
     check->done.store(true);
   }).detach();
