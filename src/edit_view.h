@@ -443,8 +443,11 @@ private:
     unsigned generation = 0;           // abort when the view moves on
     int lastPct = -1;
     bool active = false;
+    bool pending = false;              // swapped: the reload + the edit run on a later tick
+    DWORD pendingUntil = 0;            // (Windows brings the media back online a moment later)
   };
   ConvertJob m_convertJob;
+  void RunConvertedEdit();             // the pending phase: reload onto the WAV, then the edit
   std::string DestructiveConvertExt() const;   // "MP3" when the source needs a WAV first, "" for a WAV
   bool StartConvertToWav(const char* verb, std::function<void()> then);
   void StepConvertJob();               // OnTimer: decode + write slices, title progress

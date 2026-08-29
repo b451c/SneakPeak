@@ -20,6 +20,7 @@
 #include "reaper_plugin.h"
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 static const int kConvertChunkFrames = 65536;
@@ -103,6 +104,10 @@ void SneakPeak::StepConvertJob()
 {
   ConvertJob& J = m_convertJob;
   if (!J.active) return;
+  if (J.pending) {
+    RunConvertedEdit();
+    return;
+  }
   if (m_waveform.IsStandaloneMode() || J.generation != m_waveform.GetLoadGeneration() ||
       (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)m_waveform.GetTake(), "MediaItem_Take*"))) {
     AbortConvertJob("Conversion cancelled - the item changed");
@@ -136,26 +141,27 @@ void SneakPeak::AbortConvertJob(const char* toast)
 {
   ConvertJob& J = m_convertJob;
   if (!J.active) return;
+  const bool swapped = J.pending;   // the WAV is in place; only the edit is dropped
   J.writer.Abort();
   AudioEngine::CloseSourceReader(J.reader);
   J.active = false;
+  J.pending = false;
   J.then = nullptr;
   if (m_hwnd) UpdateTitle();
-  if (toast) ShowToast(toast);
+  if (toast) ShowToast(swapped ? "Converted to WAV - the edit was not run" : toast);
 }
 
-// The WAV is complete: swap the source under every take that used the file,
-// reload the view onto it (view range and selection kept) and run the edit.
+// The WAV is complete: swap the source under every take that used the file
+// and hand the reload + the edit to the pending phase (RunConvertedEdit).
 void SneakPeak::FinishConvertJob()
 {
   ConvertJob& J = m_convertJob;
   const bool ok = J.writer.End();
   AudioEngine::CloseSourceReader(J.reader);
-  J.active = false;
   UpdateTitle();
-  std::function<void()> then = std::move(J.then);
-  J.then = nullptr;
   if (!ok) {
+    J.active = false;
+    J.then = nullptr;
     ShowToast("Write failed - check the source folder permissions");
     return;
   }
@@ -172,20 +178,54 @@ void SneakPeak::FinishConvertJob()
            slash == std::string::npos ? J.outPath.c_str() : J.outPath.c_str() + slash + 1,
            count, count == 1 ? "" : "s");
   ShowToast(buf);
-  if (count <= 0) return;   // nothing referenced the file any more: no edit either
-
-  m_waveform.ClearItem();
-  LoadSelectedItem();
-  if (m_waveform.HasItem()) {
-    if (J.viewDur > 0.0 && J.viewDur <= m_waveform.GetItemDuration()) {
-      m_waveform.SetViewStart(J.viewStart);
-      m_waveform.SetViewDuration(J.viewDur);
-    }
-    if (J.sel.active) {
-      m_waveform.SetSelection(J.sel);
-      SyncSelectionToReaper();
-    }
-    if (then) then();
+  if (count <= 0) {   // nothing referenced the file any more: no edit either
+    J.active = false;
+    J.then = nullptr;
+    return;
   }
+  m_waveform.ClearItem();
+  J.pending = true;
+  J.pendingUntil = GetTickCount() + 8000;
+  RunConvertedEdit();
+}
+
+// The pending phase: reload the view onto the WAV (on Windows the swapped
+// media comes back online a moment after the swap, so the first reload can
+// find no item - try again per tick, for up to 8 s), restore the view range
+// and the selection the edit was asked on, then run the edit.
+void SneakPeak::RunConvertedEdit()
+{
+  ConvertJob& J = m_convertJob;
+  if (!m_waveform.HasItem()) LoadSelectedItem();
+  bool ready = false;
+  if (m_waveform.HasItem() && m_waveform.GetTake()) {
+    const std::string now = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+#ifdef __linux__
+    ready = now == J.outPath;
+#else
+    ready = strcasecmp(now.c_str(), J.outPath.c_str()) == 0;
+#endif
+  }
+  if (!ready) {
+    if (GetTickCount() < J.pendingUntil) return;   // next tick
+    J.active = false;
+    J.pending = false;
+    J.then = nullptr;
+    ShowToast("Converted to WAV - select the item again and repeat the edit");
+    return;
+  }
+  std::function<void()> then = std::move(J.then);
+  J.then = nullptr;
+  J.active = false;
+  J.pending = false;
+  if (J.viewDur > 0.0 && J.viewDur <= m_waveform.GetItemDuration()) {
+    m_waveform.SetViewStart(J.viewStart);
+    m_waveform.SetViewDuration(J.viewDur);
+  }
+  if (J.sel.active) {
+    m_waveform.SetSelection(J.sel);
+    SyncSelectionToReaper();
+  }
+  if (then) then();
   Invalidate();
 }
