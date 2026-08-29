@@ -251,6 +251,7 @@ public:
   MediaItem_Take* GetTake() const { return m_take; }
   double GetTakeOffset() const { return m_takeOffset; }
   double GetTakePlayrate() const { return m_takePlayrate; }
+  void SetTakePlayrate(double r) { m_takePlayrate = r; m_peaksValid = false; }   // A6.3: the take's rate changed under us
 
   // Update after destructive edit
   void SetAudioSampleCount(int count) { m_audioSampleCount = count; }

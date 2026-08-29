@@ -974,6 +974,12 @@ bool SneakPeak::SegmentsMatchProject() const
     const double end = pos + g_GetMediaItemInfo_Value(item, "D_LENGTH");
     return same(segStart, pos) && (same(segEnd, end) || (nextStart >= 0.0 && same(segEnd, nextStart)));
   };
+  // A6.3: the take's playrate is part of what a segment caches (envelope timebase)
+  auto rateMatches = [&](MediaItem_Take* take, double segRate) {
+    if (!take || !g_GetSetMediaItemTakeInfo) return true;
+    double* pRate = (double*)g_GetSetMediaItemTakeInfo(take, "D_PLAYRATE", nullptr);
+    return !pRate || *pRate <= 0.0 || same(*pRate, segRate);
+  };
   if (m_waveform.IsMultiItemActive()) {
     for (const auto& layer : m_waveform.GetMultiItemView().GetLayers())
       if (!matches(layer.item, layer.position, layer.position + layer.duration, -1.0)) return false;
@@ -983,6 +989,7 @@ bool SneakPeak::SegmentsMatchProject() const
   for (size_t i = 0; i < segs.size(); i++) {
     const double next = i + 1 < segs.size() ? segs[i + 1].position : -1.0;
     if (!matches(segs[i].item, segs[i].position, segs[i].position + segs[i].duration, next)) return false;
+    if (!rateMatches(segs[i].take, segs[i].playrate)) return false;
   }
   return true;
 }
@@ -1191,10 +1198,21 @@ void SneakPeak::UpdateItemState()
     double len = g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_LENGTH");
     bool posChanged = pos != m_waveform.GetItemPosition();
     bool lenChanged = len != m_waveform.GetItemDuration();
-    if (posChanged || lenChanged) {
+    // The take's playrate (Item properties, a script) scales the envelope
+    // timebase and the audio per item second: refresh the cache and reload
+    // like a length change, or Apply Dynamics writes item time again (A6.3).
+    bool rateChanged = false;
+    if (g_GetSetMediaItemTakeInfo && m_waveform.GetTake()) {
+      double* pRate = (double*)g_GetSetMediaItemTakeInfo(m_waveform.GetTake(), "D_PLAYRATE", nullptr);
+      if (pRate && *pRate > 0.0 && std::fabs(*pRate - m_waveform.GetTakePlayrate()) > 1e-9) {
+        m_waveform.SetTakePlayrate(*pRate);
+        rateChanged = true;
+      }
+    }
+    if (posChanged || lenChanged || rateChanged) {
       m_waveform.SetItemPosition(pos);
       m_waveform.SetItemDuration(len);
-      if (lenChanged) {
+      if (lenChanged || rateChanged) {
         JoinDynamicsWorker(true);
         m_waveform.ReloadAudio();
         StartItemAudioLoad(); // SDK phase: re-plan the background load for the new length
