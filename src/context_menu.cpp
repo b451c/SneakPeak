@@ -252,18 +252,15 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_CUT, "Cut\tCtrl+X");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_COPY, "Copy\tCtrl+C");
   bool isStandalone = m_waveform.IsStandaloneMode();
-  // F2/F4 (UX audit 2026-08-29): in ITEM mode the rows that rewrite the
-  // source file say so, and while the file cannot be rewritten they grey out
-  // with the reason (Process gets a row of its own) - never a refusal after
-  // the confirm. Gain +-3 dB rewrites only with a selection (DoGain).
+  // F2/F4 (UX audit 2026-08-29): in ITEM mode the Process rows that rewrite
+  // the source file say so, and while the file cannot be rewritten they grey
+  // out with the reason on a row of their own - never a refusal after the
+  // confirm. Gain +-3 dB rewrites only with a selection (DoGain). Paste on
+  // items is the non-destructive insert (DoPaste): no label, no greying.
   const std::string rewriteReason = hasReaperItem ? DestructiveTargetReason() : std::string();
   const bool canRewrite = hasReaperItem && rewriteReason.empty();
-  const std::string pasteLabel =
-      !hasReaperItem ? (isStandalone ? "Paste (destructive)\tCtrl+V" : "Paste\tCtrl+V")
-      : canRewrite   ? "Paste (rewrites file)\tCtrl+V"
-                     : "Paste - " + rewriteReason;
-  MenuAppend(editMenu, (hasItem && hasClip && (!hasReaperItem || canRewrite)) ? MF_STRING : MF_GRAYED,
-             CM_PASTE, pasteLabel.c_str());
+  MenuAppend(editMenu, (hasItem && hasClip) ? MF_STRING : MF_GRAYED, CM_PASTE,
+             isStandalone ? "Paste (destructive)\tCtrl+V" : "Paste\tCtrl+V");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_DELETE, "Delete\tDel");
   bool canRipple = hasItem && hasSel && !m_waveform.IsStandaloneMode();
   MenuAppend(editMenu, canRipple ? MF_STRING : MF_GRAYED, CM_RIPPLE_DELETE, "Ripple Delete\tShift+Del");

@@ -419,20 +419,13 @@ private:
 
   // Helpers for destructive ops
   void GetSelectionSampleRange(int& startFrame, int& endFrame) const;
-  void WriteAndRefresh();
-  // True when the working buffer maps 1:1 onto the source file (rate, offset,
-  // playrate, length, CHANNELS) - the only case a whole-file write is valid.
-  bool BufferCoversWholeFile(const std::string& path, WavInfo& srcInfo) const;
-  bool WholeFileWriteOk(WavInfo& srcInfo);   // + refusal toast (F2)
   bool BeginDestructiveWrite(std::string& path);
   // F2 (UX audit 2026-08-29): why the take's file cannot be rewritten right
   // now ("" = it can) - evaluated BEFORE any prompt and shown on the control.
   std::string DestructiveTargetReason() const;
   bool DestructiveTargetOk();   // toast the reason + false; never a dialog
-  void EndDestructiveWrite(bool written);   // synchronous whole-file path: rollback + finish
   void FinishDestructiveWrite(bool written, bool restored);   // the refresh / failure report
   std::string UndoSnapshotPath() const;     // the free undo slot's file (a/b alternate)
-  bool RestoreFromSnapshot();   // pre-edit copy back over the current take's file (A1.4)
   void GetSelectionSourceRange(int64_t& startFrame, int64_t& endFrame) const;
   void DiscardItemUndo();
   void SyncSelectionToReaper();

@@ -396,10 +396,10 @@ void SneakPeak::DoLoopSelection()
   g_OnPlayButton();
 }
 
-// --- Write back to disk and refresh ---
+// --- Rewrite the file in place and refresh ---
 
-// Destructive-write bracket shared by the buffer write and the in-place file
-// ops: WAV sources only, and our own readers (live accessor, retained cache,
+// Destructive-write bracket of the in-place file ops (destructive_job.cpp):
+// WAV sources only, and our own readers (live accessor, retained cache,
 // background loader) are dropped while the file changes under them. F7: every
 // write lands in the SAME inode so REAPER's pooled decoders serve the new
 // audio at once.
@@ -487,24 +487,6 @@ bool SneakPeak::BeginDestructiveWrite(std::string& path)
   return true;
 }
 
-// The pre-edit copy UndoSave took, back over the take's file (UndoRestore
-// keeps its own copy-back: it brackets the file offline itself).
-bool SneakPeak::RestoreFromSnapshot()
-{
-  return m_hasUndo && !m_itemUndoFile.empty() && m_waveform.GetTake() &&
-         AudioEngine::GetSourceFilePath(m_waveform.GetTake()) == m_itemUndoPath &&
-         AudioEngine::CopyFileInto(m_itemUndoFile, m_itemUndoPath);
-}
-
-void SneakPeak::EndDestructiveWrite(bool written)
-{
-  // Rollback (audit A1.4): a whole-file write that fails part-way (a disk
-  // that fills up) leaves a truncated file; the snapshot taken moments ago
-  // goes back - inside the Windows offline bracket, like the write itself.
-  // (The in-place ops roll back on their worker - destructive_job.cpp.)
-  FinishDestructiveWrite(written, !written && RestoreFromSnapshot());
-}
-
 void SneakPeak::FinishDestructiveWrite(bool written, bool restored)
 {
   BringOfflineItemsBackOnline();   // Windows: the items BeginDestructiveWrite took offline
@@ -536,62 +518,6 @@ void SneakPeak::FinishDestructiveWrite(bool written, bool restored)
   m_waveform.Invalidate();
   m_dirty = true;
   UpdateTitle();
-}
-
-// The working buffer is capped at 2 channels and folded to 1 by the take's
-// mono channel modes (audio_stream.h FoldedChannels), so a whole-file write
-// of it over a 6-channel file drops channels 3-6 and a mono-mode stereo item
-// collapses its file to mono (audit A1.1, P0): the channel count is part of
-// "covers the whole file", not a detail the caller may skip.
-bool SneakPeak::BufferCoversWholeFile(const std::string& path, WavInfo& srcInfo) const
-{
-  if (!AudioEngine::ReadWavHeader(path, srcInfo) || srcInfo.bitsPerSample <= 0) return false;
-  return m_waveform.GetSampleRate() == srcInfo.sampleRate &&
-         m_waveform.GetNumChannels() == srcInfo.numChannels &&
-         m_waveform.GetTakeOffset() == 0.0 && m_waveform.GetTakePlayrate() == 1.0 &&
-         std::abs((int64_t)m_waveform.GetAudioSampleCount() - (int64_t)srcInfo.numFrames) <= 1;
-}
-
-// The whole-file write's own preconditions, with the refusal toast: never a
-// downsampled buffer (F6), never a trimmed, offset or rate-changed item (F12).
-// Paste asks before its prompt (F2); WriteAndRefresh re-checks after the
-// accessors are released.
-bool SneakPeak::WholeFileWriteOk(WavInfo& srcInfo)
-{
-  if (!m_waveform.IsItemBufferDownsampled() &&
-      BufferCoversWholeFile(AudioEngine::GetSourceFilePath(m_waveform.GetTake()), srcInfo))
-    return true;
-  ShowToast(m_waveform.IsItemBufferDownsampled()
-                ? "Item too long for this edit - the file was not changed"
-                : "This edit needs the item to cover the whole source file - the file was not changed");
-  return false;
-}
-
-void SneakPeak::WriteAndRefresh()
-{
-  std::string path;
-  if (!BeginDestructiveWrite(path)) return;
-
-  const auto& data = m_waveform.GetAudioData();
-  int nch = m_waveform.GetNumChannels();
-  int sr = m_waveform.GetSampleRate();
-  int frames = m_waveform.GetAudioSampleCount();
-
-  // The buffer covers the ITEM and this write replaces the WHOLE file, so it
-  // is only valid when the two coincide: never a downsampled buffer (10M-frame
-  // cap - F6) and never a trimmed, offset or rate-changed item, which would
-  // truncate the source to the item's window (F12). Reverse / Gain / DC Remove
-  // edit the file in place instead (WriteAndRefreshInplace).
-  WavInfo srcInfo;
-  if (!WholeFileWriteOk(srcInfo)) {
-    m_waveform.RecreateLiveAccessor();
-    return;
-  }
-  // Write back in the SOURCE file's own format. m_wavBitsPerSample tracks
-  // standalone loads only (default 16): using it here silently re-encoded a
-  // 24-bit or float item as 16-bit PCM on Reverse/DC Remove.
-  EndDestructiveWrite(AudioEngine::WriteWavFile(path, data.data(), frames, nch, sr,
-                                                srcInfo.bitsPerSample, srcInfo.audioFormat));
 }
 
 // The selection (whole item when none) in FILE frames: item time -> source
@@ -913,69 +839,28 @@ void SneakPeak::DoPaste()
   Invalidate();
 }
 
+// Standalone: an in-memory insert at the cursor with its own undo stack - no
+// file prompt, no item, no ITEM-mode snapshot (audit A4.4). Items paste
+// non-destructively (DoPaste); there is no whole-file rewrite path any more.
 void SneakPeak::DoPasteDestructive()
 {
-  if (!RequireItemAudio("Paste")) return;
-  if (s_clipboard.numChannels != m_waveform.GetNumChannels()) return;
-  if (m_waveform.IsStandaloneMode()) {
-    // Standalone: an in-memory edit with its own undo stack - no file prompt,
-    // no item, no ITEM-mode snapshot (audit A4.4: UndoSave took none here and
-    // the item path wrote D_LENGTH to a null item).
-    JoinDynamicsWorker(true);
-    StandaloneUndoSave();
-    const int nch = m_waveform.GetNumChannels();
-    const int insertFrame = std::max(0, std::min(m_waveform.GetAudioSampleCount(),
-                             (int)(m_waveform.GetCursorTime() * (double)m_waveform.GetSampleRate())));
-    auto& data = m_waveform.GetAudioData();
-    data.insert(data.begin() + (long)((size_t)insertFrame * nch),
-                s_clipboard.samples.begin(), s_clipboard.samples.end());
-    const int newFrames = m_waveform.GetAudioSampleCount() + s_clipboard.numFrames;
-    m_waveform.SetAudioSampleCount(newFrames);
-    m_waveform.SetItemDuration((double)newFrames / (double)m_waveform.GetSampleRate());
-    m_dirty = true;
-    m_previewCacheDirty = true;
-    UpdateTitle();
-    m_waveform.Invalidate();
-    m_minimap.Invalidate();
-    Invalidate();
-    return;
-  }
-  if (!DestructiveTargetOk()) return;
-  WavInfo srcInfo;
-  if (!WholeFileWriteOk(srcInfo)) return;   // F2: before the prompt, not after the Yes
-
-  int ret = MessageBox(m_hwnd,
-    "Paste modifies the audio file on disk. Continue?",
-    "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
-  if (ret != IDYES) return;
-
-  if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
-  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-
-  int nch = m_waveform.GetNumChannels();
-  double cursorTime = m_waveform.GetCursorTime();
-  int insertFrame = std::max(0, std::min(m_waveform.GetAudioSampleCount(),
-                   (int)(cursorTime * (double)m_waveform.GetSampleRate())));
-
+  if (!m_waveform.IsStandaloneMode() || s_clipboard.numChannels != m_waveform.GetNumChannels()) return;
+  JoinDynamicsWorker(true);
+  StandaloneUndoSave();
+  const int nch = m_waveform.GetNumChannels();
+  const int insertFrame = std::max(0, std::min(m_waveform.GetAudioSampleCount(),
+                           (int)(m_waveform.GetCursorTime() * (double)m_waveform.GetSampleRate())));
   auto& data = m_waveform.GetAudioData();
-  size_t insertPos = (size_t)insertFrame * nch;
-  data.insert(data.begin() + (long)insertPos,
+  data.insert(data.begin() + (long)((size_t)insertFrame * nch),
               s_clipboard.samples.begin(), s_clipboard.samples.end());
-
-  int newFrames = m_waveform.GetAudioSampleCount() + s_clipboard.numFrames;
+  const int newFrames = m_waveform.GetAudioSampleCount() + s_clipboard.numFrames;
   m_waveform.SetAudioSampleCount(newFrames);
-  double newDur = (double)newFrames / (double)m_waveform.GetSampleRate();
-  m_waveform.SetItemDuration(newDur);
-
-  if (g_SetMediaItemInfo_Value)
-    g_SetMediaItemInfo_Value(m_waveform.GetItem(), "D_LENGTH", newDur);
-
-  WriteAndRefresh();
-
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Paste", -1);
-  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-
+  m_waveform.SetItemDuration((double)newFrames / (double)m_waveform.GetSampleRate());
+  m_dirty = true;
+  m_previewCacheDirty = true;
+  UpdateTitle();
+  m_waveform.Invalidate();
+  m_minimap.Invalidate();
   Invalidate();
 }
 
