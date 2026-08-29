@@ -152,7 +152,9 @@ public:
   double GetAveragePeakDb() const { return m_avgPeakDb; }
   double GetThreshold() const;
   bool HasResults() const { return !m_db.empty(); }
-  void Clear() { m_db.clear(); m_gr.clear(); m_curve.clear(); }
+  // Results AND the cached trace: a Standalone edit that misses the sparse
+  // content hash (every 4096th sample) must not resurrect the old trace (A7.4).
+  void Clear() { m_db.clear(); m_gr.clear(); m_curve.clear(); m_trace.reset(); }
   const DynamicsParams& GetParams() const { return m_params; }
   void SetParams(const DynamicsParams& p) { m_params = p; m_curve.clear(); }
 

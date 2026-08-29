@@ -161,6 +161,9 @@ void SneakPeak::UndoRestore()
 
 void SneakPeak::StandaloneUndoSave()
 {
+  // Every Standalone buffer edit snapshots first: the worker must not read the
+  // buffer while it changes and the engine's cached trace must go (A4.3, A7.4).
+  JoinDynamicsWorker(true);
   const auto& data = m_waveform.GetAudioData();
   if (data.empty()) return;
   if ((int)m_standaloneUndoStack.size() >= MAX_STANDALONE_UNDO)
@@ -181,6 +184,9 @@ void SneakPeak::StandaloneUndoSave()
 // the swap for seconds). Same bookkeeping as StandaloneUndoSave.
 void SneakPeak::StandaloneUndoPushFull(std::vector<double>&& oldData)
 {
+  // Every Standalone buffer edit snapshots first: the worker must not read the
+  // buffer while it changes and the engine's cached trace must go (A4.3, A7.4).
+  JoinDynamicsWorker(true);
   if (oldData.empty()) return;
   if ((int)m_standaloneUndoStack.size() >= MAX_STANDALONE_UNDO)
     m_standaloneUndoStack.erase(m_standaloneUndoStack.begin());
@@ -199,6 +205,9 @@ void SneakPeak::StandaloneUndoPushFull(std::vector<double>&& oldData)
 // 30-min file costs megabytes instead of gigabytes per undo slot.
 void SneakPeak::StandaloneUndoSaveRange(int startFrame, int numFrames)
 {
+  // Every Standalone buffer edit snapshots first: the worker must not read the
+  // buffer while it changes and the engine's cached trace must go (A4.3, A7.4).
+  JoinDynamicsWorker(true);
   const auto& data = m_waveform.GetAudioData();
   if (data.empty()) return;
   const int nch = std::max(1, m_waveform.GetNumChannels());

@@ -200,7 +200,21 @@ def _run_one_shot(sess, settings: dict):
     _send_sync(sess, "WM_LBUTTONUP", 0, x, y, settle=0.1)
     wait_main_thread_idle(sess, timeout=120)
     time.sleep(1.0)
-    _command_sync(sess, CM_ONESHOT_FACTORY, settle=0.3)   # close the panel again
+    _close_one_shot_panel(sess)
+
+
+def _close_one_shot_panel(sess):
+    """CM_ONESHOT_FACTORY only SHOWS the panel (no toggle), so the old "close"
+    left it open for every later test (its Run button is the largest amber
+    blob - the next spec's Apply click ran the Factory instead). Click the
+    panel's close cross: a fixed offset from Run in the 800x400 layout."""
+    from conftest import locate_apply_button
+    xy = locate_apply_button(sess, SHOTS / "oneshot_close.png")
+    if xy is None:
+        return
+    _send_sync(sess, "WM_LBUTTONDOWN", 1, xy[0] + 40, xy[1] - 235, settle=0.1)
+    _send_sync(sess, "WM_LBUTTONUP", 0, xy[0] + 40, xy[1] - 235, settle=0.3)
+    assert locate_apply_button(sess, SHOTS / "oneshot_close.png") is None, "the One-Shot panel did not close"
 
 
 def test_one_shot_lufs_on_a_pcm_standalone_file_does_not_clip(sess):
@@ -256,3 +270,73 @@ def test_one_shot_regions_mode_is_refused_in_standalone(sess):
     toast = _last_toast(sess)
     assert not written, f"REGIONS mode sliced a Standalone file by the project's regions: {written}"
     assert "REGIONS uses the project" in toast, f"refusal toast missing: {toast!r}"
+
+
+# --- A7.4: a small Standalone edit re-analyses the buffer -----------------------
+CM_SILENCE = 2006
+
+
+def _tone_burst_fixture(name: str, *, hz: float = 2000.0, seconds: float = 10.0, sr: int = 44100) -> Path:
+    """Mono quiet tone (0.03) with a 0.9 burst at 0.5-1.5 s; a 2 kHz carrier so
+    a 2 ms window holds whole cycles (stable RMS). Fresh file every call."""
+    path = perf_media_dir() / name
+    t = np.arange(int(seconds * sr)) / sr
+    y = 0.03 * np.sin(2 * np.pi * hz * t)
+    burst = (t >= 0.5) & (t < 1.5)
+    y[burst] = 0.9 * np.sin(2 * np.pi * hz * t[burst])
+    sf.write(str(path), y.astype("float32"), sr, subtype="FLOAT")   # MONO: the hash samples every 4096th
+    return path                                                        # interleaved sample = every 4096th frame
+
+
+def _apply_standalone(sess, shots: Path):
+    from conftest import locate_apply_button
+    sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+    if locate_apply_button(sess, shots / "dyn_panel.png") is None:
+        _command_sync(sess, 2058, settle=1.0)                        # CM_APPLY_DYNAMICS: shows the panel
+        sess.wait_until(lambda: locate_apply_button(sess, shots / "dyn_panel.png") is not None, timeout=15)
+    x, y = locate_apply_button(sess, shots / "dyn_panel.png")
+    _send_sync(sess, "WM_LBUTTONDOWN", 1, x, y, settle=0.1)
+    _send_sync(sess, "WM_LBUTTONUP", 0, x, y, settle=0.1)
+    sess.wait_until(lambda: _last_toast(sess).startswith("Dynamics applied"), timeout=20)
+    wait_main_thread_idle(sess, timeout=60)
+
+
+def test_standalone_small_edit_reanalyses(sess):
+    """The engine keeps the last analysis trace behind a sparse content hash
+    (every 4096th sample). A 60 ms silence cut inside the burst that lands
+    between two hashed samples left the old trace in place, so the second
+    Apply compressed with the curve of the UNEDITED audio: the gain right
+    after the gap equalled the gain before it. Re-analysed, the compressor
+    has released during the gap and re-attacks after it - the 2 ms after the
+    gap come out louder than the 2 ms before. Control (b88fbd4): ratio 1.0."""
+    from conftest import WAVE_Y, drag_client
+    media = _tone_burst_fixture("sa_reanalyse_10s.wav")
+    _open_and_wait(sess, media)
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    _apply_standalone(sess, SHOTS)                                  # Apply 1: the burst is compressed
+    drag_client(sess, 80, WAVE_Y, 84, WAVE_Y)                        # ~1.056-1.109 s, inside the burst
+    time.sleep(0.4)
+    _command_sync(sess, CM_SILENCE, settle=0.5)
+    wait_main_thread_idle(sess, timeout=60)
+    _apply_standalone(sess, SHOTS)                                  # Apply 2: must see the gap
+    got = _preview_of_whole_buffer(sess)
+    sr = 44100
+    mono = got[:, 0]
+    burst = mono[int(0.5 * sr):int(1.5 * sr)]
+    zero = np.abs(burst) < 1e-9
+    runs = np.flatnonzero(np.diff(np.concatenate(([0], zero.astype(int), [0]))))
+    starts, ends = runs[0::2], runs[1::2]
+    long = ends - starts >= 1000                     # the sine's exact zeros are single samples
+    starts, ends = starts[long], ends[long]
+    assert len(starts) == 1, f"expected one silent gap inside the burst, found {len(starts)}"
+    g0, g1 = int(starts[0]) + int(0.5 * sr), int(ends[0]) + int(0.5 * sr)
+    stride = 4096 // got.shape[1]                    # hashed FRAMES (the hash walks interleaved samples)
+    hashed_inside = [k * stride for k in range(g0 // stride, g1 // stride + 2) if g0 <= k * stride < g1]
+    w = int(0.002 * sr)
+    before = float(np.sqrt(np.mean(mono[g0 - w:g0] ** 2)))
+    after = float(np.sqrt(np.mean(mono[g1:g1 + w] ** 2)))
+    ratio = after / max(before, 1e-12)
+    print(f"\n[standalone] gap frames {g0}-{g1} ({(g1 - g0) / sr * 1e3:.0f} ms), hashed samples inside: {hashed_inside}; "
+          f"RMS 2 ms before {before:.4f} / after {after:.4f} = x{ratio:.3f}")
+    assert not hashed_inside, "precondition: the gap covers a hashed sample (the hash would catch it)"
+    assert ratio > 1.10, f"the second Apply used the stale analysis (after/before = {ratio:.3f})"
