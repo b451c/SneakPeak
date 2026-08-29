@@ -500,9 +500,11 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
 
     const auto& pens = allPens[layerIdx];
 
-    // Compute visible column range for this layer
+    // Compute visible column range for this layer (the planned length while the
+    // layer still draws from .reapeaks - audioFrameCount is 0 until the loader lands)
+    int frames = layer.audioFrameCount > 0 ? layer.audioFrameCount : layer.plannedFrames;
     double layerRelStart = (double)layer.audioStartFrame / sr;
-    double layerRelEnd = layerRelStart + (double)layer.audioFrameCount / sr;
+    double layerRelEnd = layerRelStart + (double)frames / sr;
     int colStart = (int)((layerRelStart - viewStart) / timePerPixel);
     int colEnd = (int)((layerRelEnd - viewStart) / timePerPixel) + 1;
     colStart = std::max(0, colStart);
