@@ -336,11 +336,15 @@ void WaveformView::Paint(HDC hdc)
   // Draw order: time grid → center lines → dB grid lines → waveform → dB scale column → selection → cursor
   // Grid lines go UNDER the waveform so they're subtly visible through gaps
   DrawTimeGrid(hdc);
-  for (int ch = 0; ch < m_numChannels; ch++) {
-    int chTop = GetChannelTop(ch);
-    int chH = GetChannelHeight();
-    DrawCenterLine(hdc, chTop + chH / 2);
-    DrawDbGridLines(hdc, ch, chTop, chH);
+  // Lanes (per Track): the lanes own their band geometry (center lines in DrawLanes)
+  bool lanes = m_multiItemActive && m_multiItem.GetMode() == MultiItemMode::LANES;
+  if (!lanes) {
+    for (int ch = 0; ch < m_numChannels; ch++) {
+      int chTop = GetChannelTop(ch);
+      int chH = GetChannelHeight();
+      DrawCenterLine(hdc, chTop + chH / 2);
+      DrawDbGridLines(hdc, ch, chTop, chH);
+    }
   }
 
   // Draw gap regions between segments (timeline view + multi-item MIX mode)
@@ -373,9 +377,20 @@ void WaveformView::Paint(HDC hdc)
     }
   }
 
-  // dB scale column (on top of waveform, right edge)
-  for (int ch = 0; ch < m_numChannels; ch++) {
-    DrawDbScale(hdc, ch, GetChannelTop(ch), GetChannelHeight());
+  // dB scale column (on top of waveform, right edge); one per lane band with the
+  // lane's zoom in Lanes mode (no solo badge there - solo is a whole-view control)
+  if (lanes) {
+    for (int lane = 0; lane < m_multiItem.LaneCount(); lane++) {
+      RECT lr; int bands, bandH;
+      if (!m_multiItem.LaneGeometry(m_rect, lane, lr, bands, bandH)) continue;
+      float zoom = m_verticalZoom * m_multiItem.GetLaneZoom(lane);
+      for (int b = 0; b < bands; b++)
+        DrawDbScale(hdc, b, lr.top + b * (bandH + SP(CHANNEL_SEPARATOR_HEIGHT)), bandH, zoom, false);
+    }
+  } else {
+    for (int ch = 0; ch < m_numChannels; ch++) {
+      DrawDbScale(hdc, ch, GetChannelTop(ch), GetChannelHeight(), m_verticalZoom, true);
+    }
   }
 
   // Item boundaries for multi-item view
@@ -384,13 +399,13 @@ void WaveformView::Paint(HDC hdc)
   // Selection edges and cursor
   if (hasSel) DrawSelection(hdc);
   DrawCursor(hdc);
-  DrawClipIndicators(hdc);
+  if (!lanes) DrawClipIndicators(hdc);   // the flags describe the layer SUM, which lanes do not show
   DrawVolumeEnvelope(hdc);
   DrawFadeEnvelope(hdc);
   DrawStandaloneFadeHandles(hdc);
 
-  // Channel separator on top of everything
-  if (m_numChannels == 2) {
+  // Channel separator on top of everything (lanes draw their own bands)
+  if (m_numChannels == 2 && !lanes) {
     int sepY = GetChannelTop(1) - SP(CHANNEL_SEPARATOR_HEIGHT);
     RECT sepRect = { m_rect.left, sepY, m_rect.right, sepY + SP(CHANNEL_SEPARATOR_HEIGHT) };
     HBRUSH sepBrush = CreateSolidBrush(RGB(60, 60, 60));
@@ -869,12 +884,12 @@ void WaveformView::DrawDbGridLines(HDC hdc, int channel, int yTop, int height)
 }
 
 // dB scale column with labels — dynamic Audition-style, adapts to vertical zoom
-void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
+void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height, float zoom, bool badge)
 {
   if (height < 40) return;
 
   int centerY = yTop + height / 2;
-  float halfH = (float)(height / 2) * m_verticalZoom;
+  float halfH = (float)(height / 2) * zoom;
   int scaleLeft = m_rect.right - SP(DB_SCALE_WIDTH);
 
   // Column background
@@ -920,10 +935,10 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
   // Breathing room (user feedback: the column read cramped): labels keep clear
   // of the channel badge (stereo - the badge owns the center, so -inf is skipped
   // there too) and of the "dB" header; text gets a real right margin.
-  const int badgeHalf = (m_numChannels > 1) ? SP(CHAN_BTN_HEIGHT) / 2 + SP(9) : 0;
+  const int badgeHalf = (badge && m_numChannels > 1) ? SP(CHAN_BTN_HEIGHT) / 2 + SP(9) : 0;
 
   // -∞ at center line (mono only - in stereo the channel badge sits here)
-  if (m_numChannels <= 1 &&
+  if (badgeHalf == 0 &&
       centerY > yTop + SP(4) && centerY < yTop + height - SP(4)) {
     oldPen = (HPEN)SelectObject(hdc, tickPen);
     MoveToEx(hdc, scaleLeft + 1, centerY, nullptr);
@@ -988,7 +1003,7 @@ void WaveformView::DrawDbScale(HDC hdc, int channel, int yTop, int height)
   DeleteObject(tickPen);
 
   // Channel button — centered vertically, clickable for solo
-  if (m_numChannels > 1) {
+  if (badge && m_numChannels > 1) {
     const char* chLabel = (channel == 0) ? "L" : "R";
 
     int btnW = SP(CHAN_BTN_WIDTH), btnH = SP(CHAN_BTN_HEIGHT);
@@ -1175,6 +1190,7 @@ void WaveformView::SetFadeDragInfo(int dragType, int shape)
 bool WaveformView::ClickChannelButton(int x, int y)
 {
   if (m_numChannels < 2) return false;
+  if (m_multiItemActive && m_multiItem.GetMode() == MultiItemMode::LANES) return false;  // no badge in Lanes
 
   int scaleLeft = m_rect.right - SP(DB_SCALE_WIDTH);
   if (x < scaleLeft || x > m_rect.right) return false;

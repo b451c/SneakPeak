@@ -271,6 +271,8 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
               CM_MULTI_MODE_LAYERED, "Layered (per Item)");
       addItem(modeMenu, curMode == MultiItemMode::LAYERED_TRACKS ? MF_CHECKED : 0,
               CM_MULTI_MODE_LAYERED_TRACKS, "Layered (per Track)");
+      addItem(modeMenu, curMode == MultiItemMode::LANES ? MF_CHECKED : 0,
+              CM_MULTI_MODE_LANES, "Lanes (per Track)");
 #ifdef _WIN32
       AppendMenuA(modeMenu, MF_SEPARATOR, 0, nullptr);
 #else
@@ -2484,18 +2486,22 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
     }
   }
 
-  // Scroll on dB scale column = vertical zoom
+  // Scroll on dB scale column = vertical zoom (Lanes (per Track): the lane under the cursor only)
   int dbScaleLeft = m_waveformRect.right - SP(DB_SCALE_WIDTH);
   if (x >= dbScaleLeft && x <= m_waveformRect.right &&
       y >= m_waveformRect.top && y < m_waveformRect.bottom) {
-    m_waveform.ZoomVertical((float)pow(1.15, steps));
+    int lane = m_waveform.LaneAtY(y);
+    if (lane >= 0) m_waveform.ZoomLane(lane, (float)pow(1.15, steps));
+    else m_waveform.ZoomVertical((float)pow(1.15, steps));
     Invalidate();
     return;
   }
 
   if (alt) {
-    // Option+Scroll = vertical zoom
-    m_waveform.ZoomVertical((float)pow(1.15, steps));
+    // Option+Scroll = vertical zoom (Lanes: the lane under the cursor only)
+    int lane = m_waveform.LaneAtY(y);
+    if (lane >= 0) m_waveform.ZoomLane(lane, (float)pow(1.15, steps));
+    else m_waveform.ZoomVertical((float)pow(1.15, steps));
   } else if (cmd) {
     // Cmd+Scroll = horizontal pan (may not reach us when docked — trackpad pan via WM_MOUSEHWHEEL)
     m_waveform.ScrollH(-steps * m_waveform.GetViewDuration() * 0.1);
@@ -3085,7 +3091,7 @@ void SneakPeak::OnToolbarClick(int button)
     case TB_REVERSE:   DoReverse(); break;
     case TB_VZOOM_IN:  m_waveform.ZoomVertical(1.5f); break;
     case TB_VZOOM_OUT: m_waveform.ZoomVertical(1.0f / 1.5f); break;
-    case TB_VZOOM_RESET: m_waveform.ZoomVertical(1.0f / m_waveform.GetVerticalZoom()); break;
+    case TB_VZOOM_RESET: m_waveform.ResetVerticalZoom(); break;   // global + every lane
   }
   Invalidate();
 }

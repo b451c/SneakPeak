@@ -4,15 +4,18 @@
 #include "platform.h"
 #include "globals.h"
 #include <vector>
+#include <string>
+#include <algorithm>
 #include <cmath>
 
 struct WaveformSelection;
 
-enum class MultiItemMode { MIX, LAYERED, LAYERED_TRACKS };
+enum class MultiItemMode { MIX, LAYERED, LAYERED_TRACKS, LANES };
 
 struct ItemLayer {
   MediaItem* item = nullptr;
   MediaItem_Take* take = nullptr;
+  MediaTrack* track = nullptr; // parent track (the lane identity)
   double position = 0.0;       // absolute timeline position
   double duration = 0.0;       // full item length (not trimmed)
   double itemVol = 1.0;        // D_VOL baked into audio
@@ -60,6 +63,14 @@ public:
                   const WaveformSelection& selection, double gainOffset = 1.0);
 
   void SetMode(MultiItemMode mode) { m_mode = mode; m_peaksValid = false; }
+  // Lanes (per Track): one band per track with its own vertical zoom (multi_item_lanes.cpp).
+  // Lane index == trackColorIndex; the zoom survives a rebuild of the same tracks.
+  int LaneCount() const { return (int)m_laneZoom.size(); }
+  bool LaneGeometry(RECT rect, int lane, RECT& outLane, int& outBands, int& outBandH) const;
+  int LaneAtY(RECT rect, int y) const;      // -1 unless LANES mode and y inside a lane
+  float GetLaneZoom(int lane) const { return (lane >= 0 && lane < LaneCount()) ? m_laneZoom[lane] : 1.0f; }
+  void ZoomLane(int lane, float factor);
+  void ResetLaneZoom() { std::fill(m_laneZoom.begin(), m_laneZoom.end(), 1.0f); }
   MultiItemMode GetMode() const { return m_mode; }
   double GetTimelineStart() const { return m_timelineStart; }
   double GetTimelineEnd() const { return m_timelineEnd; }
@@ -99,8 +110,15 @@ private:
   double GetLayerSample(const ItemLayer& layer, int timelineFrame, int ch, int nch) const;
   void ComputeLayerPeaksFromSDK(ItemLayer& layer, double viewStart, double viewDur,
                                 int width, int numChannels);
+  void DrawLanes(HDC hdc, RECT rect, int numChannels, double viewStart, double viewDur,
+                 float verticalZoom, const WaveformSelection& selection, double gainOffset);
+  static int TrackNumber(MediaTrack* tr);          // 1-based arrange position (0 = unknown)
+  static std::string TrackLabel(MediaTrack* tr);   // P_NAME or "Track N"
+  static COLORREF BlendColor(COLORREF fg, COLORREF bg, float alpha);
 
   std::vector<ItemLayer> m_layers;
+  std::vector<float> m_laneZoom;          // per track (index = trackColorIndex)
+  std::vector<std::string> m_laneNames;   // track name or "Track N", fetched at load
   MultiItemMode m_mode = MultiItemMode::MIX;
   double m_timelineStart = 0.0;
   double m_timelineEnd = 0.0;

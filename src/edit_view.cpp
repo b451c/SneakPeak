@@ -112,6 +112,8 @@ void SneakPeak::Create()
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED);
     else if (multiMode && strcmp(multiMode, "layered_tracks") == 0)
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED_TRACKS);
+    else if (multiMode && strcmp(multiMode, "lanes") == 0)
+      m_waveform.SetMultiItemMode(MultiItemMode::LANES);
     const char* rulerMode = g_GetExtState("SneakPeak", "ruler_mode");
     if (rulerMode) m_rulerMode = static_cast<RulerMode>(atoi(rulerMode));
     const char* joinLines = g_GetExtState("SneakPeak", "show_join_lines");

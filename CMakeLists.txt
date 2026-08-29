@@ -94,6 +94,7 @@ add_library(reaper_sneakpeak SHARED
   src/spectral_view.cpp
   src/minimap_view.cpp
   src/multi_item_view.cpp
+  src/multi_item_lanes.cpp
   src/dynamics_engine.cpp
   src/deess_engine.cpp
   src/dyn_trace.cpp

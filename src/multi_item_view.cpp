@@ -56,6 +56,8 @@ void MultiItemView::ScaleLayerAudioRange(double factor, double startTime, double
 void MultiItemView::Clear()
 {
   m_layers.clear();
+  m_laneZoom.clear();
+  m_laneNames.clear();
   m_timelineStart = 0.0;
   m_timelineEnd = 0.0;
   m_peaksValid = false;
@@ -67,6 +69,11 @@ void MultiItemView::Clear()
 bool MultiItemView::LoadItems(const std::vector<MediaItem*>& items,
                               int& outChannels, int& outSampleRate)
 {
+  // Lanes: a rebuild (split/delete/reselect of the same tracks) keeps each track's zoom
+  std::vector<std::pair<MediaTrack*, float>> keptZoom;
+  for (const auto& layer : m_layers)
+    if (layer.track && layer.trackColorIndex < (int)m_laneZoom.size())
+      keptZoom.emplace_back(layer.track, m_laneZoom[layer.trackColorIndex]);
   Clear();
 
   if (items.size() < 2) return false;
@@ -160,19 +167,28 @@ bool MultiItemView::LoadItems(const std::vector<MediaItem*>& items,
         layer.numChannels);
   }
 
-  // Assign color indices: per-item and per-track
+  // Assign color indices: per-item sequential; per-track in arrange order (the
+  // items arrive sorted by position - lanes must follow the track list instead)
   {
-    std::vector<MediaTrack*> seenTracks;
+    std::vector<MediaTrack*> tracks;
+    for (auto& layer : m_layers) {
+      layer.track = g_GetMediaItem_Track ? g_GetMediaItem_Track(layer.item) : nullptr;
+      if (std::find(tracks.begin(), tracks.end(), layer.track) == tracks.end())
+        tracks.push_back(layer.track);
+    }
+    std::sort(tracks.begin(), tracks.end(), [](MediaTrack* a, MediaTrack* b) {
+      return TrackNumber(a) < TrackNumber(b);
+    });
+    for (MediaTrack* tr : tracks) {
+      float zoom = 1.0f;
+      for (const auto& kz : keptZoom) if (kz.first == tr) zoom = kz.second;
+      m_laneZoom.push_back(zoom);
+      m_laneNames.push_back(TrackLabel(tr));
+    }
     for (int i = 0; i < (int)m_layers.size(); i++) {
-      m_layers[i].colorIndex = i; // per-item: sequential
-      // per-track: find or assign
-      MediaTrack* tr = g_GetMediaItem_Track ? g_GetMediaItem_Track(m_layers[i].item) : nullptr;
-      int trackIdx = -1;
-      for (int t = 0; t < (int)seenTracks.size(); t++) {
-        if (seenTracks[t] == tr) { trackIdx = t; break; }
-      }
-      if (trackIdx < 0) { trackIdx = (int)seenTracks.size(); seenTracks.push_back(tr); }
-      m_layers[i].trackColorIndex = trackIdx;
+      m_layers[i].colorIndex = i;
+      m_layers[i].trackColorIndex =
+        (int)(std::find(tracks.begin(), tracks.end(), m_layers[i].track) - tracks.begin());
     }
   }
 
@@ -411,7 +427,7 @@ void MultiItemView::ComputeLayeredPeaks(double viewStart, double viewDur, int wi
 // --- LAYERED drawing ---
 
 // Blend color with background for pseudo-alpha (GDI has no native alpha)
-static COLORREF BlendColor(COLORREF fg, COLORREF bg, float alpha)
+COLORREF MultiItemView::BlendColor(COLORREF fg, COLORREF bg, float alpha)
 {
   int r = (int)(GetRValue(fg) * alpha + GetRValue(bg) * (1.0f - alpha));
   int g = (int)(GetGValue(fg) * alpha + GetGValue(bg) * (1.0f - alpha));
@@ -425,6 +441,10 @@ void MultiItemView::DrawLayers(HDC hdc, RECT rect, int numChannels,
                                double viewStart, double viewDur, float verticalZoom,
                                const WaveformSelection& selection, double gainOffset)
 {
+  if (m_mode == MultiItemMode::LANES) {   // one band per track (multi_item_lanes.cpp)
+    DrawLanes(hdc, rect, numChannels, viewStart, viewDur, verticalZoom, selection, gainOffset);
+    return;
+  }
   int w = rect.right - rect.left - SP(DB_SCALE_WIDTH);
   if (w < 1) w = 1;
   int nch = numChannels;

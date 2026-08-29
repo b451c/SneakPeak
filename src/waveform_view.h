@@ -88,6 +88,10 @@ public:
   double GetItemPosition() const { return m_itemPosition; }
   int GetNumChannels() const { return m_numChannels; }
   float GetVerticalZoom() const { return m_verticalZoom; }
+  // Lanes (per Track): the lane under client y (-1 outside / other modes) and its own zoom
+  int LaneAtY(int y) const { return m_multiItemActive ? m_multiItem.LaneAtY(m_rect, y) : -1; }
+  void ZoomLane(int lane, float factor) { m_multiItem.ZoomLane(lane, factor); }
+  void ResetVerticalZoom() { ZoomVertical(1.0f / m_verticalZoom); m_multiItem.ResetLaneZoom(); }
 
   // Navigation
   void ZoomHorizontal(double factor, double centerTime);
@@ -317,7 +321,7 @@ private:
   void DrawCenterLine(HDC hdc, int yCenter);
   void DrawDbGridLines(HDC hdc, int channel, int yTop, int height);
   void DrawTimeGrid(HDC hdc);
-  void DrawDbScale(HDC hdc, int channel, int yTop, int height);
+  void DrawDbScale(HDC hdc, int channel, int yTop, int height, float zoom, bool badge);
   void DrawFadeBackground(HDC hdc);
   void DrawFadeEnvelope(HDC hdc);
   void DrawVolumeEnvelope(HDC hdc);

@@ -195,6 +195,7 @@ enum ContextMenuID {
   CM_ONESHOT_FACTORY,                                  // INC-B1: open the prep panel
   CM_LOOP_LAB,                                         // INC-A5: open the Loop Lab panel
   CM_EDIT_COPY_STANDALONE,                             // INC-B4: ITEM -> copy as standalone tab
+  CM_MULTI_MODE_LANES,                                 // row 15 #2: Lanes (per Track) - appended, ids are numeric in specs
   CM_LAST // sentinel -- keep last
 };
 

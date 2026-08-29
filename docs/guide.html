@@ -413,7 +413,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h4>Vertical zoom (amplitude)</h4>
 <div class="shortcut-grid">
   <div class="key"><kbd>Option</kbd> + <kbd>Scroll</kbd></div><div class="desc">Zoom amplitude up/down</div>
-  <div class="key">Scroll on dB scale</div><div class="desc">Always zooms amplitude (right edge)</div>
+  <div class="key">Scroll on dB scale</div><div class="desc">Always zooms amplitude (right edge); in Lanes (per Track) the lane under the cursor only</div>
 </div>
 
 <h4>Quick navigation</h4>
@@ -991,7 +991,10 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Mix (Sum)</strong> - all items mixed into a single waveform, like hearing them all at once</li>
   <li><strong>Layered (per Item)</strong> - each item drawn in a different color, overlapping. An 8-color palette provides clear visual separation.</li>
   <li><strong>Layered (per Track)</strong> - items grouped and colored by their parent track</li>
+  <li><strong>Lanes (per Track)</strong> - one horizontal lane per track, stacked in arrange order, with the track name at the top-left and its own dB scale</li>
 </ul>
+
+<p><strong>Per-track zoom (Lanes):</strong> scroll on a lane's dB scale, or hold <kbd>Option</kbd> and scroll over the lane, to zoom that track's amplitude alone - the other lanes keep their scale, and the lane label shows the factor (for example "Vocal x2.3"). The toolbar's V Zoom +/- still scale every lane together; V Zoom reset returns the view and every lane to 1:1. A stereo lane splits into L/R bands when it is tall enough and folds both channels into one band otherwise. The per-track zoom survives the view rebuilds that follow edits made outside SneakPeak.</p>
 
 <p>Toggle <strong>Show Join Lines</strong> in the context menu to see vertical lines at crossfade points between items.</p>
 
@@ -1201,8 +1204,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Right-click</td><td>Meter panel</td><td>Meter mode menu</td></tr>
     <tr><td>Scroll</td><td>Waveform</td><td>Horizontal zoom</td></tr>
     <tr><td>Cmd/Ctrl + Scroll</td><td>Waveform</td><td>Pan left/right</td></tr>
-    <tr><td>Option + Scroll</td><td>Waveform</td><td>Vertical zoom</td></tr>
-    <tr><td>Scroll</td><td>dB scale</td><td>Vertical zoom</td></tr>
+    <tr><td>Option + Scroll</td><td>Waveform</td><td>Vertical zoom (Lanes: that lane only)</td></tr>
+    <tr><td>Scroll</td><td>dB scale</td><td>Vertical zoom (Lanes: that lane only)</td></tr>
     <tr><td>Trackpad horizontal swipe</td><td>Waveform</td><td>Pan left/right</td></tr>
     <tr><td>Trackpad pinch</td><td>Waveform</td><td>Horizontal zoom (dampened)</td></tr>
     <tr><td>Drag fade handle</td><td>Top corners</td><td>Adjust fade length (H) and curve (V)</td></tr>
@@ -1236,7 +1239,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Ripple Delete, Silence, Select All, Split at Cursor (S)</li>
   <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Mono Downmix, Dynamics Panel</li>
   <li><strong>View</strong> - Zoom controls, Spectral View, Show Volume Envelope, Show Dynamics Curve, Show RMS, Show Meters, Snap to Zero-Crossing, Minimap, Ruler mode (Relative/Absolute/Bars & Beats), Working Set toggle, Group, Switch to Timeline View</li>
-  <li><strong>Multi-Item</strong> - Mix/Layered modes, Show Join Lines, Switch to Timeline View (when multiple items are loaded)</li>
+  <li><strong>Multi-Item</strong> - Mix/Layered/Lanes modes, Show Join Lines, Switch to Timeline View (when multiple items are loaded)</li>
   <li><strong>Markers</strong> - Add Marker, Add Region, Edit, Delete, Show/Hide</li>
   <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal, GitHub</li>
   <li><strong>Replace Source in REAPER Timeline</strong> - standalone mode only; see Replace Source section</li>

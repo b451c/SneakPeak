@@ -442,6 +442,8 @@ void SneakPeak::OnRightClick(int x, int y)
                CM_MULTI_MODE_LAYERED, "Layered (per Item)");
     MenuAppend(multiMenu, (curMode == MultiItemMode::LAYERED_TRACKS) ? (MF_STRING | MF_CHECKED) : MF_STRING,
                CM_MULTI_MODE_LAYERED_TRACKS, "Layered (per Track)");
+    MenuAppend(multiMenu, (curMode == MultiItemMode::LANES) ? (MF_STRING | MF_CHECKED) : MF_STRING,
+               CM_MULTI_MODE_LANES, "Lanes (per Track)");
     MenuAppendSeparator(multiMenu);
     MenuAppend(multiMenu, MF_STRING, CM_SHOW_JOIN_LINES,
                m_waveform.GetShowJoinLines() ? "Show Join Lines  \xE2\x9C\x93" : "Show Join Lines");
@@ -690,6 +692,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED_TRACKS);
       m_waveform.Invalidate();
       if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "layered_tracks", true);
+      Invalidate();
+      break;
+    case CM_MULTI_MODE_LANES:
+      m_waveform.SetMultiItemMode(MultiItemMode::LANES);
+      m_waveform.Invalidate();
+      if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "lanes", true);
       Invalidate();
       break;
     case CM_SHOW_JOIN_LINES:
