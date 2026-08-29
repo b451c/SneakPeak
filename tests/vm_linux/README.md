@@ -16,6 +16,9 @@ followed by an XTEST key (`xfocus.py`).
 - `sp_eval.py <file.lua> [seq]` - run one Lua chunk in the live REAPER.
 - `probe_titles.lua` - visible top-level titles via `BR_Win32_GetWindow`.
 - `acc.lua` - track-accessor mean-abs of the item head/tail.
+- `sp_xdg_probe.py` - the support links reach `xdg-open` (A5.6): a shim `xdg-open`
+  first in PATH logs its arguments while the four menu commands are fired through
+  WM_COMMAND (`BR_Win32_SendMessage`), exactly as the popup menu delivers them.
 - `xwin.py` - X window list (name/map/geometry/pid); the screenshot substitute.
 - `xfocus.py <substr> [key]` - focus a window by title, optionally send a key.
 - `gen_long.py <out.wav> <minutes>` - 44.1k/16-bit stereo, 1 kHz tone in the
