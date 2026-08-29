@@ -56,7 +56,7 @@ def _record(name: str, m: dict):
     print(f"\n[perf] {name}: {json.dumps(m, indent=1)}")
 
 
-def _place_window(sess) -> float:
+def _place_window(sess, want_scale: float = WANT_SCALE) -> float:
     """Move/resize the floating window onto the 2x display when there is one
     (else the main display) and return the backing scale it landed on, read
     back from the window's real bounds via CGWindowList."""
@@ -66,7 +66,7 @@ def _place_window(sess) -> float:
     def scale_of(d):
         mode = Quartz.CGDisplayCopyDisplayMode(d)
         return Quartz.CGDisplayModeGetPixelWidth(mode) / Quartz.CGDisplayModeGetWidth(mode)
-    target = min(displays, key=lambda d: (abs(scale_of(d) - WANT_SCALE), -scale_of(d)))
+    target = min(displays, key=lambda d: (abs(scale_of(d) - want_scale), -scale_of(d)))
     b = Quartz.CGDisplayBounds(target)
     x, y = int(b.origin.x) + 40, int(b.origin.y) + 60
     # SWELL maps a y below the main display back onto it, so the move goes
@@ -262,3 +262,120 @@ def test_playback_paint_profile_20min_dense_envelope(sess):
     assert points > 1000, f"the envelope is not dense enough to profile: {m}"
     assert len(gaps) >= 20, f"REAPER's main loop barely ticked during playback: {m}"
     assert prof.get("total"), f"sample produced no main-thread call graph: {m}"
+
+
+# ---------------------------------------------------------------------------
+# A9.5 (measure first): scrolling a SET view over 40 segments
+# ---------------------------------------------------------------------------
+SEGMENT_SYMBOLS = ["WaveformView::UpdatePeaksFromSDKSegments", "GetMediaItemTake_Peaks",
+                   "GetMediaItemTake_Source", "GetMediaItemInfo_Value", "GetSetMediaItemTakeInfo",
+                   "SneakPeak::OnPaint", "WaveformView::Paint", "WaveformView::DrawWaveformChannel",
+                   "WaveformView::UpdatePeaks", "MinimapView::Paint"]
+SEGMENTS = 40
+CM_TRACK_VIEW_ID = 2041
+CM_MINIMAP_ID = 2030
+MINIMAP_BG = (12, 14, 18)      # minimap_view.cpp bgBrush; a SET view over lazy segments draws no columns
+
+
+def _minimap_band_y(sess, out: Path) -> int | None:
+    """Client y at the middle of the minimap band (its background rows), or
+    None when the minimap is hidden. 1x display only (capture px = client pt)."""
+    cap = capture(sess, out)
+    cw, ch = client_size(sess)
+    img = cap.image[cap.height - ch:, :cw, :].astype(int)
+    rows = np.nonzero(np.all(img == np.array(MINIMAP_BG), axis=2).sum(axis=1) > cw * 0.2)[0]
+    return int((rows.min() + rows.max()) / 2) if len(rows) else None
+
+
+def test_set_view_scroll_profile_40_segments(sess):
+    """A9.5: the segment SDK path re-fetches per-segment take/source/volume data
+    on every re-render. Split the 20-minute item into 40, enter the SET view over
+    them, zoom in x3 and drag the minimap across the item (every mouse move
+    scrolls the view = a full scene re-render); records the per-move cost on
+    REAPER's clock and the sample shares of the segment path."""
+    from conftest import mode_from_capture, send_command, track_item_count, window_handle_lua as wh
+    media = write_long_wav(perf_media_dir() / "long20min_stereo.wav", minutes=20)
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    ensure_window(sess)
+    dpr = _place_window(sess, 1.0)
+    sess.eval(f"""
+      local tr = reaper.GetTrack(0, 0)
+      local it = reaper.GetTrackMediaItem(tr, 0)
+      local len = reaper.GetMediaItemInfo_Value(it, "D_LENGTH")
+      reaper.Undo_BeginBlock()
+      for i = {SEGMENTS} - 1, 1, -1 do reaper.SplitMediaItem(it, len * i / {SEGMENTS}) end
+      reaper.SelectAllMediaItems(0, true)
+      reaper.Undo_EndBlock("split x{SEGMENTS}", -1)
+      reaper.UpdateArrange()
+      return true""")
+    assert track_item_count(sess) == SEGMENTS
+    send_command(sess, CM_TRACK_VIEW_ID)
+    sess.wait_until(lambda: mode_from_capture(sess, SHOTS / "set.png") == "SET", timeout=30)
+    wait_main_thread_idle(sess, timeout=60)
+    for _ in range(3):
+        sess.eval('reaper.Main_OnCommand(reaper.NamedCommandLookup("_SneakPeak_ZoomIn"), 0) return true')
+    time.sleep(0.5)
+    y = _minimap_band_y(sess, SHOTS / "set_zoomed.png")
+    if y is None:
+        send_command(sess, CM_MINIMAP_ID)
+        time.sleep(0.5)
+        y = _minimap_band_y(sess, SHOTS / "set_zoomed.png")
+    assert y is not None, "no minimap band to drag"
+    cw, _ = client_size(sess)
+    x0, x1, steps = int(cw * 0.1), int(cw * 0.9), 60
+    # One mouse move per defer tick: a Send-only sequence would queue 60 scrolls
+    # and ONE deferred paint - the paint between moves is the cost measured.
+    sess.eval(f"""
+      local h = {wh()} if not h then return false end
+      DRAG_DONE = nil
+      reaper.JS_WindowMessage_Send(h, "WM_LBUTTONDOWN", 1, 0, {x0}, {y})
+      DRAG_T0 = reaper.time_precise()
+      local i = 0
+      local function step()
+        i = i + 1
+        reaper.JS_WindowMessage_Send(h, "WM_MOUSEMOVE", 1, 0, {x0} + ({x1} - {x0}) * i // {steps}, {y})
+        if i < {steps} then reaper.defer(step)
+        else reaper.JS_WindowMessage_Send(h, "WM_LBUTTONUP", 0, 0, {x1}, {y}) DRAG_DONE = reaper.time_precise() end
+      end
+      reaper.defer(step)
+      return true""")
+    hb = sess.bridge.heartbeat
+    samples: list[tuple[int, float]] = []
+    stop = threading.Event()
+
+    def probe():
+        last = None
+        while not stop.is_set():
+            try:
+                d = json.loads(hb.read_text(encoding="utf-8", errors="replace"))
+                tick, t = int(d["tick"]), float(d["t"])
+                if tick != last:
+                    samples.append((tick, t))
+                    last = tick
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+            time.sleep(0.003)
+
+    th = threading.Thread(target=probe, daemon=True)
+    th.start()
+    profile = PROFILES / f"set_scroll_40seg_{LABEL}.txt"
+    sampler = subprocess.Popen(["sample", str(sess.handle.pid), "8", "-mayDie", "-file", str(profile)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    sess.wait_until(lambda: sess.eval("return DRAG_DONE ~= nil"), timeout=60)
+    t0, t1 = (float(v) for v in sess.eval("return {DRAG_T0, DRAG_DONE}"))
+    stop.set()
+    th.join(timeout=2)
+    sampler.wait(timeout=120)
+    gaps = [(tb - ta) / (kb - ka) for (ka, ta), (kb, tb) in zip(samples, samples[1:])
+            if ta >= t0 and tb <= t1 and kb > ka]
+    prof = parse_sample(profile.read_text(errors="replace"), SEGMENT_SYMBOLS) if profile.exists() else {}
+    m = {"per_move": round((t1 - t0) / steps, 4), "drag_total": round(t1 - t0, 3), "steps": steps,
+         "max_gap": round(max(gaps), 3) if gaps else None,
+         "mean_gap": round(sum(gaps) / len(gaps), 4) if gaps else None,
+         "segments": SEGMENTS, "dpr": dpr, "sample_total": prof.get("total"),
+         "shares": prof.get("shares"), "top_dylib": prof.get("top_dylib"), "profile": str(profile)}
+    _record(f"paint.set_scroll_40seg.{LABEL}", m)
+    assert t1 - t0 > 0.5, f"the minimap drag did not scroll tick by tick: {m}"
+    assert mode_from_capture(sess, SHOTS / "set_after.png") == "SET"
