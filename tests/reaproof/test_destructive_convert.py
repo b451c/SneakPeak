@@ -141,10 +141,25 @@ def _wait_convert_and_edit(sess, wav: Path, timeout=600):
     except Exception:
         raise AssertionError(f"the item does not play the WAV after the conversion (source {_source_name(sess)!r}, "
                              f"convert_state {_convert_state(sess)!r}, toast {_last_toast(sess)!r})")
-    wait_destructive_job(sess, timeout=timeout)
-    sess.wait_until(lambda: "..." not in window_title(sess), timeout=timeout)
-    wait_main_thread_idle(sess, timeout=timeout)
-    time.sleep(1.0)
+    _wait_edit_job(sess, timeout=timeout)
+
+
+JOB_TITLES = ("saving the pre-edit copy", "Reversing", "Removing DC", "Applying gain", "Limiting")
+
+
+def _wait_edit_job(sess, timeout=600):
+    """The edit's job by ITS titles, not by any "...": with the panel open the
+    pump reloads the long WAV's buffer afterwards ("Loading... N%"), minutes on
+    the VM (leg 7 timed out on that, the edit long done)."""
+    def job_running():
+        t = window_title(sess)
+        return any(m in t for m in JOB_TITLES)
+    try:
+        sess.wait_until(job_running, timeout=8)
+    except Exception:
+        pass   # finished within one round trip
+    sess.wait_until(lambda: not job_running(), timeout=timeout)
+    time.sleep(1.5)
 
 
 # --- non-WAV items convert first -----------------------------------------------------
