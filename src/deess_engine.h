@@ -27,6 +27,10 @@ struct DeEssBiquad {
   inline double Process(double x)
   {
     double y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    // A silence never brings the state to zero by itself (it settles on the
+    // smallest subnormal); flush it below 1e-30 (-600 dB) so the tail of a
+    // long silence is not a denormal grind on x86 (audit A7.3).
+    if (y > -1e-30 && y < 1e-30) y = 0.0;
     x2 = x1; x1 = x;
     y2 = y1; y1 = y;
     return y;

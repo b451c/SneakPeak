@@ -10,6 +10,7 @@
 
 #include "dyn_trace.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -223,12 +224,49 @@ void RunRate(int sr)
   }
 }
 
+// A7.3: a burst followed by a minute of silence - the de-ess biquads decay
+// into denormals, which made the band lane an order of magnitude slower per
+// frame with nothing to flush them. Timed (evidence), and chunked == whole.
+void RunSilenceTail()
+{
+  const int sr = 44100;
+  const int frames = 62 * sr;
+  std::vector<double> sig((size_t)frames * kNch, 0.0);
+  for (int i = 0; i < 2 * sr; i++) {
+    const double l = 0.5 * std::sin(2.0 * kPi * 6000.0 * (double)i / (double)sr);
+    sig[(size_t)i * kNch] = l;
+    sig[(size_t)i * kNch + 1] = -l;
+  }
+  DynTraceKey key;
+  key.sampleRate = sr;
+  key.numChannels = kNch;
+  key.numFrames = frames;
+  key.rmsMode = false;
+  key.dsEnable = true;
+  key.dsMode = DEESS_MODE_BANDPASS;
+  key.dsFreqHz = 6000.0;
+  key.dsQ = 2.0;
+  const auto t0 = std::chrono::steady_clock::now();
+  std::shared_ptr<const DynTrace> whole = BuildChunked(sig, key, frames);
+  const int ms = (int)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+  std::shared_ptr<const DynTrace> part = BuildChunked(sig, key, 65536);
+  Check(SameDoubles(part->band, whole->band), "silence tail: chunk 65536 == whole (band lane)");
+  Check(SameDoubles(part->peak, whole->peak), "silence tail: chunk 65536 == whole (peak lane)");
+  int tailZeros = 0;
+  for (size_t i = whole->band.size() / 2; i < whole->band.size(); i++) if (whole->band[i] == 0.0) tailZeros++;
+  printf("[probe] band lane at 1 s %.3e, 3 s %.3e, 10 s %.3e, 30 s %.3e, 60 s %.3e (unflushed: 4.9e-324 forever)\n",
+         whole->band[1000], whole->band[3000], whole->band[10000], whole->band[30000], whole->band[60000]);
+  printf("[timing] 62 s silence-tail band lane (2 s burst + 60 s silence, 2 ch): %d ms; "
+         "band values exactly 0 in the second half: %d of %d\n", ms, tailZeros, (int)(whole->band.size() - whole->band.size() / 2));
+}
+
 } // namespace
 
 int main()
 {
   RunRate(44100);
   RunRate(48000);
+  RunSilenceTail();
   // Time grid: TimeAt must be the legacy (double)frame / (double)rate.
   {
     DynTraceKey key;

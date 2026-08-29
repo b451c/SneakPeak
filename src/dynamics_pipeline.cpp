@@ -18,6 +18,7 @@
 // everything else re-runs only the trace -> results pass. Standalone keeps
 // analysing its full-rate buffer (no accessor there).
 #include "edit_view.h"
+#include "denormals.h"
 #include <algorithm>
 #include <cmath>
 
@@ -70,6 +71,7 @@ void SneakPeak::StartDynTraceJob()
   J.lastPct = -1;
   J.active = true;
   J.thread = std::thread([&J]() {
+    FlushDenormalsToZero();   // this thread filters long silences (denormals.h)
     std::vector<double> chunk((size_t)kTraceChunkFrames * (size_t)J.stream.Channels());
     bool ok = true;
     while (J.stream.Remaining() > 0 && !J.abort.load()) {
