@@ -289,7 +289,9 @@ add_executable(wav_format_test
 )
 target_include_directories(wav_format_test PRIVATE ${REAPER_SDK_DIR} ${WDL_DIR} ${WDL_DIR}/swell src)
 target_compile_definitions(wav_format_test PRIVATE
+  $<$<PLATFORM_ID:Windows>:NOMINMAX>
   $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+  WDL_NO_DEFINE_MINMAX
 )
 if(WIN32)
   target_sources(wav_format_test PRIVATE src/win32_utf8_unit.c)
