@@ -23,9 +23,6 @@
 #include <cstring>
 #include <string>
 
-#ifdef _WIN32
-#define strcasecmp _stricmp   // as standalone_file.cpp: the path compare is case-insensitive here
-#endif
 
 static const int kConvertChunkFrames = 65536;
 
@@ -201,14 +198,21 @@ void SneakPeak::RunConvertedEdit()
 {
   ConvertJob& J = m_convertJob;
   if (!m_waveform.HasItem()) LoadSelectedItem();
-  bool ready = false;
-  if (m_waveform.HasItem() && m_waveform.GetTake()) {
-    const std::string now = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
-#ifdef __linux__
-    ready = now == J.outPath;
-#else
-    ready = strcasecmp(now.c_str(), J.outPath.c_str()) == 0;
+  // Same file? Slashes and case normalised: REAPER may report the path of a
+  // source it created with the other slash on Windows.
+  auto norm = [](std::string p) {
+#ifdef _WIN32
+    for (auto& c : p) { if (c == '/') c = '\\'; c = (char)tolower((unsigned char)c); }
 #endif
+    return p;
+  };
+  std::string now;
+  if (m_waveform.HasItem() && m_waveform.GetTake())
+    now = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
+  const bool ready = !now.empty() && norm(now) == norm(J.outPath);
+  if (g_SetExtState) {   // spec probe: why the edit is still waiting
+    std::string st = ready ? "ready" : now.empty() ? "pending: no item" : "pending: " + now;
+    g_SetExtState("SneakPeak", "convert_state", st.c_str(), false);
   }
   if (!ready) {
     if (GetTickCount() < J.pendingUntil) return;   // next tick

@@ -126,11 +126,21 @@ def _load(sess, media: Path, *, lazy=False, trim_s: float | None = None):
     sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
 
 
+def _convert_state(sess) -> str:
+    return str(sess.eval('return reaper.GetExtState("SneakPeak", "convert_state")'))
+
+
 def _wait_convert_and_edit(sess, wav: Path, timeout=600):
     """The conversion pump ("Converting to WAV... N%") writes the WAV, the source
-    swap follows and the edit's own job runs right after: wait for the file,
-    then for the job's title to show and clear (F5 lore)."""
+    swap follows (the item plays the WAV a moment later on Windows) and the
+    edit's own job runs from the pending phase: wait for the file, for the
+    take to play it, then for the job's title to show and clear (F5 lore)."""
     sess.wait_until(lambda: wav.exists(), timeout=timeout)
+    try:
+        sess.wait_until(lambda: _source_name(sess).endswith(wav.name), timeout=60)
+    except Exception:
+        raise AssertionError(f"the item does not play the WAV after the conversion (source {_source_name(sess)!r}, "
+                             f"convert_state {_convert_state(sess)!r}, toast {_last_toast(sess)!r})")
     wait_destructive_job(sess, timeout=timeout)
     sess.wait_until(lambda: "..." not in window_title(sess), timeout=timeout)
     wait_main_thread_idle(sess, timeout=timeout)
@@ -209,7 +219,7 @@ def test_limiter_on_an_mp3_item_converts_then_limits(sess):
     assert wav.exists(), f"no converted WAV (toast {toast!r})"
     assert _source_name(sess).endswith(wav.name), f"the item still plays {_source_name(sess)}"
     assert _sha(mp3) == sha0, "the MP3's bytes changed"
-    assert toast.startswith("Limited"), f"result toast missing: {toast!r}"
+    assert toast.startswith("Limited"), f"result toast missing: {toast!r} (convert_state {_convert_state(sess)!r})"
     with sf.SoundFile(str(wav)) as f:
         f.seek(int(0.1 * f.samplerate))
         y = f.read(int(59.8 * f.samplerate), dtype="float64", always_2d=True)
