@@ -30,8 +30,7 @@ import soundfile as sf
 
 from conftest import (SELECT_ITEM0, burst_fixture, capture, clear_project, dismiss_native_modal,
                       ensure_window, insert_item_unselected, locate_apply_button, perf_media_dir,
-                      send_command, wait_audio_loaded, wait_loaded, wait_main_thread_idle,
-                      window_title)
+                      send_command, wait_audio_loaded, wait_destructive_job, wait_loaded, wait_main_thread_idle)
 
 # edit_view.h enum ContextMenuID (compiled 2026-08-29: CM_LAST 2264)
 CM_SELECT_ALL, CM_REVERSE, CM_GAIN_UP, CM_DC_REMOVE, CM_APPLY_LIMITER = 2007, 2012, 2013, 2015, 2176
@@ -60,13 +59,6 @@ def _last_toast(sess) -> str:
 def _clear_toast(sess):
     sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
 
-
-def _wait_job(sess, timeout=240):
-    """F5: the write runs on a worker - wait for the job's title to clear,
-    never for an idle main thread (idle at once since F5)."""
-    sess.wait_until(lambda: "..." not in window_title(sess), timeout=timeout)
-    wait_main_thread_idle(sess, timeout=timeout)
-    time.sleep(1.0)
 
 
 def _load(sess, media: Path, *, lazy=False, trim_s: float | None = None):
@@ -128,7 +120,7 @@ def test_gain_on_a_selection_asks_before_rewriting_the_file(sess):
 
     sess.eval(_fire(CM_GAIN_UP))
     confirmed = dismiss_native_modal(sess, timeout=6)
-    _wait_job(sess)
+    wait_destructive_job(sess)
 
     assert confirmed, "Gain on a selection rewrote the file without asking (Reverse and DC Remove ask)"
     assert _sha(media) != sha0, "after Yes the selection must be gained in the file"
@@ -185,7 +177,7 @@ def _press_apply(sess, tag: str) -> bool:
     time.sleep(0.4)
     capture(sess, SHOTS / f"{tag}_2_pressed.png")
     confirmed = dismiss_native_modal(sess, timeout=6)
-    _wait_job(sess, timeout=600)
+    wait_destructive_job(sess, timeout=600)
     capture(sess, SHOTS / f"{tag}_3_after.png")
     return confirmed
 

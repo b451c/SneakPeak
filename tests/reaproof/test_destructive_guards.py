@@ -22,7 +22,7 @@ import soundfile as sf
 
 from conftest import (SELECT_ITEM0, burst_fixture, capture, clear_project,
                       dismiss_native_modal, ensure_window, insert_item_unselected,
-                      locate_apply_button, send_command, wait_audio_loaded,
+                      locate_apply_button, send_command, wait_audio_loaded, wait_destructive_job,
                       wait_main_thread_idle)
 
 CM_APPLY_LIMITER = 2176   # edit_view.h enum ContextMenuID (compiled 2026-08-28)
@@ -83,8 +83,7 @@ def _apply_limiter(sess, tag: str) -> bool:
     capture(sess, SHOTS / f"{tag}_2_pressed.png")   # a refusal toast is still solid here
     confirmed = dismiss_native_modal(sess, timeout=6)
     capture(sess, SHOTS / f"{tag}_3_after_press.png")
-    wait_main_thread_idle(sess, timeout=120)
-    time.sleep(1.0)
+    wait_destructive_job(sess, timeout=300)   # F3: the limit runs on the F5 worker
     capture(sess, SHOTS / f"{tag}_4_idle.png")
     press = sess.eval('return reaper.GetExtState("SneakPeakSpec", "press")')
     print(f"[guards] {tag}: press {press} confirmed={confirmed}")

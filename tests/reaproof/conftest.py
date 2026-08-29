@@ -745,6 +745,22 @@ def measure_after_modal(s, fire_lua: str, *, idle_marker: str, progress_marker: 
             "ticks": len(probe.samples)}
 
 
+def wait_destructive_job(s, timeout: float = 240.0):
+    """After a destructive confirm (F5): the write runs on a worker, so the
+    main thread is idle AT ONCE - wait for the job's title ("Limiting... N%
+    (Esc cancels)", "... saving the pre-edit copy") to show (a slow VM takes a
+    tick to retitle; a job that finished within one bridge round trip never
+    shows it), then to clear, then for a quiet main thread. On Windows the
+    edited item is offline until the job lands."""
+    try:
+        s.wait_until(lambda: "..." in window_title(s), timeout=5)
+    except Exception:
+        pass
+    s.wait_until(lambda: "..." not in window_title(s), timeout=timeout)
+    wait_main_thread_idle(s, timeout=timeout)
+    time.sleep(1.0)
+
+
 def wait_main_thread_idle(s, timeout: float = 120.0, quiet: float = 0.5):
     """Block (without touching the bridge) until REAPER's defer loop ticks
     again and has done so regularly for `quiet` s - e.g. after a long
