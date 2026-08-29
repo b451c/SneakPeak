@@ -40,6 +40,12 @@ void FoldChanMode(double* frames, int64_t n, int chanMode)
   }
 }
 
+std::mutex& AudioStream::ApiLock()
+{
+  static std::mutex m;
+  return m;
+}
+
 AudioStream::~AudioStream()
 {
   Close();
@@ -54,6 +60,7 @@ bool AudioStream::Open(std::vector<AudioStreamSegment> segs, int rate, int readN
     return false;
   m_segs = std::move(segs);
   for (auto& s : m_segs) {
+    std::lock_guard<std::mutex> lk(ApiLock());
     s.accessor = s.take ? g_CreateTakeAudioAccessor(s.take) : nullptr;
     if (!s.accessor) DBG("[AudioStream] no accessor for take %p - silence\n", (void*)s.take);
   }
@@ -88,12 +95,14 @@ bool AudioStream::Read(double* out, int frames)
       int ret;
       if (srcNch < m_readNch) {
         std::vector<double> mono((size_t)call * (size_t)srcNch, 0.0);
-        ret = g_GetAudioAccessorSamples(seg.accessor, m_rate, srcNch, t, call, mono.data());
+        { std::lock_guard<std::mutex> lk(ApiLock());
+          ret = g_GetAudioAccessorSamples(seg.accessor, m_rate, srcNch, t, call, mono.data()); }
         for (int f = 0; f < call; f++)
           for (int ch = 0; ch < m_readNch; ch++)
             dst[(size_t)f * m_readNch + ch] = ret > 0 ? mono[(size_t)f * srcNch] : 0.0;
       } else {
-        ret = g_GetAudioAccessorSamples(seg.accessor, m_rate, m_readNch, t, call, dst);
+        { std::lock_guard<std::mutex> lk(ApiLock());
+          ret = g_GetAudioAccessorSamples(seg.accessor, m_rate, m_readNch, t, call, dst); }
         if (ret <= 0) std::fill(dst, dst + (size_t)call * (size_t)m_readNch, 0.0);
       }
       if (ret < 0) {
@@ -115,6 +124,7 @@ bool AudioStream::Read(double* out, int frames)
 bool AudioStream::Changed() const
 {
   if (!m_open || !g_AudioAccessorStateChanged) return false;
+  std::lock_guard<std::mutex> lk(ApiLock());
   for (const auto& s : m_segs)
     if (s.accessor && g_AudioAccessorStateChanged(s.accessor)) return true;
   return false;
@@ -124,7 +134,7 @@ void AudioStream::Close()
 {
   if (g_DestroyAudioAccessor)
     for (auto& s : m_segs)
-      if (s.accessor) g_DestroyAudioAccessor(s.accessor);
+      if (s.accessor) { std::lock_guard<std::mutex> lk(ApiLock()); g_DestroyAudioAccessor(s.accessor); }
   m_segs.clear();
   m_open = false;
   m_total = m_cursor = 0;

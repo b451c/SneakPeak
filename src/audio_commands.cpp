@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <algorithm>
+#include <mutex>
 
 
 // --- Selection sample range helper ---
@@ -483,7 +484,8 @@ void SneakPeak::EndDestructiveWrite(bool written)
   AudioEngine::RefreshItemSource(m_waveform.GetItem(), m_waveform.GetTake());
   m_waveform.RecreateLiveAccessor();
   if (g_AudioAccessorValidateState && m_waveform.GetLiveAccessor())
-    g_AudioAccessorValidateState(m_waveform.GetLiveAccessor()); // our own write is not an external change
+    { std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
+      g_AudioAccessorValidateState(m_waveform.GetLiveAccessor()); }   // our own write is not an external change
 
   m_waveform.Invalidate();
   m_dirty = true;

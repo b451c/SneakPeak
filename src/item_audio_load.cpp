@@ -11,6 +11,7 @@
 
 #include "edit_view.h"
 #include "audio_stream.h"
+#include <mutex>
 #include "debug.h"
 #include "reaper_plugin.h"
 
@@ -109,7 +110,7 @@ void SneakPeak::StartItemAudioLoad(bool wanted)
 void SneakPeak::AbortItemAudioLoad()
 {
   for (auto& j : m_itemLoad.jobs)
-    if (j.accessor && g_DestroyAudioAccessor) g_DestroyAudioAccessor(j.accessor);
+    if (j.accessor && g_DestroyAudioAccessor) { std::lock_guard<std::mutex> lk(AudioStream::ApiLock()); g_DestroyAudioAccessor(j.accessor); }
   bool wasActive = m_itemLoad.active;
   m_itemLoad = ItemAudioLoad();
   if (wasActive && m_hwnd) UpdateTitle();
@@ -138,7 +139,7 @@ void SneakPeak::StepItemAudioLoad()
       return;
     }
     if (!j.accessor) {
-      j.accessor = g_CreateTakeAudioAccessor(j.take);
+      { std::lock_guard<std::mutex> lk(AudioStream::ApiLock()); j.accessor = g_CreateTakeAudioAccessor(j.take); }
       if (!j.accessor) { L.doneFrames += j.frames; L.jobIdx++; L.framesRead = 0; continue; }
       if (L.multi) j.staging.assign((size_t)j.frames * (size_t)L.nch, 0.0);
     }
@@ -159,14 +160,18 @@ void SneakPeak::StepItemAudioLoad()
     if (j.srcNch < L.nch) {
       // mono source in a stereo layer set: read mono, duplicate (legacy parity)
       std::vector<double> tmp((size_t)n * (size_t)j.srcNch, 0.0);
-      int ret = g_GetAudioAccessorSamples(j.accessor, L.readRate, j.srcNch, t, n, tmp.data());
+      int ret;
+      { std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
+        ret = g_GetAudioAccessorSamples(j.accessor, L.readRate, j.srcNch, t, n, tmp.data()); }
       if (ret > 0)
         for (int f = 0; f < n; f++)
           for (int ch = 0; ch < L.nch; ch++)
             dst[(size_t)f * L.nch + ch] = tmp[(size_t)f * j.srcNch];
       if (ret <= 0) n = j.frames - L.framesRead;   // keep zeros for the rest
     } else {
-      int ret = g_GetAudioAccessorSamples(j.accessor, L.readRate, L.nch, t, n, dst);
+      int ret;
+      { std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
+        ret = g_GetAudioAccessorSamples(j.accessor, L.readRate, L.nch, t, n, dst); }
       if (ret <= 0) n = j.frames - L.framesRead;
     }
     L.framesRead += n;
@@ -186,7 +191,7 @@ void SneakPeak::StepItemAudioLoad()
           m_waveform.Invalidate();
         }
       }
-      if (g_DestroyAudioAccessor) g_DestroyAudioAccessor(j.accessor);
+      if (g_DestroyAudioAccessor) { std::lock_guard<std::mutex> lk(AudioStream::ApiLock()); g_DestroyAudioAccessor(j.accessor); }
       j.accessor = nullptr;
       L.jobIdx++;
       L.framesRead = 0;

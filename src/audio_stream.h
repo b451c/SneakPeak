@@ -13,6 +13,7 @@
 #include "platform.h"
 #include "globals.h"
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
 struct AudioStreamSegment {
@@ -37,6 +38,11 @@ void FoldChanMode(double* frames, int64_t n, int chanMode);
 class AudioStream {
 public:
   ~AudioStream();
+  // The one lock around every REAPER audio-accessor call (create / validate /
+  // state-changed / destroy / read): the trace worker reads its accessor while
+  // the main thread creates, polls and destroys others - never inside the API
+  // at the same time (A8.1). Held per call, never across a chunk loop.
+  static std::mutex& ApiLock();
   // MAIN THREAD. readNch = channels the buffer would carry before the fold;
   // outNch = FoldedChannels(readNch, chanMode). Creates one accessor per segment
   // (a failed create yields silence for that segment, like the loader).

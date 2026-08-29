@@ -2,6 +2,7 @@
 // Audio data is loaded once into memory, peaks computed from cache (zero API calls per paint)
 #include "waveform_view.h"
 #include "audio_stream.h"
+#include <mutex>
 #include "audio_engine.h"
 #include "audio_ops.h"
 #include "reaper_plugin.h"
@@ -105,7 +106,7 @@ void WaveformView::SetItem(MediaItem* item)
       if (chanMode >= 2 && chanMode <= 4) m_numChannels = 1;
     }
     if (g_CreateTakeAudioAccessor)
-      m_liveAccessor = g_CreateTakeAudioAccessor(m_take);
+      { std::lock_guard<std::mutex> lk(AudioStream::ApiLock()); m_liveAccessor = g_CreateTakeAudioAccessor(m_take); }
     UpdateFadeCache();  // first paint needs D_VOL/fades
     m_viewStartTime = 0.0;
     m_viewDuration = m_itemDuration;
@@ -119,6 +120,7 @@ void WaveformView::SetItem(MediaItem* item)
 
   // Create live accessor for external change detection
   if (m_take && g_CreateTakeAudioAccessor) {
+    std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
     m_liveAccessor = g_CreateTakeAudioAccessor(m_take);
   }
 
@@ -494,6 +496,7 @@ void WaveformView::ClearItem()
   m_loadGeneration++;
   RetainCurrentAudio();
   if (m_liveAccessor && g_DestroyAudioAccessor) {
+    std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
     g_DestroyAudioAccessor(m_liveAccessor);
     m_liveAccessor = nullptr;
   }
@@ -527,6 +530,7 @@ void WaveformView::ClearItem()
 bool WaveformView::CheckAudioChanged()
 {
   if (!m_liveAccessor || !g_AudioAccessorStateChanged) return false;
+  std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
   return g_AudioAccessorStateChanged(m_liveAccessor);
 }
 
@@ -537,8 +541,10 @@ void WaveformView::ReloadAfterExternalChange()
     m_take = nullptr;
     return;
   }
-  if (m_liveAccessor && g_AudioAccessorValidateState)
+  if (m_liveAccessor && g_AudioAccessorValidateState) {
+    std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
     g_AudioAccessorValidateState(m_liveAccessor);
+  }
   // SDK-peaks hybrid: drop the stale buffer and let the caller restart the
   // background loader - display falls back to .reapeaks meanwhile (which
   // REAPER refreshes itself on source changes). No code depends on the
@@ -642,14 +648,25 @@ bool WaveformView::ComputeItemLoadPlan(int& readRate, int& readFrames) const
   return PlanRead(m_itemDuration, m_sampleRate, readRate, readFrames);
 }
 
+// StateChanged under the accessor lock (A8.1).
+static bool AccessorChanged(AudioAccessor* a)
+{
+  if (!a || !g_AudioAccessorStateChanged) return false;
+  std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
+  return g_AudioAccessorStateChanged(a);
+}
+
 bool WaveformView::ReadLiveWindow(double t0, int frames, std::vector<double>& out) const
 {
   if (!m_liveAccessor || m_standaloneMode || !m_take || m_sourceRate <= 0 || frames <= 0 ||
       !g_GetAudioAccessorSamples) return false;
   const int srcNch = std::max(1, m_srcChannels);
   out.assign((size_t)frames * (size_t)srcNch, 0.0);
-  if (g_GetAudioAccessorSamples(m_liveAccessor, m_sourceRate, srcNch, t0, frames, out.data()) < 0)
-    return false;
+  {
+    std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
+    if (g_GetAudioAccessorSamples(m_liveAccessor, m_sourceRate, srcNch, t0, frames, out.data()) < 0)
+      return false;
+  }
   const int chanMode = TakeChanMode(m_take);
   if (FoldedChannels(srcNch, chanMode) != srcNch) {   // audio_stream.h: loader parity
     FoldChanMode(out.data(), frames, chanMode);
@@ -718,7 +735,8 @@ void WaveformView::LoadAudioData()
     DBG("[SneakPeak] Downsampling: readRate=%d readFrames=%d\n", readRate, readFrames);
   }
 
-  AudioAccessor* accessor = g_CreateTakeAudioAccessor(m_take);
+  AudioAccessor* accessor = nullptr;
+  { std::lock_guard<std::mutex> lk(AudioStream::ApiLock()); accessor = g_CreateTakeAudioAccessor(m_take); }
   if (!accessor) return;
 
   m_audioData.resize((size_t)readFrames * nch, 0.0);
@@ -731,9 +749,13 @@ void WaveformView::LoadAudioData()
     int framesThisChunk = std::min(CHUNK_FRAMES, readFrames - framesRead);
     double chunkTime = (double)framesRead / (double)readRate;
 
-    int ret = g_GetAudioAccessorSamples(accessor, readRate, nch,
-                                         chunkTime, framesThisChunk,
-                                         m_audioData.data() + (size_t)framesRead * nch);
+    int ret;
+    {
+      std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
+      ret = g_GetAudioAccessorSamples(accessor, readRate, nch,
+                                      chunkTime, framesThisChunk,
+                                      m_audioData.data() + (size_t)framesRead * nch);
+    }
     if (ret <= 0) {
       // Zero out remaining
       size_t offset = (size_t)framesRead * nch;
@@ -745,7 +767,7 @@ void WaveformView::LoadAudioData()
   }
 
   m_audioSampleCount = readFrames;
-  g_DestroyAudioAccessor(accessor);
+  { std::lock_guard<std::mutex> lk(AudioStream::ApiLock()); g_DestroyAudioAccessor(accessor); }
 
   DBG("[SneakPeak] Loaded %d frames (%d ch) into %.1f MB\n",
       m_audioSampleCount, nch, (double)(m_audioData.size() * sizeof(double)) / (1024.0 * 1024.0));
@@ -1045,7 +1067,7 @@ bool WaveformView::ReuseRetainedAudio()
       fabs(m_retained.playrate - m_takePlayrate) > 1e-9 ||
       m_retained.chanMode != TakeChanMode(m_take)) return false;
   if (m_retained.accessor && g_AudioAccessorStateChanged &&
-      g_AudioAccessorStateChanged(m_retained.accessor)) return false;
+      AccessorChanged(m_retained.accessor)) return false;
 
   m_audioData = std::move(m_retained.data);
   m_audioSampleCount = m_retained.frames;
@@ -1062,13 +1084,13 @@ bool WaveformView::ReuseRetainedAudio()
 
 void WaveformView::DropRetainedAudio()
 {
-  if (m_retained.accessor && g_DestroyAudioAccessor) g_DestroyAudioAccessor(m_retained.accessor);
+  if (m_retained.accessor && g_DestroyAudioAccessor) { std::lock_guard<std::mutex> lk(AudioStream::ApiLock()); g_DestroyAudioAccessor(m_retained.accessor); }
   m_retained = RetainedAudio();
 }
 
 void WaveformView::ReleaseTakeAccessors()
 {
-  if (m_liveAccessor && g_DestroyAudioAccessor) g_DestroyAudioAccessor(m_liveAccessor);
+  if (m_liveAccessor && g_DestroyAudioAccessor) { std::lock_guard<std::mutex> lk(AudioStream::ApiLock()); g_DestroyAudioAccessor(m_liveAccessor); }
   m_liveAccessor = nullptr;
   DropRetainedAudio();
 }
@@ -1077,5 +1099,5 @@ void WaveformView::RecreateLiveAccessor()
 {
   if (m_liveAccessor || !m_take || m_standaloneMode || !g_CreateTakeAudioAccessor) return;
   if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)m_take, "MediaItem_Take*")) return;
-  m_liveAccessor = g_CreateTakeAudioAccessor(m_take);
+  { std::lock_guard<std::mutex> lk(AudioStream::ApiLock()); m_liveAccessor = g_CreateTakeAudioAccessor(m_take); }
 }

@@ -1423,7 +1423,7 @@ void SneakPeak::UpdateItemState()
           std::vector<double> mixBuf;
           m_waveform.GetMultiItemView().GetMixedAudio(startFrame, endFrame, nch, mixBuf);
           m_levels.Update(mixBuf, 0, (int)mixBuf.size() / std::max(1, nch), sr, nch, itemVol, playing, chActive);
-        } else if (m_waveform.GetAudioSampleCount() <= 0 && playing && !m_dynTraceJob.active &&
+        } else if (m_waveform.GetAudioSampleCount() <= 0 && playing &&   // the accessor lock covers the trace worker (A8.1)
                    m_waveform.ReadLiveWindow(std::max(0.0, (double)startFrame / sr),
                                              (int)((double)(endFrame - std::max(0, startFrame)) / sr *
                                                    m_waveform.GetSourceSampleRate() + 0.5),
