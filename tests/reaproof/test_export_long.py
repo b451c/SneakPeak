@@ -397,10 +397,15 @@ def _silent_burst_wav(name: str, seconds: float, every: float = 10.0) -> Path:
                 burst = ((t % every) >= 0.5) & ((t % every) < 1.5)
                 y[burst] = 0.9 * np.sin(2 * np.pi * 220 * t[burst])
                 f.write(np.stack([y, y], axis=1).astype(np.float32))
-    work = perf_media_dir() / name
     import shutil
-    shutil.copyfile(pristine, work)
-    return work
+    work = perf_media_dir() / name
+    for n in range(20):          # Windows: REAPER's source pool may still hold the previous copy open
+        try:
+            shutil.copyfile(pristine, work)
+            return work
+        except PermissionError:
+            work = perf_media_dir() / f"{Path(name).stem}_{n + 1}{Path(name).suffix}"
+    raise PermissionError(f"could not write a fresh copy of {name}")
 
 
 # --- A4.6: One-Shot SILENCE slicing on a long item ----------------------------

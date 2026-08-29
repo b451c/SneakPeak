@@ -192,7 +192,7 @@ def test_reverse_on_a_reversed_take_leaves_the_parent_file_alone(sess):
 
 
 # --- A1.3: the pre-edit snapshot must exist before the file is touched ---------
-def test_snapshot_failure_cancels_the_edit():
+def test_snapshot_failure_cancels_the_edit(sess):
     """UndoSave copied the source into the temp dir and, when that copy failed
     (temp dir missing, disk full), logged it and let the edit go ahead with no
     way back. With the temp dir pointed at a directory that does not exist
@@ -207,6 +207,11 @@ def test_snapshot_failure_cancels_the_edit():
         names, bad = ("TMP", "TEMP"), r"C:\nonexistent\sneakpeak"
     else:
         names, bad = ("TMPDIR",), "/nonexistent/sneakpeak"
+    # Windows: SP_WINDOW() sees every process's windows, so the module session's
+    # visible SneakPeak window would answer window_visible() for the fresh
+    # session below and hide_window() would wait forever. Hide it first.
+    from conftest import hide_window
+    hide_window(sess)
     saved = {n: os.environ.get(n) for n in names}
     for n in names:
         os.environ[n] = bad
