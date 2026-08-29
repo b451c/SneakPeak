@@ -240,8 +240,12 @@ class _WinCapture:
 def _capture_window_windows(pid: int, out_path: Path, *, settle: float = 0.4,
                             retries: int = 20):
     """PrintWindow(PW_RENDERFULLCONTENT) of our top-level - SneakPeak renders
-    with plain GDI, which PrintWindow captures faithfully; includes the frame,
-    like screencapture on macOS (the titlebar offset math stays identical)."""
+    with plain GDI, which PrintWindow captures faithfully. The window rect it
+    renders carries the invisible 8 px DWM frame on the left/right/bottom that
+    a macOS screencapture never has, so the image is cropped to the client
+    area: every locator's `cap.height - ch` titlebar math then yields 0 and a
+    located pixel IS its client coordinate (a 16 px stage-power dot missed by
+    exactly that frame in s17)."""
     import ctypes
     import time as _t
     from ctypes import wintypes
@@ -276,6 +280,12 @@ def _capture_window_windows(pid: int, out_path: Path, *, settle: float = 0.4,
     r = wintypes.RECT()
     u32.GetWindowRect(hwnd, ctypes.byref(r))
     w, h = r.right - r.left, r.bottom - r.top
+    cr = wintypes.RECT()
+    u32.GetClientRect(hwnd, ctypes.byref(cr))
+    origin = wintypes.POINT(0, 0)
+    u32.ClientToScreen(hwnd, ctypes.byref(origin))
+    ox, oy = origin.x - r.left, origin.y - r.top              # client origin inside the window rect
+    cw, ch = cr.right - cr.left, cr.bottom - cr.top
     hdcw = u32.GetWindowDC(hwnd)
     mem = g32.CreateCompatibleDC(hdcw)
     bmp = g32.CreateCompatibleBitmap(hdcw, w, h)
@@ -297,7 +307,8 @@ def _capture_window_windows(pid: int, out_path: Path, *, settle: float = 0.4,
         g32.DeleteObject(bmp)
         g32.DeleteDC(mem)
         u32.ReleaseDC(hwnd, hdcw)
-    img = _np.frombuffer(buf, dtype=_np.uint8).reshape(h, w, 4)[..., [2, 1, 0]].copy()
+    img = _np.frombuffer(buf, dtype=_np.uint8).reshape(h, w, 4)[..., [2, 1, 0]]
+    img = img[oy:oy + ch, ox:ox + cw].copy()                  # client area only
     if img.std() < 1.0:
         raise RuntimeError("captured an all-black frame - PrintWindow returned nothing")
     _Image.fromarray(img).save(str(out_path))
@@ -536,11 +547,16 @@ class MainThreadProbe:
         self.samples: list[tuple[float, int, float]] = []     # (wall, tick, t)
         self.titles: list[tuple[float, str]] = []              # (wall, title) on change
         self._stop = threading.Event()
+        self._ready = threading.Event()                   # first title sample taken
         self._th = threading.Thread(target=self._run, daemon=True)
 
     def start(self, settle: float = 0.2):
         import time as _t
         self._th.start()
+        # The baseline title must be sampled BEFORE the caller fires its action:
+        # a fixed sleep let a slow first EnumWindows on the Windows VM land after
+        # a 14 ms lazy select had already retitled, so the change was never seen.
+        self._ready.wait(timeout=5.0)
         _t.sleep(settle)                                  # a few idle ticks first
         return self
 
@@ -569,6 +585,7 @@ class MainThreadProbe:
                 if title != last_title:
                     self.titles.append((_t.monotonic(), title))
                     last_title = title
+                self._ready.set()
             _t.sleep(0.003)
 
     def to_reaper(self, wall: float):
