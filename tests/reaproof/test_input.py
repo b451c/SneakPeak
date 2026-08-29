@@ -111,16 +111,21 @@ def test_ctrl_y_redoes_in_standalone(sess):
     _front_and_key(sess, KVK_Y, cmd=True)
     time.sleep(0.8)
 
-    preview = Path(tempfile.gettempdir()) / f"sneakpeak_preview_{sess.handle.pid}.wav"
-    preview.unlink(missing_ok=True)
-    _command_sync(sess, CM_SELECT_ALL, settle=0.3)
-    _key_sync(sess, VK_SPACE, settle=0.2)
-    sess.wait_until(preview.exists, timeout=10)
-    time.sleep(0.5)
-    _key_sync(sess, VK_SPACE, settle=0.3)
-    got = sf.read(str(preview), dtype="float64", always_2d=True)[0]
-    want = sf.read(str(media), dtype="float64", always_2d=True)[0]
-    assert np.abs(got[:4410] - want[::-1][:4410]).max() < 1e-4, "Ctrl+Y did not redo the reverse"
+    try:
+        preview = Path(tempfile.gettempdir()) / f"sneakpeak_preview_{sess.handle.pid}.wav"
+        preview.unlink(missing_ok=True)
+        _command_sync(sess, CM_SELECT_ALL, settle=0.3)
+        _key_sync(sess, VK_SPACE, settle=0.2)
+        sess.wait_until(preview.exists, timeout=10)
+        time.sleep(0.5)
+        _key_sync(sess, VK_SPACE, settle=0.3)
+        got = sf.read(str(preview), dtype="float64", always_2d=True)[0]
+        want = sf.read(str(media), dtype="float64", always_2d=True)[0]
+        assert np.abs(got[:4410] - want[::-1][:4410]).max() < 1e-4, "Ctrl+Y did not redo the reverse"
+    finally:
+        # the redo leaves the buffer reversed; re-opening the same path activates
+        # this tab, so a --reaproof-repeat pass must start from the original
+        _command_sync(sess, CM_UNDO, settle=0.3)
 
 
 def test_right_click_does_not_interrupt_a_selection_drag(sess):

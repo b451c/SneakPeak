@@ -371,6 +371,11 @@ def clear_project(s):
       for i = reaper.CountTracks(0) - 1, 0, -1 do
         reaper.DeleteTrack(reaper.GetTrack(0, i))
       end
+      -- markers/regions too: a --reaproof-repeat pass must not inherit the
+      -- previous pass's regions (One-Shot REGIONS slices every region it finds)
+      for i = reaper.CountProjectMarkers(0) - 1, 0, -1 do
+        reaper.DeleteProjectMarkerByIndex(0, i)
+      end
       reaper.UpdateArrange()
       return true
     """)

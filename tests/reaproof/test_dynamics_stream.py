@@ -181,7 +181,8 @@ def test_thresh_knob_drag_tracks_input_on_one_hour_item(sess, one_hour_hf):
     sess.eval(SELECT_ITEM0)
     wait_audio_loaded(sess, media.stem, timeout=600)
 
-    send_command(sess, CM_APPLY_DYNAMICS)
+    if locate_apply_button(sess, SHOTS / "probe1h.png") is None:   # 2058 toggles the panel
+        send_command(sess, CM_APPLY_DYNAMICS)
     sess.wait_until(lambda: locate_apply_button(sess, SHOTS / "probe1h.png") is not None, timeout=15)
     _wait_title_settled(sess, media.stem, timeout=120)
     px, py = _panel_origin(sess)

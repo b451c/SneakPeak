@@ -313,13 +313,19 @@ def test_standalone_small_edit_reanalyses(sess):
     media = _tone_burst_fixture("sa_reanalyse_10s.wav")
     _open_and_wait(sess, media)
     SHOTS.mkdir(parents=True, exist_ok=True)
-    _apply_standalone(sess, SHOTS)                                  # Apply 1: the burst is compressed
-    drag_client(sess, 80, WAVE_Y, 84, WAVE_Y)                        # ~1.056-1.109 s, inside the burst
-    time.sleep(0.4)
-    _command_sync(sess, CM_SILENCE, settle=0.5)
-    wait_main_thread_idle(sess, timeout=60)
-    _apply_standalone(sess, SHOTS)                                  # Apply 2: must see the gap
-    got = _preview_of_whole_buffer(sess)
+    try:
+        _apply_standalone(sess, SHOTS)                              # Apply 1: the burst is compressed
+        drag_client(sess, 80, WAVE_Y, 84, WAVE_Y)                    # ~1.056-1.109 s, inside the burst
+        time.sleep(0.4)
+        _command_sync(sess, CM_SILENCE, settle=0.5)
+        wait_main_thread_idle(sess, timeout=60)
+        _apply_standalone(sess, SHOTS)                              # Apply 2: must see the gap
+        got = _preview_of_whole_buffer(sess)
+    finally:
+        # Re-opening the same path activates the EXISTING tab (edits included), so a
+        # --reaproof-repeat pass would find two gaps: put the buffer back (3 edits).
+        for _ in range(3):
+            _command_sync(sess, CM_UNDO, settle=0.3)
     sr = 44100
     mono = got[:, 0]
     burst = mono[int(0.5 * sr):int(1.5 * sr)]
@@ -349,6 +355,10 @@ SAVE = ('reaper.defer(function() reaper.Main_OnCommand('
         'reaper.NamedCommandLookup("_SneakPeak_SaveStandalone"), 0) end) return true')
 
 
+import itertools as _itertools
+_BWF_N = _itertools.count(1)
+
+
 def _bwf_fixture() -> Path:
     """The 10 s burst fixture with bext + iXML + LIST chunks in front of the
     data chunk (a Broadcast WAV the way field recorders write it). Fresh copy
@@ -362,7 +372,10 @@ def _bwf_fixture() -> Path:
     def chunk(cid: bytes, payload: bytes) -> bytes:
         return cid + len(payload).to_bytes(4, "little") + payload + (b"\0" if len(payload) & 1 else b"")
     body = raw[12:data_at] + chunk(b"bext", bext) + chunk(b"iXML", ixml) + chunk(b"LIST", info) + raw[data_at:]
-    out = base.with_name("sa_bwf_10s.wav")
+    # A unique name per call: re-opening a path that is already a Standalone tab
+    # activates THAT tab (buffer edited and saved by the previous pass), so a
+    # --reaproof-repeat pass must get its own file.
+    out = base.with_name(f"sa_bwf_10s_{next(_BWF_N)}.wav")
     out.write_bytes(b"RIFF" + (len(body) + 4).to_bytes(4, "little") + b"WAVE" + body)
     return out
 
