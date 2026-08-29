@@ -132,6 +132,9 @@ public:
   double GetCursorTime() const { return m_cursorTime; }
 
   // Snap to zero-crossing
+  // Forget takes REAPER has freed (ValidatePtr2) before anything asks REAPER
+  // about them; true when one was dropped. See SneakPeak::OnPaint.
+  bool DropDeadTakes();
   void SetSnapToZero(bool snap) { m_snapToZero = snap; }
   bool GetSnapToZero() const { return m_snapToZero; }
   // Public wrapper for the loop-bracket drag (SnapToZeroCrossing is private).

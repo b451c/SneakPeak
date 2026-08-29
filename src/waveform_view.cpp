@@ -658,6 +658,26 @@ bool WaveformView::ReadLiveWindow(double t0, int frames, std::vector<double>& ou
   return true;
 }
 
+// A script can delete an item without an undo point, so REAPER's project-state
+// counter never moves and SneakPeak::PollProjectState does not rebuild the
+// view: the segment stayed and the next paint asked REAPER for the envelope
+// of a freed take (GetTakeEnvelopeByName crashed once the memory was reused).
+// Only the take is forgotten - the item stays so SegmentsMatchProject sees
+// the mismatch and rebuilds the view.
+bool WaveformView::DropDeadTakes()
+{
+  if (m_standaloneMode || !g_ValidatePtr2) return false;
+  auto dead = [](MediaItem_Take* take) {
+    return take && !g_ValidatePtr2(nullptr, (void*)take, "MediaItem_Take*");
+  };
+  bool dropped = false;
+  for (auto& seg : m_segments)
+    if (dead(seg.take)) { seg.take = nullptr; dropped = true; }
+  if (m_multiItemActive && m_multiItem.DropDeadTakes(dead)) dropped = true;
+  if (dead(m_take)) { m_take = nullptr; dropped = true; }
+  return dropped;
+}
+
 bool WaveformView::ItemBufferIsLazy() const
 {
   if (m_standaloneMode || m_multiItemActive || !m_take || m_sourceRate <= 0) return false;

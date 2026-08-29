@@ -82,6 +82,12 @@ public:
   void InstallLayerAudio(size_t idx, std::vector<double>&& audio, int frames, double bakedVol);
   bool AllLayersLoaded() const;
   void DropAudio();                  // forget samples, keep the plan (reload)
+  template <typename IsDead> bool DropDeadTakes(IsDead dead) {   // WaveformView::DropDeadTakes
+    bool dropped = false;
+    for (auto& layer : m_layers)
+      if (dead(layer.take)) { layer.take = nullptr; dropped = true; }
+    return dropped;
+  }
   int GetChannels() const { return m_channels; }
   int GetSampleRate() const { return m_sampleRate; }
 

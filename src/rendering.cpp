@@ -120,6 +120,11 @@ void SneakPeak::OnPaint(HDC hdc)
   // mid-paint scale change can never leave a dangling HFONT selected into a DC.
   if (g_fontsNeedRescale) { Theme_CreateFonts(); g_fontsNeedRescale = false; }
 
+  // A take freed behind our back (a script's delete without an undo point)
+  // must never reach REAPER's take APIs from the paint; the forced poll
+  // rebuilds the view on the next tick (A6.2).
+  if (m_waveform.DropDeadTakes()) m_lastProjectState = -1;
+
   DrawModeBar(hdc);
   DrawRuler(hdc);
   if (m_masterMode) {
