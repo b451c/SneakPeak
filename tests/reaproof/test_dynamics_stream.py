@@ -12,7 +12,8 @@ Specs:
      writes must be IDENTICAL (point for point) to the one the buffer path
      wrote - recorded from the 8912905 control build first:
        SNEAKPEAK_DYLIB=<control> SNEAKPEAK_DYN_RECORD=control rp.sh ...::test_streamed_equals_buffered_3min
-     then the new build compares against that record (skipped when absent).
+     then the new build compares against that record, which lives in
+     tests/reaproof/records/ (the spec FAILS when it is absent).
   2. one hour: a 12 kHz tone burst near the end of a 1-h item is compressed
      (the 8 kHz buffer band-limits it away: control RED), RSS delta recorded,
      the Apply pressed before the analysis lands fires when it does, no stall.
@@ -41,7 +42,7 @@ from test_perf_slider import (PER_MOVE_BUDGET, STALL_BUDGET, _knob_drag_lua,
 
 RESULTS = Path("/tmp/sneakpeak-perf-results.json")
 SHOTS = Path("/tmp/sneakpeak-reaproof-shots/dynstream")
-RECORD_DIR = Path("/tmp/sneakpeak-dyn-records")
+RECORD_DIR = Path(__file__).resolve().parent / "records"   # in the repo: the control is evidence, not a temp file
 SR = 44100
 FLOOR_AMP, BURST_AMP, HF_AMP = 0.03, 0.9, 0.8
 WB_BURST = (1800.0, 1801.0)     # wideband 220 Hz burst at 30:00
@@ -91,8 +92,9 @@ def test_streamed_equals_buffered_3min(sess):
         print(f"\n[record] {len(pts)} points -> envelope_3min.{tag}.json")
         return
     control = RECORD_DIR / "envelope_3min.control.json"
-    if not control.exists():
-        pytest.skip("no control record: run once with SNEAKPEAK_DYLIB=<8912905> SNEAKPEAK_DYN_RECORD=control")
+    # Recorded 2026-08-28 from the 8912905 build (the buffer path) and kept in
+    # the repo: a missing control is a broken checkout, not a reason to skip (A7.7).
+    assert control.exists(), f"control record missing: {control} (record it from the 8912905 build with SNEAKPEAK_DYN_RECORD=control)"
     want = [tuple(p) for p in json.loads(control.read_text())]
     assert len(pts) == len(want), f"{len(pts)} points vs control {len(want)}"
     diffs = [(i, a, b) for i, (a, b) in enumerate(zip(pts, want)) if a != b]
