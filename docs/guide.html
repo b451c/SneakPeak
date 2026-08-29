@@ -796,7 +796,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <img src="images/dynamics-panel.png" alt="SneakPeak dynamics panel" style="width:420px;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
-<p>Hold <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> while dragging a slider for fine mode (1/5th sensitivity). The <strong>Apply</strong> button writes the computed compression curve as REAPER volume envelope points. Each Apply is non-destructive and idempotent - existing points are cleared before writing new ones.</p>
+<p>Hold <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> while dragging a slider for fine mode (1/5th sensitivity). The <strong>Apply</strong> button writes the computed compression curve as REAPER volume envelope points. Each Apply is non-destructive and idempotent - existing points are cleared before writing new ones. The curve is simplified to what the shape needs (0.3 dB tolerance); on very long or busy material the tolerance widens automatically so the envelope stays under 20,000 points (REAPER edits larger envelopes slowly), and the toast reports the tolerance used.</p>
 
 <p>Toggle <strong>Peak/RMS</strong> in the panel to switch detection mode. RMS provides smoother, less aggressive curves suited for music. Peak is more responsive, better for speech.</p>
 

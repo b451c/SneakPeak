@@ -2455,6 +2455,9 @@ void SneakPeak::ApplyDynamicsToEnvelope()
     if (clampedPts > 0)
       snprintf(toast, sizeof(toast), "Applied %d points - %d at the +%.1f dB ceiling",
                (int)comp.size(), clampedPts, 20.0 * log10(clampCeilLin));
+    else if (m_dynamics.EnvelopeCurveEpsilon() > DynamicsEngine::kEnvelopeEpsilonDb)
+      snprintf(toast, sizeof(toast), "Envelope simplified to %d points (tolerance %.2f dB)",
+               (int)comp.size(), m_dynamics.EnvelopeCurveEpsilon());
     else
       snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), rawCount);
     ShowToast(toast);

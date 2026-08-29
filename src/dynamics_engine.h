@@ -171,10 +171,16 @@ public:
   // worker - so Apply never simplifies millions of points on the main thread
   // (A7.1: 3.6 M points for an hour). Analyze, SetParams and Clear drop it;
   // it is only valid for the state that made it.
+  // Point budget (A7.2): an hour of busy material still leaves ~30 k points
+  // at 0.3 dB, which REAPER's envelope editing handles slowly; the tolerance
+  // widens (x1.5 steps, at most kEnvelopeEpsilonCapDb) until under budget.
   static constexpr double kEnvelopeEpsilonDb = 0.3;
+  static constexpr double kEnvelopeEpsilonCapDb = 2.0;
+  static constexpr int kMaxEnvPoints = 20000;
   void BuildEnvelopeCurve(const std::vector<CompressPoint>& raw);
   const std::vector<CompressPoint>& EnvelopeCurve() const { return m_curve; }
   size_t EnvelopeCurveSource() const { return m_curveRawCount; }   // points it was built from
+  double EnvelopeCurveEpsilon() const { return m_curveEpsilon; }   // the curve's distance bound from the raw one (dB)
 
   // Average gain reduction from last ComputeCompression (for GR meter, auto-makeup)
   double GetAvgGainReduction() const { return m_avgGR; }
@@ -201,6 +207,7 @@ private:
   std::vector<double> m_gr;   // total smoothed GR per point (ComputeCompression)
   std::vector<CompressPoint> m_curve;  // the simplified curve (see BuildEnvelopeCurve)
   size_t m_curveRawCount = 0;
+  double m_curveEpsilon = kEnvelopeEpsilonDb;
   double m_avgPeakDb = -60.0;
   double m_avgGR = 0.0;
   double m_itemVolDb = 0.0; // cached for ComputeCompression (gain smoothing needs raw dB)

@@ -97,7 +97,7 @@ def test_view_actions_after_load_do_not_freeze(sess, one_hour, label, lua):
     assert m["max_stall"] <= STALL_BUDGET, f"{label} froze REAPER: {m}"
 
 
-def test_apply_dynamics_on_one_hour_item(sess, one_hour):
+def _apply_on_one_hour(sess, one_hour) -> dict:
     """A7.1 (measure first): Apply Dynamics on the one-hour item. The worker
     had computed the curve for the current knobs; Apply then recomputed every
     trace point on the main thread (ComputeCompression + the RDP simplify)
@@ -171,7 +171,7 @@ def test_apply_dynamics_on_one_hour_item(sess, one_hour):
     wall0 = time.monotonic()
     while time.monotonic() - wall0 < 300:
         toast = str(sess.eval('return reaper.GetExtState("SneakPeak", "last_toast")'))
-        if toast.startswith("Applied"):
+        if toast.startswith(("Applied", "Envelope simplified")):
             break
         time.sleep(0.5)
     t_done = float(sess.eval("return reaper.time_precise()"))
@@ -182,10 +182,29 @@ def test_apply_dynamics_on_one_hour_item(sess, one_hour):
         if t1 <= t_click or k1 <= k0:
             continue
         max_stall = max(max_stall, (t1 - t0) / (k1 - k0))
+    points = int(sess.eval("local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0) "
+                           "local env = reaper.GetTakeEnvelopeByName(reaper.GetActiveTake(it), 'Volume') "
+                           "return env and reaper.CountEnvelopePoints(env) or 0"))
     m = {"max_stall": round(max_stall, 3), "t_toast": round(t_done - t_click, 2), "t_trace": t_trace,
-         "toast": toast, "ticks": len(samples)}
+         "toast": toast, "ticks": len(samples), "points": points}
     _record("perf.apply_1h", m)
-    assert toast.startswith("Applied"), f"Apply never finished: {m}"
-    # measured 2026-08-29: 0.699 s on the b1c97ed control (the RDP simplify of
-    # 3.6 M points on the main thread), 0.051 s with the curve built on the worker
+    assert toast.startswith("Applied") or toast.startswith("Envelope simplified"), f"Apply never finished: {m}"
+    return m
+
+
+def test_apply_dynamics_on_one_hour_item(sess, one_hour):
+    """A7.1 (measured first): longest main-thread stall between the Apply click
+    and its toast on the one-hour item. 0.699 s on the b1c97ed control (the RDP
+    simplify of 3.6 M trace points on the main thread), 0.051 s with the curve
+    built on the analysis worker."""
+    m = _apply_on_one_hour(sess, one_hour)
     assert m["max_stall"] <= STALL_BUDGET, f"Apply Dynamics froze REAPER on the 1-h item: {m}"
+
+
+def test_apply_point_budget_on_one_hour_item(sess, one_hour):
+    """A7.2: the hour simplifies to 29844 points at 0.3 dB (control d1d4b5b),
+    which REAPER's envelope handles slowly; the tolerance now widens until the
+    curve is under 20000 points and the toast says so."""
+    m = _apply_on_one_hour(sess, one_hour)
+    assert m["points"] <= 20000, f"the envelope got {m['points']} points (budget 20000): {m}"
+    assert "tolerance" in m["toast"], f"no tolerance toast although the budget applied: {m}"

@@ -1589,7 +1589,10 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     case WM_LBUTTONDOWN: {
-      if (m_dynWorker.busy.load()) JoinDynamicsWorker(false);
+      // The worker reads the Standalone buffer by pointer, so input that may
+      // edit it waits for the job; item views hand it an immutable trace and
+      // must not wait (the RDP for an hour of audio takes over a second - A7.1).
+      if (m_dynWorker.busy.load() && m_waveform.IsStandaloneMode()) JoinDynamicsWorker(false);
 #ifdef _WIN32
       if (GetFocus() != m_hwnd) SetFocus(m_hwnd);
 #endif
@@ -1659,7 +1662,10 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       return 0;
 
     case WM_KEYDOWN:
-      if (m_dynWorker.busy.load()) JoinDynamicsWorker(false);
+      // The worker reads the Standalone buffer by pointer, so input that may
+      // edit it waits for the job; item views hand it an immutable trace and
+      // must not wait (the RDP for an hour of audio takes over a second - A7.1).
+      if (m_dynWorker.busy.load() && m_waveform.IsStandaloneMode()) JoinDynamicsWorker(false);
       OnKeyDown(wParam);
       return 0;
 
@@ -1678,7 +1684,10 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_RBUTTONUP: {
       if (AnyDragActive()) return 0;   // (A5.3) the drag keeps its capture and its undo block
-      if (m_dynWorker.busy.load()) JoinDynamicsWorker(false);   // the menu's commands mutate the buffer (A4.3)
+      // The worker reads the Standalone buffer by pointer, so input that may
+      // edit it waits for the job; item views hand it an immutable trace and
+      // must not wait (the RDP for an hour of audio takes over a second - A7.1).
+      if (m_dynWorker.busy.load() && m_waveform.IsStandaloneMode()) JoinDynamicsWorker(false);
       int x = (short)LOWORD(lParam);
       int y = (short)HIWORD(lParam);
       OnRightClick(x, y);
@@ -1686,7 +1695,10 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     case WM_COMMAND: {
-      if (m_dynWorker.busy.load()) JoinDynamicsWorker(false);
+      // The worker reads the Standalone buffer by pointer, so input that may
+      // edit it waits for the job; item views hand it an immutable trace and
+      // must not wait (the RDP for an hour of audio takes over a second - A7.1).
+      if (m_dynWorker.busy.load() && m_waveform.IsStandaloneMode()) JoinDynamicsWorker(false);
       int id = LOWORD(wParam);
       if (id == IDCANCEL) {
         // Docker [x] button sends IDCANCEL — defer destruction to OnTimer

@@ -519,7 +519,19 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
 
 void DynamicsEngine::BuildEnvelopeCurve(const std::vector<CompressPoint>& raw)
 {
-  m_curve = SimplifyCurve(raw, kEnvelopeEpsilonDb);
+  double bound = kEnvelopeEpsilonDb;   // the curve stays within this of the raw one
+  m_curve = SimplifyCurve(raw, bound);
+  // Over budget: coarsen the SIMPLIFIED curve further (a second pass over the
+  // ~30 k survivors is free; a pass over the millions of raw points is not,
+  // and this also runs on the main thread after a Flush). Each pass adds its
+  // tolerance to the bound, which is what the toast reports.
+  double step = bound;
+  while ((int)m_curve.size() > kMaxEnvPoints && bound < kEnvelopeEpsilonCapDb) {
+    step = std::min(step * 1.5, kEnvelopeEpsilonCapDb - bound);
+    m_curve = SimplifyCurve(m_curve, step);
+    bound += step;
+  }
+  m_curveEpsilon = bound;
   m_curveRawCount = raw.size();
 }
 
