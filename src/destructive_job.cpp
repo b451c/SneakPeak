@@ -115,9 +115,7 @@ void SneakPeak::FinalizeDestructiveJob()
   if (!J.snapshotOk) {
     // No pre-edit copy = no edit (A1.3): the file was never touched.
     AudioEngine::RemoveFile(J.snapshot);   // whatever a partial copy left behind
-#ifdef _WIN32
-    if (g_Main_OnCommand) g_Main_OnCommand(40439, 0);  // Item: set selected media online
-#endif
+    BringOfflineItemsBackOnline();         // Windows: the items BeginDestructiveWrite took offline
     m_waveform.RecreateLiveAccessor();
     UpdateTitle();
     char msg[sizeof(m_toastText)];

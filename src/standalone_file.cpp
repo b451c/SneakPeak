@@ -1162,6 +1162,49 @@ void SneakPeak::BringItemsBackOnline(const std::vector<MediaItem*>& savedSel)
 #endif
 }
 
+// ITEM-mode in-place edits (Reverse, Gain, DC Remove): BeginDestructiveWrite
+// takes the selected item's media offline (F22) and the write runs on a worker
+// (F5), so REAPER's selection can move before the bracket closes - 40439 on
+// "the selection" would then leave the edited item offline (silent) for good.
+// Remember what went offline; bring exactly that back, selection left as found.
+void SneakPeak::TakeSelectionOffline()
+{
+  m_offlineItems.clear();
+#ifdef _WIN32
+  if (!g_Main_OnCommand || !g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
+  const int n = g_CountSelectedMediaItems(nullptr);
+  m_offlineItems.reserve((size_t)n);
+  for (int i = 0; i < n; i++)
+    if (MediaItem* it = g_GetSelectedMediaItem(nullptr, i)) m_offlineItems.push_back(it);
+  g_Main_OnCommand(40440, 0);  // Item: set selected media offline
+#endif
+}
+
+void SneakPeak::BringOfflineItemsBackOnline()
+{
+#ifdef _WIN32
+  std::vector<MediaItem*> offline;
+  offline.swap(m_offlineItems);
+  if (offline.empty() || !g_Main_OnCommand || !g_CountSelectedMediaItems || !g_GetSelectedMediaItem ||
+      !g_SetMediaItemSelected)
+    return;
+  std::vector<MediaItem*> cur;
+  const int n = g_CountSelectedMediaItems(nullptr);
+  for (int i = 0; i < n; i++)
+    if (MediaItem* s = g_GetSelectedMediaItem(nullptr, i)) cur.push_back(s);
+  for (MediaItem* s : cur) g_SetMediaItemSelected(s, false);
+  int selected = 0;
+  for (MediaItem* it : offline)   // an item deleted during the write has nothing to bring back
+    if (!g_ValidatePtr2 || g_ValidatePtr2(nullptr, it, "MediaItem*")) { g_SetMediaItemSelected(it, true); selected++; }
+  if (selected > 0) g_Main_OnCommand(40439, 0);  // Item: set selected media online
+  for (MediaItem* it : offline)
+    if (!g_ValidatePtr2 || g_ValidatePtr2(nullptr, it, "MediaItem*")) g_SetMediaItemSelected(it, false);
+  for (MediaItem* s : cur) g_SetMediaItemSelected(s, true);
+#else
+  m_offlineItems.clear();
+#endif
+}
+
 // --- Replace Source in REAPER Timeline ---
 
 int SneakPeak::ReplaceSourceInTimeline(const std::string& oldPath, const std::string& newPath)

@@ -329,6 +329,10 @@ private:
   // offline for the write (F22 for saves, s12). No-ops elsewhere.
   int TakeItemsUsingPathOffline(const std::string& path, std::vector<MediaItem*>& savedSel);
   void BringItemsBackOnline(const std::vector<MediaItem*>& savedSel);
+  // Windows, ITEM-mode in-place edits: the bracket around a write whose
+  // selection may move meanwhile (F5 background job). No-ops elsewhere.
+  void TakeSelectionOffline();
+  void BringOfflineItemsBackOnline();
   int ReplaceSourceInTimeline(const std::string& oldPath, const std::string& newPath);
   void DoReplaceSourceInTimeline();
 
@@ -753,6 +757,7 @@ private:
   // UndoRestore copies it back into the same inode (path-checked).
   std::string m_itemUndoPath;   // the source file the snapshot belongs to
   std::string m_itemUndoFile;   // the snapshot copy (empty = no snapshot)
+  std::vector<MediaItem*> m_offlineItems;   // Windows: items 40440 took offline for the write in flight
   int m_itemUndoSlot = 0;       // next snapshot name (_a/_b alternate: the old copy outlives a failed new one)
   // Standalone undo/redo stacks (full or range snapshots - StandaloneUndoEntry)
   std::vector<StandaloneUndoEntry> m_standaloneUndoStack;

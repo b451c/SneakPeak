@@ -444,10 +444,11 @@ bool SneakPeak::BeginDestructiveWrite(std::string& path)
   // refuses an in-place overwrite while it is held ("target is in use"), so the
   // destructive edit silently failed and popped the "Failed to write" box
   // (forum #105 platform). Take the selected item's media offline for the
-  // duration of the write - EndDestructiveWrite brings it back online. macOS and
-  // Linux overwrite an open file fine, so this is Windows-only. The item we edit
+  // duration of the write - FinishDestructiveWrite brings those same items back
+  // (a background write lets the selection move meanwhile). macOS and Linux
+  // overwrite an open file fine, so this is Windows-only. The item we edit
   // is REAPER's selected item in ITEM mode (the selection poll loads it).
-  if (g_Main_OnCommand) g_Main_OnCommand(40440, 0);  // Item: set selected media offline
+  TakeSelectionOffline();
 #endif
   return true;
 }
@@ -472,9 +473,7 @@ void SneakPeak::EndDestructiveWrite(bool written)
 
 void SneakPeak::FinishDestructiveWrite(bool written, bool restored)
 {
-#ifdef _WIN32
-  if (g_Main_OnCommand) g_Main_OnCommand(40439, 0);  // Item: set selected media online
-#endif
+  BringOfflineItemsBackOnline();   // Windows: the items BeginDestructiveWrite took offline
   if (!written) {
     if (!restored) {
       m_waveform.RecreateLiveAccessor();
