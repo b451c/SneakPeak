@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -50,8 +51,42 @@ def pytest_collection_modifyitems(config, items):
             it.add_marker(skip)
 
 
+def clear_mac_reopen_prompt():
+    """macOS: after a REAPER crash (or the harness SIGKILL on a timeout) every
+    launch of the bundle id shows 'unexpectedly quit while reopening windows -
+    Reopen?' and the bridge never comes up; a timed-out launch is killed, which
+    re-arms the prompt - a loop (seen 2026-08-29 after an A6 crash). REAPER
+    manages its own windows, so NSApp state restoration is expendable: tell it
+    to ignore the persisted state (user default, harmless for the real REAPER;
+    undo with `defaults delete com.cockos.reaper ApplePersistenceIgnoreState`)."""
+    if sys.platform == "darwin":
+        import subprocess
+        subprocess.run(["defaults", "write", "com.cockos.reaper", "ApplePersistenceIgnoreState", "-bool", "YES"],
+                       capture_output=True)
+
+
+def release_stuck_modifiers():
+    """macOS: a key event posted WITH a modifier flag but without the modifier
+    key's own down/up leaves that modifier held in the CG session state for
+    good (measured 2026-08-29: Cmd stuck after test_input's Cmd+Y; OnKeyDown
+    then reads GetAsyncKeyState(VK_CONTROL) as held and Delete became
+    Silence). Post a key-up for every modifier the session still reports."""
+    if sys.platform != "darwin":
+        return
+    import Quartz
+    state = Quartz.kCGEventSourceStateCombinedSessionState
+    for keycode in (55, 56, 58, 59):      # Cmd, Shift, Option, Control
+        if Quartz.CGEventSourceKeyState(state, keycode):
+            ev = Quartz.CGEventCreateKeyboardEvent(None, keycode, False)
+            Quartz.CGEventSetFlags(ev, 0)
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
+            time.sleep(0.05)
+
+
 @pytest.fixture(scope="module")
 def sess():
+    clear_mac_reopen_prompt()
+    release_stuck_modifiers()
     with ReaperSession("sneakpeak", extensions=[DYLIB]) as s:
         if not bool(s.eval('return reaper.APIExists("JS_Window_Find")')):
             pytest.skip("js_ReaScriptAPI not available in isolated profile")
@@ -788,6 +823,31 @@ def mode_from_capture(s, out: Path) -> str:
 def drag_client(s, x0: int, y0: int, x1: int, y1: int, steps: int = 30):
     from reaproof.observe.input import bridge_drag
     bridge_drag(s, WINDOW_TITLE, (x0, y0), (x1, y1), steps=steps)
+
+
+def send_sync(s, msg: str, wparam: int, lo: int = 0, hi: int = 0, settle: float = 0.5):
+    """JS_WindowMessage_Send from inside the defer loop. Once a Send has been
+    used on our window (bridge_drag / bridge_click do), POSTED messages
+    (send_command / press_key) are no longer delivered to it on macOS
+    (measured 2026-08-29), so every later command, key and click goes this
+    way; a modal it raises blocks the defer loop, which is exactly the stall
+    dismiss_native_modal keys on."""
+    s.eval(f'reaper.defer(function() reaper.JS_WindowMessage_Send({window_handle_lua()}, "{msg}", '
+           f'{wparam}, 0, {lo}, {hi}) end) return true')
+    time.sleep(settle)
+
+
+def command_sync(s, cmd: int, settle: float = 0.5):
+    send_sync(s, "WM_COMMAND", cmd, settle=settle)
+
+
+def key_sync(s, vk: int, settle: float = 0.5):
+    send_sync(s, "WM_KEYDOWN", vk, settle=settle)
+
+
+def click_sync(s, x: int, y: int, settle: float = 0.5):
+    send_sync(s, "WM_LBUTTONDOWN", 1, x, y, settle=0.05)
+    send_sync(s, "WM_LBUTTONUP", 0, x, y, settle=settle)
 
 
 def press_key(s, vk: int):

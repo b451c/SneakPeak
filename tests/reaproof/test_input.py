@@ -32,10 +32,14 @@ def _front_and_key(sess, kvk: int, *, cmd: bool = False):
     subprocess.run(["osascript", "-e", 'tell application "System Events" to set frontmost of '
                     f'(first process whose unix id is {sess.handle.pid}) to true'], capture_output=True)
     time.sleep(0.3)
-    for down in (True, False):
-        ev = Quartz.CGEventCreateKeyboardEvent(None, kvk, down)
-        if cmd:
-            Quartz.CGEventSetFlags(ev, Quartz.kCGEventFlagMaskCommand)
+    # The Cmd key itself goes down and up around the key: a key event carrying
+    # only the Command FLAG leaves Cmd held in the CG session state for good
+    # (every later Delete in every later spec read as Ctrl+Delete = Silence).
+    KVK_CMD = 55
+    seq = ([(KVK_CMD, True)] if cmd else []) + [(kvk, True), (kvk, False)] + ([(KVK_CMD, False)] if cmd else [])
+    for code, down in seq:
+        ev = Quartz.CGEventCreateKeyboardEvent(None, code, down)
+        Quartz.CGEventSetFlags(ev, Quartz.kCGEventFlagMaskCommand if (cmd and down and code != KVK_CMD) else 0)
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
         time.sleep(0.05)
     time.sleep(0.4)

@@ -22,6 +22,7 @@ import soundfile as sf
 from conftest import (burst_fixture, clear_project, ensure_window, mode_from_capture,
                       perf_media_dir, rss_mb, send_command, wait_audio_loaded,
                       wait_main_thread_idle, write_long_wav)
+from conftest import command_sync as _command_sync, key_sync as _key_sync, send_sync as _send_sync
 
 CM_UNDO, CM_PASTE, CM_COPY, CM_SELECT_ALL = 2000, 2003, 2002, 2007   # edit_view.h ContextMenuID
 SHOTS = Path("/tmp/sneakpeak-reaproof-shots/standalone_guards")
@@ -32,25 +33,6 @@ OPEN = ('reaper.defer(function() reaper.Main_OnCommand('
 
 def _last_toast(sess) -> str:
     return str(sess.eval('return reaper.GetExtState("SneakPeak", "last_toast")'))
-
-
-def _send_sync(sess, msg: str, wparam: int, lo: int = 0, hi: int = 0, settle: float = 0.5):
-    """JS_WindowMessage_Send from inside the defer loop. Once a Send has been
-    used on our window, POSTED messages (send_command / press_key) are no
-    longer delivered to it on macOS (measured 2026-08-29), so every command
-    and key in these specs goes this way; a modal it raises blocks the defer
-    loop, which is exactly the stall dismiss_native_modal keys on."""
-    sess.eval(f'reaper.defer(function() reaper.JS_WindowMessage_Send(SP_WINDOW(), "{msg}", '
-              f'{wparam}, 0, {lo}, {hi}) end) return true')
-    time.sleep(settle)
-
-
-def _command_sync(sess, cmd: int, settle: float = 0.5):
-    _send_sync(sess, "WM_COMMAND", cmd, settle=settle)
-
-
-def _key_sync(sess, vk: int, settle: float = 0.5):
-    _send_sync(sess, "WM_KEYDOWN", vk, settle=settle)
 
 
 def _open_standalone(sess, path: Path):
