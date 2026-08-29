@@ -1081,13 +1081,15 @@ int SneakPeak::ReplaceSourceInTimeline(const std::string& oldPath, const std::st
   if (oldPath.empty() || newPath.empty()) return 0;
   if (!g_CountTracks || !g_GetTrack || !g_GetTrackNumMediaItems || !g_GetTrackMediaItem ||
       !g_GetMediaItemNumTakes || !g_GetMediaItemTake || !g_GetMediaItemTake_Source ||
-      !g_GetMediaSourceFileName || !g_PCM_Source_CreateFromFile || !g_GetSetMediaItemTakeInfo)
+      !g_GetMediaSourceFileName || !g_PCM_Source_CreateFromFile || !g_GetSetMediaItemTakeInfo ||
+      !g_GetMediaItemInfo_Value || !g_SetMediaItemInfo_Value || !g_CountSelectedMediaItems ||
+      !g_GetSelectedMediaItem || !g_SetMediaItemSelected || !g_Main_OnCommand)
     return 0;
 
+  // Every take whose source is the original file (paths are case-sensitive on Linux only)
+  struct Match { MediaItem* item; MediaItem_Take* take; };
+  std::vector<Match> matches;
   std::vector<MediaItem*> touchedItems;
-  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-
   int trackCount = g_CountTracks(nullptr);
   char pathBuf[4096];
   for (int t = 0; t < trackCount; t++) {
@@ -1106,39 +1108,74 @@ int SneakPeak::ReplaceSourceInTimeline(const std::string& oldPath, const std::st
         if (!src) continue;
         pathBuf[0] = 0;
         g_GetMediaSourceFileName(src, pathBuf, sizeof(pathBuf));
+#ifdef __linux__
+        if (strcmp(pathBuf, oldPath.c_str()) != 0) continue;
+#else
         if (strcasecmp(pathBuf, oldPath.c_str()) != 0) continue;
-        PCM_source* newSrc = g_PCM_Source_CreateFromFile(newPath.c_str());
-        if (!newSrc) continue;
-        // P_SOURCE with set transfers ownership; REAPER destroys the old source
-        g_GetSetMediaItemTakeInfo(take, "P_SOURCE", newSrc);
+#endif
+        matches.push_back({item, take});
         itemTouched = true;
       }
       if (itemTouched) touchedItems.push_back(item);
     }
   }
+  if (touchedItems.empty()) return 0;
+
+  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
+  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+
+  // The offline/online and peak-rebuild actions work on the selection: swap it
+  // to the touched items for the duration, restore it after.
+  std::vector<MediaItem*> savedSel;
+  int prevCount = g_CountSelectedMediaItems(nullptr);
+  savedSel.reserve((size_t)prevCount);
+  for (int i = 0; i < prevCount; i++)
+    if (MediaItem* s = g_GetSelectedMediaItem(nullptr, i)) savedSel.push_back(s);
+  for (MediaItem* s : savedSel) g_SetMediaItemSelected(s, false);
+  for (MediaItem* it : touchedItems) g_SetMediaItemSelected(it, true);
+
+  // REAPER shares one file reader per path for as long as any source keeps it
+  // open, and a source created for such a path inherits the reader's header:
+  // with the takes still online, a source for a file just saved over its
+  // original reports the OLD length. Take the items offline first, so the new
+  // sources read the file as it is now.
+  g_Main_OnCommand(40440, 0);  // Item: set selected media offline
+  for (const Match& m : matches) {
+    PCM_source* newSrc = g_PCM_Source_CreateFromFile(newPath.c_str());
+    if (!newSrc) continue;
+    const double srcLen = newSrc->GetLength();
+    // P_SOURCE with set transfers ownership; REAPER destroys the old source
+    g_GetSetMediaItemTakeInfo(m.take, "P_SOURCE", newSrc);
+    if (srcLen <= 0.0) continue;
+    // REAPER keeps the item's length and start offset, so an item over a
+    // shortened file ran past its end (and looped back to the start): end the
+    // item where the new source ends, at the take's playrate; an offset past
+    // the new end has nothing left to show and restarts from the file's start.
+    double* pOff = (double*)g_GetSetMediaItemTakeInfo(m.take, "D_STARTOFFS", nullptr);
+    double* pRate = (double*)g_GetSetMediaItemTakeInfo(m.take, "D_PLAYRATE", nullptr);
+    double off = pOff ? *pOff : 0.0;
+    const double rate = (pRate && *pRate > 0.0) ? *pRate : 1.0;
+    if (off >= srcLen) {
+      off = 0.0;
+      g_GetSetMediaItemTakeInfo(m.take, "D_STARTOFFS", &off);
+    }
+    const double maxLen = (srcLen - off) / rate;
+    if (g_GetMediaItemInfo_Value(m.item, "D_LENGTH") > maxLen)
+      g_SetMediaItemInfo_Value(m.item, "D_LENGTH", maxLen);
+  }
+  g_Main_OnCommand(40439, 0);  // Item: set selected media online
 
   // Notify REAPER per item so peak cache invalidates and arrange redraws immediately
   // (without this, waveforms stay stale until REAPER regains window focus)
   if (g_UpdateItemInProject)
     for (MediaItem* it : touchedItems) g_UpdateItemInProject(it);
+  g_Main_OnCommand(40047, 0);  // Item: Build any missing peaks for selected items
+
+  for (MediaItem* it : touchedItems) g_SetMediaItemSelected(it, false);
+  for (MediaItem* s : savedSel) g_SetMediaItemSelected(s, true);
 
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Replace source in timeline", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-
-  if (!touchedItems.empty() && g_CountSelectedMediaItems && g_GetSelectedMediaItem &&
-      g_SetMediaItemSelected && g_Main_OnCommand) {
-    // Force peak rebuild on touched items: swap selection to them, trigger action, restore
-    std::vector<MediaItem*> savedSel;
-    int prevCount = g_CountSelectedMediaItems(nullptr);
-    savedSel.reserve((size_t)prevCount);
-    for (int i = 0; i < prevCount; i++)
-      if (MediaItem* s = g_GetSelectedMediaItem(nullptr, i)) savedSel.push_back(s);
-    for (MediaItem* s : savedSel) g_SetMediaItemSelected(s, false);
-    for (MediaItem* it : touchedItems) g_SetMediaItemSelected(it, true);
-    g_Main_OnCommand(40047, 0);  // Item: Build any missing peaks for selected items
-    for (MediaItem* it : touchedItems) g_SetMediaItemSelected(it, false);
-    for (MediaItem* s : savedSel) g_SetMediaItemSelected(s, true);
-  }
 
   if (g_UpdateArrange) g_UpdateArrange();
   if (g_UpdateTimeline) g_UpdateTimeline();

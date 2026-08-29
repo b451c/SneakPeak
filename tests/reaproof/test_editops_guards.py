@@ -5,11 +5,17 @@ in the arrange, a script, an undo) and the solo button walked the dead
 pointer: `ToggleTrackSolo` asked REAPER for the track of a freed item.
 Control (955f5e8): crash or garbage solo. Fixed: dead segments are skipped
 (ValidatePtr2, the same guard UpdateSoloState already had).
+A6.5 - "Replace source in timeline" swapped the take's source but left the
+item's length alone: after a Standalone edit that shortened the file the item
+ran past its source (looping it, B_LOOPSRC is on by default). Control
+(c2cf074): D_LENGTH unchanged.
 """
 from __future__ import annotations
 
 import time
 from pathlib import Path
+
+import soundfile as sf
 
 from conftest import (SELECT_ITEM0, VK_DELETE, WAVE_Y, _heartbeat_t, burst_fixture, clear_project,
                       click_sync, drag_client, ensure_window, insert_item_unselected, key_sync,
@@ -184,3 +190,53 @@ def test_locked_item_not_deleted(sess):
     assert track_item_count(sess) == 1, "Delete removed a locked item whole"
     assert "locked" in toast.lower(), f"no lock toast after the partial Delete: {toast!r}"
     assert "locked" in toast2.lower(), f"no lock toast after the whole-item Delete: {toast2!r}"
+
+
+# --- A6.5: Replace source in timeline follows a shortened file ----------------
+CM_REPLACE_SOURCE = 2067   # edit_view.h ContextMenuID
+REPLACE = ('reaper.defer(function() reaper.JS_WindowMessage_Send(SP_WINDOW(), "WM_COMMAND", '
+           f'{CM_REPLACE_SOURCE}, 0, 0, 0) end) return true')
+OPEN_STANDALONE = ('reaper.defer(function() reaper.Main_OnCommand('
+                   'reaper.NamedCommandLookup("_SneakPeak_OpenStandalone"), 0) end) return true')
+
+
+def test_replace_source_shorter_file(sess):
+    """The item's file is opened in Standalone, its tail deleted, then
+    "Replace source in timeline" (Save -> overwrite -> P_SOURCE swap). The
+    item must end where the new file ends: D_LENGTH == the saved length.
+    Control (c2cf074): the item keeps its 10 s over an 8 s source."""
+    from conftest import dismiss_native_modal, mode_from_capture, wait_main_thread_idle
+    media = burst_fixture("editops_replace_10s.wav", seconds=10, channels=2)
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    ensure_window(sess)
+    sess.eval(f'reaper.SetExtState("SneakPeak", "open_path", "{media.as_posix()}", false) return true')
+    sess.eval(OPEN_STANDALONE)
+    wait_audio_loaded(sess, media.name, timeout=60)
+    time.sleep(0.5)
+    assert mode_from_capture(sess, SHOTS / "replace_standalone.png") == "STANDALONE"
+    drag_client(sess, 606, WAVE_Y, 790, WAVE_Y)   # ~8 s to past the right edge: the tail
+    time.sleep(0.5)
+    key_sync(sess, VK_DELETE)
+    wait_main_thread_idle(sess, timeout=60)
+    time.sleep(0.5)
+    sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+    sess.eval(REPLACE)
+    prompted = dismiss_native_modal(sess, timeout=10)    # "Overwrite original file?" -> Yes
+    wait_main_thread_idle(sess, timeout=60)
+    time.sleep(1.0)
+
+    new_len = float(sf.info(str(media)).duration)
+    item_len = _item_len(sess, 0)
+    src_len = float(sess.eval("local tk = reaper.GetActiveTake(reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0)) "
+                              "return reaper.GetMediaSourceLength(reaper.GetMediaItemTake_Source(tk))"))
+    toast = str(sess.eval('return reaper.GetExtState("SneakPeak", "last_toast")'))
+    src_path = str(sess.eval("local tk = reaper.GetActiveTake(reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0)) "
+                             "return reaper.GetMediaSourceFileName(reaper.GetMediaItemTake_Source(tk))"))
+    print(f"\n[editops] replace source: prompted {prompted}, file now {new_len:.3f} s, take source {src_len:.3f} s "
+          f"{src_path!r} (spec path {media.as_posix()!r}), item D_LENGTH {item_len:.3f} s, toast {toast!r}")
+    assert prompted, "no overwrite prompt: Save did not run (nothing to replace)"
+    assert new_len < 9.0, f"precondition: the Standalone delete did not shorten the file ({new_len:.3f} s)"
+    assert abs(src_len - new_len) < 0.01, "precondition: the take does not point at the saved file"
+    assert "Replaced 1 item" in toast, f"replace toast missing: {toast!r}"
+    assert abs(item_len - new_len) < 0.01, f"the item ({item_len:.3f} s) runs past its shortened source ({new_len:.3f} s)"

@@ -673,7 +673,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <ul>
   <li><strong>Multiple references</strong> - if the same file is used on several tracks, all matching takes are updated in one pass.</li>
-  <li><strong>Case-insensitive</strong> on Windows; exact match on macOS/Linux.</li>
+  <li><strong>Shorter file</strong> - when the saved file is shorter than the original, every matching item is shortened to end where the new file ends (at the take's playrate); an item that showed only audio past the new end restarts from the file's start.</li>
+  <li><strong>Case-insensitive</strong> path match on Windows and macOS; exact match on Linux.</li>
   <li><strong>Single undo</strong> - <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Z</kbd> reverts every replaced take at once.</li>
   <li><strong>No references</strong> - toast reports "No items in timeline reference this file" (e.g. when the standalone file was dragged from outside the project).</li>
 </ul>
