@@ -2,6 +2,7 @@
 #pragma once
 
 #include "platform.h"
+#include "display_gain.h"
 #include "config.h"
 #include "globals.h"
 #include "multi_item_view.h"
@@ -231,6 +232,11 @@ public:
     m_standaloneGainEnd = selEnd;
   }
   void ClearStandaloneGain() { m_standaloneGain = 1.0; m_standaloneGainStart = -1; m_standaloneGainEnd = -1; }
+  // What the columns are scaled by (item volume + the knob preview): the
+  // spectrogram's colour offset follows it (s20).
+  DisplayGain GetDisplayGain() const {
+    return { m_fadeCache.itemVol, m_standaloneGain, m_standaloneGainStart, m_standaloneGainEnd };
+  }
 
   // Channel active state (solo badges: both on by default; audio = take pan balance, host-side)
   bool IsChannelActive(int ch) const { return m_channelActive[ch]; } // ch: 0=L, 1=R

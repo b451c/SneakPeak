@@ -892,6 +892,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Toggle the spectrogram via right-click > View > Spectral View. A resizable pane appears below the waveform showing a time-frequency representation of the audio using the magma color scheme (dark = silence, bright = energy).</p>
 
+<p>The spectrogram follows the amplitude you see on the waveform: the item volume and the gain knob's live preview shift its colours, and in Standalone a baked gain recomputes it. The spectral view, zoom, cursor and selection are remembered per item while REAPER runs - click another item and back, and you continue where you were.</p>
+
 <img src="images/spectral-view.png" alt="The spectral view in Standalone: waveform above, spectrogram below with a time x frequency selection marquee" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <p>The spectrogram is computed asynchronously when an item loads, with the FFT size chosen in Settings &gt; View: <strong>FFT 512 / 1024 / 2048 / 4096</strong> (default 2048). A larger size resolves close partials and hum harmonics in frequency (4096 is about 11 Hz per bin at 44.1 kHz), a smaller one keeps clicks and transients sharp in time (512 is about 3 ms per column); the overlap stays at 75% at every size, so the cost does not change with it. The setting is remembered, and a change recomputes the open spectrogram. A progress overlay shows computation status; after computation completes, the display updates instantly.</p>

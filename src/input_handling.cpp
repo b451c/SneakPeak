@@ -1471,6 +1471,7 @@ void SneakPeak::OnMouseUp(int x, int y)
         m_gainPanel.ShowStandalone(); // reset knob to 0dB
         m_waveform.ClearStandaloneGain();
         m_waveform.Invalidate(); // recalc peaks
+        ResetSpectrum();         // the spectrogram follows the baked gain (s20)
         m_dirty = true;
         UpdateTitle();
         DBG("[SneakPeak] Standalone gain baked: %.1f dB\n", db);

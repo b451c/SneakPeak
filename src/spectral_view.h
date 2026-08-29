@@ -2,6 +2,7 @@
 #pragma once
 
 #include "platform.h"
+#include "display_gain.h"
 #include <vector>
 #include <thread>
 #include <atomic>
@@ -114,6 +115,7 @@ private:
   std::atomic<bool> m_renderValid{false};
   double m_cachedViewStart = 0.0;
   double m_cachedViewDuration = 0.0;
+  DisplayGain m_cachedGain;          // the render's colour offset input (s20)
   int m_cachedWidth = 0;
   int m_cachedHeight = 0;
 

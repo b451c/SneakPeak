@@ -954,6 +954,16 @@ private:
   }
   void SyncUiStateMirror();              // ExtState ui_state (specs): open overlays + Settings rect
   std::string m_uiStateMirror;
+  // Per-item UI memory (s20, user): what was open and where the view sat on an
+  // item comes back when it is reselected (session-only, keyed by item GUID).
+  struct ItemUiState {
+    bool spectral = false;
+    double viewStart = 0.0, viewDur = 0.0, cursor = 0.0;
+    WaveformSelection sel;
+  };
+  std::vector<std::pair<std::string, ItemUiState>> m_itemUiMemory;   // oldest first, capped
+  void RememberItemUi();                 // the current single item -> memory
+  void RestoreItemUi(MediaItem* item);   // memory -> the freshly loaded item
   void DrawLimiterOverlay(HDC hdc);      // top-anchored GR band + trace (GDI pass)
   void DrawLoopRegion(HDC hdc);          // Loop Lab brackets + tinted ruler strip
   int m_loopDrag = 0;                    // bracket drag: 0 none, 1 start, 2 end

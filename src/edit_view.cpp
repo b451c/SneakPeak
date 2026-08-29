@@ -708,6 +708,57 @@ void SneakPeak::CacheFileSize(const std::string& path)
     m_cachedFileSizeMB = static_cast<double>(st.st_size) / (1024.0 * 1024.0);
 }
 
+// --- Per-item UI memory (s20) ------------------------------------------------
+// The spectral view, zoom, cursor and selection of a plain single item survive
+// a switch to another item and come back on reselect, so a process started on
+// an item continues where it was. Panels (Dynamics, Limiter, Settings) are
+// global and simply stay open; Standalone tabs keep their own state already.
+
+static std::string ItemGuid(MediaItem* item)
+{
+  char guid[64] = { 0 };
+  if (item && g_GetSetMediaItemInfo_String)
+    g_GetSetMediaItemInfo_String(item, "GUID", guid, false);
+  return guid;
+}
+
+void SneakPeak::RememberItemUi()
+{
+  if (!m_waveform.HasItem() || m_waveform.IsStandaloneMode() || m_waveform.IsMultiItem() ||
+      m_workingSet.active)
+    return;
+  const std::string guid = ItemGuid(m_waveform.GetItem());
+  if (guid.empty()) return;
+  ItemUiState st;
+  st.spectral = m_spectralVisible;
+  st.viewStart = m_waveform.GetViewStart();
+  st.viewDur = m_waveform.GetViewDuration();
+  st.cursor = m_waveform.GetCursorTime();
+  st.sel = m_waveform.GetSelection();
+  for (auto it = m_itemUiMemory.begin(); it != m_itemUiMemory.end(); ++it)
+    if (it->first == guid) { m_itemUiMemory.erase(it); break; }
+  m_itemUiMemory.emplace_back(guid, st);
+  if (m_itemUiMemory.size() > 64) m_itemUiMemory.erase(m_itemUiMemory.begin());
+}
+
+void SneakPeak::RestoreItemUi(MediaItem* item)
+{
+  const std::string guid = ItemGuid(item);
+  for (const auto& e : m_itemUiMemory) {
+    if (e.first != guid) continue;
+    const ItemUiState& st = e.second;
+    const double dur = m_waveform.GetItemDuration();   // the item may have changed length meanwhile
+    if (st.viewDur > 0.0 && st.viewStart >= 0.0 && st.viewStart + st.viewDur <= dur + 1e-6) {
+      m_waveform.SetViewStart(st.viewStart);
+      m_waveform.SetViewDuration(st.viewDur);
+    }
+    if (st.cursor >= 0.0 && st.cursor <= dur) m_waveform.SetCursorTime(st.cursor);
+    if (st.sel.active && st.sel.endTime <= dur + 1e-6) m_waveform.SetSelection(st.sel);
+    m_spectralVisible = st.spectral;
+    return;
+  }
+}
+
 void SneakPeak::LoadSelectedItem()
 {
   if (m_destructiveJob.active) return;   // F5: the view is pinned until the write lands (the job re-syncs)
@@ -765,6 +816,7 @@ void SneakPeak::LoadSelectedItem()
   if (count <= 0) {
     // No selection - don't destroy dormant working set
     if (!m_workingSet.dormant && !m_workingSet.active) {
+      RememberItemUi();   // s20: the item we leave keeps its UI
       m_waveform.ClearItem();
       m_hasUndo = false;
       m_dirty = false;
@@ -800,6 +852,7 @@ void SneakPeak::LoadSelectedItem()
   // Multi-item: show all selected items as one continuous waveform
   if (count > 1 && LoadSelectedItemMulti(count)) return;
 
+  if (m_waveform.GetItem() != item) RememberItemUi();   // s20: the item we leave keeps its UI
   // Clear first to exit multi-item mode if active
   if (m_waveform.IsMultiItem()) m_waveform.ClearItem();
   m_waveform.SetItem(item);
@@ -813,6 +866,7 @@ void SneakPeak::LoadSelectedItem()
   m_spectral.ClearSpectrum();
   m_spectral.Invalidate();
   m_minimap.Invalidate();
+  RestoreItemUi(item);        // s20: its own zoom, cursor, selection and spectral view come back
   if (m_hwnd) {
     RECT cr;
     GetClientRect(m_hwnd, &cr);
@@ -2327,12 +2381,16 @@ void SneakPeak::SyncUiStateMirror()
   if (!g_SetExtState) return;
   const RECT sr = m_settingsPanel.IsVisible() ? m_settingsPanel.GetRect(SettingsPanelArea())
                                               : RECT{ 0, 0, 0, 0 };
-  char buf[160];
-  snprintf(buf, sizeof(buf), "spectral=%d dyn=%d lim=%d settings=%d,%d,%d,%d,%d minimap=%d preview=%d",
+  const RECT gr = m_gainPanel.IsVisible() ? m_gainPanel.GetRect(m_waveformRect) : RECT{ 0, 0, 0, 0 };
+  char buf[240];
+  snprintf(buf, sizeof(buf),
+           "spectral=%d dyn=%d lim=%d settings=%d,%d,%d,%d,%d minimap=%d preview=%d gain=%d,%d,%d,%d view=%.3f,%.3f",
            m_spectralVisible ? 1 : 0, m_dynamicsPanel.IsVisible() ? 1 : 0,
            m_limiterPanel.IsVisible() ? 1 : 0, m_settingsPanel.IsVisible() ? 1 : 0,
            (int)sr.left, (int)sr.top, (int)sr.right, (int)sr.bottom,
-           m_minimapVisible ? 1 : 0, m_previewActive ? 1 : 0);
+           m_minimapVisible ? 1 : 0, m_previewActive ? 1 : 0,
+           (int)gr.left, (int)gr.top, (int)gr.right, (int)gr.bottom,
+           m_waveform.GetViewStart(), m_waveform.GetViewDuration());
   if (m_uiStateMirror == buf) return;
   m_uiStateMirror = buf;
   g_SetExtState("SneakPeak", "ui_state", buf, false);

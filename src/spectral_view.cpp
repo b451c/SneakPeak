@@ -265,9 +265,10 @@ void SpectralView::RenderView(const WaveformView& waveform)
 
   double viewStart = waveform.GetViewStart();
   double viewDur = waveform.GetViewDuration();
+  const DisplayGain gain = waveform.GetDisplayGain();
 
   if (m_renderValid.load() && m_cachedViewStart == viewStart &&
-      m_cachedViewDuration == viewDur &&
+      m_cachedViewDuration == viewDur && m_cachedGain == gain &&
       m_cachedWidth == width && m_cachedHeight == height) return;
 
   m_pixW = width;
@@ -319,6 +320,9 @@ void SpectralView::RenderView(const WaveformView& waveform)
       int scEnd = std::max(sc0, std::min(m_specCols - 1, (int)(tNext / colTime)));
       float hFrac = specCol - (float)(int)specCol;
       bool timeDown = (scEnd - sc0) >= 2; // pixel spans 2+ hop columns
+      // The display gain (item volume, knob preview) shifts the colours on the
+      // 90 dB range exactly as it scales the waveform column (s20).
+      const float gainOff = (float)(20.0 * log10(std::max(gain.At(t), 1e-6)) / 90.0 * 255.0);
 
       for (int ch = 0; ch < nch; ch++) {
         int chTop = ch * (chH + chSep);
@@ -367,7 +371,7 @@ void SpectralView::RenderView(const WaveformView& waveform)
           }
 
           m_pixels[(size_t)px * (size_t)height + (size_t)screenY] =
-            (unsigned char)std::max(0.0f, std::min(255.0f, val));
+            (unsigned char)std::max(0.0f, std::min(255.0f, val + gainOff));
         }
       }
     }
@@ -377,6 +381,7 @@ done:
   m_renderValid.store(true);
   m_cachedViewStart = viewStart;
   m_cachedViewDuration = viewDur;
+  m_cachedGain = gain;
   m_cachedWidth = width;
   m_cachedHeight = height;
 }
