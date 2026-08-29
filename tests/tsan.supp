@@ -1,0 +1,11 @@
+# ThreadSanitizer suppressions for the A8.3 evidence runs (macOS only).
+# REAPER's own threads and the frameworks are not instrumented and report
+# nothing meaningful; only frames inside reaper_sneakpeak.dylib count.
+called_from_lib:REAPER
+called_from_lib:libswell
+called_from_lib:AppKit
+called_from_lib:CoreAudio
+called_from_lib:CoreFoundation
+called_from_lib:Foundation
+called_from_lib:libsystem
+race:^objc_

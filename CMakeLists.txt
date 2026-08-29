@@ -153,6 +153,17 @@ target_link_libraries(reaper_sneakpeak PRIVATE blend2d::blend2d)
 # real window DC). Default ON since v2.2.0 (parity + global UI scale reached); the
 # GDI fallback stays until Phase 3 deletes the #else paths + this option. Build the
 # GDI fallback locally with: cmake -B build-off -DSNEAKPEAK_BLEND2D_PANEL=OFF
+# ThreadSanitizer evidence build (audit A8.3, macOS only, never CI):
+#   cmake -S . -B build-tsan -DSNEAKPEAK_TSAN=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
+# REAPER must be launched with DYLD_INSERT_LIBRARIES=<libclang_rt.tsan_osx_dynamic.dylib>
+# and TSAN_OPTIONS=suppressions=tests/tsan.supp:log_path=<file> (the runtime has to be
+# in the process before the plugin loads). See .harness/plan_v250_audit_fixes.md A8.3.
+option(SNEAKPEAK_TSAN "Build the plugin with -fsanitize=thread (evidence runs only)" OFF)
+if(SNEAKPEAK_TSAN AND NOT MSVC)
+  target_compile_options(reaper_sneakpeak PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+  target_link_options(reaper_sneakpeak PRIVATE -fsanitize=thread)
+endif()
+
 option(SNEAKPEAK_BLEND2D_PANEL "Premium Blend2D UI (Dynamics/Settings/gain/meters/toast)" ON)
 if(SNEAKPEAK_BLEND2D_PANEL)
   target_compile_definitions(reaper_sneakpeak PRIVATE SNEAKPEAK_BLEND2D_PANEL)
