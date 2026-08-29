@@ -71,7 +71,7 @@ SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timelin
 
 ### Long Files (new in v2.5)
 - **Instant select at any length** - the waveform and minimap draw from REAPER's own peak files; selecting a 20-minute or hour-long item costs milliseconds and zero memory (measured main-thread stalls under 0.1 s, buffer allocation 0 MB).
-- **Buffer only on demand** - tools that need raw samples (Spectral view, One-Shot Factory, Hard Limiter) load in the background with progress in the title; a buffer over 1 GB is refused with a message instead of being allocated.
+- **Buffer only on demand** - tools that need raw samples (Spectral view, One-Shot Factory, Paste) load the buffer in the background with progress in the title; the Hard Limiter refuses items over about 3.8 minutes; a buffer over 1 GB is refused with a message instead of being allocated.
 - **Everything else streams** - exports, Copy, Normalize, and the Dynamics analysis read the source at its full sample rate chunk by chunk, so long items no longer produce reduced-rate files or band-limited analysis.
 - **Destructive edits in place** - Reverse, DC Remove and Gain on a selection stream through the source file itself (exactly the item's window of it), with a pre-edit file snapshot as undo - items of any length, no waiting.
 
@@ -95,7 +95,7 @@ SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timelin
 - **DC offset removal** - One-click DC bias correction.
 - **Silence / Insert silence** - Zero out selection or insert silence at cursor.
 - **Snap to zero-crossing** - Intelligent selection boundaries at zero-crossing points.
-- **Undo / Redo** - Full REAPER undo integration, with redo (Ctrl+Shift+Z / Ctrl+Y, new in v2.4). Independent 20-level undo + redo stacks in standalone mode; bounded edits snapshot only the touched range, so long files stay light. Destructive item edits keep a pre-edit file snapshot: one Ctrl+Z restores the original bytes on items of any length (v2.5).
+- **Undo / Redo** - Full REAPER undo integration, with redo (Ctrl+Shift+Z / Ctrl+Y). Independent 20-level undo + redo stacks in standalone mode; bounded edits snapshot only the touched range, so long files stay light. Destructive item edits keep a pre-edit file snapshot: one Ctrl+Z restores the original bytes on items of any length (v2.5).
 - **Bindable toolbar actions** (new in v2.4) - every toolbar command is a named REAPER action: assign any shortcut in the Action List.
 
 ### Dynamics Processing
@@ -172,11 +172,11 @@ Select items on one track, press T to enter. Gaps collapse into a continuous wav
 
 ### Standalone File Mode
 Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully destructive editing with independent undo.
-- **Drag & drop** files directly into SneakPeak for offline editing.
+- **Drag & drop** files directly into SneakPeak for offline editing. Mono and stereo files; a file with more than two channels is refused (edit it as an item instead), as is one that would need more than 1 GB of samples.
 - **Long-file friendly** (new in v2.4) - loading runs in timer slices with a progress title (the UI stays responsive), bounded edits snapshot only the touched range, and tab switches are instant regardless of file size.
 - **Multiple file tabs** - Up to 8 files open simultaneously with independent undo stacks.
 - **Smart Save** - Ctrl+S with overwrite confirmation for WAV, auto `_edit.wav` for MP3/FLAC. Ctrl+Shift+S for Save As.
-- **Edit Copy in Standalone** (new in v2.4) - right-click a selected timeline item > Edit Copy in Standalone: the item's audio is written as `{name}_edit.wav` next to its media file and opens as a new standalone tab - one command from the timeline into Loop Lab, Spectral Repair, the Hard Limiter and destructive editing. The original item stays untouched.
+- **Edit Copy in Standalone** (new in v2.4) - right-click a selected timeline item > Edit Copy in Standalone: the item's audio is written as `{name}_edit.wav` next to its media file (streamed at the source rate in the background; a copy over the 1 GB buffer is refused) and opens as a new standalone tab - one command from the timeline into Loop Lab, Spectral Repair, the Hard Limiter and destructive editing. The original item stays untouched.
 - **Replace Source in REAPER Timeline** - Right-click > Replace Source in REAPER Timeline after editing: one click saves the file and swaps `P_SOURCE` on every project take that references the original path. Immediate arrange redraw.
 - **Drag-export** - Drag files to REAPER timeline. Clean files use original (no copy), dirty files auto-save first. Selections export as named WAV. Works on all platforms (fixed for real on Windows in v2.5 - the drop session never started before).
 - **True-Peak Hard Limiter** (new in v2.4) - transparent lookahead brickwall limiting with a hard **dBTP** ceiling (8x-oversampled detection + output re-measure, passes BS.1770-4 meters with margin). Premium panel (Gain/Ceiling/Attack/Hold/Release, TRUE PEAK + LINK, 4 presets incl. Game Asset -1 dBTP), live GR band over the waveform, threaded preview readouts, whole-file or selection apply with undo. Works on Standalone files AND directly on a selected timeline item (destructive source rewrite, Reverse-style confirm + undo). Right-click > Process > Hard Limiter...

@@ -335,7 +335,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <ul>
   <li><strong>Non-destructive (default):</strong> everything you do in ITEM / SET / Timeline modes - splits, gain, fades, envelopes, Dynamics - goes through the REAPER API and lands in REAPER's undo history. Your audio files are never touched.</li>
-  <li><strong>Destructive on a REAPER item:</strong> the processing entries in the right-click menu (Reverse, DC Remove, Hard Limiter, ...) rewrite the item's source WAV on disk after a confirmation prompt. Since v2.5 they edit the file <em>in place</em> - the same file identity, exactly the item's window of it (trimmed, offset and rate-changed items stay safe), streamed at the file's own sample rate so items of any length work without waiting for anything to load - and can be undone: <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> copies the pre-edit snapshot back (one level). WAV sources only; for MP3/FLAC items use <strong>Edit Copy in Standalone</strong> instead.</li>
+  <li><strong>Destructive on a REAPER item:</strong> the processing entries in the right-click menu (Reverse, DC Remove, Hard Limiter, ...) rewrite the item's source WAV on disk after a confirmation prompt. Since v2.5 they edit the file <em>in place</em> - the same file identity, exactly the item's window of it (trimmed, offset and rate-changed items stay safe), streamed at the file's own sample rate so items of any length work without waiting for anything to load - and can be undone: <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> copies the pre-edit snapshot back (one level). WAV sources only; for MP3/FLAC items use <strong>Edit Copy in Standalone</strong> instead. A take reversed or sectioned in REAPER is refused before the prompt (it plays a different region of the file than the one on the timeline) - reverse or unsection it in REAPER first, or glue it.</li>
   <li><strong>Destructive standalone editor:</strong> drag a file from Finder/Explorer (or any file browser) and drop it ONTO the SneakPeak window - the mode bar switches to the orange STANDALONE tab. Cut, paste, silence, process and draw freely; nothing happens to any file until you Save (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd>) or use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a>. Standalone has its own 20-level undo, independent of REAPER's.</li>
 </ul>
 
@@ -355,7 +355,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Everything you do in this mode uses the REAPER API. The audio files on disk are never modified directly. Gain changes use the item's D_VOL parameter. Fades use D_FADEINLEN and D_FADEOUTLEN. Split uses SplitMediaItem. All reversible with REAPER's undo system.</p>
 
 <h3>Long items (v2.5)</h3>
-<p>Selecting an item of any length is instant: the waveform and minimap draw from REAPER's own peak files - the same data the arrange view shows - so nothing is decoded up front and nothing freezes. Items over about 4 minutes stay buffer-free until a tool that actually needs raw samples asks: the Spectral view and the One-Shot Factory open at once and fill in when the audio lands (progress in the title), the Hard Limiter shows a short "loading" toast and works on the next try. Reverse, DC Remove, Gain on a selection, Copy, Normalize, every export and the Dynamics analysis never need the buffer at all - they stream the source or edit the file in place. A buffer that would exceed 1 GB is refused with a clear message instead of being allocated, and the level meters keep following playback on such items (they read the played window straight from the item).</p>
+<p>Selecting an item of any length is instant: the waveform and minimap draw from REAPER's own peak files - the same data the arrange view shows - so nothing is decoded up front and nothing freezes. Items over about 3.8 minutes (stereo, 44.1 kHz) stay buffer-free until a tool that actually needs raw samples asks: the Spectral view and the One-Shot Factory open at once and fill in when the audio lands (progress in the title), Paste asks for the buffer with a short toast and works once it has loaded, and the Hard Limiter refuses such items with a message (it needs the full-rate buffer). Reverse, DC Remove, Gain on a selection, Copy, Normalize, every export and the Dynamics analysis never need the buffer at all - they stream the source or edit the file in place. The RMS band stays off on these items (it needs real samples). A buffer that would exceed 1 GB is refused with a clear message instead of being allocated, and the level meters keep following playback on such items (they read the played window straight from the item). Shorter items load their full-rate buffer in the background: a sample-based command issued within the first ~100 ms after selecting shows a "still loading" toast and works on the next try.</p>
 
 <h2 id="waveform-display">Waveform Display</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
@@ -629,13 +629,13 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Standalone mode is fully destructive - operations modify the audio data in memory. Each file has its own undo stack (20 levels). Changes are not saved to disk until you explicitly save.</p>
 
-<p>Standalone edits mono and stereo files; a file with more channels is refused with a message (edit it as an item instead). The same working-buffer limit as for items applies: a file that would need more than 1 GB of samples (about 100 minutes of stereo at 44.1 kHz) is refused rather than loaded.</p>
+<p>Standalone edits mono and stereo files; a file with more channels is refused with a message (edit it as an item instead). The same working-buffer limit as for items applies: a file that would need more than 1 GB of samples (about 25 minutes of stereo at 44.1 kHz) is refused rather than loaded.</p>
 
 <h2 id="standalone-files">File Management</h2>
 
 <ul>
   <li><strong>Open a file</strong> - drag and drop WAV, MP3, or FLAC into the window. Scripts can open a file with the action <em>SneakPeak: Open file in Standalone</em> after setting the path in ExtState <code>SneakPeak/open_path</code>.</li>
-  <li><strong>Edit Copy in Standalone</strong> - in ITEM mode, right-click a selected timeline item &gt; <strong>Edit Copy in Standalone</strong>: the item's audio is written as <code>{name}_edit.wav</code> (32-bit float) next to its media file and opens as a new standalone tab - the fastest route from the timeline into Loop Lab, Spectral Repair, the Hard Limiter and destructive editing. The original item is untouched; use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a> to bring the result back.</li>
+  <li><strong>Edit Copy in Standalone</strong> - in ITEM mode, right-click a selected timeline item &gt; <strong>Edit Copy in Standalone</strong>: the item's audio is written as <code>{name}_edit.wav</code> (32-bit float) next to its media file - streamed from the source at its own rate in the background, with progress in the title; a copy that would not fit the 1 GB buffer is refused with a message - and opens as a new standalone tab - the fastest route from the timeline into Loop Lab, Spectral Repair, the Hard Limiter and destructive editing. The original item is untouched; use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a> to bring the result back.</li>
   <li><strong>Switch tabs</strong> - click a tab in the mode bar</li>
   <li><strong>Close a tab</strong> - click the X on the active tab. If the file has unsaved changes, you'll be asked to save first.</li>
   <li><strong>Return to ITEM mode</strong> - click the item tab (blue diamond, shows the take name; appears when you have an item selected)</li>
@@ -697,7 +697,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Full file (dirty)</strong> - auto-saves first, then drags the saved file</li>
 </ul>
 
-<p>Drop the dragged file onto REAPER's timeline to insert it as a new item. In ITEM, SET and Timeline modes the selection is streamed from the item's source at its own sample rate, so exports from long items keep full quality. On Windows the drop session never actually started before v2.5 (the export was written, then silently dropped nowhere) - fixed.</p>
+<p>Drop the dragged file onto REAPER's timeline to insert it as a new item. In ITEM, SET and Timeline modes the selection is streamed from the item's source at its own sample rate, so exports from long items keep full quality, and the item's volume is baked into the exported audio (what you hear is what you export). The file lands in the project's recording folder - also while the project is unsaved (REAPER's default recording path), never in the OS temp folder. On Windows the drop session never actually started before v2.5 (the export was written, then silently dropped nowhere) - fixed.</p>
 
 <div class="tip">
   <strong>Tip:</strong>
@@ -927,7 +927,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <div class="warning">
   <strong>Metadata note</strong>
-  SneakPeak's save rebuilds the WAV from the audio in memory, so metadata chunks from the original file (bext, iXML) are not carried over - only the audio, and the <code>smpl</code> loop when enabled.
+  Saving writes the original file's metadata chunks (bext, iXML, LIST/INFO, cue, ...) back unchanged after the audio; only the <code>smpl</code> chunk is rebuilt to reflect SneakPeak's own loop state (an original <code>smpl</code> is replaced, not kept).
 </div>
 
 <h2 id="oneshot">One-Shot Factory</h2>
@@ -939,7 +939,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>TRIM</strong> - drop silence below the threshold (default -60 dBFS), keeping a small padding (default 10 ms) around the sound.</li>
   <li><strong>Fade In / Fade Out</strong> - edge micro-fades (defaults 5 ms / 20 ms, the industry click-killers).</li>
   <li><strong>Normalize</strong> - OFF, <strong>PEAK</strong> (dBFS), <strong>LUFS</strong> (integrated, custom target, measured by REAPER's own engine) or <strong>TP SAFE</strong> (the Hard Limiter at your dBTP ceiling - the game-asset default).</li>
-  <li><strong>SLICE</strong> - <strong>WHOLE</strong> exports the file as one asset; <strong>REGIONS</strong> makes each region a variation (with no regions, markers act as split points); <strong>SILENCE</strong> auto-splits on gaps longer than 150 ms below the trim threshold (slices under 50 ms are dropped, and each slice keeps its padding without bleeding into a neighbor). Record ten footsteps in one take, add nothing, and SILENCE finds the ten slices.</li>
+  <li><strong>SLICE</strong> - <strong>WHOLE</strong> exports the file as one asset; <strong>REGIONS</strong> makes each region a variation (with no regions, markers act as split points; it needs a timeline item and is refused in Standalone); <strong>SILENCE</strong> auto-splits on gaps longer than 150 ms below the trim threshold (slices under 50 ms are dropped, and each slice keeps its padding without bleeding into a neighbor). Record ten footsteps in one take, add nothing, and SILENCE finds the ten slices. Slices longer than about 3.8 minutes are skipped - one-shots are short.</li>
   <li><strong>NAME</strong> - the naming pattern for the written files: <code>{name}</code> = source basename, <code>{nn}</code> = 01-based zero-padded number; default <code>{name}_{nn}</code>. Any digit token works too: <code>{01}</code> numbers from 01, <code>{001}</code> pads to three digits, <code>{5}</code> starts at 5. Click the box to edit.</li>
 </ul>
 
@@ -952,7 +952,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>A transparent lookahead brickwall limiter for final asset loudness - push a sound effect or a mixed file into a hard ceiling that is guaranteed on <strong>true peaks</strong> (inter-sample peaks measured BS.1770-style), not just sample values. Game platforms commonly require assets to stay at or below <strong>-1 dBTP</strong>; this is the tool for that last step.</p>
 
-<p>Open it via right-click &gt; <strong>Process &gt; Hard Limiter...</strong> - on a Standalone file or directly on a selected timeline item (plain ITEM mode). In ITEM mode Apply follows the same destructive rules as Reverse: after a confirm prompt the item's source WAV is rewritten on disk (every item referencing it updates; WAV sources only) and the edit is one REAPER undo point - the panel footer shows a standing "APPLY REWRITES THE SOURCE FILE" note as a reminder. The panel gives you:</p>
+<p>Open it via right-click &gt; <strong>Process &gt; Hard Limiter...</strong> - on a Standalone file or directly on a selected timeline item (plain ITEM mode). In ITEM mode Apply follows the same destructive rules as Reverse: after a confirm prompt the item's source WAV is rewritten on disk (every item referencing it updates; WAV sources only) and the edit is one REAPER undo point. Apply checks its requirements before the prompt - a WAV under about 3.8 minutes (stereo, 44.1 kHz), the item covering its whole source file (untrimmed), a normal or reversed-stereo channel mode - and otherwise refuses with a message that says the file was not changed - the panel footer shows a standing "APPLY REWRITES THE SOURCE FILE" note as a reminder. The panel gives you:</p>
 
 <ul>
   <li><strong>Gain</strong> (0 to +24 dB) - how hard you push into the ceiling.</li>
@@ -1144,7 +1144,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>T</kbd></td><td>Toggle Working Set mode</td><td>ITEM</td></tr>
     <tr><td><kbd>S</kbd></td><td>Split at cursor / selection</td><td>ITEM, SET</td></tr>
     <tr><td><kbd>G</kbd></td><td>Toggle gain panel</td><td>All</td></tr>
-    <tr><td><kbd>D</kbd></td><td>Toggle Dynamics panel</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td><kbd>D</kbd></td><td>Toggle Dynamics panel</td><td>All</td></tr>
     <tr><td><kbd>M</kbd></td><td>Add marker at cursor</td><td>ITEM</td></tr>
     <tr><td><kbd>Shift</kbd>+<kbd>M</kbd></td><td>Add region from selection</td><td>ITEM</td></tr>
     <tr><td><kbd>E</kbd></td><td>Delete selection (gap preserved)</td><td>All</td></tr>
