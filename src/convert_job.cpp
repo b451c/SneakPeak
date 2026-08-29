@@ -14,7 +14,6 @@
 // Part of the SneakPeak class — methods defined here, class in edit_view.h.
 // ============================================================================
 
-#include "platform.h"   // strcasecmp -> _stricmp on Windows
 #include "edit_view.h"
 #include "audio_engine.h"
 #include "debug.h"
@@ -23,6 +22,10 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+
+#ifdef _WIN32
+#define strcasecmp _stricmp   // as standalone_file.cpp: the path compare is case-insensitive here
+#endif
 
 static const int kConvertChunkFrames = 65536;
 
