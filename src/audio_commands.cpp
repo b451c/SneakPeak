@@ -2586,6 +2586,25 @@ void SneakPeak::SaveLimiterGeom()
   g_SetExtState("SneakPeak", "lim_off_y", buf, true);
 }
 
+// Settings panel drag offsets (s20): the same shape as the limiter's.
+void SneakPeak::SaveSettingsGeom()
+{
+  if (!g_SetExtState) return;
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", m_settingsPanel.GetPanelOffsetX());
+  g_SetExtState("SneakPeak", "set_off_x", buf, true);
+  snprintf(buf, sizeof(buf), "%d", m_settingsPanel.GetPanelOffsetY());
+  g_SetExtState("SneakPeak", "set_off_y", buf, true);
+}
+
+void SneakPeak::RestoreSettingsGeom()
+{
+  if (!g_GetExtState) return;
+  const char* ox = g_GetExtState("SneakPeak", "set_off_x");
+  const char* oy = g_GetExtState("SneakPeak", "set_off_y");
+  m_settingsPanel.SetPanelOffset(ox && ox[0] ? atoi(ox) : 0, oy && oy[0] ? atoi(oy) : 0);
+}
+
 // --- One-Shot Prep (v2.4 INC-B1 + B2) -----------------------------------------
 // RUN = per slice: trim silence -> edge micro-fades -> normalize -> write WAV
 // next to the source (naming pattern, collision appends _x). The loaded buffer

@@ -903,6 +903,7 @@ void SneakPeak::OnTimer()
 
   // Limiter preview pump (v2.4.0 INC-L1): debounced worker launch + finish repaint.
   LimiterPreviewTick();
+  SyncUiStateMirror();
   // Background limiter apply: title progress + result swap on completion.
   LimiterApplyTick();
   StepDestructiveJob();     // F5: in-place file edit on the worker - title progress + finalize
@@ -2317,6 +2318,24 @@ void SneakPeak::NoteLimiterPreviewPass()
   char buf[16];
   snprintf(buf, sizeof(buf), "%d", ++m_limPreviewPasses);
   if (g_SetExtState) g_SetExtState("SneakPeak", "lim_preview_passes", buf, false);
+}
+
+// ExtState SneakPeak/ui_state for the specs (s20): which overlays are open and
+// where the Settings panel sits (client rect). Written on change only.
+void SneakPeak::SyncUiStateMirror()
+{
+  if (!g_SetExtState) return;
+  const RECT sr = m_settingsPanel.IsVisible() ? m_settingsPanel.GetRect(SettingsPanelArea())
+                                              : RECT{ 0, 0, 0, 0 };
+  char buf[160];
+  snprintf(buf, sizeof(buf), "spectral=%d dyn=%d lim=%d settings=%d,%d,%d,%d,%d minimap=%d preview=%d",
+           m_spectralVisible ? 1 : 0, m_dynamicsPanel.IsVisible() ? 1 : 0,
+           m_limiterPanel.IsVisible() ? 1 : 0, m_settingsPanel.IsVisible() ? 1 : 0,
+           (int)sr.left, (int)sr.top, (int)sr.right, (int)sr.bottom,
+           m_minimapVisible ? 1 : 0, m_previewActive ? 1 : 0);
+  if (m_uiStateMirror == buf) return;
+  m_uiStateMirror = buf;
+  g_SetExtState("SneakPeak", "ui_state", buf, false);
 }
 
 // F2: the Hard Limiter's greyed-Apply reason on the panel footer (ITEM mode;

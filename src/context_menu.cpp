@@ -373,13 +373,15 @@ void SneakPeak::OnRightClick(int x, int y)
   bool canSpectral = hasItem && !m_waveform.IsMultiItemActive();
   MenuAppend(viewMenu, canSpectral ? MF_STRING : MF_GRAYED, CM_TOGGLE_SPECTRAL,
              m_spectralVisible ? "Spectral View  \xE2\x9C\x93" : "Spectral View");
+  // Minimap: a view toggle like Spectral View, in both builds (user s20); the
+  // Settings > VIEW pill stays as its second home.
+  MenuAppend(viewMenu, MF_STRING, CM_MINIMAP,
+             m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
 #ifndef SNEAKPEAK_BLEND2D_PANEL
   // OFF-build fallback only: these preferences live in the premium Settings panel
   // (VIEW + RULER sections); the menu copies die with the GDI path in Phase 3.
   MenuAppend(viewMenu, MF_STRING, CM_SNAP_ZERO,
              m_waveform.GetSnapToZero() ? "Snap to Zero-Crossing  \xE2\x9C\x93" : "Snap to Zero-Crossing");
-  MenuAppend(viewMenu, MF_STRING, CM_MINIMAP,
-             m_minimapVisible ? "Minimap  \xE2\x9C\x93" : "Minimap");
   MenuAppend(viewMenu, MF_STRING, CM_ZOOM_CENTER,
              m_zoomOnEditCursor ? "Zoom at Edit Cursor  \xE2\x9C\x93" : "Zoom at Edit Cursor");
   if (hasItem) {
@@ -1084,8 +1086,12 @@ void SneakPeak::OnContextMenuCommand(int id)
       ApplyUiScale(1.0); SaveUiScale(); MarkUiScaleUserSet();
       break;
     case CM_SETTINGS:
-      if (m_settingsPanel.IsVisible()) m_settingsPanel.Hide();
-      else m_settingsPanel.Show();
+      if (m_settingsPanel.IsVisible()) {
+        m_settingsPanel.Hide();
+      } else {
+        RestoreSettingsGeom();
+        m_settingsPanel.Show();
+      }
       break;
     default: {
       // Preset selection: factory (CM_PRESET_BASE+i), a user preset

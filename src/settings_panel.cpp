@@ -43,9 +43,10 @@ RECT SettingsPanel::GetRect(RECT wr) const
   const int pw = (int)std::lround((double)dynui::kSettingsW * S);
   const int ph = (int)std::lround((double)dynui::kSettingsH * S);
   // Centered horizontally, upper third vertically (clear of the bottom-docked
-  // dynamics panel). Clamped into the waveform rect on small windows.
-  int left = (wr.left + wr.right - pw) / 2;
-  int top  = wr.top + ((wr.bottom - wr.top) - ph) / 3;
+  // dynamics panel), plus the drag offsets. Clamped into the area rect (the
+  // waveform + spectral panes, s20) on small windows.
+  int left = (wr.left + wr.right - pw) / 2 + m_offsetX;
+  int top  = wr.top + ((wr.bottom - wr.top) - ph) / 3 + m_offsetY;
   if (left < wr.left) left = wr.left;
   if (top  < wr.top)  top  = wr.top;
   if (left + pw > wr.right)  left = wr.right - pw;
@@ -145,12 +146,25 @@ bool SettingsPanel::OnMouseDown(int x, int y, RECT wr)
     return true;
   }
 
-  return true;   // elsewhere on the panel body: consume (it is an overlay)
+  // elsewhere on the panel body: drag the panel (s20; the limiter pattern)
+  m_panelDragging = true;
+  m_dragOffX = x - pr.left;
+  m_dragOffY = y - pr.top;
+  return true;
 }
 
 bool SettingsPanel::OnMouseMove(int x, int y, RECT wr)
 {
-  (void)y;
+  if (m_panelDragging) {
+    const RECT pr = GetRect(wr);
+    const int pw = pr.right - pr.left, ph = pr.bottom - pr.top;
+    const int defaultLeft = (wr.left + wr.right - pw) / 2;
+    const int defaultTop = wr.top + ((wr.bottom - wr.top) - ph) / 3;
+    m_offsetX = (x - m_dragOffX) - defaultLeft;
+    m_offsetY = (y - m_dragOffY) - defaultTop;
+    m_geomChanged = true;           // host persists on mouse-up
+    return false;                   // no scale change: the host repaints on IsPanelDragging
+  }
   if (!m_dragging) return false;
   const RECT pr = GetRect(wr);        // stable during the drag (EffScale frozen)
   const double lx = (double)(x - pr.left) / EffScale(wr) - m_grabDx;
@@ -164,6 +178,7 @@ bool SettingsPanel::OnMouseMove(int x, int y, RECT wr)
 
 bool SettingsPanel::OnMouseUp()
 {
+  m_panelDragging = false;
   if (!m_dragging) return false;
   m_dragging = false;                 // panel geometry snaps to the new scale now
   return true;

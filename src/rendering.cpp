@@ -107,7 +107,7 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
     sp.zoomOnCursor    = m_zoomOnEditCursor;
     sp.spectralNotes   = m_spectral.GetNoteScale();
     sp.spectralFft     = SpectralView::FftIndex(m_spectral.GetFftSize());
-    m_settingsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), sp);
+    m_settingsPanel.DrawPremium(hdc, SettingsPanelArea(), GetUiDpr(), sp);
   }
 #endif
 }

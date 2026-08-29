@@ -942,6 +942,17 @@ private:
   void SaveLimiterParams();              // lim_* ExtState session defaults
   void RestoreLimiterParams();           // (first run -> preset 0) + panel offsets
   void SaveLimiterGeom();                // lim_off_x / lim_off_y
+  void SaveSettingsGeom();               // set_off_x / set_off_y (Settings panel drag, s20)
+  void RestoreSettingsGeom();
+  // The Settings panel floats over the whole content area - the waveform AND
+  // the spectral pane when it is open - not just the waveform pane (s20).
+  RECT SettingsPanelArea() const {
+    RECT r = m_waveformRect;
+    if (m_spectralVisible && m_spectralRect.bottom > r.bottom) r.bottom = m_spectralRect.bottom;
+    return r;
+  }
+  void SyncUiStateMirror();              // ExtState ui_state (specs): open overlays + Settings rect
+  std::string m_uiStateMirror;
   void DrawLimiterOverlay(HDC hdc);      // top-anchored GR band + trace (GDI pass)
   void DrawLoopRegion(HDC hdc);          // Loop Lab brackets + tinted ruler strip
   int m_loopDrag = 0;                    // bracket drag: 0 none, 1 start, 2 end
