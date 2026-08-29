@@ -778,10 +778,10 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <tbody>
     <tr><td>Thresh</td><td>-60 to 0 dB</td><td>Compression threshold - signals above this are compressed</td></tr>
     <tr><td>Ratio</td><td>1:1 to Inf:1 and beyond</td><td>Compression ratio; past 20:1 the knob approaches Inf:1 (true limiting, detent) and continues into over-compression (negative ratios - reduction exceeds the overshoot)</td></tr>
-    <tr><td>Knee</td><td>0 to 30 dB</td><td>Soft knee width - gradual transition into compression; in BOTH mode it sets the gentle "leave-alone" band around the threshold</td></tr>
+    <tr><td>Knee</td><td>0 to 24 dB</td><td>Soft knee width - gradual transition into compression; in BOTH mode it sets the gentle "leave-alone" band around the threshold</td></tr>
     <tr><td>L.ahead</td><td>0 to 20 ms</td><td>Lookahead - catch transients before they arrive</td></tr>
-    <tr><td>Attack</td><td>0.1 to 200 ms</td><td>How fast compression fades in</td></tr>
-    <tr><td>Release</td><td>5 to 2000 ms</td><td>How fast compression fades out</td></tr>
+    <tr><td>Attack</td><td>0 to 500 ms</td><td>How fast compression fades in</td></tr>
+    <tr><td>Release</td><td>0 to 1000 ms</td><td>How fast compression fades out</td></tr>
     <tr><td>Makeup</td><td>-24 to +24 dB</td><td>Gain compensation (auto-calculated from average GR); negative values trim - the useful direction after an Up-mode boost</td></tr>
     <tr><td>G.Thr</td><td>-90 to 0 dB, Off</td><td>Gate threshold - signals below this are attenuated; drag fully left (or Cmd/Ctrl-click) for Off</td></tr>
     <tr><td>G.Ratio</td><td>1:1 to 10:1</td><td>Gate ratio - attenuation slope below the threshold (2:1 = gentle expander, higher = harder gate)</td></tr>
@@ -791,6 +791,13 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>G.Rel</td><td>10 to 1000 ms</td><td>Gate release - how fast the gate closes</td></tr>
     <tr><td>G.Hold</td><td>0 to 500 ms</td><td>Gate hold time - minimum fully-open time after the level exceeds the threshold</td></tr>
     <tr><td>M.Boost</td><td>0 to 24 dB</td><td>Up mode only: maximum boost applied to quiet material (caps the noise-floor lift)</td></tr>
+    <tr><td>Freq</td><td>2 to 16 kHz</td><td>DE-ESS tab: detector center (band-pass) or corner (high-pass) frequency</td></tr>
+    <tr><td>Width</td><td>0.5 to 8 Q</td><td>DE-ESS tab: band-pass width (ignored in HP mode)</td></tr>
+    <tr><td>D.Thr</td><td>-60 to 0 dB, Auto</td><td>DE-ESS tab: band-level threshold; drag fully left for Auto (the band's average level)</td></tr>
+    <tr><td>D.Ratio</td><td>1:1 to 20:1</td><td>DE-ESS tab: reduction slope above the band threshold</td></tr>
+    <tr><td>D.Range</td><td>-24 to 0 dB</td><td>DE-ESS tab: maximum de-ess reduction</td></tr>
+    <tr><td>D.Att</td><td>0.5 to 10 ms</td><td>DE-ESS tab: how fast the de-esser reacts</td></tr>
+    <tr><td>D.Rel</td><td>20 to 200 ms</td><td>DE-ESS tab: how fast it lets go</td></tr>
   </tbody>
 </table>
 
