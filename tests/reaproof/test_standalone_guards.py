@@ -340,3 +340,83 @@ def test_standalone_small_edit_reanalyses(sess):
           f"RMS 2 ms before {before:.4f} / after {after:.4f} = x{ratio:.3f}")
     assert not hashed_inside, "precondition: the gap covers a hashed sample (the hash would catch it)"
     assert ratio > 1.10, f"the second Apply used the stale analysis (after/before = {ratio:.3f})"
+
+
+# ---------------------------------------------------------------------------
+# A10.4: a Standalone overwrite keeps the original WAV's metadata chunks
+# ---------------------------------------------------------------------------
+SAVE = ('reaper.defer(function() reaper.Main_OnCommand('
+        'reaper.NamedCommandLookup("_SneakPeak_SaveStandalone"), 0) end) return true')
+
+
+def _bwf_fixture() -> Path:
+    """The 10 s burst fixture with bext + iXML + LIST chunks in front of the
+    data chunk (a Broadcast WAV the way field recorders write it). Fresh copy
+    per call - the spec overwrites it."""
+    base = burst_fixture("sa_bwf_base_10s.wav", seconds=10, channels=2)
+    raw = base.read_bytes()
+    data_at = raw.index(b"data", 12)
+    bext = b"SneakPeak BWF description".ljust(256, b"\0") + b"originator".ljust(32, b"\0") + b"\0" * (602 - 288)
+    ixml = b"<BWFXML><IXML_VERSION>1.5</IXML_VERSION><PROJECT>ReaProof</PROJECT></BWFXML>"   # odd length
+    info = b"INFO" + b"ISFT" + (10).to_bytes(4, "little") + b"SneakPeak\0"
+    def chunk(cid: bytes, payload: bytes) -> bytes:
+        return cid + len(payload).to_bytes(4, "little") + payload + (b"\0" if len(payload) & 1 else b"")
+    body = raw[12:data_at] + chunk(b"bext", bext) + chunk(b"iXML", ixml) + chunk(b"LIST", info) + raw[data_at:]
+    out = base.with_name("sa_bwf_10s.wav")
+    out.write_bytes(b"RIFF" + (len(body) + 4).to_bytes(4, "little") + b"WAVE" + body)
+    return out
+
+
+def _riff_chunks(path: Path) -> dict:
+    raw = path.read_bytes()
+    assert raw[:4] == b"RIFF" and raw[8:12] == b"WAVE", "not a RIFF/WAVE"
+    assert int.from_bytes(raw[4:8], "little") == len(raw) - 8, "RIFF size != file size - 8"
+    out, pos = {}, 12
+    while pos + 8 <= len(raw):
+        assert pos % 2 == 0, f"chunk at odd offset {pos}"
+        cid, size = raw[pos:pos + 4], int.from_bytes(raw[pos + 4:pos + 8], "little")
+        out[cid] = raw[pos + 8:pos + 8 + size]
+        pos += 8 + size + (size & 1)
+    return out
+
+
+def test_standalone_overwrite_keeps_the_bwf_metadata(sess):
+    """Reverse a Broadcast WAV in Standalone and save over it: bext / iXML /
+    LIST come back byte-identical, the audio is the edited one and REAPER
+    still opens the file. Control (44ac91e): the chunks are gone."""
+    from conftest import dismiss_native_modal
+    media = _bwf_fixture()
+    before = _riff_chunks(media)
+    want = sf.read(str(media), dtype="float64", always_2d=True)[0]
+    assert {b"bext", b"iXML", b"LIST"} <= set(before), "fixture lost its chunks"
+    _open_and_wait(sess, media)
+    sess.eval(REVERSE)
+    dismiss_native_modal(sess, timeout=3)     # no prompt since A4.4; harmless otherwise
+    wait_main_thread_idle(sess, timeout=60)
+    sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+    # the Save action from a deferred script: the "Overwrite original file?"
+    # MessageBox then stalls the defer loop and the dismisser answers Yes
+    # (Ctrl+S through the accelerator keeps the loop pumping - invisible here)
+    sess.eval(SAVE)
+    prompted = dismiss_native_modal(sess, timeout=10)
+    try:
+        sess.wait_until(lambda: _last_toast(sess).startswith("Saved"), timeout=30)
+    except Exception:
+        from conftest import window_title
+        from test_input import _mac_windows
+        print(f"\n[bwf] no Saved toast: prompted={prompted} title={window_title(sess)!r} "
+              f"toast={_last_toast(sess)!r} windows={_mac_windows(sess)}")
+        raise
+    wait_main_thread_idle(sess, timeout=60)
+
+    after = _riff_chunks(media)
+    for cid in (b"bext", b"iXML", b"LIST"):
+        assert cid in after, f"{cid!r} chunk gone after the Standalone overwrite"
+        assert after[cid] == before[cid], f"{cid!r} chunk not byte-identical after the overwrite"
+    got = sf.read(str(media), dtype="float64", always_2d=True)[0]
+    assert len(got) == len(want), f"{len(got)} frames after the save, expected {len(want)}"
+    assert np.abs(got[:4410] - want[::-1][:4410]).max() < 1e-4, "the saved audio is not the reversed buffer"
+    length = float(sess.eval(f'local src = reaper.PCM_Source_CreateFromFile("{media.as_posix()}") '
+                             'if not src then return -1 end local len = reaper.GetMediaSourceLength(src) '
+                             'reaper.PCM_Source_Destroy(src) return len'))
+    assert abs(length - 10.0) < 0.01, f"REAPER reads the saved BWF as {length} s"

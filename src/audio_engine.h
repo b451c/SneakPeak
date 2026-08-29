@@ -3,6 +3,7 @@
 
 #include "platform.h"
 #include "globals.h"
+#include "wav_writer.h"
 #include <vector>
 #include <string>
 #include <cstdint>
@@ -31,8 +32,15 @@ public:
   static std::string TempDir();
   static int ProcessId();
 
-  // Read WAV header info (does not read audio data)
+  // Read WAV header info (does not read audio data). WAVE_FORMAT_EXTENSIBLE
+  // reports the SubFormat tag; a data size of 0 / 0xFFFFFFFF (streamed WAV)
+  // derives the frame count from the file size (audit A10.1 / A10.2).
   static bool ReadWavHeader(const std::string& path, WavInfo& info);
+
+  // Every RIFF chunk of a WAV other than fmt / data / smpl, verbatim, in file
+  // order (bext, iXML, LIST, cue, axml, ...). Empty when the file is not a
+  // WAV. The Standalone save hands them to the writer (audit A10.4).
+  static bool CollectWavCarryChunks(const std::string& path, std::vector<WavCarryChunk>& out);
 
   // Read WAV file into double samples (interleaved). Fills info + samples vector.
   static bool ReadWavFile(const std::string& path, WavInfo& info,
@@ -70,10 +78,12 @@ public:
   // loopStartFrame/loopEndFrame (END-EXCLUSIVE): when both valid, a `smpl`
   // sustain-loop chunk is appended after the data chunk (v2.4 INC-A4) so game
   // engines/samplers read the loop natively. -1/-1 = no chunk (default).
+  // carry: foreign chunks re-emitted verbatim after the audio (A10.4).
   static bool WriteWavFile(const std::string& path, const double* samples,
                            int numFrames, int numChannels, int sampleRate,
                            int bitsPerSample, int audioFormat,
-                           int loopStartFrame = -1, int loopEndFrame = -1);
+                           int loopStartFrame = -1, int loopEndFrame = -1,
+                           const std::vector<WavCarryChunk>* carry = nullptr);
 
   // Copy src into dst opened for truncate+write: dst keeps its inode (created
   // when absent). False on any I/O error - dst may then be incomplete.

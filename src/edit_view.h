@@ -224,6 +224,7 @@ public:
   // Mode bar / standalone tab management
   void SaveCurrentStandaloneState();
   void AddStandaloneFile(const char* path);
+  void SaveStandaloneFile();   // Ctrl+S / the SneakPeak_SaveStandalone action (no-op outside Standalone)
 
   static INT_PTR CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -668,7 +669,6 @@ private:
   int m_sdkPeaksBuildStage = -1; // -1 idle, 0 begun
   void EvictStandaloneTabIfFull();
   void InstallStandaloneTab(const std::string& spath);
-  void SaveStandaloneFile();
   void SaveStandaloneFileAs();
   void BakePendingFades();
   void StandalonePlayStop();

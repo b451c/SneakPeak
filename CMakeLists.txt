@@ -275,6 +275,32 @@ else()
   target_compile_options(version_compare_test PRIVATE -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion)
 endif()
 
+# --- v2.5.0 audit A10: WAV format robustness (offline, hand-built files) ---
+# Links the three WAV code paths SneakPeak owns (ReadWavHeader / WavInplace /
+# WavWriter); audio_engine.cpp brings the REAPER function-pointer globals,
+# all null here (the file paths under test never touch them).
+add_executable(wav_format_test
+  tests/wav_format_test.cpp
+  src/audio_engine.cpp
+  src/globals.cpp
+  src/wav_writer.cpp
+  src/wav_inplace.cpp
+  src/wav_smpl.cpp
+)
+target_include_directories(wav_format_test PRIVATE ${REAPER_SDK_DIR} ${WDL_DIR} ${WDL_DIR}/swell src)
+target_compile_definitions(wav_format_test PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+)
+if(WIN32)
+  target_sources(wav_format_test PRIVATE src/win32_utf8_unit.c)
+endif()
+if(MSVC)
+  target_compile_options(wav_format_test PRIVATE /W3)
+else()
+  # -Wno-unused-parameter: reaper_plugin.h (third-party, via audio_engine.h) has unused inline parameters
+  target_compile_options(wav_format_test PRIVATE -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion -Wno-unused-parameter)
+endif()
+
 # --- v2.4.0 INC-A2: offline loop-finder correctness check ---
 # Pure-DSP test binary (no REAPER/SWELL/Blend2D deps), machine-independent
 # assertions like spectral_repair_test. Run via tests/run_loop_finder_test.sh.

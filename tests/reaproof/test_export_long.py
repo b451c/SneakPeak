@@ -211,9 +211,11 @@ def test_drag_export_of_a_five_minute_selection_keeps_the_source_rate(sess):
     assert info.channels == 2
     assert abs(info.frames - frames) <= 1, f"{info.frames} frames, expected {frames}"
     got = sf.read(str(out), dtype="int32", always_2d=True)[0].astype(np.float64) / 2147483648.0
-    shift, diff = _best_shift(got, media, int(round(t0 * SR)), atol=1.5 / 8388608.0)
+    # A10.3: the 24-bit encode rounds on the decoder's grid, so a 24-bit source
+    # comes back exactly (was 1 LSB of truncation)
+    shift, diff = _best_shift(got, media, int(round(t0 * SR)), atol=0.5 / 8388608.0)
     print(f"[export] drag: aligned at shift {shift}, max |diff| vs source = {diff:.3g}")
-    assert diff <= 1.5 / 8388608.0, f"export differs from the source window (shift {shift}): {diff}"
+    assert diff <= 0.5 / 8388608.0, f"export differs from the source window (shift {shift}): {diff}"
 
 
 def _trimmed_item(sess, media, *, offset_s: float, length_s: float, playrate: float = 1.0):

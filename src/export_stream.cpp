@@ -153,6 +153,15 @@ std::string SneakPeak::ExportItemRangeToWav(double t0, double t1)
     bits = info.bitsPerSample;
     fmt = info.audioFormat;
   }
+  // RIFF holds 4 GB: refuse a longer selection up front, like Copy does (A10.5).
+  const int64_t bytesPerFrame = (int64_t)(bits / 8) * stream.Channels();
+  if (stream.Frames() * bytesPerFrame > (int64_t)UINT32_MAX - 4096) {
+    const int maxMin = (int)(((int64_t)UINT32_MAX - 4096) / bytesPerFrame / stream.Rate() / 60);
+    char msg[128];
+    snprintf(msg, sizeof(msg), "Selection too long to export as WAV (about %d min max at this rate)", maxMin);
+    ShowToast(msg);
+    return {};
+  }
   const std::string path = AudioEngine::ExportWavPath(nullptr);
   WavWriter writer;
   if (!writer.Begin(path, stream.Channels(), stream.Rate(), bits, fmt)) return {};

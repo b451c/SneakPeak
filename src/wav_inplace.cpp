@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 namespace {
@@ -58,6 +59,16 @@ bool Open(const std::string& path, WavFile& w)
           fread(&rate, 4, 1, w.f) != 1 || fread(&byteRate, 4, 1, w.f) != 1 ||
           fread(&align, 2, 1, w.f) != 1 || fread(&bits, 2, 1, w.f) != 1)
         return false;
+      // WAVE_FORMAT_EXTENSIBLE: the real tag is the first two bytes of the
+      // SubFormat GUID (cbSize, validBits, channel mask precede it) - A10.1.
+      if (fmt == 0xFFFE && size >= 40) {
+        uint16_t cbSize = 0, validBits = 0, subTag = 0;
+        uint32_t mask = 0;
+        if (fread(&cbSize, 2, 1, w.f) != 1 || fread(&validBits, 2, 1, w.f) != 1 ||
+            fread(&mask, 4, 1, w.f) != 1 || fread(&subTag, 2, 1, w.f) != 1)
+          return false;
+        fmt = subTag;
+      }
       w.fmt = fmt; w.nch = nch; w.bits = bits;
       haveFmt = true;
     } else if (memcmp(id, "data", 4) == 0) {
@@ -69,7 +80,12 @@ bool Open(const std::string& path, WavFile& w)
         return false;
       }
       w.dataOffset = TellAt(w.f);
-      w.frames = (int64_t)size / w.bpf;
+      int64_t dataBytes = (int64_t)size;
+      if (size == 0 || size == 0xFFFFFFFFu) {   // streamed WAV: size never patched (A10.2)
+        if (fseek(w.f, 0, SEEK_END) != 0) return false;
+        dataBytes = TellAt(w.f) - w.dataOffset;
+      }
+      w.frames = dataBytes / w.bpf;
       return true;
     }
     if (!SeekTo(w.f, next)) return false;
@@ -116,13 +132,14 @@ void Encode(const WavFile& w, const double* in, size_t n, uint8_t* out)
     for (size_t i = 0; i < n; i++) { float v = (float)in[i]; memcpy(out + i * 4, &v, 4); }
     return;
   }
+  // Round to nearest on the decoder's grid and clamp (WavWriter parity, A10.3):
+  // an edit that leaves a sample alone writes the byte it read.
   for (size_t i = 0; i < n; i++) {
-    const double v = std::max(-1.0, std::min(1.0, in[i]));
     if (w.bits == 16) {
-      const int16_t s = (int16_t)(v * 32767.0);
+      const int16_t s = (int16_t)std::max(-32768.0, std::min(32767.0, (double)std::lrint(in[i] * 32768.0)));
       memcpy(out + i * 2, &s, 2);
     } else {
-      const int32_t s = (int32_t)(v * 8388607.0);
+      const int32_t s = (int32_t)std::max(-8388608.0, std::min(8388607.0, (double)std::lrint(in[i] * 8388608.0)));
       out[i * 3] = (uint8_t)(s & 0xFF);
       out[i * 3 + 1] = (uint8_t)((s >> 8) & 0xFF);
       out[i * 3 + 2] = (uint8_t)((s >> 16) & 0xFF);

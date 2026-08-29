@@ -538,10 +538,15 @@ void SneakPeak::SaveStandaloneFile()
   int frames = m_waveform.GetAudioSampleCount();
 
   const bool wantLoop = m_writeLoopOnSave && m_waveform.HasLoop();
+  // The original WAV's metadata (bext, iXML, LIST, cue, ...) rides along
+  // verbatim; smpl is ours (the loop state), fmt/data are rewritten (A10.4).
+  std::vector<WavCarryChunk> carry;
+  if (IsWavExtension(origPath)) AudioEngine::CollectWavCarryChunks(origPath, carry);
   if (AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
                                 m_wavBitsPerSample, m_wavAudioFormat,
                                 wantLoop ? m_waveform.GetLoopStart() : -1,
-                                wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1)) {
+                                wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1,
+                                carry.empty() ? nullptr : &carry)) {
     DBG("[SneakPeak] Saved: %s\n", savePath.c_str());
     m_savedPath = savePath;
     m_dirty = false;
@@ -632,10 +637,15 @@ void SneakPeak::SaveStandaloneFileAs()
   }
 
   const bool wantLoop = m_writeLoopOnSave && m_waveform.HasLoop();
+  // The original WAV's metadata (bext, iXML, LIST, cue, ...) rides along
+  // verbatim; smpl is ours (the loop state), fmt/data are rewritten (A10.4).
+  std::vector<WavCarryChunk> carry;
+  if (IsWavExtension(origPath)) AudioEngine::CollectWavCarryChunks(origPath, carry);
   if (AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
                                 m_wavBitsPerSample, m_wavAudioFormat,
                                 wantLoop ? m_waveform.GetLoopStart() : -1,
-                                wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1)) {
+                                wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1,
+                                carry.empty() ? nullptr : &carry)) {
     DBG("[SneakPeak] Saved As: %s\n", savePath.c_str());
     m_savedPath = savePath;
     m_overwriteConfirmed = true; // user explicitly chose this path

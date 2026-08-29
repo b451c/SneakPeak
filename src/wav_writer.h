@@ -13,6 +13,15 @@
 #include <string>
 #include <vector>
 
+// A foreign RIFF chunk copied verbatim from the file being overwritten (bext,
+// iXML, LIST, cue, axml, ...): the Standalone save re-emits the original's
+// metadata after the audio (audit A10.4). Cue points are byte-copied and may
+// point past a shortened file - documented, never rewritten.
+struct WavCarryChunk {
+  char id[4];
+  std::vector<unsigned char> payload;
+};
+
 class WavWriter {
 public:
   ~WavWriter();   // Abort() when still open
@@ -22,7 +31,11 @@ public:
              int bitsPerSample, int audioFormat);
   // False (and the tmp removed) on I/O failure or past the RIFF 4 GB limit.
   bool Write(const double* samples, int numFrames);
+  // Queue a foreign chunk for End() (written after data and smpl, pad byte
+  // honoured, counted in the RIFF size). Call between Begin and End.
+  void AddCarryChunk(const WavCarryChunk& chunk) { m_carry.push_back(chunk); }
   // Loop frames END-EXCLUSIVE: a valid in-range pair appends a smpl chunk.
+  // False (tmp removed) when the RIFF total would pass 4 GB.
   bool End(int loopStartFrame = -1, int loopEndFrame = -1);
   void Abort();
   int64_t Frames() const { return m_frames; }
@@ -33,4 +46,5 @@ private:
   int m_nch = 0, m_sr = 0, m_bits = 0, m_fmt = 0, m_bpf = 0;
   int64_t m_frames = 0;
   std::vector<unsigned char> m_buf;   // one encoded chunk
+  std::vector<WavCarryChunk> m_carry;
 };

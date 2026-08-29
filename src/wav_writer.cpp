@@ -4,20 +4,24 @@
 #include "wav_smpl.h"
 #include "debug.h"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace {
 
+// PCM encode = round to nearest on the decoder's grid (k / 32768, k / 8388608)
+// and clamp at the ends: a load -> save round trip is the identity (audit
+// A10.3; the old `v * 32767` truncation moved 65535 of the 65536 16-bit values).
 inline int16_t doubleToS16(double v)
 {
-  v = std::max(-1.0, std::min(1.0, v));
-  return (int16_t)(v * 32767.0);
+  const double s = (double)std::lrint(v * 32768.0);
+  return (int16_t)std::max(-32768.0, std::min(32767.0, s));
 }
 
 inline void doubleToS24(double v, unsigned char* out)
 {
-  v = std::max(-1.0, std::min(1.0, v));
-  int32_t i = (int32_t)(v * 8388607.0);
+  const double s = (double)std::lrint(v * 8388608.0);
+  const int32_t i = (int32_t)std::max(-8388608.0, std::min(8388607.0, s));
   out[0] = (unsigned char)(i & 0xFF);
   out[1] = (unsigned char)((i >> 8) & 0xFF);
   out[2] = (unsigned char)((i >> 16) & 0xFF);
@@ -108,19 +112,30 @@ bool WavWriter::Write(const double* samples, int numFrames)
 bool WavWriter::End(int loopStartFrame, int loopEndFrame)
 {
   if (!m_f) return false;
-  const uint32_t dataSize = (uint32_t)(m_frames * m_bpf);
+  const int64_t dataBytes = m_frames * m_bpf;
   // Loop points ride along only when they form a valid in-range region.
   const bool writeLoop = loopStartFrame >= 0 && loopEndFrame > loopStartFrame &&
                          (int64_t)loopEndFrame <= m_frames;
-  bool ok = true;
-  if (writeLoop) {   // one forward sustain loop, infinite (INC-A4)
+  // RIFF size (= file size - 8): every chunk pads to an even size (A10.5) and
+  // the 32-bit field guards the whole image, not the audio alone.
+  int64_t riffSize = 36 + dataBytes + (dataBytes & 1) + (writeLoop ? kSmplChunkBytes : 0);
+  for (const auto& c : m_carry) riffSize += 8 + (int64_t)c.payload.size() + (c.payload.size() & 1);
+  bool ok = riffSize <= (int64_t)UINT32_MAX;
+  if (!ok) DBG("[WavWriter] RIFF size %lld bytes exceeds 4 GB\n", (long long)riffSize);
+  if (ok && (dataBytes & 1)) ok = fputc(0, m_f) != EOF;   // pad byte: the next chunk starts even
+  if (ok && writeLoop) {   // one forward sustain loop, infinite (INC-A4)
     unsigned char smpl[kSmplChunkBytes];
     BuildSmplChunk(m_sr, loopStartFrame, loopEndFrame, smpl);
     ok = fwrite(smpl, 1, sizeof(smpl), m_f) == sizeof(smpl);
   }
-  const uint32_t fileSize = 36 + dataSize + (writeLoop ? (uint32_t)kSmplChunkBytes : 0);
-  ok = ok && fseek(m_f, (long)kRiffSizeOffset, SEEK_SET) == 0 && PutU32(m_f, fileSize) &&
-       fseek(m_f, (long)kDataSizeOffset, SEEK_SET) == 0 && PutU32(m_f, dataSize);
+  for (size_t i = 0; ok && i < m_carry.size(); i++) {   // the original's metadata, verbatim
+    const WavCarryChunk& c = m_carry[i];
+    ok = fwrite(c.id, 4, 1, m_f) == 1 && PutU32(m_f, (uint32_t)c.payload.size()) &&
+         (c.payload.empty() || fwrite(c.payload.data(), 1, c.payload.size(), m_f) == c.payload.size()) &&
+         (!(c.payload.size() & 1) || fputc(0, m_f) != EOF);
+  }
+  ok = ok && fseek(m_f, (long)kRiffSizeOffset, SEEK_SET) == 0 && PutU32(m_f, (uint32_t)riffSize) &&
+       fseek(m_f, (long)kDataSizeOffset, SEEK_SET) == 0 && PutU32(m_f, (uint32_t)dataBytes);
   ok = (fclose(m_f) == 0) && ok;
   m_f = nullptr;
   if (!ok) {
@@ -146,6 +161,7 @@ bool WavWriter::End(int loopStartFrame, int loopEndFrame)
 
 void WavWriter::Abort()
 {
+  m_carry.clear();
   if (!m_f) return;
   fclose(m_f);
   m_f = nullptr;

@@ -663,9 +663,10 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>WAV file</strong> - first save asks "Overwrite original?" Yes overwrites, No opens Save As</li>
   <li><strong>MP3/FLAC file</strong> - automatically creates <code>filename_edit.wav</code> next to the original (never overwrites non-WAV originals)</li>
   <li><strong>Previously saved</strong> - saves silently to the same path</li>
+  <li><strong>Metadata kept</strong> - a WAV original's bext (Broadcast WAV), iXML, LIST/INFO, cue and any other chunk are written back unchanged after the audio; the loop points (smpl) reflect SneakPeak's own loop state. Cue points are copied as they were, so a shortened file may keep cue points past its end.</li>
 </ul>
 
-<p>Any pending fade previews are baked into the audio data at save time.</p>
+<p>Any pending fade previews are baked into the audio data at save time. Scripts can save the active file with the action <em>SneakPeak: Save file (Standalone)</em> - the same Smart Save as <kbd>Ctrl</kbd>+<kbd>S</kbd>.</p>
 
 <h2 id="standalone-replace-source">Replace Source in REAPER Timeline</h2>
 

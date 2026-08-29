@@ -90,14 +90,27 @@ bool AudioEngine::ReadWavHeader(const std::string& path, WavInfo& info)
       // Read fmt data
       fseek(f, -8, SEEK_CUR);
       if (fread(&fmt, sizeof(fmt), 1, f) != 1) break;
-      // Skip any extra fmt bytes
-      if (fmt.chunkSize > 16) {
-        fseek(f, (long)(fmt.chunkSize - 16), SEEK_CUR);
+      uint32_t extra = fmt.chunkSize > 16 ? fmt.chunkSize - 16 : 0;
+      // WAVE_FORMAT_EXTENSIBLE: the real tag is the first two bytes of the
+      // SubFormat GUID (after cbSize, validBits, channel mask) - A10.1.
+      if (fmt.audioFormat == 0xFFFE && extra >= 24) {
+        unsigned char ext[10];
+        if (fread(ext, sizeof(ext), 1, f) != 1) break;
+        fmt.audioFormat = (uint16_t)(ext[8] | (ext[9] << 8));
+        extra -= (uint32_t)sizeof(ext);
       }
+      if (extra > 0) fseek(f, (long)extra, SEEK_CUR);   // skip the rest of the fmt chunk
       foundFmt = true;
     } else if (memcmp(chunkId, "data", 4) == 0) {
       dataSize = chunkSize;
       foundData = true;
+      if (chunkSize == 0 || chunkSize == 0xFFFFFFFFu) {   // streamed WAV: size never patched (A10.2)
+        const long dataStart = ftell(f);
+        if (dataStart >= 0 && fseek(f, 0, SEEK_END) == 0) {
+          const long end = ftell(f);
+          dataSize = end > dataStart ? (uint32_t)std::min<long>(end - dataStart, (long)UINT32_MAX) : 0;
+        }
+      }
       break;
     } else {
       // Skip unknown chunk
@@ -118,7 +131,7 @@ bool AudioEngine::ReadWavHeader(const std::string& path, WavInfo& info)
 
   int bytesPerFrame = (fmt.bitsPerSample / 8) * fmt.numChannels;
   if (bytesPerFrame > 0) {
-    info.numFrames = (int)(dataSize / (uint32_t)bytesPerFrame);
+    info.numFrames = (int)std::min<uint32_t>(dataSize / (uint32_t)bytesPerFrame, (uint32_t)INT_MAX);
   }
 
   DBG("[AudioEngine] WAV header: %dch %dHz %dbit fmt=%d frames=%d\n",
@@ -188,13 +201,48 @@ bool AudioEngine::ReadWavFile(const std::string& path, WavInfo& info,
 bool AudioEngine::WriteWavFile(const std::string& path, const double* samples,
                                 int numFrames, int numChannels, int sampleRate,
                                 int bitsPerSample, int audioFormat,
-                                int loopStartFrame, int loopEndFrame)
+                                int loopStartFrame, int loopEndFrame,
+                                const std::vector<WavCarryChunk>* carry)
 {
   // One encoder for whole buffers and streamed exports (wav_writer.h).
   WavWriter w;
   if (!w.Begin(path, numChannels, sampleRate, bitsPerSample, audioFormat)) return false;
+  if (carry)
+    for (const auto& c : *carry) w.AddCarryChunk(c);
   if (!w.Write(samples, numFrames)) return false;
   return w.End(loopStartFrame, loopEndFrame);
+}
+
+bool AudioEngine::CollectWavCarryChunks(const std::string& path, std::vector<WavCarryChunk>& out)
+{
+  out.clear();
+  FILE* f = fopen(path.c_str(), "rb");
+  if (!f) return false;
+  RiffHeader riff;
+  if (fread(&riff, sizeof(riff), 1, f) != 1 || memcmp(riff.riffId, "RIFF", 4) != 0 ||
+      memcmp(riff.waveId, "WAVE", 4) != 0) {
+    fclose(f);
+    return false;
+  }
+  for (;;) {
+    char id[4];
+    uint32_t size;
+    if (fread(id, 4, 1, f) != 1 || fread(&size, 4, 1, f) != 1) break;
+    const bool own = memcmp(id, "fmt ", 4) == 0 || memcmp(id, "data", 4) == 0 || memcmp(id, "smpl", 4) == 0;
+    if (own || size == 0xFFFFFFFFu || size > (64u << 20)) {   // ours, or a streamed / absurd size: stop copying
+      if (size == 0xFFFFFFFFu || size > (64u << 20)) break;
+      if (fseek(f, (long)(size + (size & 1)), SEEK_CUR) != 0) break;
+      continue;
+    }
+    WavCarryChunk c;
+    memcpy(c.id, id, 4);
+    c.payload.resize(size);
+    if (size && fread(c.payload.data(), 1, size, f) != size) break;   // truncated: drop it
+    out.push_back(std::move(c));
+    if ((size & 1) && fseek(f, 1, SEEK_CUR) != 0) break;
+  }
+  fclose(f);
+  return true;
 }
 
 bool AudioEngine::RemoveFile(const std::string& path)
