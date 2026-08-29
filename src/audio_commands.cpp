@@ -285,7 +285,7 @@ void SneakPeak::StandaloneFinishRestore(const char* what)
   m_waveform.ClearStandaloneFade(); // clear non-destructive fade on undo/redo
   m_waveform.Invalidate();
   m_minimap.Invalidate();
-  m_spectral.ClearSpectrum();
+  ResetSpectrum();
   InvalidateLimiterPreview();       // the GR preview renders the buffer we just swapped
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_dirty = true;
@@ -1899,7 +1899,7 @@ void SneakPeak::DoSpectralHeal(double strength)
   UpdateTitle();
   m_waveform.Invalidate();
   m_minimap.Invalidate();
-  m_spectral.ClearSpectrum();
+  ResetSpectrum();
   Invalidate();
 }
 
@@ -2044,7 +2044,7 @@ void SneakPeak::DoApplyDynamicsStandalone()
   InvalidateLimiterPreview();
   m_waveform.Invalidate();
   m_minimap.Invalidate();
-  m_spectral.ClearSpectrum();
+  ResetSpectrum();
   Invalidate();
 }
 
@@ -2151,7 +2151,7 @@ void SneakPeak::DoApplyLimiterItem()
   ShowToast(buf);
   m_waveform.Invalidate();
   m_minimap.Invalidate();
-  m_spectral.ClearSpectrum();
+  ResetSpectrum();
   InvalidateLimiterPreview();   // recompute the GR band for the limited buffer
   Invalidate();
 }
@@ -2234,7 +2234,7 @@ void SneakPeak::LimiterApplyTick()
   UpdateTitle();
   m_waveform.Invalidate();
   m_minimap.Invalidate();
-  m_spectral.ClearSpectrum();
+  ResetSpectrum();
   InvalidateLimiterPreview();   // recompute the GR band for the limited buffer
   Invalidate();
 }
@@ -2291,7 +2291,7 @@ void SneakPeak::DoRepairClicks()
   UpdateTitle();
   m_waveform.Invalidate();
   m_minimap.Invalidate();
-  m_spectral.ClearSpectrum();
+  ResetSpectrum();
   Invalidate();
 }
 

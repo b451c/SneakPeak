@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Exports and Copy bake the item volume** - drag export, "Edit Copy in Standalone", the One-Shot Factory and Copy/Cut apply the item's volume to the audio they write (take channel modes - mono mix, left, right - are honored as before), so what you hear is what you export. Single-item exports used to ignore the item volume while multi-segment views applied it.
 
 ### Fixed
+- **A Standalone edit could leave a frozen "Computing spectrum... 0%" overlay** - after Heal, Repair Clicks, Reverse, Gain, DC Remove, Apply, Undo or Redo in Standalone the spectrogram recomputes in the background; on a short file it finished faster than the window's repaint timer looked, so the finished spectrogram stayed hidden behind the progress overlay until something else repainted. The recompute now always reveals its result.
 - **Layered Multi-item modes painted a still-loading layer as a single column** - the layers decode in the background and draw from REAPER's peak files meanwhile, but the Layered (per Item / per Track) painters took the visible width of a layer from the samples that had landed (none, at first), so a multi-minute item showed one column until its decode finished. The planned length is used until then; Mix was unaffected.
 
 #### Long items (the reduced-rate working buffer)
