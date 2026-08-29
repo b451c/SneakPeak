@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - **A Standalone edit could leave a frozen "Computing spectrum... 0%" overlay** - after Heal, Repair Clicks, Reverse, Gain, DC Remove, Apply, Undo or Redo in Standalone the spectrogram recomputes in the background; on a short file it finished faster than the window's repaint timer looked, so the finished spectrogram stayed hidden behind the progress overlay until something else repainted. The recompute now always reveals its result.
+- **The spectral view did not follow amplitude and order edits** - Gain, Normalize, Reverse and DC Remove in Standalone, and the destructive Reverse / Gain-on-selection / DC Remove on items, changed the audio but left the previous spectrogram on screen; opening another Standalone file or switching its tabs with the spectral view open could leave the pane on a frozen "Computing spectrum... 0%". Every edit that changes the audio now recomputes the spectrogram, and the repaint after a recompute no longer depends on the edit remembering to ask for it.
 - **Layered Multi-item modes painted a still-loading layer as a single column** - the layers decode in the background and draw from REAPER's peak files meanwhile, but the Layered (per Item / per Track) painters took the visible width of a layer from the samples that had landed (none, at first), so a multi-minute item showed one column until its decode finished. The planned length is used until then; Mix was unaffected.
 
 #### Long items (the reduced-rate working buffer)

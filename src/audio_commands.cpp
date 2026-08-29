@@ -498,6 +498,7 @@ void SneakPeak::FinishDestructiveWrite(bool written, bool restored)
     { std::lock_guard<std::mutex> lk(AudioStream::ApiLock());
       g_AudioAccessorValidateState(m_waveform.GetLiveAccessor()); }   // our own write is not an external change
 
+  ResetSpectrum();   // no external-change reload follows: the edited display buffer recomputes here
   m_waveform.Invalidate();
   m_dirty = true;
   UpdateTitle();
@@ -1444,6 +1445,7 @@ void SneakPeak::DoNormalize()
       AudioOps::Normalize(data.data(), frames, nch, 0.989); // -0.1dB
     m_dirty = true;
     UpdateTitle();
+    ResetSpectrum();
     m_waveform.Invalidate();
     Invalidate();
     return;
@@ -1616,6 +1618,7 @@ void SneakPeak::DoReverse()
     m_dirty = true;
     m_previewCacheDirty = true;
     UpdateTitle();
+    ResetSpectrum();
     m_waveform.Invalidate();
     Invalidate();
     return;
@@ -1690,6 +1693,7 @@ void SneakPeak::DoGain(double factor)
     m_dirty = true;
     m_previewCacheDirty = true;
     UpdateTitle();
+    ResetSpectrum();   // the spectrogram is on a fixed dBFS scale: gain shows
     m_waveform.Invalidate();
     Invalidate();
     return;
@@ -1781,6 +1785,7 @@ void SneakPeak::DoDCRemove()
     m_dirty = true;
     m_previewCacheDirty = true;
     UpdateTitle();
+    ResetSpectrum();
     m_waveform.Invalidate();
     Invalidate();
     return;

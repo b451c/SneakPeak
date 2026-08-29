@@ -1180,9 +1180,10 @@ void SneakPeak::UpdatePlaybackFollow()
   }
 
   // Keep repainting while spectral is computing (progress bar update)
-  if (m_spectralVisible && (m_spectral.IsLoading() || (m_spectral.IsReady() && !m_spectralPainted))) {
+  if (m_spectralVisible && (m_spectral.IsLoading() ||
+                            (m_spectral.IsReady() && m_spectralPaintedGen != m_spectral.Generation()))) {
     Invalidate(&m_spectralRect);
-    if (m_spectral.IsReady()) m_spectralPainted = true;
+    if (m_spectral.IsReady()) m_spectralPaintedGen = m_spectral.Generation();
   }
 }
 

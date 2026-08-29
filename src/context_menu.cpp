@@ -957,7 +957,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       // (FinishItemAudioLoad); only an item over the buffer cap stays closed.
       if (!m_spectralVisible && !RequireItemAudio("Spectral view") && m_itemLoadOverCap) break;
       m_spectralVisible = !m_spectralVisible;
-      m_spectralPainted = false;
+      m_spectralPaintedGen = ~0u;
       {
         RECT cr;
         GetClientRect(m_hwnd, &cr);
@@ -1076,9 +1076,9 @@ void SneakPeak::OnContextMenuCommand(int id)
       } else if (id >= CM_SPECTRAL_FFT_BASE && id <= CM_SPECTRAL_FFT_LAST) {
         // Spectrogram FFT size (row 15 #3): drops the spectrum; the visible pane recomputes.
         // A short item recomputes faster than one timer tick, so the "was loading" pump
-        // never fires - the ready-but-unpainted pump (m_spectralPainted) paints the result.
+        // never fires - the per-generation pump (m_spectralPaintedGen) paints the result.
         m_spectral.SetFftSize(SpectralView::kFftSizes[id - CM_SPECTRAL_FFT_BASE]);
-        m_spectralPainted = false;
+        m_spectralPaintedGen = ~0u;
         if (g_SetExtState) {
           char buf[8];
           snprintf(buf, sizeof(buf), "%d", m_spectral.GetFftSize());

@@ -535,11 +535,11 @@ private:
   bool m_dynamicsVisible = false;
   bool m_spectralVisible = false;
   bool m_spectralWasLoading = false; // OnTimer: repaint pump while spectrum computes
-  bool m_spectralPainted = false;  // triggers one repaint after FFT completes
-  // Drop the spectrum for a recompute AND re-arm that repaint: a short file
-  // recomputes faster than one timer tick, so the "was loading" pump never
-  // fires and only the ready-but-unpainted pump reveals the result.
-  void ResetSpectrum() { m_spectral.ClearSpectrum(); m_spectralPainted = false; }
+  unsigned m_spectralPaintedGen = ~0u;  // SpectralView generation painted Ready (~0u = none)
+  // Drop the spectrum for a recompute. A short file recomputes faster than one
+  // timer tick, so the "was loading" pump never fires; ClearSpectrum bumps the
+  // generation and OnTimer paints once per generation that reaches Ready.
+  void ResetSpectrum() { m_spectral.ClearSpectrum(); }
   bool m_minimapVisible = false;
   bool m_showMeters = true;
   bool m_showRuler = true;        // hide-ruler layout flag (forum #51); markers fall back onto the waveform

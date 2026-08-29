@@ -26,6 +26,9 @@ public:
 
   bool IsLoading() const { return m_computing.load(); }
   bool IsReady() const { return m_specValid.load(); }
+  // Bumped by every ClearSpectrum: the owner repaints once per generation that
+  // reaches Ready, so a recompute faster than one timer tick still shows.
+  unsigned Generation() const { return m_generation; }
   float GetProgress() const { return m_progress.load(); }
 
 
@@ -95,6 +98,7 @@ private:
   int m_specSr = 0;
   double m_specDuration = 0.0;
   std::atomic<bool> m_specValid{false};
+  unsigned m_generation = 0;        // main thread only (ClearSpectrum joins the worker)
 
   // Async computation
   std::thread m_computeThread;

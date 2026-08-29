@@ -3157,6 +3157,7 @@ void SneakPeak::ReloadAfterGainChange(double savedViewStart, double savedViewDur
   // Re-analyze dynamics with updated audio levels
   if (m_dynamicsVisible || m_dynamicsPanel.IsVisible()) RequestDynamicsAnalysis();
 
+  if (std::abs(db) > 0.01) ResetSpectrum();   // the scaled timeline/multi buffer above
   m_waveform.Invalidate();
   if (savedSel.active) m_waveform.SetSelection(savedSel);
 }

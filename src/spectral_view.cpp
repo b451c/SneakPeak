@@ -112,6 +112,7 @@ void SpectralView::ClearSpectrum()
   m_computing.store(false);
   m_progress.store(0.0f);
   m_renderValid.store(false);
+  m_generation++;
 }
 
 // Launch async spectrogram computation — returns immediately
