@@ -152,9 +152,9 @@ public:
   double GetAveragePeakDb() const { return m_avgPeakDb; }
   double GetThreshold() const;
   bool HasResults() const { return !m_db.empty(); }
-  void Clear() { m_db.clear(); m_gr.clear(); }
+  void Clear() { m_db.clear(); m_gr.clear(); m_curve.clear(); }
   const DynamicsParams& GetParams() const { return m_params; }
-  void SetParams(const DynamicsParams& p) { m_params = p; }
+  void SetParams(const DynamicsParams& p) { m_params = p; m_curve.clear(); }
 
   // Compute gain reduction per point (gain-smoothing compressor model).
   // Attack/release smooth the GR signal, not the input level.
@@ -165,6 +165,16 @@ public:
     double dbAdjust; // total dB change (GR + makeup)
   };
   std::vector<CompressPoint> ComputeCompression();
+
+  // The curve Apply writes: `raw` (a ComputeCompression result) simplified to
+  // kEnvelopeEpsilonDb. Built where ComputeCompression ran - the pipeline's
+  // worker - so Apply never simplifies millions of points on the main thread
+  // (A7.1: 3.6 M points for an hour). Analyze, SetParams and Clear drop it;
+  // it is only valid for the state that made it.
+  static constexpr double kEnvelopeEpsilonDb = 0.3;
+  void BuildEnvelopeCurve(const std::vector<CompressPoint>& raw);
+  const std::vector<CompressPoint>& EnvelopeCurve() const { return m_curve; }
+  size_t EnvelopeCurveSource() const { return m_curveRawCount; }   // points it was built from
 
   // Average gain reduction from last ComputeCompression (for GR meter, auto-makeup)
   double GetAvgGainReduction() const { return m_avgGR; }
@@ -189,6 +199,8 @@ private:
   std::shared_ptr<const DynTrace> m_trace;
   std::vector<double> m_db;   // follower level per point (BuildEnvelope)
   std::vector<double> m_gr;   // total smoothed GR per point (ComputeCompression)
+  std::vector<CompressPoint> m_curve;  // the simplified curve (see BuildEnvelopeCurve)
+  size_t m_curveRawCount = 0;
   double m_avgPeakDb = -60.0;
   double m_avgGR = 0.0;
   double m_itemVolDb = 0.0; // cached for ComputeCompression (gain smoothing needs raw dB)

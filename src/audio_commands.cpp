@@ -2309,11 +2309,13 @@ void SneakPeak::ApplyDynamicsToEnvelope()
     return;
   }
 
-  auto compRaw = m_dynamics.ComputeCompression();
-  if (compRaw.empty()) return;
-
-  // Simplify curve: RDP reduces ~60000 points to ~200-500 essential shape points
-  auto comp = DynamicsEngine::SimplifyCurve(compRaw, 0.3); // 0.3 dB tolerance
+  // The pipeline's worker built the curve for these knobs (simplified from
+  // every trace point; TakeDynamicsResult swapped it in): reuse it instead of
+  // simplifying millions of points on the main thread (A7.1). The fallback
+  // (a Flush wrote the analysis synchronously) builds it here.
+  if (m_dynamics.EnvelopeCurve().empty()) m_dynamics.BuildEnvelopeCurve(m_dynamics.ComputeCompression());
+  std::vector<DynamicsEngine::CompressPoint> comp = m_dynamics.EnvelopeCurve();
+  const int rawCount = (int)m_dynamics.EnvelopeCurveSource();
   if (comp.empty()) return;
 
   if (!g_GetTakeEnvelopeByName || !g_InsertEnvelopePointEx ||
@@ -2454,7 +2456,7 @@ void SneakPeak::ApplyDynamicsToEnvelope()
       snprintf(toast, sizeof(toast), "Applied %d points - %d at the +%.1f dB ceiling",
                (int)comp.size(), clampedPts, 20.0 * log10(clampCeilLin));
     else
-      snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), (int)compRaw.size());
+      snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), rawCount);
     ShowToast(toast);
   }
   InvalidateRect(m_hwnd, nullptr, FALSE);

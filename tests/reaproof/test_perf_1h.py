@@ -95,3 +95,97 @@ def test_view_actions_after_load_do_not_freeze(sess, one_hour, label, lua):
     m = measure_after(sess, lua, loaded_marker=one_hour.stem, max_wait=15, quiet=1.0)
     _record(f"wav60.{label}", m)
     assert m["max_stall"] <= STALL_BUDGET, f"{label} froze REAPER: {m}"
+
+
+def test_apply_dynamics_on_one_hour_item(sess, one_hour):
+    """A7.1 (measure first): Apply Dynamics on the one-hour item. The worker
+    had computed the curve for the current knobs; Apply then recomputed every
+    trace point on the main thread (ComputeCompression + the RDP simplify)
+    before writing the envelope. The panel is opened first and the 1-h trace
+    left to stream (title "Analysing dynamics... N%"; its time is recorded as
+    t_trace), then the Apply button is clicked: longest main-thread stall
+    between the click and the "Applied N points" toast, on REAPER's clock
+    (bridge heartbeat) = perf.apply_1h. BEFORE on the b1c97ed control, AFTER
+    on the fix."""
+    import threading
+    import time
+    from conftest import CM_APPLY_DYNAMICS, command_sync, locate_apply_button, window_title
+    clear_project(sess)
+    insert_item_unselected(sess, one_hour)
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, one_hour.stem, timeout=600)
+    shots = Path("/tmp/sneakpeak-reaproof-shots/perf_1h")
+    shots.mkdir(parents=True, exist_ok=True)
+    wall_open = time.monotonic()
+    command_sync(sess, CM_APPLY_DYNAMICS, settle=1.0)      # shows the Dynamics panel; the trace starts
+    sess.wait_until(lambda: locate_apply_button(sess, shots / "panel.png") is not None, timeout=30)
+    # the trace streams on a worker ("Analysing dynamics... N%" in the title;
+    # a fast disk finishes the hour before the panel is even located): wait
+    # until the title has been plain for 3 s, recording the trace time if seen
+    seen_analysing = False
+    t_trace = None
+    plain_since = None
+    while time.monotonic() - wall_open < 1800:
+        title = window_title(sess)
+        if "Analysing" in title:
+            seen_analysing = True
+            plain_since = None
+        else:
+            if seen_analysing and t_trace is None:
+                t_trace = round(time.monotonic() - wall_open, 1)
+            plain_since = plain_since or time.monotonic()
+            if time.monotonic() - plain_since > 3.0:
+                break
+        time.sleep(0.25)
+    assert plain_since is not None, f"the dynamics trace of the 1-h item never finished (title {window_title(sess)!r})"
+    x, y = locate_apply_button(sess, shots / "panel.png")
+    sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+
+    hb = sess.bridge.heartbeat
+    samples: list[tuple[int, float]] = []
+    stop = threading.Event()
+
+    def probe():
+        last = None
+        while not stop.is_set():
+            try:
+                d = json.loads(hb.read_text(encoding="utf-8", errors="replace"))
+                tick, t = int(d["tick"]), float(d["t"])
+                if tick != last:
+                    samples.append((tick, t))
+                    last = tick
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+            time.sleep(0.003)
+
+    th = threading.Thread(target=probe, daemon=True)
+    th.start()
+    time.sleep(0.3)
+    t_click = float(sess.eval(
+        f'local h = {window_handle_lua()} '
+        f'reaper.JS_WindowMessage_Send(h, "WM_LBUTTONDOWN", 1, 0, {x}, {y}) '
+        f'reaper.JS_WindowMessage_Send(h, "WM_LBUTTONUP", 0, 0, {x}, {y}) '
+        'return reaper.time_precise()', hang_timeout=300))
+    toast = ""
+    wall0 = time.monotonic()
+    while time.monotonic() - wall0 < 300:
+        toast = str(sess.eval('return reaper.GetExtState("SneakPeak", "last_toast")'))
+        if toast.startswith("Applied"):
+            break
+        time.sleep(0.5)
+    t_done = float(sess.eval("return reaper.time_precise()"))
+    stop.set()
+    th.join(timeout=2)
+    max_stall = 0.0
+    for (k0, t0), (k1, t1) in zip(samples, samples[1:]):
+        if t1 <= t_click or k1 <= k0:
+            continue
+        max_stall = max(max_stall, (t1 - t0) / (k1 - k0))
+    m = {"max_stall": round(max_stall, 3), "t_toast": round(t_done - t_click, 2), "t_trace": t_trace,
+         "toast": toast, "ticks": len(samples)}
+    _record("perf.apply_1h", m)
+    assert toast.startswith("Applied"), f"Apply never finished: {m}"
+    # measured 2026-08-29: 0.699 s on the b1c97ed control (the RDP simplify of
+    # 3.6 M points on the main thread), 0.051 s with the curve built on the worker
+    assert m["max_stall"] <= STALL_BUDGET, f"Apply Dynamics froze REAPER on the 1-h item: {m}"

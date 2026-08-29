@@ -244,7 +244,7 @@ void SneakPeak::StepDynamicsPipeline()
       W.thread = std::thread([&W, trace, data, frames, nch, sr, ivDb, params]() {
         if (trace) W.engine.Analyze(trace, ivDb, params);
         else W.engine.Analyze(data, frames, nch, sr, ivDb, params);
-        W.engine.ComputeCompression();
+        W.engine.BuildEnvelopeCurve(W.engine.ComputeCompression());   // Apply's curve, off the main thread
         W.hasResult.store(true);
         W.busy.store(false);
       });

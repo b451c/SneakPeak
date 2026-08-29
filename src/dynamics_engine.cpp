@@ -174,6 +174,7 @@ void DynamicsEngine::Analyze(std::shared_ptr<const DynTrace> trace, double itemV
   m_params = params;
   m_db.clear();
   m_gr.clear();
+  m_curve.clear();
   m_avgGR = 0.0;
   m_itemVolDb = itemVolDb;
   m_trace = std::move(trace);
@@ -514,6 +515,12 @@ std::vector<DynamicsEngine::CompressPoint> DynamicsEngine::ComputeCompression()
   }
 
   return out;
+}
+
+void DynamicsEngine::BuildEnvelopeCurve(const std::vector<CompressPoint>& raw)
+{
+  m_curve = SimplifyCurve(raw, kEnvelopeEpsilonDb);
+  m_curveRawCount = raw.size();
 }
 
 // Iterative Ramer-Douglas-Peucker curve simplification
