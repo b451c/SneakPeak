@@ -14,6 +14,7 @@
 // Part of the SneakPeak class — methods defined here, class in edit_view.h.
 // ============================================================================
 
+#include "platform.h"   // strcasecmp -> _stricmp on Windows
 #include "edit_view.h"
 #include "audio_engine.h"
 #include "debug.h"
