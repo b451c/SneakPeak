@@ -548,7 +548,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       }
       break;
     case CM_SPLIT:
-      if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem()) {
+      if (!m_waveform.IsStandaloneMode() && m_waveform.HasItem() && !DestructiveJobBusy()) {
         if (m_workingSet.active && !m_waveform.HasSelection() && g_SetEditCurPos) {
           double absTime = m_waveform.RelTimeToAbsTime(m_waveform.GetCursorTime());
           g_SetEditCurPos(absTime, true, false);

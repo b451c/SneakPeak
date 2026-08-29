@@ -32,6 +32,7 @@
 
 void SneakPeak::StartItemAudioLoad(bool wanted)
 {
+  if (m_destructiveJob.active) return;   // F5: the file is being rewritten - the finish reloads
   AbortItemAudioLoad();
   m_itemLoadOverCap = false;
   if (m_waveform.IsStandaloneMode() || !m_waveform.HasItem()) return;

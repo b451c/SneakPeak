@@ -67,16 +67,13 @@ bool SneakPeak::UndoSave()
   // dropped only once the new one exists.
   if (!m_waveform.IsStandaloneMode() && m_waveform.GetTake()) {
     const std::string path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
-    const std::string dir = AudioEngine::TempDir();
-    char buf[512];
-    snprintf(buf, sizeof(buf), "%s/sneakpeak_undo_%d_%c.wav", dir.c_str(),
-             AudioEngine::ProcessId(), m_itemUndoSlot ? 'b' : 'a');
+    const std::string buf = UndoSnapshotPath();
     if (!AudioEngine::CopyFileInto(path, buf)) {
-      DBG("[SneakPeak] undo snapshot failed: %s\n", buf);
+      DBG("[SneakPeak] undo snapshot failed: %s\n", buf.c_str());
       AudioEngine::RemoveFile(buf);   // whatever a partial copy left behind
       char msg[sizeof(m_toastText)];
       snprintf(msg, sizeof(msg), "Could not create the pre-edit copy in %s - the edit was cancelled",
-               dir.c_str());
+               AudioEngine::TempDir().c_str());
       ShowToast(msg);
       return false;
     }
@@ -96,12 +93,21 @@ void SneakPeak::DiscardItemUndo()
   m_itemUndoPath.clear();
 }
 
+std::string SneakPeak::UndoSnapshotPath() const
+{
+  char buf[512];
+  snprintf(buf, sizeof(buf), "%s/sneakpeak_undo_%d_%c.wav", AudioEngine::TempDir().c_str(),
+           AudioEngine::ProcessId(), m_itemUndoSlot ? 'b' : 'a');
+  return buf;
+}
+
 void SneakPeak::UndoRestore()
 {
   if (m_waveform.IsStandaloneMode()) {
     StandaloneUndoRestore();
     return;
   }
+  if (DestructiveJobBusy()) return;   // F5: the file is being rewritten
   // Destructive-edit restore: if the snapshot belongs to the CURRENT take's
   // source file, copy the pre-edit file back (same inode - F7) and reload
   // from disk. REAPER's own undo point for the edit stays in its history as
@@ -316,6 +322,7 @@ void SneakPeak::RedoRestore()
     StandaloneRedoRestore();
     return;
   }
+  if (DestructiveJobBusy()) return;   // F5
   // Trigger REAPER's native redo (action 40030 = Edit: Redo) and reload the
   // view the same way UndoRestore does.
   if (g_Main_OnCommand) {
@@ -412,6 +419,7 @@ bool SneakPeak::DestructiveSourceOk()
 
 bool SneakPeak::BeginDestructiveWrite(std::string& path)
 {
+  if (DestructiveJobBusy()) return false;   // F5: one file rewrite at a time
   if (!m_waveform.HasItem() || !m_waveform.GetTake()) return false;
   if (!DestructiveSourceOk()) return false;
   path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
@@ -455,11 +463,15 @@ bool SneakPeak::RestoreFromSnapshot()
 
 void SneakPeak::EndDestructiveWrite(bool written)
 {
-  // Rollback (audit A1.4): an in-place edit that fails part-way (a read past
-  // a truncated data chunk, a disk that fills up) leaves the chunks already
-  // written; the snapshot taken moments ago goes back - inside the Windows
-  // offline bracket, like the write itself.
-  const bool restored = !written && RestoreFromSnapshot();
+  // Rollback (audit A1.4): a whole-file write that fails part-way (a disk
+  // that fills up) leaves a truncated file; the snapshot taken moments ago
+  // goes back - inside the Windows offline bracket, like the write itself.
+  // (The in-place ops roll back on their worker - destructive_job.cpp.)
+  FinishDestructiveWrite(written, !written && RestoreFromSnapshot());
+}
+
+void SneakPeak::FinishDestructiveWrite(bool written, bool restored)
+{
 #ifdef _WIN32
   if (g_Main_OnCommand) g_Main_OnCommand(40439, 0);  // Item: set selected media online
 #endif
@@ -536,16 +548,6 @@ void SneakPeak::WriteAndRefresh()
                                                 srcInfo.bitsPerSample, srcInfo.audioFormat));
 }
 
-void SneakPeak::WriteAndRefreshInplace(
-    const std::function<bool(const std::string& path, int64_t s0, int64_t s1)>& op)
-{
-  std::string path;
-  if (!BeginDestructiveWrite(path)) return;
-  int64_t s0, s1;
-  GetSelectionSourceRange(s0, s1);
-  EndDestructiveWrite(op(path, s0, s1));
-}
-
 // The selection (whole item when none) in FILE frames: item time -> source
 // time through the take's start offset and playrate, at the source's own rate.
 void SneakPeak::GetSelectionSourceRange(int64_t& startFrame, int64_t& endFrame) const
@@ -594,6 +596,7 @@ bool SneakPeak::DoCopy()
 {
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return false;
 
+  if (!m_waveform.IsStandaloneMode() && DestructiveJobBusy()) return false;   // F5: reads the file
   // Sync selection to REAPER so native copy works on the right range
   SyncSelectionToReaper();
 
@@ -668,6 +671,7 @@ void SneakPeak::DoCut()
 {
   // Copy + ripple delete (standard waveform editor behavior: cut closes the gap)
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
+  if (!m_waveform.IsStandaloneMode() && DestructiveJobBusy()) return;   // F5: item pinned
 
   // A refused copy (over the buffer cap, unreadable audio) must not delete:
   // the selection would be gone and the clipboard stale (audit A2.1).
@@ -682,6 +686,7 @@ void SneakPeak::DoPaste()
     DoPasteDestructive();
     return;
   }
+  if (DestructiveJobBusy()) return;   // F5: item pinned
 
   // --- Non-destructive insert-paste (all modes) ---
   // 1. Find item under cursor, resolve its track
@@ -889,7 +894,7 @@ void SneakPeak::DoPasteDestructive()
     Invalidate();
     return;
   }
-  if (!DestructiveSourceOk()) return;
+  if (!DestructiveSourceOk() || DestructiveJobBusy()) return;
 
   int ret = MessageBox(m_hwnd,
     "Paste modifies the audio file on disk. Continue?",
@@ -930,6 +935,7 @@ void SneakPeak::DoDelete(bool ripple)
 {
   if (!m_waveform.HasItem() || !m_waveform.HasSelection()) return;
   if (m_waveform.IsStandaloneMode()) { DoDeleteStandalone(); return; }
+  if (DestructiveJobBusy()) return;   // F5: item pinned
   DoDeleteNonDestructive(ripple);
 }
 
@@ -1281,6 +1287,7 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
 void SneakPeak::DoSilence()
 {
   if (!m_waveform.HasItem()) return;
+  if (!m_waveform.IsStandaloneMode() && DestructiveJobBusy()) return;   // F5: item pinned
 
   // --- Standalone mode ---
   if (m_waveform.IsStandaloneMode()) {
@@ -1426,6 +1433,7 @@ void SneakPeak::DoNormalize()
 {
   // Non-destructive (REAPER) or destructive (standalone)
   if (!m_waveform.HasItem()) return;
+  if (!m_waveform.IsStandaloneMode() && DestructiveJobBusy()) return;   // F5: streams the file
 
   if (m_waveform.IsStandaloneMode()) {
     if (!RequireItemAudio("Normalize")) return;   // standalone edits its buffer
@@ -1614,32 +1622,26 @@ void SneakPeak::DoReverse()
     return;
   }
 
-  if (!DestructiveSourceOk()) return;
+  if (!DestructiveSourceOk() || DestructiveJobBusy()) return;
   int ret = MessageBox(m_hwnd,
     "Reverse modifies the audio file on disk. Continue?",
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
-  if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
-  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-
   int startF, endF;
   GetSelectionSampleRange(startF, endF);
-  int nch = m_waveform.GetNumChannels();
-  int selFrames = endF - startF;
-
-  auto& data = m_waveform.GetAudioData();
-  AudioOps::Reverse(data.data() + (size_t)startF * nch, selFrames, nch);   // the display
-
-  WriteAndRefreshInplace([](const std::string& p, int64_t a, int64_t b) {
-    return WavInplace::Reverse(p, a, b);
-  });
-
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Reverse (destructive)", -1);
-  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-
-  Invalidate();
+  // F5: the file edit, its pre-edit copy and REAPER's refresh run through the
+  // job (destructive_job.cpp); the display edit lands with them on success.
+  StartDestructiveJob("Reverse", "Reversing", "SneakPeak: Reverse (destructive)",
+    [](const std::string& p, int64_t a, int64_t b, const WavInplace::Progress* prog) {
+      return WavInplace::Reverse(p, a, b, prog);
+    },
+    [this, startF, endF]() {
+      const int nch = m_waveform.GetNumChannels();
+      const int e = std::min(endF, m_waveform.GetAudioSampleCount());
+      if (e > startF && nch > 0)
+        AudioOps::Reverse(m_waveform.GetAudioData().data() + (size_t)startF * nch, e - startF, nch);
+    });
 }
 
 void SneakPeak::DoGain(double factor)
@@ -1700,55 +1702,45 @@ void SneakPeak::DoGain(double factor)
   if (m_waveform.HasSelection()) {
     // Partial selection: destructive gain on selection only
     if (m_waveform.IsMultiItem()) return; // not supported for multi-item yet
-    if (!DestructiveSourceOk()) return;
-
-    if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
-    if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-    if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
+    if (!DestructiveSourceOk() || DestructiveJobBusy()) return;
 
     int startF, endF;
     GetSelectionSampleRange(startF, endF);
-    int nch = m_waveform.GetNumChannels();
-    int sr = m_waveform.GetSampleRate();
-    int selFrames = endF - startF;
-    auto& data = m_waveform.GetAudioData();
-
-    if (selFrames > 0 && nch > 0) {
-      size_t offset = (size_t)startF * nch;
-      AudioOps::Gain(data.data() + offset, selFrames, nch, factor);
-
-      // Crossfade at edges (~5ms)
-      bool isPartial = startF > 0 || endF < m_waveform.GetAudioSampleCount();
-      if (isPartial) {
-        int fadeLen = std::min(sr / 200, selFrames / 2);
-        if (fadeLen > 1) {
-          for (int f = 0; f < fadeLen && startF + f < endF; f++) {
-            double t = (double)f / (double)fadeLen;
-            for (int ch = 0; ch < nch; ch++) {
-              size_t idx = (size_t)(startF + f) * nch + ch;
-              data[idx] = data[idx] / factor * (1.0 + t * (factor - 1.0));
-            }
-          }
-          for (int f = 0; f < fadeLen && endF - 1 - f >= startF; f++) {
-            double t = (double)f / (double)fadeLen;
-            for (int ch = 0; ch < nch; ch++) {
-              size_t idx = (size_t)(endF - 1 - f) * nch + ch;
-              data[idx] = data[idx] / factor * (1.0 + t * (factor - 1.0));
-            }
-          }
-        }
-      }
-    }
-
     const int fade = m_waveform.GetSourceSampleRate() / 200;   // ~5 ms at the file's rate
-    WriteAndRefreshInplace([factor, fade](const std::string& p, int64_t a, int64_t b) {
-      return WavInplace::Gain(p, a, b, factor, fade);
-    });
-
     char desc[64];
     snprintf(desc, sizeof(desc), "SneakPeak: Gain %.1fdB (selection)", 20.0 * log10(factor));
-    if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
-    if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+    // F5: file edit + pre-edit copy + refresh through the job (destructive_job.cpp).
+    StartDestructiveJob("Gain", "Applying gain", desc,
+      [factor, fade](const std::string& p, int64_t a, int64_t b, const WavInplace::Progress* prog) {
+        return WavInplace::Gain(p, a, b, factor, fade, prog);
+      },
+      [this, factor, startF, endF]() {   // the display, with the edge crossfade (~5 ms)
+        auto& data = m_waveform.GetAudioData();
+        const int nch = m_waveform.GetNumChannels();
+        const int sr = m_waveform.GetSampleRate();
+        const int e = std::min(endF, m_waveform.GetAudioSampleCount());
+        const int selFrames = e - startF;
+        if (selFrames <= 0 || nch <= 0) return;
+        AudioOps::Gain(data.data() + (size_t)startF * nch, selFrames, nch, factor);
+        const bool isPartial = startF > 0 || e < m_waveform.GetAudioSampleCount();
+        if (!isPartial) return;
+        const int fadeLen = std::min(sr / 200, selFrames / 2);
+        if (fadeLen <= 1) return;
+        for (int f = 0; f < fadeLen && startF + f < e; f++) {
+          double t = (double)f / (double)fadeLen;
+          for (int ch = 0; ch < nch; ch++) {
+            size_t idx = (size_t)(startF + f) * nch + ch;
+            data[idx] = data[idx] / factor * (1.0 + t * (factor - 1.0));
+          }
+        }
+        for (int f = 0; f < fadeLen && e - 1 - f >= startF; f++) {
+          double t = (double)f / (double)fadeLen;
+          for (int ch = 0; ch < nch; ch++) {
+            size_t idx = (size_t)(e - 1 - f) * nch + ch;
+            data[idx] = data[idx] / factor * (1.0 + t * (factor - 1.0));
+          }
+        }
+      });
   } else {
     // No selection: non-destructive D_VOL on whole item
     MediaItem* item = m_waveform.GetItem();
@@ -1795,38 +1787,32 @@ void SneakPeak::DoDCRemove()
     return;
   }
 
-  if (!DestructiveSourceOk()) return;
+  if (!DestructiveSourceOk() || DestructiveJobBusy()) return;
   int ret = MessageBox(m_hwnd,
     "DC Offset Remove modifies the audio file on disk. Continue?",
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
-  if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
-  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-
   int startF, endF;
   GetSelectionSampleRange(startF, endF);
-  int nch = m_waveform.GetNumChannels();
-  int selFrames = endF - startF;
-
-  auto& data = m_waveform.GetAudioData();
-  AudioOps::DCOffsetRemove(data.data() + (size_t)startF * nch, selFrames, nch);   // the display
-
-  WriteAndRefreshInplace([](const std::string& p, int64_t a, int64_t b) {
-    return WavInplace::DCRemove(p, a, b);
-  });
-
-  if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: DC Offset Remove (destructive)", -1);
-  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-
-  Invalidate();
+  // F5: file edit + pre-edit copy + refresh through the job (destructive_job.cpp).
+  StartDestructiveJob("DC Offset Remove", "Removing DC offset", "SneakPeak: DC Offset Remove (destructive)",
+    [](const std::string& p, int64_t a, int64_t b, const WavInplace::Progress* prog) {
+      return WavInplace::DCRemove(p, a, b, prog);
+    },
+    [this, startF, endF]() {
+      const int nch = m_waveform.GetNumChannels();
+      const int e = std::min(endF, m_waveform.GetAudioSampleCount());
+      if (e > startF && nch > 0)
+        AudioOps::DCOffsetRemove(m_waveform.GetAudioData().data() + (size_t)startF * nch, e - startF, nch);
+    });
 }
 
 void SneakPeak::DoNormalizeLUFS(double targetLufs)
 {
   if (!m_waveform.HasItem()) return;
   if (m_waveform.IsStandaloneMode()) return;
+  if (DestructiveJobBusy()) return;   // F5: REAPER would measure a file mid-edit
   if (!g_CalculateNormalization || !g_SetMediaItemInfo_Value) return;   // REAPER measures the source
 
   MediaItem_Take* take = m_waveform.GetTake();
@@ -2053,6 +2039,7 @@ void SneakPeak::DoApplyDynamicsStandalone()
 void SneakPeak::DoApplyLimiterItem()
 {
   if (!SingleBufferModeOk() || m_waveform.IsStandaloneMode()) return;
+  if (DestructiveJobBusy()) return;   // F5: refuse before the buffer is limited
   const int nch = m_waveform.GetNumChannels();
   const int sr = m_waveform.GetSampleRate();
   const int frames = m_waveform.GetAudioSampleCount();
@@ -3116,6 +3103,7 @@ void SneakPeak::DoEditCopyStandalone()
     ShowToast("Edit Copy already in progress");
     return;
   }
+  if (DestructiveJobBusy()) return;   // F5: streams the file
   // The copy is written at the SOURCE rate through AudioStream (F11: the
   // working buffer is downsampled on long items). Standalone then loads it
   // fully into doubles, so refuse what would not fit the buffer cap.

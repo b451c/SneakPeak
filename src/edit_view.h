@@ -30,6 +30,8 @@
 #include <string>
 #include <functional>
 
+namespace WavInplace { struct Progress; }
+
 // Standalone undo/redo entry (STA-2). Whole-file and length-changing edits
 // snapshot the FULL buffer; bounded selection edits (heal, click repair,
 // silence, selection gain) snapshot only the touched RANGE - orders of
@@ -405,14 +407,11 @@ private:
   // True when the working buffer maps 1:1 onto the source file (rate, offset,
   // playrate, length, CHANNELS) - the only case a whole-file write is valid.
   bool BufferCoversWholeFile(const std::string& path, WavInfo& srcInfo) const;
-  // In-place file edit: op runs on the source WAV over the selection mapped to
-  // FILE frames (wav_inplace.h) - the working buffer is never written back
-  // (downsampled on long items - F6; covers only the item's window - F12).
-  void WriteAndRefreshInplace(
-      const std::function<bool(const std::string& path, int64_t s0, int64_t s1)>& op);
   bool BeginDestructiveWrite(std::string& path);
   bool DestructiveSourceOk();   // false + toast on SECTION / reversed sources (A1.2)
-  void EndDestructiveWrite(bool written);
+  void EndDestructiveWrite(bool written);   // synchronous whole-file path: rollback + finish
+  void FinishDestructiveWrite(bool written, bool restored);   // the refresh / failure report
+  std::string UndoSnapshotPath() const;     // the free undo slot's file (a/b alternate)
   bool RestoreFromSnapshot();   // pre-edit copy back over the current take's file (A1.4)
   void GetSelectionSourceRange(int64_t& startFrame, int64_t& endFrame) const;
   void DiscardItemUndo();
@@ -659,6 +658,38 @@ private:
   // a WAV in the source's format, item/segment fades baked per chunk.
   std::string ExportItemRangeToWav(double t0, double t1);
   void BakeItemFades(double* chunk, int64_t viewFrame0, int n, int nch, int sr) const;
+  // F5 (destructive_job.cpp): Reverse / Gain / DC Remove rewrite the source file
+  // IN PLACE on a worker (wav_inplace.h) - the pre-edit copy, the op and the
+  // rollback copy all run there; the main thread brackets the write, shows
+  // progress in the title and finalizes on the finishing tick. The view is
+  // pinned to the item meanwhile (design_f5_background_destructive.md).
+  using DestructiveOp = std::function<bool(const std::string& path, int64_t s0, int64_t s1,
+                                           const WavInplace::Progress* prog)>;
+  struct DestructiveJob {
+    std::thread thread;
+    std::atomic<bool> cancel{false};
+    std::atomic<bool> done{false};
+    std::atomic<int> phase{0};         // 0 = pre-edit copy, 1 = the op
+    std::atomic<int> pct{0};
+    bool snapshotOk = false, ok = false, restored = false;   // worker -> main, read after the join
+    std::string path, snapshot;        // the source file, its pre-edit copy (free undo slot)
+    int64_t s0 = 0, s1 = 0;            // the selection in FILE frames
+    std::string verb, doing, undoLabel;   // "Reverse", "Reversing", REAPER's undo label
+    DestructiveOp op;
+    std::function<void()> displayEdit; // the working-buffer edit, applied on success only
+    MediaItem* selItem = nullptr;      // REAPER's selection at start: re-sync on finish
+    int selCount = 0;
+    std::string lastTitle;
+    bool active = false;
+  };
+  DestructiveJob m_destructiveJob;
+  void StartDestructiveJob(const char* verb, const char* doing, const char* undoLabel,
+                           DestructiveOp op, std::function<void()> displayEdit);
+  void DestructiveJobThread();
+  void StepDestructiveJob();       // OnTimer: progress title, finalize on completion
+  void FinalizeDestructiveJob();   // main thread after the join: undo bookkeeping + refresh
+  void AbortDestructiveJob();      // window close: cancel + join + finalize
+  bool DestructiveJobBusy();       // toast + true while a job runs (file readers/writers refuse)
   unsigned m_itemLoadFailedGen = ~0u;  // generation that produced no jobs (no retry loop)
   bool m_itemLoadOverCap = false;      // last start refused: buffer > kMaxBufferBytes
   // 8g: a lazy view (WaveformView::ItemBufferIsLazy) loads only when `wanted` -

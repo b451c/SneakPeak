@@ -73,6 +73,7 @@ void SneakPeak::SaveCurrentStandaloneState()
 void SneakPeak::RestoreStandaloneState(int idx)
 {
   if (idx < 0 || idx >= (int)m_standaloneFiles.size()) return;
+  if (DestructiveJobBusy()) return;   // F5: the item view is pinned until the write lands
 
   StandaloneCleanupPreview();
 
@@ -235,6 +236,7 @@ void SneakPeak::LoadStandaloneFile(const char* path)
 void SneakPeak::AddStandaloneFile(const char* path)
 {
   if (!path || !path[0]) return;
+  if (DestructiveJobBusy()) return;   // F5: the item view is pinned until the write lands
 
   std::string spath(path);
 

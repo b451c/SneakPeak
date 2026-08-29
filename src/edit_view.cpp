@@ -189,6 +189,7 @@ void SneakPeak::Destroy()
   StandaloneCleanupPreview();
   if (!m_previewTempPath.empty()) { AudioEngine::RemoveFile(m_previewTempPath); m_previewTempPath.clear(); }
   CleanupDragTemp();
+  AbortDestructiveJob();   // F5: the worker rolls the file back; a landed edit gets its refresh
   DiscardItemUndo();
   // Cancel an in-flight incremental load (closes its PCM_source)
   m_stdLoading = false;
@@ -273,6 +274,7 @@ void SneakPeak::ToggleMasterView()
 void SneakPeak::ToggleTrackView()
 {
   if (m_waveform.IsStandaloneMode()) return;
+  if (DestructiveJobBusy()) return;   // F5: the view is pinned
 
   // If working set exists (active or dormant), exit it
   if (m_workingSet.active || m_workingSet.dormant) {
@@ -693,6 +695,7 @@ bool SneakPeak::LoadSelectedItemMulti(int count)
 
 void SneakPeak::LoadSelectedItem()
 {
+  if (m_destructiveJob.active) return;   // F5: the view is pinned until the write lands (the job re-syncs)
   JoinDynamicsWorker(true);   // the sample buffer may be replaced below
   PruneWorkingSet();          // a set whose items died must not lock the view (F1)
   if (!g_CountSelectedMediaItems || !g_GetSelectedMediaItem) return;
@@ -892,6 +895,7 @@ void SneakPeak::OnTimer()
   LimiterPreviewTick();
   // Background limiter apply: title progress + result swap on completion.
   LimiterApplyTick();
+  StepDestructiveJob();     // F5: in-place file edit on the worker - title progress + finalize
   // Loop finder: publish finished candidates (INC-A2).
   LoopFindTick();
   // One-Shot Prep needs a single-item view (Standalone or plain ITEM mode,
@@ -1841,6 +1845,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         m_limApplyCancel.store(true);
         m_limApplyThread.join();
       }
+      AbortDestructiveJob();   // F5 (idempotent after Destroy())
       if (m_loopFindThread.joinable()) m_loopFindThread.join();
       KillTimer(m_hwnd, TIMER_REFRESH);
       ReleaseScene();

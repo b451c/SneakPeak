@@ -54,6 +54,7 @@ bool SneakPeak::DynTraceCurrent(const DynamicsParams& p) const
 void SneakPeak::StartDynTraceJob()
 {
   DynTraceJob& J = m_dynTraceJob;
+  if (m_destructiveJob.active) return;   // F5: the file is being rewritten - the tick retries
   AbortDynTraceJob();
   // Loader parity: the shared timeline/SET buffer bakes per-segment item
   // volume, a single item's does not (ivDb is the engine's argument).

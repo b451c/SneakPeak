@@ -153,11 +153,16 @@ void ReverseFrames(uint8_t* buf, int64_t n, int bpf)
     std::swap_ranges(buf + i * bpf, buf + (i + 1) * bpf, buf + j * bpf);
 }
 
+bool Report(const WavInplace::Progress* prog, int64_t done, int64_t total)
+{
+  return !prog || !prog->fn || prog->fn(prog->user, total > 0 ? (double)done / (double)total : 1.0);
+}
+
 } // namespace
 
 namespace WavInplace {
 
-bool Reverse(const std::string& path, int64_t s0, int64_t s1)
+bool Reverse(const std::string& path, int64_t s0, int64_t s1, const Progress* prog)
 {
   WavFile w;
   if (!Open(path, w)) return false;
@@ -174,11 +179,13 @@ bool Reverse(const std::string& path, int64_t s0, int64_t s1)
     if (!WriteFrames(w, lo, n, b.data()) || !WriteFrames(w, hi - n, n, a.data())) return false;
     lo += n;
     hi -= n;
+    if (!Report(prog, lo - s0, (s1 - s0) / 2)) return false;
   }
   return fflush(w.f) == 0;
 }
 
-bool Gain(const std::string& path, int64_t s0, int64_t s1, double factor, int fadeFrames)
+bool Gain(const std::string& path, int64_t s0, int64_t s1, double factor, int fadeFrames,
+          const Progress* prog)
 {
   WavFile w;
   if (!Open(path, w)) return false;
@@ -203,11 +210,12 @@ bool Gain(const std::string& path, int64_t s0, int64_t s1, double factor, int fa
     Encode(w, smp.data(), (size_t)(n * w.nch), raw.data());
     if (!WriteFrames(w, pos, n, raw.data())) return false;
     pos += n;
+    if (!Report(prog, pos - s0, total)) return false;
   }
   return fflush(w.f) == 0;
 }
 
-bool DCRemove(const std::string& path, int64_t s0, int64_t s1)
+bool DCRemove(const std::string& path, int64_t s0, int64_t s1, const Progress* prog)
 {
   WavFile w;
   if (!Open(path, w)) return false;
@@ -223,6 +231,7 @@ bool DCRemove(const std::string& path, int64_t s0, int64_t s1)
     for (int64_t f = 0; f < n; f++)
       for (int ch = 0; ch < w.nch; ch++) mean[(size_t)ch] += smp[(size_t)(f * w.nch + ch)];
     pos += n;
+    if (!Report(prog, pos - s0, 2 * (s1 - s0))) return false;   // both passes = the work
   }
   for (double& m : mean) m /= (double)(s1 - s0);
   for (int64_t pos = s0; pos < s1;) {   // pass 2: subtract
@@ -234,6 +243,7 @@ bool DCRemove(const std::string& path, int64_t s0, int64_t s1)
     Encode(w, smp.data(), (size_t)(n * w.nch), raw.data());
     if (!WriteFrames(w, pos, n, raw.data())) return false;
     pos += n;
+    if (!Report(prog, (s1 - s0) + (pos - s0), 2 * (s1 - s0))) return false;
   }
   return fflush(w.f) == 0;
 }

@@ -107,6 +107,7 @@ add_library(reaper_sneakpeak SHARED
   src/loop_finder.cpp
   src/wav_smpl.cpp
   src/wav_inplace.cpp
+  src/destructive_job.cpp
   src/wav_writer.cpp
   src/audio_stream.cpp
   src/view_stream.cpp

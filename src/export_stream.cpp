@@ -140,6 +140,7 @@ void SneakPeak::BakeItemFades(double* chunk, int64_t viewFrame0, int n, int nch,
 // never the standalone-tracked m_wavBitsPerSample. Empty on failure.
 std::string SneakPeak::ExportItemRangeToWav(double t0, double t1)
 {
+  if (DestructiveJobBusy()) return {};   // F5: the file is being rewritten
   AudioStream stream;
   if (!m_waveform.OpenStream(stream, t0, t1, true)) return {};
   MediaItem_Take* take = m_waveform.GetTake();
