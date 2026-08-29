@@ -1872,15 +1872,7 @@ double SneakPeak::QuerySystemDefaultUiScale() const
 {
 #ifdef _WIN32
   // Per-monitor DPI for our window (GetDpiForWindow, Win10+), else system DPI.
-  UINT dpi = 0;
-  typedef UINT (WINAPI *GetDpiForWindow_t)(HWND);
-  static GetDpiForWindow_t p =
-      (GetDpiForWindow_t)GetProcAddress(GetModuleHandleA("user32.dll"), "GetDpiForWindow");
-  if (p && m_hwnd) dpi = p(m_hwnd);
-  if (!dpi) {
-    HDC dc = GetDC(NULL);
-    if (dc) { dpi = (UINT)GetDeviceCaps(dc, LOGPIXELSX); ReleaseDC(NULL, dc); }
-  }
+  const UINT dpi = Win32WindowDpi(m_hwnd);
   return dpi ? dpi / 96.0 : 1.0;  // 96=1.0, 120=1.25, 144=1.5, 192=2.0
 #elif defined(__APPLE__)
   return 1.0;  // SWELL renders Retina crisp + correctly sized at logical 1x; g_uiScale is orthogonal

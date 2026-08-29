@@ -66,6 +66,19 @@
 
 // Portable dialog creation
 #ifdef _WIN32
+// DPI of a window (GetDpiForWindow, Win10+), else the system DPI; 0 if unknown.
+inline UINT Win32WindowDpi(HWND hwnd) {
+  typedef UINT (WINAPI *GetDpiForWindow_t)(HWND);
+  static GetDpiForWindow_t p =
+      (GetDpiForWindow_t)GetProcAddress(GetModuleHandleA("user32.dll"), "GetDpiForWindow");
+  UINT dpi = (p && hwnd) ? p(hwnd) : 0;
+  if (!dpi) {
+    HDC dc = GetDC(NULL);
+    if (dc) { dpi = (UINT)GetDeviceCaps(dc, LOGPIXELSX); ReleaseDC(NULL, dc); }
+  }
+  return dpi;
+}
+
 inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param, bool docked = false) {
   #pragma pack(push, 4)
   struct { DLGTEMPLATE tmpl; WORD menu; WORD wndClass; WORD title; } dlg = {};
@@ -73,11 +86,23 @@ inline HWND CreateSneakPeakDialog(HWND parent, DLGPROC dlgProc, LPARAM param, bo
   if (docked) {
     dlg.tmpl.style = WS_CHILD | DS_CONTROL;
   } else {
-    dlg.tmpl.style = WS_POPUP | WS_CAPTION | WS_SIZEBOX | WS_SYSMENU | WS_VISIBLE;
-    dlg.tmpl.cx = 800;
-    dlg.tmpl.cy = 400;
+    dlg.tmpl.style = WS_POPUP | WS_CAPTION | WS_SIZEBOX | WS_SYSMENU;   // shown by the caller
   }
-  return CreateDialogIndirectParam(GetModuleHandle(nullptr), &dlg.tmpl, parent, dlgProc, param);
+  HWND hwnd = CreateDialogIndirectParam(GetModuleHandle(nullptr), &dlg.tmpl, parent, dlgProc, param);
+  if (hwnd && !docked) {
+    // The template's cx/cy are dialog units (about 2 px each with the system
+    // font), not pixels: an 800x400 template opened a ~1600x800 window (audit
+    // A5.8). Size the client to the same 800x400 px SWELL gives the other
+    // platforms, scaled by the window's DPI; a saved rect overrides this later.
+    const UINT dpi = Win32WindowDpi(hwnd);
+    RECT rc = { 0, 0, MulDiv(800, (int)dpi, 96), MulDiv(400, (int)dpi, 96) };
+    if (!dpi) rc = { 0, 0, 800, 400 };
+    AdjustWindowRectEx(&rc, (DWORD)GetWindowLong(hwnd, GWL_STYLE), FALSE,
+                       (DWORD)GetWindowLong(hwnd, GWL_EXSTYLE));
+    SetWindowPos(hwnd, nullptr, 0, 0, rc.right - rc.left, rc.bottom - rc.top,
+                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+  return hwnd;
 }
 #else
 #include "swell/swell-dlggen.h"

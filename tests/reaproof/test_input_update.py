@@ -14,12 +14,34 @@ from __future__ import annotations
 import json
 import os
 import threading
+import sys
 import time
 from pathlib import Path
 
 from conftest import DYLIB, SP_WINDOW_LUA, ensure_window, wait_main_thread_idle
 
 VERSION_LABEL = (640, 13)   # "v2.5.0" in the mode bar (client coords) of the 800x400 spec window
+
+
+def _visible_consoles() -> int:
+    """Windows: visible console windows right now (a child spawned with a
+    console flashes one; diagnostic for the update worker's curl)."""
+    if sys.platform != "win32":
+        return 0
+    import ctypes
+    from ctypes import wintypes
+    u32 = ctypes.windll.user32
+    n = [0]
+    @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+    def cb(hwnd, _):
+        if u32.IsWindowVisible(hwnd):
+            buf = ctypes.create_unicode_buffer(64)
+            u32.GetClassNameW(hwnd, buf, 64)
+            if buf.value == "ConsoleWindowClass":
+                n[0] += 1
+        return True
+    u32.EnumWindows(cb, 0)
+    return n[0]
 
 
 def _heartbeat_gaps(sess, seconds: float) -> float:
@@ -30,8 +52,10 @@ def _heartbeat_gaps(sess, seconds: float) -> float:
         hb = next(run_dir.rglob("heartbeat.json"))
     last = None
     worst = 0.0
+    consoles = 0
     t0 = time.monotonic()
     while time.monotonic() - t0 < seconds:
+        consoles = max(consoles, _visible_consoles())
         try:
             t = float(json.loads(hb.read_text())["t"])
         except Exception:   # noqa: BLE001 - a half-written file
@@ -41,6 +65,7 @@ def _heartbeat_gaps(sess, seconds: float) -> float:
             worst = max(worst, t - last)
         last = t
         time.sleep(0.005)
+    print(f"\n[update] visible console windows during the probe: {consoles}")
     return worst
 
 

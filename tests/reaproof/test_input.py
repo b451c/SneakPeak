@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 
 from conftest import (SELECT_ITEM0, WAVE_Y, burst_fixture, clear_project, click_client,
-                      ensure_window, insert_item_unselected, toggle_window, wait_audio_loaded,
-                      window_handle_lua, window_visible)
+                      client_size, ensure_window, insert_item_unselected, toggle_window,
+                      wait_audio_loaded, window_handle_lua, window_visible)
 
 SHOTS = Path("/tmp/sneakpeak-reaproof-shots/input")
 KVK_RIGHT, KVK_Y, KVK_Z = 124, 16, 6      # macOS virtual key codes
@@ -167,3 +167,42 @@ def test_window_restores_onto_a_monitor(sess):
     print(f"\n[input] restored window rect: {l},{t}-{r},{b}")
     assert int(r) > 0 and int(b) > 0 and int(l) > -800 and int(t) > -400, f"window restored off-screen: {l},{t}-{r},{b}"
     sess.eval('reaper.DeleteExtState("SneakPeak", "win_rect", true) return true')
+
+
+def _system_dpi() -> int:
+    """The real system DPI (python.exe is DPI-unaware: ask on a per-monitor-aware thread)."""
+    if sys.platform != "win32":
+        return 96
+    import ctypes
+    u32 = ctypes.windll.user32
+    try:
+        u32.SetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+        prev = u32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))   # PER_MONITOR_AWARE_V2
+        try:
+            return int(u32.GetDpiForSystem())
+        finally:
+            u32.SetThreadDpiAwarenessContext(ctypes.c_void_p(prev))
+    except (AttributeError, OSError):
+        return 96
+
+
+def test_default_floating_window_is_800x400(sess):
+    """No saved rect: the floating window opens with an 800x400 client (times
+    the DPI). The Win32 DLGTEMPLATE takes cx/cy in dialog units (about 2 px
+    each with the system font), so the control opened a ~1600x800 window
+    (1532 wide on the VM's 1512 px screen) - every client coordinate the
+    specs use (WAVE_Y, VERSION_LABEL, the drag scale) was off there. SWELL
+    takes pixels: GREEN on the macOS control; the Windows leg is the RED."""
+    if window_visible(sess):
+        toggle_window(sess)      # Destroy() saves the current rect ...
+        sess.wait_until(lambda: not window_visible(sess), timeout=10)
+    sess.eval('reaper.DeleteExtState("SneakPeak", "win_rect", true) return true')   # ... which we drop
+    toggle_window(sess)
+    sess.wait_until(lambda: window_visible(sess), timeout=10)
+    time.sleep(0.5)
+    w, h = client_size(sess)
+    dpi = _system_dpi()
+    want_w, want_h = round(800 * dpi / 96), round(400 * dpi / 96)
+    print(f"\n[input] default floating client: {w}x{h} (want {want_w}x{want_h} at {dpi} dpi)")
+    assert abs(w - want_w) <= 4 and abs(h - want_h) <= 4, \
+        f"default floating window is {w}x{h}, not {want_w}x{want_h} (dialog units instead of pixels?)"
