@@ -299,6 +299,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>SneakPeak opens as a floating, resizable window. You can dock it into any REAPER docker via right-click menu (<strong>"Dock SneakPeak in Docker"</strong>) or leave it floating. To undock, right-click and choose <strong>"Undock SneakPeak"</strong>. Your floating position, size, and dock state are remembered across sessions.</p>
 <p>Click any media item on the timeline. SneakPeak immediately loads its waveform.</p>
 
+<img src="images/sneakpeak-hero-window.png" alt="SneakPeak in ITEM mode - a dialogue item with its volume envelope, the dynamics curves and the Dynamics panel" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+
 <h3>Custom Icons</h3>
 <p>SneakPeak ships with custom toolbar and track icons in three states (active, hover, inactive) at multiple scales (100%, 150%, 200%). To set up a toolbar button with the SneakPeak icon:</p>
 <ol>
@@ -356,7 +358,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Everything you do in this mode uses the REAPER API. The audio files on disk are never modified directly. Gain changes use the item's D_VOL parameter. Fades use D_FADEINLEN and D_FADEOUTLEN. Split uses SplitMediaItem. All reversible with REAPER's undo system.</p>
 
 <h3>Long items (v2.5)</h3>
-<p>Selecting an item of any length is instant: the waveform and minimap draw from REAPER's own peak files - the same data the arrange view shows - so nothing is decoded up front and nothing freezes. Items over about 3.8 minutes (stereo, 44.1 kHz) stay buffer-free until a tool that actually needs raw samples asks: the Spectral view and the One-Shot Factory open at once and fill in when the audio lands (progress in the title), Paste asks for the buffer with a short toast and works once it has loaded, and the Hard Limiter refuses such items with a message (it needs the full-rate buffer). Reverse, DC Remove, Gain on a selection, Copy, Normalize, every export and the Dynamics analysis never need the buffer at all - they stream the source or edit the file in place. The RMS band stays off on these items (it needs real samples). A buffer that would exceed 1 GB is refused with a clear message instead of being allocated, and the level meters keep following playback on such items (they read the played window straight from the item). Shorter items load their full-rate buffer in the background: a sample-based command issued within the first ~100 ms after selecting shows a "still loading" toast and works on the next try.</p>
+<p>Selecting an item of any length is instant: the waveform and minimap draw from REAPER's own peak files - the same data the arrange view shows - so nothing is decoded up front and nothing freezes. Items over about 3.8 minutes (stereo, 44.1 kHz) stay buffer-free until a tool that actually needs raw samples asks: the Spectral view and the One-Shot Factory open at once and fill in when the audio lands (progress in the title), Paste asks for the buffer with a short toast and works once it has loaded, and the Hard Limiter opens at once and limits the file itself (its readouts fill in when the buffer lands). Reverse, DC Remove, Gain on a selection, Copy, Normalize, every export and the Dynamics analysis never need the buffer at all - they stream the source or edit the file in place. The RMS band stays off on these items (it needs real samples). A buffer that would exceed 1 GB is refused with a clear message instead of being allocated, and the level meters keep following playback on such items (they read the played window straight from the item). Shorter items load their full-rate buffer in the background: a sample-based command issued within the first ~100 ms after selecting shows a "still loading" toast and works on the next try.</p>
 
 <h2 id="waveform-display">Waveform Display</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
@@ -775,7 +777,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="dynamics-panel">Dynamics Panel</h2>
 
-<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with 15 real-time controls across the COMP and GATE tabs. The mode button in the panel header cycles <strong>DOWN / UP / BOTH</strong>: DOWN is a classic compressor (reduce loud material above the threshold), UP is an upward compressor (boost quiet material below the threshold - leveling quiet speech without touching the peaks), and BOTH does the two at once in a single pass - a full leveler that pulls everything toward the threshold, ideal for "lift the quiet, tame the loud" voice work. In Up/Both the GR readout turns amber when the net gain is a boost, auto-makeup acts as a trim, and the boost is capped by M.Boost and floored at the gate threshold when the gate is on.</p>
+<p>The dynamics panel is an inline floating control surface at the bottom of the waveform area with its controls across four tabs - COMP, GATE, DE-ESS and VIEW - and one footer line that says what Apply will do in the current mode. The mode button in the panel header cycles <strong>DOWN / UP / BOTH</strong>: DOWN is a classic compressor (reduce loud material above the threshold), UP is an upward compressor (boost quiet material below the threshold - leveling quiet speech without touching the peaks), and BOTH does the two at once in a single pass - a full leveler that pulls everything toward the threshold, ideal for "lift the quiet, tame the loud" voice work. In Up/Both the GR readout turns amber when the net gain is a boost, auto-makeup acts as a trim, and the boost is capped by M.Boost and floored at the gate threshold when the gate is on.</p>
 
 <table>
   <thead><tr><th>Slider</th><th>Range</th><th>Description</th></tr></thead>
@@ -818,7 +820,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="dynamics-live">Live Mode</h2>
 
-<p>Click the <strong>[Live]</strong> toggle (green when active) to enable real-time envelope writing. In Live mode, every slider change immediately writes envelope points to REAPER - the waveform updates in real-time as you drag. No need to click Apply.</p>
+<p>Click the <strong>LIVE</strong> pill on the VIEW tab (amber when armed) to enable real-time envelope writing. In Live mode, every slider change immediately writes envelope points to REAPER - the waveform updates in real-time as you drag. No need to click Apply.</p>
 
 <p>A single undo block wraps each drag gesture, so <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> reverts the entire adjustment. When Live is active, the Apply button is grayed out (it would be redundant).</p>
 
@@ -851,6 +853,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>In Standalone mode the DE-ESS tab shows a <strong>WIDE / SPLIT</strong> switch in the footer (where the Compressor tab keeps PEAK / RMS). <strong>WIDE</strong> is the classic broadband behavior described above, applied to the buffer. <strong>SPLIT</strong> turns Apply into a split-band de-esser: during a sibilant only the detector band is cut, by the amount the gain-reduction curve shows, and everything outside the band passes untouched - a dynamic EQ cut rather than a duck. The band is exactly the one the detector listens to: band-pass at <strong>Freq</strong> with <strong>Width</strong>, or everything above <strong>Freq</strong> in HP mode (there the cut is -3 dB at Freq itself, as with any filter corner, and full an octave above). The cut is applied with zero phase, so it can never boost and leaves the signal bit-for-bit untouched wherever the de-esser is idle; pre-ringing at de-ess frequencies is a fraction of a millisecond. The compressor, gate and makeup still apply as a wideband gain in the same pass, and there is one undo step for the whole Apply. The switch is saved with the panel settings; on items it renders disabled because a take envelope can only duck the whole signal - the panel's footer line says so ("APPLY WRITES THE TAKE VOLUME ENVELOPE - SPLIT NEEDS STANDALONE").</p>
 
+<img src="images/dynamics-deess-standalone.png" alt="The DE-ESS tab in Standalone: WIDE / SPLIT in the footer, LISTEN painting the sibilant spans along the top of the waveform, and the footer line saying Apply edits the buffer" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+
 <div class="warning">
   <strong>Wideband topology on items</strong>
   Because the reduction is written to the take volume envelope, on items the WHOLE signal ducks briefly during a sibilant - the classic broadband de-esser design, not a dynamic EQ. With the default -10 dB range this is the proven de-esser sound for voice work. For a band-only cut, open the file in Standalone (Edit Copy in Standalone brings an item over) and use SPLIT.
@@ -878,7 +882,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="dynamics-ab">A/B Bypass</h2>
 
-<p>Click the <strong>[A/B]</strong> toggle (yellow when active) to bypass the volume envelope in REAPER. This disables the envelope so you hear the original unprocessed audio - an instant before/after comparison. The waveform also renders without the envelope effect while bypassed. Bypass is automatically restored when you close the dynamics panel.</p>
+<p>Click the <strong>A/B</strong> button in the panel header (amber outline while engaged) to bypass the volume envelope in REAPER. This disables the envelope so you hear the original unprocessed audio - an instant before/after comparison. The waveform also renders without the envelope effect while bypassed. Bypass is automatically restored when you close the dynamics panel.</p>
 
 <hr>
 
@@ -887,6 +891,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-standalone">STANDALONE</span></div>
 
 <p>Toggle the spectrogram via right-click > View > Spectral View. A resizable pane appears below the waveform showing a time-frequency representation of the audio using the magma color scheme (dark = silence, bright = energy).</p>
+
+<img src="images/spectral-view.png" alt="The spectral view in Standalone: waveform above, spectrogram below with a time x frequency selection marquee" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <p>The spectrogram is computed asynchronously when an item loads, with the FFT size chosen in Settings &gt; View: <strong>FFT 512 / 1024 / 2048 / 4096</strong> (default 2048). A larger size resolves close partials and hum harmonics in frequency (4096 is about 11 Hz per bin at 44.1 kHz), a smaller one keeps clicks and transients sharp in time (512 is about 3 ms per column); the overlap stays at 75% at every size, so the cost does not change with it. The setting is remembered, and a change recomputes the open spectrogram. A progress overlay shows computation status; after computation completes, the display updates instantly.</p>
 
@@ -922,6 +928,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Building seamless loops (ambiences, room tone, engine/machine loops, hums, drones) for game engines and samplers starts with finding the right region and <em>hearing</em> the seam. Loop Lab is built for that kind of sustained material - it is not a beat-aware music looper (musical loops need bar alignment, which is a different tool). In Standalone mode, right-click &gt; <strong>Loop Lab...</strong> opens the Loop Lab panel - the whole loop workflow lives there: live <strong>START / END / LENGTH</strong> readouts, the finder's <strong>candidate list</strong>, loop and seam transport, weld and <code>smpl</code> controls. The panel remembers its position; drag its empty area to move it.</p>
 
+<img src="images/loop-lab-panel.png" alt="Loop Lab: a loop region with its brackets on the ruler, the readouts and the finder's candidate list" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+
 <ul>
   <li><strong>SET FROM SELECTION</strong> (also a direct right-click item, <strong>Set Loop From Selection</strong>) turns the current time selection into the loop: yellow brackets and a strip mark the region on the ruler (with the ruler hidden they sit on the waveform top, like markers). <strong>Drag a bracket</strong> to fine-tune either end - snap-to-zero-crossing applies when enabled in Settings, and the panel readouts follow live.</li>
   <li><strong>PLAY LOOP</strong> plays the region wrapping seamlessly from end back to start - if the seam clicks or thumps, you will hear it exactly as a game engine would play it. The audition follows bracket drags and loops until you stop it (the pill again, or <kbd>Space</kbd>).</li>
@@ -952,6 +960,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>While the panel is open, the waveform previews the prep live: dimmed zones show what will be cut, amber lines mark every slice that will be written and diagonal ramps show the edge fades - all following the knobs, so you can tune the threshold until the split is exactly right.</p>
 
+<img src="images/oneshot-factory.png" alt="One-Shot Factory on a dialogue item in SILENCE slice mode: amber lines mark every slice that Run will write" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+
 <p><strong>Run</strong> writes each slice through the full chain next to the source file (existing files are never overwritten - collisions get a numbered suffix <code>_2</code>, <code>_3</code>, ...). Unrecognized <code>{tokens}</code> in the pattern degrade gracefully: the braces are stripped, so a mistyped <code>{test}_{01}</code> still writes a clean <code>test_01.wav</code>. The audio loaded in the editor is not modified. Long batches show progress in the title bar and the toast sums up, e.g. "14 files written". <strong>OPEN FOLDER</strong> reveals the export destination in your file manager - no hunting for where the batch landed. Knobs work like the other premium panels; settings persist.</p>
 
 <h2 id="hard-limiter">Hard Limiter (True Peak)</h2>
@@ -960,6 +970,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>A transparent lookahead brickwall limiter for final asset loudness - push a sound effect or a mixed file into a hard ceiling that is guaranteed on <strong>true peaks</strong> (inter-sample peaks measured BS.1770-style), not just sample values. Game platforms commonly require assets to stay at or below <strong>-1 dBTP</strong>; this is the tool for that last step.</p>
 
 <p>Open it via right-click &gt; <strong>Process &gt; Hard Limiter...</strong> - on a Standalone file or directly on a selected timeline item (plain ITEM mode). In ITEM mode Apply follows the same destructive rules as Reverse: after a confirm prompt it rewrites exactly the item's window of the source WAV <em>in place</em> - trimmed items, a time selection (limited with 20 ms handoff ramps into the untouched audio), all of the file's channels, items of any length - in the background ("Limiting... N% (Esc cancels)" in the title), every item referencing the file updates, and the edit is one REAPER undo point with the pre-edit copy as the undo. The panel footer shows a standing "APPLY REWRITES THE SOURCE FILE" note - or, when Apply cannot run, the reason with a greyed Apply: a non-WAV source (use Edit Copy in Standalone), a take reversed or sectioned in REAPER, an edit already running, or a range longer than the limiter holds in memory at once (about 6 minutes of stereo at 44.1 kHz, 25 minutes of mono at 22 kHz - select less). On a long item the panel opens at once and its readouts fill in when the working buffer lands. The panel gives you:</p>
+
+<img src="images/hard-limiter-item.png" alt="The Hard Limiter on a timeline item: +6 dB into a -1 dBTP ceiling, the red gain-reduction band along the top of the waveform, the readouts and the footer note" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <ul>
   <li><strong>Gain</strong> (0 to +24 dB) - how hard you push into the ceiling.</li>
@@ -979,6 +991,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   The limiter detects peaks on an oversampled grid finer than the BS.1770-4 meter standard and then re-measures its own output, so files it writes read at or below the ceiling on compliance meters (ASWG-R001 style QC included).
 </div>
 
+<img src="images/hard-limiter-greyed.png" alt="The Hard Limiter on an MP3 item: the footer says why and Apply is greyed" style="width:482px;max-width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+
 <div class="warning">
   <strong>Destructive by design</strong>
   A true-peak ceiling needs per-sample gain, so the limiter always changes the audio itself - in Standalone it edits the loaded buffer (nothing on disk until Save), in ITEM mode Apply rewrites the source WAV after a confirm prompt (undoable with <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd>, one level).
@@ -997,6 +1011,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 </ul>
 
 <p><strong>Per-track zoom (Lanes):</strong> scroll on a lane's dB scale, or hold <kbd>Option</kbd> and scroll over the lane, to zoom that track's amplitude alone - the other lanes keep their scale, and the lane label shows the factor (for example "Vocal x2.3"). The toolbar's V Zoom +/- still scale every lane together; V Zoom reset returns the view and every lane to 1:1. A stereo lane splits into L/R bands when it is tall enough and folds both channels into one band otherwise. The per-track zoom survives the view rebuilds that follow edits made outside SneakPeak.</p>
+
+<img src="images/multi-item-lanes.png" alt="Lanes (per Track): three tracks stacked in arrange order, each with its own dB scale - the middle lane zoomed to x1.5" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <p>Toggle <strong>Show Join Lines</strong> in the context menu to see vertical lines at crossfade points between items.</p>
 
@@ -1166,7 +1182,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>Down</kbd></td><td>Gain -1 dB</td><td>All</td></tr>
     <tr><td><kbd>Option</kbd>+<kbd>Right</kbd></td><td>Next segment (select + scroll)</td><td>SET, Timeline, Multi</td></tr>
     <tr><td><kbd>Option</kbd>+<kbd>Left</kbd></td><td>Previous segment</td><td>SET, Timeline, Multi</td></tr>
-    <tr><td><kbd>Escape</kbd></td><td>Close Settings/Dynamics panel / exit working set / clear selection / stop</td><td>All</td></tr>
+    <tr><td><kbd>Escape</kbd></td><td>Close a panel / cancel a running destructive edit / exit working set / clear selection / stop</td><td>All</td></tr>
     <tr><td><kbd>Home</kbd></td><td>Go to item start</td><td>All</td></tr>
     <tr><td><kbd>End</kbd></td><td>Go to item end</td><td>All</td></tr>
     <tr><td><kbd>Tab</kbd></td><td>Next marker</td><td>ITEM</td></tr>
@@ -1229,7 +1245,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Cmd/Ctrl + Drag</td><td>Envelope line</td><td>Freehand draw points</td></tr>
     <tr><td>Cmd/Ctrl + Drag</td><td>Empty waveform area</td><td>Envelope selection rectangle / dense reveal</td></tr>
     <tr><td>Drag slider</td><td>Dynamics panel</td><td>Adjust parameter (Cmd/Ctrl for fine mode)</td></tr>
-    <tr><td>Click</td><td>MULTI label</td><td>Mode dropdown (Mix/Layered/Timeline View)</td></tr>
+    <tr><td>Click</td><td>MULTI label</td><td>Mode dropdown (Mix / Layered / Lanes / Timeline View)</td></tr>
   </tbody>
 </table>
 
@@ -1238,7 +1254,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Right-click anywhere on the waveform to access the full context menu. The menu is organized into sections:</p>
 
 <ul>
-  <li><strong>Edit</strong> - Undo, Cut, Copy, Paste, Delete, Ripple Delete, Silence, Select All, Split at Cursor (S)</li>
+  <li><strong>Edit</strong> - Undo, Redo, Cut, Copy, Paste, Delete, Ripple Delete, Silence, Select All, Split at Cursor (S)</li>
   <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Hard Limiter, Dynamics Panel, Mono Downmix. On an item the rows that rewrite the source file are labeled "(rewrites file)"; when the file cannot be rewritten they grey out and a row underneath says why.</li>
   <li><strong>View</strong> - Zoom controls, Spectral View, Show Volume Envelope, Show Dynamics Curve, Show RMS, Show Meters, Snap to Zero-Crossing, Minimap, Ruler mode (Relative/Absolute/Bars & Beats), Working Set toggle, Group, Switch to Timeline View</li>
   <li><strong>Multi-Item</strong> - Mix/Layered/Lanes modes, Show Join Lines, Switch to Timeline View (when multiple items are loaded)</li>
