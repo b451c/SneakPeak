@@ -55,7 +55,7 @@ void SneakPeak::StartDestructiveJob(const char* verb, const char* doing, const c
   J.done.store(false);
   J.phase.store(0);
   J.pct.store(0);
-  J.snapshotOk = J.ok = J.restored = false;
+  J.snapshotOk = J.ok = J.restored = J.unchanged = false;
   J.lastTitle.clear();
   J.active = true;
   J.thread = std::thread(&SneakPeak::DestructiveJobThread, this);
@@ -124,6 +124,16 @@ void SneakPeak::FinalizeDestructiveJob()
     ShowToast(msg);
     return;
   }
+  if (J.ok && J.unchanged) {
+    // The op found nothing to change and left the file alone (the limiter
+    // with nothing above the ceiling): the pre-edit copy goes, the undo slot
+    // and REAPER's undo history stay as they were; the display edit reports.
+    AudioEngine::RemoveFile(J.snapshot);
+    BringOfflineItemsBackOnline();
+    m_waveform.RecreateLiveAccessor();
+    UpdateTitle();
+    if (J.displayEdit) J.displayEdit();
+  } else {
   // The copy exists: the bookkeeping UndoSave did (the old snapshot is dropped
   // only now, the slot flips, the restore checks the path).
   DiscardItemUndo();
@@ -146,6 +156,7 @@ void SneakPeak::FinalizeDestructiveJob()
       snprintf(msg, sizeof(msg), "%s cancelled - the file was restored from the pre-edit copy", J.verb.c_str());
       ShowToast(msg);
     }
+  }
   }
   // The view was pinned: if REAPER's selection moved meanwhile, main.cpp's
   // poll has already recorded it and will not fire again - follow it now.

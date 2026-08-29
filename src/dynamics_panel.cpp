@@ -1534,6 +1534,11 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.dsEnable = m_params.dsEnable;
   vm.dsListen = m_dsListen;
   vm.dsSplit  = m_params.dsSplit;
+  // F5 (UX audit 2026-08-29): what Apply does in this mode, as a footer line;
+  // the DE-ESS tab adds where SPLIT lives (its pair renders disabled on items).
+  vm.footerNote = m_standalone   ? "APPLY EDITS THE BUFFER - SAVE WRITES THE FILE"
+                : (int)m_tab == 2 ? "APPLY WRITES THE TAKE VOLUME ENVELOPE - SPLIT NEEDS STANDALONE"
+                                  : "APPLY WRITES THE TAKE VOLUME ENVELOPE";
   vm.meterFloorSel = m_meterFloorSel;
   vm.compact  = m_compactMode;
   vm.dragHandle = m_dragHandle;

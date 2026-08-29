@@ -16,7 +16,7 @@ struct WavFile {
   FILE* f = nullptr;
   int64_t dataOffset = 0;   // first byte of sample data
   int64_t frames = 0;       // frames in the data chunk
-  int nch = 0, bits = 0, fmt = 0, bpf = 0;
+  int nch = 0, bits = 0, fmt = 0, bpf = 0, rate = 0;
   ~WavFile() { if (f) fclose(f); }
 };
 
@@ -69,7 +69,7 @@ bool Open(const std::string& path, WavFile& w)
           return false;
         fmt = subTag;
       }
-      w.fmt = fmt; w.nch = nch; w.bits = bits;
+      w.fmt = fmt; w.nch = nch; w.bits = bits; w.rate = (int)rate;
       haveFmt = true;
     } else if (memcmp(id, "data", 4) == 0) {
       const bool pcm = w.fmt == 1 && (w.bits == 16 || w.bits == 24);
@@ -153,9 +153,14 @@ void ReverseFrames(uint8_t* buf, int64_t n, int bpf)
     std::swap_ranges(buf + i * bpf, buf + (i + 1) * bpf, buf + j * bpf);
 }
 
+bool ReportFrac(const WavInplace::Progress* prog, double frac)
+{
+  return !prog || !prog->fn || prog->fn(prog->user, frac);
+}
+
 bool Report(const WavInplace::Progress* prog, int64_t done, int64_t total)
 {
-  return !prog || !prog->fn || prog->fn(prog->user, total > 0 ? (double)done / (double)total : 1.0);
+  return ReportFrac(prog, total > 0 ? (double)done / (double)total : 1.0);
 }
 
 } // namespace
@@ -246,6 +251,46 @@ bool DCRemove(const std::string& path, int64_t s0, int64_t s1, const Progress* p
     if (!Report(prog, (s1 - s0) + (pos - s0), 2 * (s1 - s0))) return false;
   }
   return fflush(w.f) == 0;
+}
+
+bool Limit(const std::string& path, int64_t s0, int64_t s1, const LimiterParams& params,
+           int rampFrames, LimiterResult& res, std::vector<double>* processed, const Progress* prog)
+{
+  WavFile w;
+  if (!Open(path, w)) return false;
+  Clamp(w, s0, s1);
+  const int64_t total = s1 - s0;
+  if (total <= 0 || total > (int64_t)INT32_MAX || w.rate <= 0) return false;
+  std::vector<uint8_t> raw((size_t)(kChunkFrames * w.bpf));
+  std::vector<double> smp((size_t)(total * w.nch));
+  for (int64_t pos = s0; pos < s1;) {   // the range, whole: reading = the first tenth
+    const int64_t n = std::min(kChunkFrames, s1 - pos);
+    if (!ReadFrames(w, pos, n, raw.data())) return false;
+    Decode(w, raw.data(), (size_t)(n * w.nch), smp.data() + (size_t)((pos - s0) * w.nch));
+    pos += n;
+    if (!ReportFrac(prog, 0.1 * (double)(pos - s0) / (double)total)) return false;
+  }
+  // The engine's own fractions land on [0.1, 0.9]; its cancel = ours.
+  LimiterProgress lp;
+  lp.user = (void*)prog;
+  lp.fn = [](void* user, double frac) -> bool {
+    return ReportFrac((const Progress*)user, 0.1 + 0.8 * frac);
+  };
+  const bool partial = s0 > 0 || s1 < w.frames;
+  res = LimiterProcess(smp.data(), (int)total, w.nch, w.rate, params,
+                       partial ? rampFrames : 0, prog ? &lp : nullptr);
+  if (!res.ok) return false;   // cancelled: nothing written yet
+  if (params.gainDb == 0.0 && res.maxGainReductionDb == 0.0) return true;   // nothing to write
+  for (int64_t pos = s0; pos < s1;) {
+    const int64_t n = std::min(kChunkFrames, s1 - pos);
+    Encode(w, smp.data() + (size_t)((pos - s0) * w.nch), (size_t)(n * w.nch), raw.data());
+    if (!WriteFrames(w, pos, n, raw.data())) return false;
+    pos += n;
+    if (!ReportFrac(prog, 0.9 + 0.1 * (double)(pos - s0) / (double)total)) return false;
+  }
+  if (fflush(w.f) != 0) return false;
+  if (processed) *processed = std::move(smp);
+  return true;
 }
 
 } // namespace WavInplace

@@ -403,38 +403,72 @@ void SneakPeak::DoLoopSelection()
 // background loader) are dropped while the file changes under them. F7: every
 // write lands in the SAME inode so REAPER's pooled decoders serve the new
 // audio at once.
-// A take reversed in REAPER, or trimmed to a section of its file, plays
-// through a SECTION source whose parent is the WAV: GetSourceFilePath names
-// the parent and the item-to-file mapping (offset, playrate, direction) no
-// longer describes what plays, so an in-place edit lands on the wrong region
-// of the parent (audit A1.2). Refused up front - before any prompt or
-// snapshot - by every destructive entry point, and again in
-// BeginDestructiveWrite as the last line of defence.
-bool SneakPeak::DestructiveSourceOk()
+// The preconditions of an in-place rewrite of the take's file, as one short
+// reason (UX audit 2026-08-29, F2). Every destructive entry point evaluates
+// it BEFORE its confirm prompt and the context menu / limiter panel show it
+// on the greyed control, so the user is never refused after a Yes. A take
+// reversed in REAPER, or trimmed to a section of its file, plays through a
+// SECTION source whose parent is the WAV: GetSourceFilePath names the parent
+// and the item-to-file mapping (offset, playrate, direction) no longer
+// describes what plays, so an in-place edit would land on the wrong region
+// of the parent (audit A1.2). Non-WAV sources have no in-place editor; Edit
+// Copy makes a WAV of the item in Standalone.
+std::string SneakPeak::DestructiveTargetReason() const
 {
-  if (!AudioEngine::IsSectionSource(m_waveform.GetTake())) return true;
-  ShowToast("This take uses a section or reversed source - destructive edits are not available");
+  if (m_waveform.IsMultiItem()) return "not available in Multi-item view";
+  if (m_destructiveJob.active) return m_destructiveJob.verb + " in progress - wait or press Esc";
+  MediaItem_Take* take = m_waveform.GetTake();
+  if (!m_waveform.HasItem() || !take) return "no item loaded";
+  if (AudioEngine::IsSectionSource(take)) return "the take plays a section or reversed source";
+  const std::string path = AudioEngine::GetSourceFilePath(take);
+  if (path.empty()) return "the source has no file on disk";
+  std::string ext;
+  const size_t dot = path.find_last_of('.');
+  if (dot != std::string::npos) ext = path.substr(dot + 1);
+  for (auto& c : ext) c = (char)tolower((unsigned char)c);
+  if (ext != "wav" && ext != "wave") {
+    for (auto& c : ext) c = (char)toupper((unsigned char)c);
+    return "the source is " + ext + " - WAV only (use Edit Copy)";
+  }
+  return std::string();
+}
+
+bool SneakPeak::DestructiveTargetOk()
+{
+  const std::string reason = DestructiveTargetReason();
+  if (reason.empty()) return true;
+  char msg[sizeof(m_toastText)];
+  snprintf(msg, sizeof(msg), "Cannot rewrite the file: %s", reason.c_str());
+  ShowToast(msg);
   return false;
+}
+
+// The Hard Limiter's greyed-Apply reason (F2/F3): the single-take views only
+// (SET / master have no one take to map the range through), then the shared
+// preconditions, then the range cap - WavInplace::Limit holds the item's
+// window (or the selection) in memory whole (kLimiterMaxBytes).
+std::string SneakPeak::LimiterTargetReason() const
+{
+  if (!SingleItemViewOk()) return "not available in this view";
+  const std::string reason = DestructiveTargetReason();
+  if (!reason.empty()) return reason;
+  int64_t s0, s1;
+  GetSelectionSourceRange(s0, s1);
+  const int64_t srcCh = std::max(1, m_waveform.GetSrcChannels());
+  const int64_t rate = std::max(1, m_waveform.GetSourceSampleRate());
+  if ((s1 - s0) * srcCh * (int64_t)sizeof(double) > kLimiterMaxBytes) {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "range too long for the limiter - select up to %.0f min here",
+             (double)(kLimiterMaxBytes / (int64_t)sizeof(double)) / (double)(srcCh * rate) / 60.0);
+    return buf;
+  }
+  return std::string();
 }
 
 bool SneakPeak::BeginDestructiveWrite(std::string& path)
 {
-  if (DestructiveJobBusy()) return false;   // F5: one file rewrite at a time
-  if (!m_waveform.HasItem() || !m_waveform.GetTake()) return false;
-  if (!DestructiveSourceOk()) return false;
+  if (!DestructiveTargetOk()) return false;   // the entry point refused already: last line of defence
   path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
-  if (path.empty()) return false;
-
-  std::string ext;
-  auto dotPos = path.find_last_of('.');
-  if (dotPos != std::string::npos)
-    ext = path.substr(dotPos + 1);
-  for (auto& c : ext) c = (char)tolower((unsigned char)c);
-  if (ext != "wav" && ext != "wave") {
-    MessageBox(m_hwnd, "Destructive editing only supports WAV files.\nConvert source to WAV first.",
-               "SneakPeak", MB_OK | MB_ICONWARNING);
-    return false;
-  }
   AbortItemAudioLoad();
   AbortExportPump();
   JoinDynamicsWorker(true);   // the trace job holds accessors on the file being rewritten
@@ -518,6 +552,21 @@ bool SneakPeak::BufferCoversWholeFile(const std::string& path, WavInfo& srcInfo)
          std::abs((int64_t)m_waveform.GetAudioSampleCount() - (int64_t)srcInfo.numFrames) <= 1;
 }
 
+// The whole-file write's own preconditions, with the refusal toast: never a
+// downsampled buffer (F6), never a trimmed, offset or rate-changed item (F12).
+// Paste asks before its prompt (F2); WriteAndRefresh re-checks after the
+// accessors are released.
+bool SneakPeak::WholeFileWriteOk(WavInfo& srcInfo)
+{
+  if (!m_waveform.IsItemBufferDownsampled() &&
+      BufferCoversWholeFile(AudioEngine::GetSourceFilePath(m_waveform.GetTake()), srcInfo))
+    return true;
+  ShowToast(m_waveform.IsItemBufferDownsampled()
+                ? "Item too long for this edit - the file was not changed"
+                : "This edit needs the item to cover the whole source file - the file was not changed");
+  return false;
+}
+
 void SneakPeak::WriteAndRefresh()
 {
   std::string path;
@@ -534,11 +583,8 @@ void SneakPeak::WriteAndRefresh()
   // truncate the source to the item's window (F12). Reverse / Gain / DC Remove
   // edit the file in place instead (WriteAndRefreshInplace).
   WavInfo srcInfo;
-  if (m_waveform.IsItemBufferDownsampled() || !BufferCoversWholeFile(path, srcInfo)) {
+  if (!WholeFileWriteOk(srcInfo)) {
     m_waveform.RecreateLiveAccessor();
-    ShowToast(m_waveform.IsItemBufferDownsampled()
-                  ? "Item too long for this edit - the file was not changed"
-                  : "This edit needs the item to cover the whole source file - the file was not changed");
     return;
   }
   // Write back in the SOURCE file's own format. m_wavBitsPerSample tracks
@@ -894,7 +940,9 @@ void SneakPeak::DoPasteDestructive()
     Invalidate();
     return;
   }
-  if (!DestructiveSourceOk() || DestructiveJobBusy()) return;
+  if (!DestructiveTargetOk()) return;
+  WavInfo srcInfo;
+  if (!WholeFileWriteOk(srcInfo)) return;   // F2: before the prompt, not after the Yes
 
   int ret = MessageBox(m_hwnd,
     "Paste modifies the audio file on disk. Continue?",
@@ -1603,10 +1651,6 @@ void SneakPeak::DoReverse()
   // samples: the file is edited in place (8b); the buffer edit below is
   // display-only and a no-op while a lazy item has none (8g).
   if (!m_waveform.HasItem()) return;
-  if (m_waveform.IsMultiItem()) {
-    MessageBox(m_hwnd, "Reverse is not supported in multi-item view.", "SneakPeak", MB_OK);
-    return;
-  }
   if (m_waveform.IsStandaloneMode()) {   // in-memory edit, own undo stack (A4.4)
     JoinDynamicsWorker(true);
     StandaloneUndoSave();
@@ -1624,7 +1668,7 @@ void SneakPeak::DoReverse()
     return;
   }
 
-  if (!DestructiveSourceOk() || DestructiveJobBusy()) return;
+  if (!DestructiveTargetOk()) return;
   int ret = MessageBox(m_hwnd,
     "Reverse modifies the audio file on disk. Continue?",
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
@@ -1704,8 +1748,14 @@ void SneakPeak::DoGain(double factor)
 
   if (m_waveform.HasSelection()) {
     // Partial selection: destructive gain on selection only
-    if (m_waveform.IsMultiItem()) return; // not supported for multi-item yet
-    if (!DestructiveSourceOk() || DestructiveJobBusy()) return;
+    if (!DestructiveTargetOk()) return;   // Multi-item view is one of its reasons
+    // F1 (UX audit 2026-08-29): the only destructive command that did not ask.
+    char prompt[96];
+    snprintf(prompt, sizeof(prompt),
+             "Gain %+.1f dB on the selection modifies the audio file on disk. Continue?",
+             20.0 * log10(factor));
+    if (MessageBox(m_hwnd, prompt, "SneakPeak - Destructive Operation",
+                   MB_YESNO | MB_ICONWARNING) != IDYES) return;
 
     int startF, endF;
     GetSelectionSampleRange(startF, endF);
@@ -1770,10 +1820,6 @@ void SneakPeak::DoDCRemove()
 {
   // Destructive — edits the file in place (8b); no samples needed (8g)
   if (!m_waveform.HasItem()) return;
-  if (m_waveform.IsMultiItem()) {
-    MessageBox(m_hwnd, "DC Remove is not supported in multi-item view.", "SneakPeak", MB_OK);
-    return;
-  }
   if (m_waveform.IsStandaloneMode()) {   // in-memory edit, own undo stack (A4.4)
     JoinDynamicsWorker(true);
     StandaloneUndoSave();
@@ -1791,7 +1837,7 @@ void SneakPeak::DoDCRemove()
     return;
   }
 
-  if (!DestructiveSourceOk() || DestructiveJobBusy()) return;
+  if (!DestructiveTargetOk()) return;
   int ret = MessageBox(m_hwnd,
     "DC Offset Remove modifies the audio file on disk. Continue?",
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
@@ -1917,8 +1963,8 @@ void SneakPeak::DoSpectralHeal(double strength)
 // envelope handoff ramps at the edges.
 void SneakPeak::DoApplyLimiter()
 {
-  if (!SingleBufferModeOk()) return;
-  if (!m_waveform.IsStandaloneMode()) {   // INC-L2: destructive-rewrite path
+  if (!SingleItemViewOk()) return;
+  if (!m_waveform.IsStandaloneMode()) {   // INC-L2 / F3: in-place rewrite of the item's window
     DoApplyLimiterItem();
     return;
   }
@@ -2052,112 +2098,79 @@ void SneakPeak::DoApplyDynamicsStandalone()
   Invalidate();
 }
 
-// INC-L2: ITEM-mode Apply = the Reverse/Normalize destructive-rewrite pattern
-// (confirm prompt, synchronous limit with title progress, write the source
-// WAV, RefreshItemSource, one REAPER undo point). NOT an envelope effect -
-// locked decision: a dBTP ceiling needs per-sample gain. The limiter runs on
-// a COPY first, so a cancelled/no-op pass never touches the file or creates
-// an undo point.
+// INC-L2 / F3 (UX audit 2026-08-29): ITEM-mode Apply limits the item's window
+// of the source file IN PLACE through the F5 job (WavInplace::Limit - the
+// pre-edit copy, the DSP and any rollback on a worker, Esc cancels), like
+// Reverse / Gain / DC: trimmed items, downsampled and lazy buffers included;
+// a selection limits that range with 20 ms handoff ramps. NOT an envelope
+// effect (locked: a dBTP ceiling needs per-sample gain). The preconditions
+// are the panel's greyed-Apply reasons (LimiterTargetReason), re-checked
+// here; the confirm is the only dialog. Nothing above the ceiling with 0 dB
+// gain leaves the file, the undo slot and REAPER's undo history alone.
 void SneakPeak::DoApplyLimiterItem()
 {
-  if (!SingleBufferModeOk() || m_waveform.IsStandaloneMode()) return;
-  if (DestructiveJobBusy()) return;   // F5: refuse before the buffer is limited
-  const int nch = m_waveform.GetNumChannels();
-  const int sr = m_waveform.GetSampleRate();
-  const int frames = m_waveform.GetAudioSampleCount();
-  if (frames <= 0 || nch <= 0 || sr <= 0) return;
-  if (m_waveform.IsItemBufferDownsampled()) {   // F6: the limiter has no file-streamed path
-    ShowToast("Item too long for the Hard Limiter (working buffer is downsampled)");
-    return;
-  }
-
-  // WAV sources only - refuse BEFORE the prompt and the compute, not after
-  // (WriteAndRefresh would otherwise reject a buffer we already limited).
+  if (m_waveform.IsStandaloneMode()) return;
   {
-    const std::string path = AudioEngine::GetSourceFilePath(m_waveform.GetTake());
-    std::string ext;
-    const size_t dot = path.find_last_of('.');
-    if (dot != std::string::npos) ext = path.substr(dot + 1);
-    for (auto& c : ext) c = (char)tolower((unsigned char)c);
-    if (ext != "wav" && ext != "wave") {
-      MessageBox(m_hwnd,
-                 "Destructive editing only supports WAV files.\nConvert source to WAV first.",
-                 "SneakPeak", MB_OK | MB_ICONWARNING);
-      return;
-    }
-    if (!DestructiveSourceOk()) return;
-    // Whole-file rewrite: the buffer must map 1:1 onto the file (rate, offset,
-    // playrate, length, channels - audit A1.1) and the take must play the file's
-    // channels as they are (normal / reversed stereo; the mono modes fold the
-    // buffer to one channel). WriteAndRefresh re-checks the same predicate as
-    // the last line of defence, but by then the buffer is already limited.
-    WavInfo srcInfo;
-    const int chanMode = TakeChanMode(m_waveform.GetTake());
-    if (!BufferCoversWholeFile(path, srcInfo) || chanMode < 0 || chanMode > 1) {
-      ShowToast("Hard Limiter needs the whole file in all channels - the file was not changed");
+    const std::string reason = LimiterTargetReason();
+    if (!reason.empty()) {
+      char msg[sizeof(m_toastText)];
+      snprintf(msg, sizeof(msg), "Cannot rewrite the file: %s", reason.c_str());
+      ShowToast(msg);
       return;
     }
   }
-
-  int s0, s1;
-  GetSelectionSampleRange(s0, s1);   // full range when no selection
+  int64_t s0, s1;
+  GetSelectionSourceRange(s0, s1);
   if (s1 - s0 < 64) {
     ShowToast("Selection too short to limit");
     return;
   }
-  const bool partial = s0 > 0 || s1 < frames;
-  const int ramp = partial ? (int)(0.020 * sr + 0.5) : 0;
+  const int ramp = (int)(0.020 * m_waveform.GetSourceSampleRate() + 0.5);   // handoff into the untouched file
 
   int ret = MessageBox(m_hwnd,
     "Hard Limiter modifies the audio file on disk. Continue?",
     "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
   if (ret != IDYES) return;
 
+  // The display: a full-rate buffer that maps 1:1 onto the range takes the
+  // worker's processed samples; otherwise (lazy, downsampled, folded or
+  // rate-changed) the buffer is dropped and reloads from the edited file
+  // through the OnTimer pump (the open panel keeps a lazy item loading).
+  int startF, endF;
+  GetSelectionSampleRange(startF, endF);
+  const bool direct = m_waveform.GetAudioSampleCount() > 0 && !m_waveform.IsItemBufferDownsampled() &&
+                      m_waveform.GetNumChannels() == m_waveform.GetSrcChannels() &&
+                      TakeChanMode(m_waveform.GetTake()) == 0 && m_waveform.GetTakePlayrate() == 1.0 &&
+                      std::abs((int64_t)(endF - startF) - (s1 - s0)) <= 1;
   const LimiterParams p = m_limiterPanel.GetParams();
-  std::vector<double> out = m_waveform.GetAudioData();
-  LimiterProgress prog;
-  prog.user = this;
-  prog.fn = [](void* user, double frac) -> bool {
-    SneakPeak* self = (SneakPeak*)user;
-    if (self->m_hwnd) {
-      char t[64];
-      snprintf(t, sizeof(t), "SneakPeak: Limiting... %d%%",
-               (int)(frac * 100.0 + 0.5));
-      SetWindowText(self->m_hwnd, t);
-    }
-    return true;   // synchronous: no cancel path
-  };
-  const LimiterResult r =
-      LimiterProcess(out.data() + (size_t)s0 * (size_t)nch, s1 - s0, nch, sr,
-                     p, ramp, &prog);
-  UpdateTitle();
-  if (!r.ok) {
-    ShowToast("Limiter failed: empty buffer");
-    return;
-  }
-  if (p.gainDb == 0.0 && r.maxGainReductionDb == 0.0) {
-    ShowToast("Nothing above the ceiling - audio unchanged");
-    return;
-  }
-
-  if (!UndoSave()) return;   // no pre-edit copy = no edit (A1.3)
-  if (g_PreventUIRefresh) g_PreventUIRefresh(1);
-  if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-  m_waveform.GetAudioData() = std::move(out);
-  WriteAndRefresh();
-  if (g_Undo_EndBlock2)
-    g_Undo_EndBlock2(nullptr, "SneakPeak: Hard Limiter (destructive)", -1);
-  if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
-
-  char buf[96];
-  snprintf(buf, sizeof(buf), "Limited: out %.1f %s, max GR %.1f dB",
-           r.outputPeakDb, p.truePeak ? "dBTP" : "dBFS", r.maxGainReductionDb);
-  ShowToast(buf);
-  m_waveform.Invalidate();
-  m_minimap.Invalidate();
-  ResetSpectrum();
-  InvalidateLimiterPreview();   // recompute the GR band for the limited buffer
-  Invalidate();
+  auto out = std::make_shared<std::vector<double>>();   // the processed range, for the display
+  auto res = std::make_shared<LimiterResult>();
+  bool* unchanged = &m_destructiveJob.unchanged;
+  StartDestructiveJob("Hard Limiter", "Limiting", "SneakPeak: Hard Limiter (destructive)",
+    [p, ramp, direct, out, res, unchanged](const std::string& path, int64_t a, int64_t b,
+                                            const WavInplace::Progress* prog) {
+      if (!WavInplace::Limit(path, a, b, p, ramp, *res, direct ? out.get() : nullptr, prog)) return false;
+      *unchanged = p.gainDb == 0.0 && res->maxGainReductionDb == 0.0;
+      return true;
+    },
+    [this, p, startF, out, res]() {
+      if (p.gainDb == 0.0 && res->maxGainReductionDb == 0.0) {
+        ShowToast("Nothing above the ceiling - audio unchanged");
+        return;
+      }
+      auto& data = m_waveform.GetAudioData();
+      const size_t at = (size_t)startF * (size_t)m_waveform.GetNumChannels();
+      if (!out->empty() && at < data.size())
+        std::copy_n(out->begin(), std::min(out->size(), data.size() - at), data.begin() + (ptrdiff_t)at);
+      else
+        m_waveform.ReloadAfterExternalChange();   // drop the stale buffer; the pump refills it
+      char buf[96];
+      snprintf(buf, sizeof(buf), "Limited: out %.1f %s, max GR %.1f dB",
+               res->outputPeakDb, p.truePeak ? "dBTP" : "dBFS", res->maxGainReductionDb);
+      ShowToast(buf);
+      m_minimap.Invalidate();
+      InvalidateLimiterPreview();   // recompute the GR band for the limited audio
+    });
 }
 
 void SneakPeak::LimiterApplyThread(int nch, int sr, int s0, int s1, int ramp)

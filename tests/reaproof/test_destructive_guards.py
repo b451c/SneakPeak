@@ -1,13 +1,15 @@
 """Destructive-edit guards (v2.5.0 audit, increment A1).
 
-A1.1 - whole-file writes must refuse a channel-count mismatch. The ITEM
-working buffer is capped at 2 channels (and folded to 1 by the take's mono
-channel modes), yet the Hard Limiter's ITEM apply wrote that BUFFER over the
-source file whenever rate/offset/playrate/length matched: a 6-channel file
-came back stereo (channels 3-6 gone, P0) and a stereo file with I_CHANMODE 2
-came back mono (P1). Ground truth: REAPER's own channel count for the source
-after the apply, the file's bytes (hash), and the refusal toast read back
-through the SneakPeak/last_toast ExtState probe. Control (cb48cd5): nch 2 / 1.
+A1.1 - the working buffer must never reach the disk. The ITEM buffer is
+capped at 2 channels (and folded to 1 by the take's mono channel modes), yet
+the Hard Limiter's ITEM apply wrote that BUFFER over the source file whenever
+rate/offset/playrate/length matched: a 6-channel file came back stereo
+(channels 3-6 gone, P0) and a stereo file with I_CHANMODE 2 came back mono
+(P1). The whole-file path first refused those cases (2328139); since v2.5 F3
+the limiter edits the file's own channels in place, so the specs check the
+channel count survives AND the limit landed. Ground truth: REAPER's own
+channel count for the source after the apply, the file's bytes (hash), the
+file's samples, and the toast read back through SneakPeak/last_toast.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ import hashlib
 import time
 from pathlib import Path
 
+import numpy as np
 import soundfile as sf
 
 from conftest import (SELECT_ITEM0, burst_fixture, capture, clear_project,
@@ -88,7 +91,29 @@ def _apply_limiter(sess, tag: str) -> bool:
     return confirmed
 
 
-def test_six_channel_item_limiter_leaves_the_file_alone(sess):
+def _limited_peak_db(path: Path, t0: float, t1: float) -> float:
+    with sf.SoundFile(str(path)) as f:
+        f.seek(int(t0 * f.samplerate))
+        y = f.read(int((t1 - t0) * f.samplerate), dtype="float64", always_2d=True)
+    return float(20 * np.log10(max(np.abs(y).max(), 1e-9)))
+
+
+def _apply_limiter_pushed(sess, tag: str) -> bool:
+    """Apply with +6 dB of input gain (lim_* ExtState = milli-dB, restored on
+    the panel open) so the burst has to be pulled down to the -1 dBTP ceiling."""
+    sess.eval('reaper.SetExtState("SneakPeak", "lim_gain", "6000", true) return true')
+    try:
+        return _apply_limiter(sess, tag)
+    finally:
+        sess.eval('reaper.SetExtState("SneakPeak", "lim_gain", "0", true) return true')
+
+
+def test_six_channel_item_limiter_keeps_all_six_channels_on_disk(sess):
+    """v2.5 F3: the limiter edits the item's window of the FILE in place
+    (WavInplace::Limit), so the 2-channel working buffer never reaches the
+    disk: the 6-channel source stays 6-channel and every channel is limited.
+    Control (2328139, whole-file write path): refused with a 'channels'
+    toast; cb48cd5: rewritten as stereo."""
     clear_project(sess)
     media = burst_fixture("guard_6ch_30s.wav", seconds=30, channels=6)
     _load(sess, media)
@@ -96,21 +121,25 @@ def test_six_channel_item_limiter_leaves_the_file_alone(sess):
     assert before["nch"] == 6, before
     sha0 = _sha(media)
 
-    confirmed = _apply_limiter(sess, "six")
+    confirmed = _apply_limiter_pushed(sess, "six")
 
+    toast = _last_toast(sess)
+    assert confirmed, f"the limiter did not reach its confirmation (toast {toast!r})"
+    assert _sha(media) != sha0, f"the file was not rewritten (toast {toast!r})"
     after = _source_info(sess)
     on_disk = sf.info(str(media)).channels
     assert on_disk == 6 and after["nch"] == 6, \
-        f"the 6-channel source was rewritten: file {on_disk} ch, REAPER reports {after['nch']}"
-    assert _sha(media) == sha0, "the source file's bytes changed"
-    assert not confirmed, "the destructive prompt appeared before the eligibility check"
-    toast = _last_toast(sess)
-    assert "channels" in toast and "not changed" in toast, f"refusal toast missing: {toast!r}"
+        f"the 6-channel source lost channels: file {on_disk} ch, REAPER reports {after['nch']}"
+    pk = _limited_peak_db(media, 0.4, 1.6)
+    assert pk <= -0.95, f"the burst still peaks at {pk:.2f} dBFS across the six channels (ceiling -1 dBTP)"
+    assert toast.startswith("Limited"), f"result toast missing: {toast!r}"
 
 
-def test_mono_channel_mode_item_limiter_leaves_the_file_alone(sess):
+def test_mono_channel_mode_item_limiter_keeps_the_stereo_file(sess):
     """Stereo source, take I_CHANMODE 2 (mono downmix): the buffer is one
-    channel, the file has two - the apply must refuse, not fold the file."""
+    channel, the file has two - the in-place limit works on the file's two
+    channels and the file stays stereo (control 2328139: refused; cb48cd5:
+    folded to mono)."""
     clear_project(sess)
     media = burst_fixture("guard_stereo_chanmode_30s.wav", seconds=30, channels=2)
     insert_item_unselected(sess, media)
@@ -126,16 +155,17 @@ def test_mono_channel_mode_item_limiter_leaves_the_file_alone(sess):
     assert before["nch"] == 2, before
     sha0 = _sha(media)
 
-    confirmed = _apply_limiter(sess, "mono")
+    confirmed = _apply_limiter_pushed(sess, "mono")
 
+    toast = _last_toast(sess)
+    assert confirmed, f"the limiter did not reach its confirmation (toast {toast!r})"
+    assert _sha(media) != sha0, f"the file was not rewritten (toast {toast!r})"
     after = _source_info(sess)
     on_disk = sf.info(str(media)).channels
     assert on_disk == 2 and after["nch"] == 2, \
-        f"the stereo source was rewritten: file {on_disk} ch, REAPER reports {after['nch']}"
-    assert _sha(media) == sha0, "the source file's bytes changed"
-    assert not confirmed, "the destructive prompt appeared before the eligibility check"
-    toast = _last_toast(sess)
-    assert "channels" in toast and "not changed" in toast, f"refusal toast missing: {toast!r}"
+        f"the stereo source was folded: file {on_disk} ch, REAPER reports {after['nch']}"
+    pk = _limited_peak_db(media, 0.4, 1.6)
+    assert pk <= -0.95, f"the burst still peaks at {pk:.2f} dBFS (ceiling -1 dBTP)"
 
 
 # --- A1.2: SECTION / reversed sources -----------------------------------------
@@ -305,6 +335,7 @@ def test_partial_write_rolls_back_to_the_pre_edit_copy(sess):
     time.sleep(0.3)
 
     sess.eval(GAIN_UP)
+    assert dismiss_native_modal(sess, timeout=6), "the Gain confirmation never appeared (F1)"
     time.sleep(0.6)
     capture(sess, SHOTS / "truncated_1_pressed.png")
     modal = dismiss_native_modal(sess, timeout=6)

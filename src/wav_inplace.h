@@ -9,8 +9,11 @@
 // the formats the rest of SneakPeak reads and writes. Pure stdio, no REAPER deps.
 #pragma once
 
+#include "limiter_engine.h"
+
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace WavInplace {
 
@@ -36,5 +39,17 @@ bool Gain(const std::string& path, int64_t startFrame, int64_t endFrame,
 // Subtract the per-channel mean of the range (two passes).
 bool DCRemove(const std::string& path, int64_t startFrame, int64_t endFrame,
               const Progress* prog = nullptr);
+
+// True-peak hard limit of the range (limiter_engine.h) - v2.5 F3. Unlike the
+// ops above the range is held in memory WHOLE: the limiter is an offline
+// two-pass chain with a true-peak refinement loop, there is no streaming
+// form - so the caller caps the range. rampFrames = the handoff ramps into
+// the untouched audio around a range that does not cover the file. Nothing
+// is written when nothing exceeded the ceiling with 0 dB gain (res says so:
+// maxGainReductionDb == 0). processed (optional) receives the limited range,
+// interleaved at the file's channel count - the caller's display buffer.
+bool Limit(const std::string& path, int64_t startFrame, int64_t endFrame,
+           const LimiterParams& params, int rampFrames, LimiterResult& res,
+           std::vector<double>* processed, const Progress* prog = nullptr);
 
 } // namespace WavInplace

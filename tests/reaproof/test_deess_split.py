@@ -31,7 +31,7 @@ SIB_HZ, SIB_AMP, SIB_LEN = 6000.0, 0.5, 0.100
 BURSTS = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
 _N = itertools.count(1)
 
-# --- premium panel geometry (ui_render.cpp ComputeDynLayout @ 480x300) ---
+# --- premium panel geometry (ui_render.cpp ComputeDynLayout @ 480x314) ---
 # Stage-power dots: {tabSeg.x + 4, tabSeg.y + 4, 16, 16}, tabSeg y = fMid - 12.
 def stage_power_center(i: int) -> tuple[float, float]:
     x = PILL_X + sum(TAB_W[:i]) + 2.0 * i

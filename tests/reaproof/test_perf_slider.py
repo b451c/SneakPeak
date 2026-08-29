@@ -7,7 +7,7 @@ the mouse-move returns immediately (engine on a worker, latest value wins,
 Live writes debounced), so per-move cost is a frame, not a pipeline.
 
 Driver: the panel is positioned from the pixel-located Apply button and the
-premium layout math (ComputeDynLayout @ 480x300, scale 1.0); the knob drag
+premium layout math (ComputeDynLayout @ 480x314, scale 1.0); the knob drag
 is a synchronous JS_WindowMessage_Send sequence timed on REAPER's clock.
 Effect: Live arms (envelope curve appears) and the drag changes the curve.
 """
@@ -28,10 +28,12 @@ PER_MOVE_BUDGET = 0.035     # s per mouse-move (~input rate)
 STALL_BUDGET = 0.35         # s - the debounced Live write may still cost one tick
 
 # --- premium panel geometry (ui_render.cpp ComputeDynLayout, Normal mode) ---
-PANEL_W, PANEL_H, PAD, HEADER_H, FOOTER_H = 480.0, 300.0, 16.0, 44.0, 44.0
+# v2.5 F5: the footer carries a 14 px note line ABOVE the Apply / tab row and
+# the panel grew by it (314): the body keeps its old bounds, the row moved down.
+PANEL_W, PANEL_H, PAD, HEADER_H, FOOTER_H, FOOTER_NOTE_H = 480.0, 314.0, 16.0, 44.0, 44.0, 14.0
 METER_BAR_W, METER_GAP, KNOB_GRID_GAP, KNOB_COL_GAP, KNOB_COLS, KNOB_ROWS = 18.0, 14.0, 18.0, 8.0, 2, 4
-FOOTER_Y = PANEL_H - FOOTER_H
-F_MID = FOOTER_Y + FOOTER_H * 0.5
+FOOTER_Y = PANEL_H - FOOTER_H - FOOTER_NOTE_H
+F_MID = PANEL_H - FOOTER_H * 0.5
 BODY_TOP, BODY_H = HEADER_H, FOOTER_Y - HEADER_H
 PLOT_SIDE = max(40.0, min(BODY_H - 2 * PAD, (PANEL_W - 2 * PAD) * 0.40))
 PLOT_Y = BODY_TOP + BODY_H * 0.5 - PLOT_SIDE * 0.5

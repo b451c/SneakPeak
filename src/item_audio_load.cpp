@@ -241,6 +241,7 @@ void SneakPeak::FinishItemAudioLoad()
   m_minimap.Invalidate();
   if (m_spectralVisible) { m_spectral.ClearSpectrum(); m_spectral.Invalidate(); }
   if (m_oneShotPanel.IsVisible()) m_osPreviewDirty = true;   // 8g: the preview waited for this
+  if (m_limiterPanel.IsVisible()) InvalidateLimiterPreview(); // idem: the GR band + readouts
   if (m_hwnd) Invalidate();
 }
 

@@ -361,7 +361,16 @@ private:
   void DoSpectralHeal(double strength);  // v2.3.0 INC-5: STFT heal of time x freq selection
   void DoRepairClicks();                 // v2.3.0 INC-5: AR click repair on time selection
   void DoApplyLimiter();                 // v2.4.0 INC-L1: true-peak hard limiter apply
-  void DoApplyLimiterItem();             // INC-L2: ITEM mode, destructive-rewrite path
+  void DoApplyLimiterItem();             // INC-L2 / F3: ITEM mode, in-place rewrite of the item's window
+  // F2/F3: the limiter's greyed-Apply reason on top of DestructiveTargetReason
+  // ("" = Apply can run): the view shape and the in-memory range cap.
+  std::string LimiterTargetReason() const;
+  // WavInplace::Limit holds the range in memory whole and the engine's
+  // working arrays run to ~8x the audio: a quarter of the buffer cap keeps
+  // the peak under ~2 GB (a 6-minute stereo / 25-minute mono 22 kHz range).
+  static constexpr int64_t kLimiterMaxBytes = WaveformView::kMaxBufferBytes / 4;
+  void SyncLimiterApplyStatus(bool force);   // footer reason + ExtState mirror, on change
+  std::string m_limApplyStatus;
   void DoRunOneShot();                   // v2.4 INC-B1/B2: per-slice trim/fade/normalize -> WAVs
   bool SingleBufferModeOk() const;            // INC-B3: Standalone or plain ITEM mode, samples in
   bool SingleItemViewOk() const;              // 8g: the same view shape, samples not required
@@ -414,8 +423,12 @@ private:
   // True when the working buffer maps 1:1 onto the source file (rate, offset,
   // playrate, length, CHANNELS) - the only case a whole-file write is valid.
   bool BufferCoversWholeFile(const std::string& path, WavInfo& srcInfo) const;
+  bool WholeFileWriteOk(WavInfo& srcInfo);   // + refusal toast (F2)
   bool BeginDestructiveWrite(std::string& path);
-  bool DestructiveSourceOk();   // false + toast on SECTION / reversed sources (A1.2)
+  // F2 (UX audit 2026-08-29): why the take's file cannot be rewritten right
+  // now ("" = it can) - evaluated BEFORE any prompt and shown on the control.
+  std::string DestructiveTargetReason() const;
+  bool DestructiveTargetOk();   // toast the reason + false; never a dialog
   void EndDestructiveWrite(bool written);   // synchronous whole-file path: rollback + finish
   void FinishDestructiveWrite(bool written, bool restored);   // the refresh / failure report
   std::string UndoSnapshotPath() const;     // the free undo slot's file (a/b alternate)
@@ -683,6 +696,7 @@ private:
     std::atomic<int> phase{0};         // 0 = pre-edit copy, 1 = the op
     std::atomic<int> pct{0};
     bool snapshotOk = false, ok = false, restored = false;   // worker -> main, read after the join
+    bool unchanged = false;            // worker -> main: the op found nothing to change, file untouched
     std::string path, snapshot;        // the source file, its pre-edit copy (free undo slot)
     int64_t s0 = 0, s1 = 0;            // the selection in FILE frames
     std::string verb, doing, undoLabel;   // "Reverse", "Reversing", REAPER's undo label
@@ -706,7 +720,9 @@ private:
   // 8g: a lazy view (WaveformView::ItemBufferIsLazy) loads only when `wanted` -
   // RequireItemAudio, or the OnTimer self-heal while a sample panel is open.
   void StartItemAudioLoad(bool wanted = false);
-  bool SamplePanelOpen() const { return m_spectralVisible || m_oneShotPanel.IsVisible(); }
+  bool SamplePanelOpen() const {
+    return m_spectralVisible || m_oneShotPanel.IsVisible() || m_limiterPanel.IsVisible();
+  }
   void StepItemAudioLoad();     // OnTimer slice + progress title
   void FinishItemAudioLoad();
   void AbortItemAudioLoad();

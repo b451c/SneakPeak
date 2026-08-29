@@ -287,6 +287,7 @@ add_executable(wav_format_test
   src/globals.cpp
   src/wav_writer.cpp
   src/wav_inplace.cpp
+  src/limiter_engine.cpp
   src/wav_smpl.cpp
 )
 target_include_directories(wav_format_test PRIVATE ${REAPER_SDK_DIR} ${WDL_DIR} ${WDL_DIR}/swell src)

@@ -252,8 +252,18 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_CUT, "Cut\tCtrl+X");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_COPY, "Copy\tCtrl+C");
   bool isStandalone = m_waveform.IsStandaloneMode();
-  MenuAppend(editMenu, (hasItem && hasClip) ? MF_STRING : MF_GRAYED, CM_PASTE,
-             isStandalone ? "Paste (destructive)\tCtrl+V" : "Paste\tCtrl+V");
+  // F2/F4 (UX audit 2026-08-29): in ITEM mode the rows that rewrite the
+  // source file say so, and while the file cannot be rewritten they grey out
+  // with the reason (Process gets a row of its own) - never a refusal after
+  // the confirm. Gain +-3 dB rewrites only with a selection (DoGain).
+  const std::string rewriteReason = hasReaperItem ? DestructiveTargetReason() : std::string();
+  const bool canRewrite = hasReaperItem && rewriteReason.empty();
+  const std::string pasteLabel =
+      !hasReaperItem ? (isStandalone ? "Paste (destructive)\tCtrl+V" : "Paste\tCtrl+V")
+      : canRewrite   ? "Paste (rewrites file)\tCtrl+V"
+                     : "Paste - " + rewriteReason;
+  MenuAppend(editMenu, (hasItem && hasClip && (!hasReaperItem || canRewrite)) ? MF_STRING : MF_GRAYED,
+             CM_PASTE, pasteLabel.c_str());
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_DELETE, "Delete\tDel");
   bool canRipple = hasItem && hasSel && !m_waveform.IsStandaloneMode();
   MenuAppend(editMenu, canRipple ? MF_STRING : MF_GRAYED, CM_RIPPLE_DELETE, "Ripple Delete\tShift+Del");
@@ -277,8 +287,12 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppendSeparator(procMenu);
 
   // Gain
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_UP, "Gain +3 dB");
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_DOWN, "Gain -3 dB");
+  const bool gainRewrites = hasReaperItem && hasSel;
+  const UINT gainFlags = (hasItem && (!gainRewrites || canRewrite)) ? MF_STRING : MF_GRAYED;
+  MenuAppend(procMenu, gainFlags, CM_GAIN_UP,
+             gainRewrites ? "Gain +3 dB on selection (rewrites file)" : "Gain +3 dB");
+  MenuAppend(procMenu, gainFlags, CM_GAIN_DOWN,
+             gainRewrites ? "Gain -3 dB on selection (rewrites file)" : "Gain -3 dB");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_PANEL, "Gain Control...\tG");
   MenuAppendSeparator(procMenu);
 
@@ -287,15 +301,22 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(procMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_FADE_OUT, "Fade Out");
   MenuAppendSeparator(procMenu);
 
-  // Destructive
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_REVERSE, "Reverse");
-  MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_DC_REMOVE, "DC Offset Remove");
+  // Rewrites of the source file (ITEM mode; Standalone edits its buffer)
+  const UINT rwFlags = (hasReaperItem ? canRewrite : hasItem) ? MF_STRING : MF_GRAYED;
+  MenuAppend(procMenu, rwFlags, CM_REVERSE, hasReaperItem ? "Reverse (rewrites file)" : "Reverse");
+  MenuAppend(procMenu, rwFlags, CM_DC_REMOVE,
+             hasReaperItem ? "DC Offset Remove (rewrites file)" : "DC Offset Remove");
+  const std::string limReason = hasReaperItem ? LimiterTargetReason() : std::string();
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   // True-peak hard limiter (v2.4.0 INC-L1 + L2): destructive, Standalone or
   // plain ITEM mode. Grayed (not hidden) elsewhere for discoverability.
-  MenuAppend(procMenu, SingleBufferModeOk() ? MF_STRING : MF_GRAYED,
-             CM_APPLY_LIMITER, "Hard Limiter...");
+  MenuAppend(procMenu, (hasReaperItem ? limReason.empty() : SingleBufferModeOk()) ? MF_STRING : MF_GRAYED,
+             CM_APPLY_LIMITER, hasReaperItem ? "Hard Limiter... (rewrites file)" : "Hard Limiter...");
 #endif
+  if (hasReaperItem && !canRewrite)
+    MenuAppend(procMenu, MF_STRING | MF_GRAYED, 0, ("Cannot rewrite the file: " + rewriteReason).c_str());
+  else if (hasReaperItem && !limReason.empty())
+    MenuAppend(procMenu, MF_STRING | MF_GRAYED, 0, ("Hard Limiter: " + limReason).c_str());
   MenuAppendSeparator(procMenu);
 
   // Spectral Repair (v2.3.0 INC-5): standalone destructive v1, shown only with
@@ -921,13 +942,20 @@ void SneakPeak::OnContextMenuCommand(int id)
       Invalidate();   // preset box may show the new name
       break;
     case CM_APPLY_LIMITER: {
-      if (!SingleBufferModeOk()) break;
+      if (!SingleItemViewOk()) break;
+      // 8g: a lazy item's buffer loads while the panel is open (the preview
+      // waits for it; F3: Apply limits the file itself). Only an item over
+      // the buffer cap stays closed.
+      if (!m_waveform.IsStandaloneMode() && !RequireItemAudio("Hard Limiter") && m_itemLoadOverCap) break;
       RestoreLimiterParams();   // lim_* session defaults (first run -> preset 0)
-      m_limiterPanel.SetMono(m_waveform.GetNumChannels() < 2);
-      // ITEM mode (INC-L2): the panel carries a destructive-apply note (the
-      // mode cannot change while open - the tick auto-closes on mode exit).
+      // LINK applies to the file's channels on an item (the buffer may fold them).
+      m_limiterPanel.SetMono((m_waveform.IsStandaloneMode() ? m_waveform.GetNumChannels()
+                                                            : m_waveform.GetSrcChannels()) < 2);
+      // ITEM mode (INC-L2 / F2): the footer carries the destructive-apply note
+      // or the reason Apply is greyed (the tick auto-closes on mode exit).
       m_limiterPanel.SetItemMode(!m_waveform.IsStandaloneMode());
       m_limiterPanel.Show();
+      SyncLimiterApplyStatus(true);
       MarkLimiterParamsChanged();   // kick the first preview compute
       Invalidate();
       break;

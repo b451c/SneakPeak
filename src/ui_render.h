@@ -96,6 +96,7 @@ struct DynPanelVM {
   bool  dsEnable = false;           // De-Ess stage on (power dot in the DE-ESS pill)
   bool  dsListen = false;           // Listen: tint sibilant spans on the waveform
   bool  dsSplit  = false;           // De-Ess apply mode: WIDE / SPLIT (Standalone only)
+  const char* footerNote = nullptr; // F5: what Apply does in this mode (one footer line; static text)
   int   dragHandle = -1;            // curve handle being dragged (-1 none, 0 knee, 1 gate) -> glow
   int   hoverHandle = -1;           // curve handle under the cursor -> lights its accent colour
   // Motion pass: the panel computes these from its animation clock; the renderer is a
@@ -172,8 +173,9 @@ struct LimiterVM {
   int hover = LIM_HIT_NONE;
   int applyPct = -1;                 // >= 0: Apply runs in the background -
                                      // the button becomes a progress bar
-  bool itemDestructive = false;      // INC-L2: footer note - Apply rewrites
-                                     // the item's source file on disk
+  const char* footerNote = nullptr;  // INC-L2 / F2: ITEM mode - "APPLY REWRITES THE
+                                     // SOURCE FILE", or the reason Apply is greyed
+  bool applyEnabled = true;          // F2: false = Apply drawn disabled
 };
 
 // Computed geometry in base kLimPanelW x kLimPanelH coords - the single source

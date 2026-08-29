@@ -705,7 +705,10 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
   DynLayout L;
   const double pad = dynui::kPanelPad;
   L.header = { 0, 0, w, (double)dynui::kHeaderH };
-  L.footer = { 0, h - (double)dynui::kFooterH, w, (double)dynui::kFooterH };
+  // The footer carries a note line (F5: what Apply does in this mode) above
+  // the Apply / tab row, which keeps its kFooterH geometry at the bottom.
+  const double footH = (double)(dynui::kFooterH + dynui::kDynFooterNoteH);
+  L.footer = { 0, h - footH, w, footH };
 
   const double hMid = L.header.h * 0.5;
   L.closeBtn = { w - pad - 18.0, hMid - 9.0, 18.0, 18.0 };
@@ -827,7 +830,7 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
   }
   }
 
-  const double fMid = L.footer.y + L.footer.h * 0.5;
+  const double fMid = L.footer.y + L.footer.h - (double)dynui::kFooterH * 0.5;
   L.apply = { pad, fMid - 12.0, 84.0, 24.0 };
   // 4 tabs since INC-3 (COMP/GATE/DE-ESS/VIEW), PROPORTIONAL widths: the pills
   // carry different content (a 20 px dot zone on the first three, labels of 4
@@ -1187,7 +1190,7 @@ uint64_t UiCanvas::HashPanelVM(const DynPanelVM& vm, int devW, int devH)
   b(vm.showDyn); b(vm.showEnv); b(vm.showGR); b(vm.liveMode); b(vm.bypassed); b(vm.standalone);
   b(vm.rmsMode); i(vm.mode); b(vm.compBypass); b(vm.gateBypass); i(vm.meterFloorSel); b(vm.compact);
   i(vm.dsMode); b(vm.dsEnable); b(vm.dsListen); b(vm.dsSplit); i(vm.dragHandle); i(vm.hoverHandle);
-  i(vm.tabFrom); d(vm.tabSlideT); d(vm.livePulse);
+  i(vm.tabFrom); d(vm.tabSlideT); d(vm.livePulse); str(vm.footerNote);
   i(devW); i(devH);
   return hsh ? hsh : 1;   // 0 is "no raster"
 }
@@ -1244,6 +1247,15 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
     DrawTabBar(ctx, *m_gfx, L, vm.activeTab, vm.tabFrom, vm.tabSlideT,
                vm.compBypass, vm.gateBypass, vm.dsEnable);
     DrawFooter(ctx, *m_gfx, L, /*applyEnabled=*/!vm.liveMode);
+    // F5: the note line under the footer hairline - what Apply does here
+    // (clipped to the pads: it never runs into the resize grip margin).
+    if (vm.footerNote && m_gfx->fontsReady) {
+      ctx.save();
+      ctx.clip_to_rect(BLRect(dynui::kPanelPad, L.footer.y, W - 2.0 * dynui::kPanelPad, dynui::kDynFooterNoteH));
+      ctx.fill_utf8_text(BLPoint(dynui::kPanelPad, L.footer.y + 11.0), m_gfx->fLabel,
+                         vm.footerNote, SIZE_MAX, col(dynui::kInkSecondary));
+      ctx.restore();
+    }
     // Hero plot + GR meter: hidden in Compact mode (plotWell is empty there).
     if (L.plotWell.w >= 1.0) {
       DrawTransferPlot(ctx, *m_gfx, L.plotWell.x, L.plotWell.y, L.plotWell.w, vm.curve, vm.activeTab);
@@ -1693,14 +1705,23 @@ void UiCanvas::RenderLimiterPanel(HDC hdc, int x, int y, int w, int h, double dp
     // not at the window title (which a docked window does not even have).
     ctx.set_stroke_width(1.0);
     ctx.stroke_line(BLLine(0, L.footer.y, W, L.footer.y), col(dynui::kHairline));
-    // ITEM mode (INC-L2): the destructive reality, visible BEFORE the Apply
-    // confirm prompt - Apply rewrites the item's source file on disk.
-    if (vm.itemDestructive && gfx.fontsReady)
+    // ITEM mode (INC-L2 / F2): the destructive reality, visible BEFORE the
+    // Apply confirm prompt - or the reason Apply is greyed (amber, clipped
+    // short of the button).
+    if (vm.footerNote && gfx.fontsReady) {
+      ctx.save();
+      ctx.clip_to_rect(BLRect(0, L.footer.y, L.apply.x - 8.0, L.footer.h));
       ctx.fill_utf8_text(
           BLPoint(dynui::kPanelPad, L.footer.y + L.footer.h * 0.5 + 4.0),
-          gfx.fLabel, "APPLY REWRITES THE SOURCE FILE", SIZE_MAX,
-          col(dynui::kInkSecondary));
-    if (vm.applyPct >= 0) {
+          gfx.fLabel, vm.footerNote, SIZE_MAX,
+          col(vm.applyEnabled ? dynui::kInkSecondary : dynui::kAmber));
+      ctx.restore();
+    }
+    if (!vm.applyEnabled) {
+      FillURound(ctx, L.apply, dynui::kRadiusCtrl, dynui::kSurface2);
+      if (gfx.fontsReady)
+        TextCentered(ctx, gfx.fValue, L.apply, "Apply", dynui::kInkDisabled);
+    } else if (vm.applyPct >= 0) {
       FillURound(ctx, L.apply, dynui::kRadiusCtrl, dynui::kSurface2);
       const double fw = L.apply.w * (double)(vm.applyPct > 100 ? 100 : vm.applyPct) / 100.0;
       if (fw > 1.0)

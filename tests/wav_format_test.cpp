@@ -15,6 +15,7 @@
 #include "wav_smpl.h"
 #include "wav_writer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -375,6 +376,68 @@ void TestCarryChunks()
   remove(saved.c_str());
 }
 
+// ---------------------------------------------------------------------------
+// F3 (v2.5 UX audit) WavInplace::Limit: the range is limited in place, the
+// rest of the file byte-identical; nothing above the ceiling = nothing written
+// ---------------------------------------------------------------------------
+void TestInplaceLimit()
+{
+  printf("F3 in-place Limit\n");
+  const int rate = 44100, total = rate * 5 / 2;   // 2.5 s mono 16-bit
+  std::vector<int16_t> pcm((size_t)total);
+  for (int i = 0; i < total; i++) {
+    const double t = (double)i / rate;
+    const double amp = (t >= 1.0 && t < 1.5) ? 0.9 : 0.01;   // one loud burst at 1.0-1.5 s
+    pcm[(size_t)i] = (int16_t)std::lrint(amp * sin(2.0 * 3.14159265358979 * 220.0 * t) * 32767.0);
+  }
+  const Bytes original = BuildWav(1, 1, rate, 16, Pcm16(pcm), false);
+  const std::string path = TempPath("limit16.wav");
+  CHECK(WriteBytes(path, original), "write limit16");
+
+  LimiterParams p;           // Game Asset defaults: -1 dBTP, TP on
+  p.gainDb = 6.0;            // 0.9 -> 1.8 must come down to the ceiling
+  const int64_t s0 = rate / 2, s1 = rate * 2;   // 0.5..2.0 s: a window of the file, ramps apply
+  const int ramp = rate / 50;                   // 20 ms
+  LimiterResult res;
+  std::vector<double> processed;
+  CHECK(WavInplace::Limit(path, s0, s1, p, ramp, res, &processed), "Limit on a window");
+  CHECK(res.ok && res.maxGainReductionDb > 5.0, "max GR %.2f dB (want > 5: +6 dB into -1 dBTP on a 0.9 burst)", res.maxGainReductionDb);
+  CHECK(processed.size() == (size_t)(s1 - s0), "processed carries the range (%zu frames, want %lld)", processed.size(), (long long)(s1 - s0));
+  const Bytes after = ReadBytes(path);
+  CHECK(after.size() == original.size(), "file size unchanged");
+  std::vector<Chunk> cs; std::string why;
+  CHECK(WalkRiff(after, cs, &why), "limited file: %s", why.c_str());
+  const Chunk* data = Find(cs, "data");
+  CHECK(data != nullptr, "no data chunk after Limit");
+  if (data) {
+    const std::vector<int16_t> got = DecodePcm16(data->payload);
+    bool outsideSame = true;
+    int16_t peakIn = 0;
+    for (int i = 0; i < total; i++) {
+      if (i < s0 || i >= s1) { if (got[(size_t)i] != pcm[(size_t)i]) outsideSame = false; }
+      else if (i >= s0 + ramp && i < s1 - ramp) peakIn = std::max(peakIn, (int16_t)std::abs((int)got[(size_t)i]));
+    }
+    CHECK(outsideSame, "samples outside the range changed");
+    const double peakDb = 20.0 * log10((double)peakIn / 32768.0);
+    CHECK(peakDb <= -0.95, "sample peak inside the range %.2f dBFS (ceiling -1 dBTP)", peakDb);
+    CHECK(peakDb > -1.6, "sample peak inside the range %.2f dBFS: the burst was not pushed into the ceiling", peakDb);
+  }
+
+  // Nothing above the ceiling with 0 dB gain (a file at -40 dBFS): the file
+  // is left alone, byte for byte.
+  std::vector<int16_t> quietPcm((size_t)total);
+  for (int i = 0; i < total; i++)
+    quietPcm[(size_t)i] = (int16_t)std::lrint(0.01 * sin(2.0 * 3.14159265358979 * 220.0 * (double)i / rate) * 32767.0);
+  const Bytes quietFile = BuildWav(1, 1, rate, 16, Pcm16(quietPcm), false);
+  CHECK(WriteBytes(path, quietFile), "write quiet16");
+  p.gainDb = 0.0;
+  LimiterResult quiet;
+  CHECK(WavInplace::Limit(path, 0, total, p, 0, quiet, nullptr), "Limit with nothing to do");
+  CHECK(quiet.ok && quiet.maxGainReductionDb == 0.0, "quiet file: max GR %.3f dB (want 0)", quiet.maxGainReductionDb);
+  CHECK(ReadBytes(path) == quietFile, "a no-op Limit must not touch the file");
+  remove(path.c_str());
+}
+
 } // namespace
 
 int main()
@@ -384,6 +447,7 @@ int main()
   TestEncodeIdentity();
   TestCarryChunks();
   TestOddDataChunkWithLoop();
+  TestInplaceLimit();
   printf("%s: %d checks, %d failed\n", g_failed ? "FAILED" : "PASS", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

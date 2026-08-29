@@ -17,6 +17,8 @@
 #include "ui_render.h"
 #include "limiter_engine.h"
 
+#include <string>
+
 // Factory presets (plan C7); user presets live in ExtState (host-managed).
 struct LimiterPreset {
   const char* name;
@@ -76,6 +78,9 @@ public:
   // panel shows a footer note so the destructive reality is visible BEFORE
   // the Apply confirm prompt.
   void SetItemMode(bool item) { m_itemMode = item; }
+  // F2: ITEM mode - why Apply is greyed ("" = enabled), drawn in the footer
+  // instead of the standing note. A press still reaches the host (its toast).
+  void SetApplyStatus(const char* reason) { m_applyStatus = reason ? reason : ""; }
   void SetPanelOffset(int ox, int oy) { m_offsetX = ox; m_offsetY = oy; }
   int  GetPanelOffsetX() const { return m_offsetX; }
   int  GetPanelOffsetY() const { return m_offsetY; }
@@ -109,6 +114,7 @@ private:
   char m_userName[64] = { 0 };   // loaded user-preset name (valid when idx == -2)
   bool m_mono = false;
   bool m_itemMode = false;       // INC-L2: destructive-apply footer note
+  std::string m_applyStatus;     // F2: greyed-Apply reason (ITEM mode)
 
   int  m_offsetX = 0, m_offsetY = 0;   // panel-drag offsets (persisted by host)
   int  m_dragKnob = -1, m_dragLastY = 0;

@@ -2209,6 +2209,19 @@ void SneakPeak::InvalidateLimiterPreview()
   }
 }
 
+// F2: the Hard Limiter's greyed-Apply reason on the panel footer (ITEM mode;
+// "" = Apply runs), mirrored in ExtState SneakPeak/lim_apply_status for the
+// specs. A few take queries per tick; the panel and the mirror only on change.
+void SneakPeak::SyncLimiterApplyStatus(bool force)
+{
+  const std::string reason = m_waveform.IsStandaloneMode() ? std::string() : LimiterTargetReason();
+  if (!force && reason == m_limApplyStatus) return;
+  m_limApplyStatus = reason;
+  m_limiterPanel.SetApplyStatus(reason.c_str());
+  if (g_SetExtState) g_SetExtState("SneakPeak", "lim_apply_status", reason.c_str(), false);
+  Invalidate();
+}
+
 void SneakPeak::LimiterPreviewTick()
 {
   // Finished worker: hand the stats to the panel + repaint the overlay once.
@@ -2230,12 +2243,18 @@ void SneakPeak::LimiterPreviewTick()
     m_limiterPanel.SetStatsPending(true, m_limPrevPct.load());
     Invalidate();
   }
-  // The limiter needs the single loaded buffer (Standalone or plain ITEM
-  // mode, INC-L2): close the panel when the mode stops qualifying.
-  if (!SingleBufferModeOk()) {
+  // The limiter lives on one take's buffer (Standalone or plain ITEM mode,
+  // INC-L2): close the panel when the view stops qualifying. ITEM mode (F2):
+  // the footer follows the greyed-Apply reason; 8g: the preview waits for a
+  // lazy item's buffer (the open panel keeps it loading).
+  if (!SingleItemViewOk()) {
     m_limiterPanel.Hide();
     Invalidate();
     return;
+  }
+  if (!m_waveform.IsStandaloneMode()) {
+    SyncLimiterApplyStatus(false);
+    if (!ItemAudioReady()) return;
   }
   // Buffer identity changed under the panel (tab switch, new load): the old
   // preview belongs to another file - drop it and recompute. Same-length
