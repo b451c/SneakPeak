@@ -542,11 +542,15 @@ void SneakPeak::SaveStandaloneFile()
   // verbatim; smpl is ours (the loop state), fmt/data are rewritten (A10.4).
   std::vector<WavCarryChunk> carry;
   if (IsWavExtension(origPath)) AudioEngine::CollectWavCarryChunks(origPath, carry);
-  if (AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
-                                m_wavBitsPerSample, m_wavAudioFormat,
-                                wantLoop ? m_waveform.GetLoopStart() : -1,
-                                wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1,
-                                carry.empty() ? nullptr : &carry)) {
+  std::vector<MediaItem*> savedSel;
+  const int offline = TakeItemsUsingPathOffline(savePath, savedSel);
+  const bool written = AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
+                                                 m_wavBitsPerSample, m_wavAudioFormat,
+                                                 wantLoop ? m_waveform.GetLoopStart() : -1,
+                                                 wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1,
+                                                 carry.empty() ? nullptr : &carry);
+  if (offline > 0) BringItemsBackOnline(savedSel);
+  if (written) {
     DBG("[SneakPeak] Saved: %s\n", savePath.c_str());
     m_savedPath = savePath;
     m_dirty = false;
@@ -641,11 +645,15 @@ void SneakPeak::SaveStandaloneFileAs()
   // verbatim; smpl is ours (the loop state), fmt/data are rewritten (A10.4).
   std::vector<WavCarryChunk> carry;
   if (IsWavExtension(origPath)) AudioEngine::CollectWavCarryChunks(origPath, carry);
-  if (AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
-                                m_wavBitsPerSample, m_wavAudioFormat,
-                                wantLoop ? m_waveform.GetLoopStart() : -1,
-                                wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1,
-                                carry.empty() ? nullptr : &carry)) {
+  std::vector<MediaItem*> savedSel;
+  const int offline = TakeItemsUsingPathOffline(savePath, savedSel);
+  const bool written = AudioEngine::WriteWavFile(savePath, data.data(), frames, nch, sr,
+                                                 m_wavBitsPerSample, m_wavAudioFormat,
+                                                 wantLoop ? m_waveform.GetLoopStart() : -1,
+                                                 wantLoop ? std::min(frames, m_waveform.GetLoopEnd()) : -1,
+                                                 carry.empty() ? nullptr : &carry);
+  if (offline > 0) BringItemsBackOnline(savedSel);
+  if (written) {
     DBG("[SneakPeak] Saved As: %s\n", savePath.c_str());
     m_savedPath = savePath;
     m_overwriteConfirmed = true; // user explicitly chose this path
@@ -1082,6 +1090,74 @@ void SneakPeak::StandaloneAuditionLoop()
   if (!StandaloneWritePreviewFile(s, e)) return;
   StandaloneStartPreviewPlayback(0.0, true, (double)s / (double)sr);
   Invalidate();
+}
+
+// --- Windows: the file being saved may be open in the project ---
+// REAPER keeps the source file of every take open through its decoder, and
+// Windows refuses to overwrite a held file, so a Standalone Save over a file
+// that is also on the timeline failed with "Failed to save file." (Replace
+// Source's own save included - the very flow it exists for). Select the items
+// whose takes reference the path, take their media offline for the write and
+// put everything back afterwards; macOS and Linux overwrite an open file fine.
+
+int SneakPeak::TakeItemsUsingPathOffline(const std::string& path, std::vector<MediaItem*>& savedSel)
+{
+  savedSel.clear();
+#ifndef _WIN32
+  (void)path;
+  return 0;
+#else
+  if (path.empty() || !g_CountTracks || !g_GetTrack || !g_GetTrackNumMediaItems || !g_GetTrackMediaItem ||
+      !g_GetMediaItemNumTakes || !g_GetMediaItemTake || !g_GetMediaItemTake_Source || !g_GetMediaSourceFileName ||
+      !g_CountSelectedMediaItems || !g_GetSelectedMediaItem || !g_SetMediaItemSelected || !g_Main_OnCommand)
+    return 0;
+  std::vector<MediaItem*> users;
+  char pathBuf[4096];
+  const int trackCount = g_CountTracks(nullptr);
+  for (int t = 0; t < trackCount; t++) {
+    MediaTrack* track = g_GetTrack(nullptr, t);
+    if (!track) continue;
+    const int itemCount = g_GetTrackNumMediaItems(track);
+    for (int i = 0; i < itemCount; i++) {
+      MediaItem* item = g_GetTrackMediaItem(track, i);
+      if (!item) continue;
+      const int takeCount = g_GetMediaItemNumTakes(item);
+      for (int k = 0; k < takeCount; k++) {
+        MediaItem_Take* take = g_GetMediaItemTake(item, k);
+        PCM_source* src = take ? g_GetMediaItemTake_Source(take) : nullptr;
+        if (!src) continue;
+        pathBuf[0] = 0;
+        g_GetMediaSourceFileName(src, pathBuf, sizeof(pathBuf));
+        if (strcasecmp(pathBuf, path.c_str()) == 0) { users.push_back(item); break; }
+      }
+    }
+  }
+  if (users.empty()) return 0;
+  const int prevCount = g_CountSelectedMediaItems(nullptr);
+  savedSel.reserve((size_t)prevCount);
+  for (int i = 0; i < prevCount; i++)
+    if (MediaItem* s = g_GetSelectedMediaItem(nullptr, i)) savedSel.push_back(s);
+  for (MediaItem* s : savedSel) g_SetMediaItemSelected(s, false);
+  for (MediaItem* it : users) g_SetMediaItemSelected(it, true);
+  g_Main_OnCommand(40440, 0);  // Item: set selected media offline
+  return (int)users.size();
+#endif
+}
+
+void SneakPeak::BringItemsBackOnline(const std::vector<MediaItem*>& savedSel)
+{
+#ifndef _WIN32
+  (void)savedSel;
+#else
+  if (!g_Main_OnCommand || !g_CountSelectedMediaItems || !g_GetSelectedMediaItem || !g_SetMediaItemSelected) return;
+  g_Main_OnCommand(40439, 0);  // Item: set selected media online
+  const int count = g_CountSelectedMediaItems(nullptr);
+  std::vector<MediaItem*> cur;
+  for (int i = 0; i < count; i++)
+    if (MediaItem* s = g_GetSelectedMediaItem(nullptr, i)) cur.push_back(s);
+  for (MediaItem* s : cur) g_SetMediaItemSelected(s, false);
+  for (MediaItem* s : savedSel) g_SetMediaItemSelected(s, true);
+#endif
 }
 
 // --- Replace Source in REAPER Timeline ---

@@ -669,10 +669,12 @@ def dismiss_native_modal(s, *, timeout: float = 15.0):
             while h:
                 u32.GetWindowTextW(h, buf, 256)
                 if buf.value.startswith("SneakPeak"):
-                    for cmd in (6, 1):                      # IDYES, then IDOK
-                        if u32.GetDlgItem(h, cmd):
-                            u32.PostMessageW(h, 0x0111, cmd, 0)   # WM_COMMAND
-                            return True
+                    if u32.GetDlgItem(h, 6):                        # a Yes/No question -> Yes
+                        u32.PostMessageW(h, 0x0111, 6, 0)           # WM_COMMAND, IDYES
+                        return True
+                    if u32.GetDlgItem(h, 2) or u32.GetDlgItem(h, 1):  # an OK box (its button is IDCANCEL on Win11)
+                        u32.PostMessageW(h, 0x0010, 0, 0)           # WM_CLOSE
+                        return True
                 h = u32.FindWindowExW(None, h, "#32770", None)
             _t.sleep(0.02)
         return False

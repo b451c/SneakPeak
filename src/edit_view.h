@@ -319,6 +319,11 @@ private:
   // Replace every REAPER take whose source file matches oldPath with a source pointing
   // to newPath. Returns the number of takes updated. Used by "Replace Source in REAPER
   // Timeline" in standalone mode. Path comparison is case-insensitive on Windows.
+  // Windows: REAPER holds the file of every take that references it, so a
+  // Standalone save over a file that is also in the project needs those items
+  // offline for the write (F22 for saves, s12). No-ops elsewhere.
+  int TakeItemsUsingPathOffline(const std::string& path, std::vector<MediaItem*>& savedSel);
+  void BringItemsBackOnline(const std::vector<MediaItem*>& savedSel);
   int ReplaceSourceInTimeline(const std::string& oldPath, const std::string& newPath);
   void DoReplaceSourceInTimeline();
 
