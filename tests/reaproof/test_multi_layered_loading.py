@@ -69,7 +69,7 @@ def test_layered_paints_a_loading_layer_at_full_width(sess):
     assert n_loading >= 0.9 * w, (f"a loading layer paints {n_loading} of {w} columns in Layered mode - "
                                   f"its .reapeaks peaks should cover the item")
     wait_audio_loaded(sess, "long", timeout=600)   # 46 min of stereo decode eagerly: > 180 s on the emulated Windows VM
-    wait_main_thread_idle(sess, timeout=60)
+    wait_main_thread_idle(sess, timeout=240)       # ...and its Multi-item paint keeps that VM's main thread busy for minutes
     n_loaded, w2, title2 = _layer_columns(sess, SHOTS / "layered_loaded.png")
     print(f"[loading] loaded ({title2!r}): {n_loaded} of {w2} columns")
     assert n_loaded >= 0.9 * w2, f"the loaded layers paint {n_loaded} of {w2} columns"

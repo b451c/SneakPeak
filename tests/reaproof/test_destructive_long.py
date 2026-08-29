@@ -12,7 +12,7 @@ import time
 
 from conftest import (SELECT_ITEM0, burst_fixture, clear_project, db, dismiss_native_modal,
                       ensure_window, insert_item_unselected, send_command, track_rms_windows,
-                      wait_audio_loaded, wait_main_thread_idle)
+                      wait_audio_loaded, wait_main_thread_idle, window_title)
 
 MINUTES = 5
 CM_UNDO = 2000        # edit_view.h enum ContextMenuID (verified 2026-08-28)
@@ -64,6 +64,10 @@ def _load_five_minute(sess, name="long5min_burst24.wav", **fixture_kw):
 def _run_destructive(sess, fire, timeout=240):
     fire()
     assert dismiss_native_modal(sess), "the destructive confirmation never appeared"
+    # F5: the write runs on a worker, so the main thread is idle at once - wait
+    # for the job's title ("... N% (Esc cancels)", "... saving the pre-edit
+    # copy") to clear; on Windows the item is offline until it does.
+    sess.wait_until(lambda: "..." not in window_title(sess), timeout=timeout)
     wait_main_thread_idle(sess, timeout=timeout)
     time.sleep(1.0)
 
