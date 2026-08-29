@@ -155,7 +155,8 @@ enum LimiterHit {
   LIM_HIT_APPLY  = 2,
   LIM_HIT_TP     = 3,
   LIM_HIT_LINK   = 4,
-  LIM_HIT_KNOB0  = 5,   // + knob index (0..kLimNumParams-1)
+  LIM_HIT_PREVIEW = 5,  // header PREVIEW pill (long audio only)
+  LIM_HIT_KNOB0  = 6,   // + knob index (0..kLimNumParams-1)
 };
 
 // View-model for RenderLimiterPanel - pure data, built by LimiterPanel each
@@ -166,6 +167,9 @@ struct LimiterVM {
   bool truePeak = true;
   bool link = true;
   bool showLink = true;              // hidden for mono files
+  bool showPreview = false;          // long audio: the header PREVIEW pill
+  bool previewOn = true;
+  int previewPct = -1;               // >= 0: the full pass runs - progress fill on the pill
   double grNorm = 0.0;               // GR meter fill 0..1 (maxGR / 24 dB)
   const char* inText = nullptr;      // input / output peak + max-GR readouts
   const char* outText = nullptr;
@@ -183,7 +187,7 @@ struct LimiterVM {
 struct LimiterLayout {
   URect header, closeBtn, preset;
   URect knob[kLimNumParams];
-  URect tpPill, linkPill;
+  URect tpPill, linkPill, previewPill;   // previewPill: header, long audio only
   URect readIn, readOut, readGr;   // caption + value readout cells
   URect grMeter;                   // horizontal max-GR strip
   URect footer, apply;

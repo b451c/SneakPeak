@@ -373,6 +373,20 @@ private:
   static constexpr int64_t kLimiterMaxBytes = WaveformView::kMaxBufferBytes / 4;
   void SyncLimiterApplyStatus(bool force);   // footer reason + ExtState mirror, on change
   std::string m_limApplyStatus;
+  // Live-preview gate (s20, user): audio over this opens the panel without a
+  // pass; the header PREVIEW pill starts it, the choice is ExtState lim_preview.
+  static constexpr double kLimiterPreviewAutoSec = 300.0;
+  double LimiterAudioSeconds() const;        // the audio the preview would run on
+  bool LimiterPreviewWanted() const { return !m_limPreviewLong || m_limPreviewOn; }
+  void SyncLimiterPreviewGate(bool force);   // long/short flip -> pill + arm/drop
+  void OnLimiterPreviewToggle();             // PREVIEW pill pressed
+  void DropLimiterPreview();                 // no pass, no band, readouts "-"
+  void SyncLimiterPreviewState();            // ExtState lim_preview_state mirror (specs)
+  void NoteLimiterPreviewPass();             // ExtState lim_preview_passes counter (specs)
+  bool m_limPreviewLong = false;
+  bool m_limPreviewOn = true;
+  std::string m_limPreviewState;
+  int m_limPreviewPasses = 0;
   void DoRunOneShot();                   // v2.4 INC-B1/B2: per-slice trim/fade/normalize -> WAVs
   bool SingleBufferModeOk() const;            // INC-B3: Standalone or plain ITEM mode, samples in
   bool SingleItemViewOk() const;              // 8g: the same view shape, samples not required
@@ -743,8 +757,9 @@ private:
   // 8g: a lazy view (WaveformView::ItemBufferIsLazy) loads only when `wanted` -
   // RequireItemAudio, or the OnTimer self-heal while a sample panel is open.
   void StartItemAudioLoad(bool wanted = false);
-  bool SamplePanelOpen() const {
-    return m_spectralVisible || m_oneShotPanel.IsVisible() || m_limiterPanel.IsVisible();
+  bool SamplePanelOpen() const {   // the limiter counts only while its preview is wanted (s20)
+    return m_spectralVisible || m_oneShotPanel.IsVisible() ||
+           (m_limiterPanel.IsVisible() && LimiterPreviewWanted());
   }
   void StepItemAudioLoad();     // OnTimer slice + progress title
   void FinishItemAudioLoad();

@@ -942,10 +942,6 @@ void SneakPeak::OnContextMenuCommand(int id)
       break;
     case CM_APPLY_LIMITER: {
       if (!SingleItemViewOk()) break;
-      // 8g: a lazy item's buffer loads while the panel is open (the preview
-      // waits for it; F3: Apply limits the file itself). Only an item over
-      // the buffer cap stays closed.
-      if (!m_waveform.IsStandaloneMode() && !RequireItemAudio("Hard Limiter") && m_itemLoadOverCap) break;
       RestoreLimiterParams();   // lim_* session defaults (first run -> preset 0)
       // LINK applies to the file's channels on an item (the buffer may fold them).
       m_limiterPanel.SetMono((m_waveform.IsStandaloneMode() ? m_waveform.GetNumChannels()
@@ -954,8 +950,16 @@ void SneakPeak::OnContextMenuCommand(int id)
       // or the reason Apply is greyed (the tick auto-closes on mode exit).
       m_limiterPanel.SetItemMode(!m_waveform.IsStandaloneMode());
       m_limiterPanel.Show();
+      SyncLimiterPreviewGate(true);   // s20: long audio waits for the PREVIEW pill, short previews at once
+      // 8g: a lazy item's buffer loads while the panel is open and the preview
+      // is wanted (the preview waits for it; F3: Apply limits the file itself).
+      // Only an item over the buffer cap stays closed.
+      if (!m_waveform.IsStandaloneMode() && LimiterPreviewWanted() &&
+          !RequireItemAudio("Hard Limiter") && m_itemLoadOverCap) {
+        m_limiterPanel.Hide();
+        break;
+      }
       SyncLimiterApplyStatus(true);
-      MarkLimiterParamsChanged();   // kick the first preview compute
       Invalidate();
       break;
     }

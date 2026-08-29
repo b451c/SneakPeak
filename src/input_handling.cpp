@@ -433,6 +433,8 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         DoApplyLimiter();
       if (m_limiterPanel.PresetMenuRequested())
         ShowLimiterPresetMenu();
+      if (m_limiterPanel.PreviewToggled())    // PREVIEW pill (long audio)
+        OnLimiterPreviewToggle();
       if (m_limiterPanel.ParamsChanged()) {   // pill toggle / Cmd-reset
         m_limiterPanel.ClearParamsChanged();
         MarkLimiterParamsChanged();

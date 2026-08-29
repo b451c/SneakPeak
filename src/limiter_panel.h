@@ -104,6 +104,18 @@ public:
     m_statsPending = pending;
     m_statsPct = pending ? pct : -1;
   }
+  // Live-preview gate (long audio): the header PREVIEW pill, hidden on short
+  // audio where the preview is always live. The host owns the decision and
+  // polls PreviewToggled after a consumed click.
+  void SetPreviewPill(bool show, bool on) { m_showPreview = show; m_previewOn = on; }
+  bool IsPreviewOn() const { return m_previewOn; }
+  bool PreviewToggled() { bool v = m_previewToggled; m_previewToggled = false; return v; }
+  void ClearPreviewStats()   // preview off: readouts "-", nothing pending
+  {
+    m_statsValid = false;
+    m_statsPending = false;
+    m_statsPct = -1;
+  }
 
 private:
   double EffScale(RECT waveformRect) const;  // g_uiScale, fit-clamped to the rect
@@ -118,6 +130,9 @@ private:
   int  m_presetIdx = 0;          // 0..3 factory; -2 user preset (m_userName); -1 custom
   char m_userName[64] = { 0 };   // loaded user-preset name (valid when idx == -2)
   bool m_mono = false;
+  bool m_showPreview = false;    // long audio: PREVIEW pill in the header
+  bool m_previewOn = true;
+  bool m_previewToggled = false;
   bool m_itemMode = false;       // INC-L2: destructive-apply footer note
   std::string m_footerNote;      // F2: footer line (ITEM mode; "" = the standing note)
   bool m_applyEnabled = true;

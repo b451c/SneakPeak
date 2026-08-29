@@ -2209,11 +2209,114 @@ void SneakPeak::InvalidateLimiterPreview()
     m_limPeakCacheFrames = 0;
   }
   m_limFullPending = false;
-  if (m_limiterPanel.IsVisible()) {
+  if (m_limiterPanel.IsVisible() && LimiterPreviewWanted()) {
     m_limPrevDirty = true;
     m_limPrevChangeTick = GetTickCount();
     m_limiterPanel.SetStatsPending(true);
   }
+}
+
+// --- Live-preview gate (s20; user: "the live calculation should be optional")
+// Audio over kLimiterPreviewAutoSec opens the panel WITHOUT a pass: readouts
+// "-", no band, and the header PREVIEW pill starts it (progress on the pill);
+// the choice is remembered in ExtState lim_preview. Shorter audio previews at
+// once, as before, and shows no pill. In ITEM mode the panel counts as a
+// sample consumer only while the preview is wanted (SamplePanelOpen), so a
+// long lazy item is not decoded until the pill is pressed.
+
+double SneakPeak::LimiterAudioSeconds() const
+{
+  if (m_waveform.IsStandaloneMode()) {
+    const int sr = m_waveform.GetSampleRate();
+    return sr > 0 ? (double)m_waveform.GetAudioSampleCount() / (double)sr : 0.0;
+  }
+  return m_waveform.GetItemDuration();
+}
+
+void SneakPeak::SyncLimiterPreviewGate(bool force)
+{
+  const bool isLong = LimiterAudioSeconds() > kLimiterPreviewAutoSec;
+  if (!force && isLong == m_limPreviewLong) return;
+  m_limPreviewLong = isLong;
+  m_limPreviewOn = true;
+  if (isLong) {
+    const char* v = g_GetExtState ? g_GetExtState("SneakPeak", "lim_preview") : nullptr;
+    m_limPreviewOn = v && v[0] == '1';
+  }
+  m_limiterPanel.SetPreviewPill(isLong, m_limPreviewOn);
+  if (LimiterPreviewWanted()) {
+    MarkLimiterParamsChanged();   // the tick launches the pass once the buffer is there
+    m_limiterPanel.SetStatsPending(true);
+  } else {
+    DropLimiterPreview();
+  }
+}
+
+void SneakPeak::OnLimiterPreviewToggle()
+{
+  m_limPreviewOn = m_limiterPanel.IsPreviewOn();
+  // ITEM mode: the lazy buffer loads now; an item over the buffer cap says so
+  // (RequireItemAudio's toast) and keeps the pill off.
+  if (m_limPreviewOn && !m_waveform.IsStandaloneMode() && !ItemAudioReady()) {
+    if (!m_itemLoad.active) StartItemAudioLoad(true);
+    if (m_itemLoadOverCap) {
+      RequireItemAudio("Hard Limiter preview");
+      m_limPreviewOn = false;
+      m_limiterPanel.SetPreviewPill(true, false);
+    }
+  }
+  if (g_SetExtState)
+    g_SetExtState("SneakPeak", "lim_preview", m_limPreviewOn ? "1" : "0", true);
+  if (m_limPreviewOn) {
+    MarkLimiterParamsChanged();
+    m_limiterPanel.SetStatsPending(true);
+  } else {
+    DropLimiterPreview();
+  }
+}
+
+void SneakPeak::DropLimiterPreview()
+{
+  m_limPrevGen++;   // an in-flight pass lands stale (the peak cache stays: same buffer)
+  {
+    std::lock_guard<std::mutex> lock(m_limPrevMutex);
+    m_limPrevValid = false;
+  }
+  m_limPrevDirty = false;
+  m_limFullPending = false;
+  m_limiterPanel.ClearPreviewStats();
+  Invalidate();
+}
+
+// ExtState SneakPeak/lim_preview_state = "closed" | "off" | "on pending" |
+// "on ready" | "auto pending" | "auto ready" (auto = short audio, no pill);
+// lim_preview_passes counts launched passes. Written on change only.
+void SneakPeak::SyncLimiterPreviewState()
+{
+  std::string s;
+  if (!m_limiterPanel.IsVisible()) {
+    s = "closed";
+  } else if (!LimiterPreviewWanted()) {
+    s = "off";
+  } else {
+    bool ready;
+    {
+      std::lock_guard<std::mutex> lock(m_limPrevMutex);
+      ready = m_limPrevValid && !m_limPrevDraft;
+    }
+    ready = ready && !m_limPrevDirty && !m_limFullPending && !m_limPrevComputing.load();
+    s = std::string(m_limPreviewLong ? "on " : "auto ") + (ready ? "ready" : "pending");
+  }
+  if (s == m_limPreviewState) return;
+  m_limPreviewState = s;
+  if (g_SetExtState) g_SetExtState("SneakPeak", "lim_preview_state", s.c_str(), false);
+}
+
+void SneakPeak::NoteLimiterPreviewPass()
+{
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", ++m_limPreviewPasses);
+  if (g_SetExtState) g_SetExtState("SneakPeak", "lim_preview_passes", buf, false);
 }
 
 // F2: the Hard Limiter's greyed-Apply reason on the panel footer (ITEM mode;
@@ -2255,10 +2358,11 @@ void SneakPeak::LimiterPreviewTick()
     }
     Invalidate();
   }
+  SyncLimiterPreviewState();
   if (!m_limiterPanel.IsVisible()) return;
   // While the full pass crunches a long file, tick the "N%" readout (drafts
   // are too fast to need this; stats-pending only shows on the full path).
-  if (m_limPrevComputing.load() && !m_limPrevDraftRunning) {
+  if (m_limPrevComputing.load() && !m_limPrevDraftRunning && LimiterPreviewWanted()) {
     m_limiterPanel.SetStatsPending(true, m_limPrevPct.load());
     Invalidate();
   }
@@ -2271,6 +2375,9 @@ void SneakPeak::LimiterPreviewTick()
     Invalidate();
     return;
   }
+  // s20: the gate follows the audio under the panel (tab switch, new load);
+  // long audio schedules nothing below until the PREVIEW pill asks.
+  SyncLimiterPreviewGate(false);
   if (!m_waveform.IsStandaloneMode()) {
     SyncLimiterApplyStatus(false);
     if (!ItemAudioReady()) return;
@@ -2290,6 +2397,7 @@ void SneakPeak::LimiterPreviewTick()
       m_limiterPanel.SetStatsPending(true);
     }
   }
+  if (!LimiterPreviewWanted()) return;
   if (m_limPrevComputing.load()) return;
 
   // Draft-vs-full scheduling: with a warm peak cache a knob change launches a
@@ -2331,6 +2439,7 @@ void SneakPeak::StartLimiterPreview()
   const int sr = m_waveform.GetSampleRate();
   if (frames <= 0 || nch <= 0 || sr <= 0) return;
   if (m_limPrevThread.joinable()) m_limPrevThread.join();  // finished (guarded by !computing)
+  NoteLimiterPreviewPass();
   m_limPrevComputing.store(true);
   m_limPrevDraftRunning = false;
   m_limPrevPct.store(0);
@@ -2413,6 +2522,7 @@ void SneakPeak::StartLimiterPreviewDraft()
     return;
   }
   if (m_limPrevThread.joinable()) m_limPrevThread.join();
+  NoteLimiterPreviewPass();
   m_limPrevComputing.store(true);
   m_limPrevDraftRunning = true;
   const uint64_t gen = m_limPrevGen.load();

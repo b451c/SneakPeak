@@ -232,6 +232,7 @@ int LimiterPanel::HitId(double lx, double ly) const
   if (L.apply.contains(lx, ly))    return LIM_HIT_APPLY;
   if (L.tpPill.contains(lx, ly))   return LIM_HIT_TP;
   if (!m_mono && L.linkPill.contains(lx, ly)) return LIM_HIT_LINK;
+  if (m_showPreview && L.previewPill.contains(lx, ly)) return LIM_HIT_PREVIEW;
   for (int i = 0; i < kLimNumParams; ++i)
     if (L.knob[i].contains(lx, ly)) return LIM_HIT_KNOB0 + i;
   return LIM_HIT_NONE;
@@ -277,6 +278,11 @@ bool LimiterPanel::OnMouseDown(int x, int y, RECT wr)
     m_params.link = !m_params.link;
     m_paramsChanged = true;
     m_presetIdx = -1;
+    return true;
+  }
+  if (m_showPreview && L.previewPill.contains(lx, ly)) {
+    m_previewOn = !m_previewOn;
+    m_previewToggled = true;
     return true;
   }
   for (int i = 0; i < kLimNumParams; ++i) {
@@ -458,6 +464,9 @@ void LimiterPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.truePeak = m_params.truePeak;
   vm.link = m_params.link;
   vm.showLink = !m_mono;
+  vm.showPreview = m_showPreview;
+  vm.previewOn = m_previewOn;
+  vm.previewPct = (m_showPreview && m_statsPending) ? m_statsPct : -1;
   vm.hover = m_hover;
 
   for (int i = 0; i < kLimNumParams; ++i) {

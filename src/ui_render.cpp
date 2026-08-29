@@ -1581,6 +1581,7 @@ LimiterLayout ComputeLimiterLayout(double w, double h)
   const double hMid = L.header.h * 0.5;
   L.closeBtn = { w - pad - 18.0, hMid - 9.0, 18.0, 18.0 };
   L.preset   = { pad + 120.0, hMid - 11.0, 110.0, 22.0 };
+  L.previewPill = { L.closeBtn.x - 10.0 - 92.0, hMid - 10.0, 92.0, 20.0 };
 
   // Knob grid: 3 cols x 2 rows; the free cell (2,1) hosts the TP/LINK pills.
   const double colGap = 8.0;
@@ -1662,6 +1663,19 @@ void UiCanvas::RenderLimiterPanel(HDC hdc, int x, int y, int w, int h, double dp
     }
     ctx.set_stroke_width(1.0);
     ctx.stroke_line(BLLine(0, L.header.h, W, L.header.h), col(dynui::kHairline));
+    // PREVIEW pill (long audio only): the live pass is optional there; a
+    // translucent amber fill tracks the running full pass.
+    if (vm.showPreview) {
+      DrawTogglePill(ctx, gfx, L.previewPill, "PREVIEW", vm.previewOn, dynui::kAmber,
+                     false, 0.0);
+      if (vm.previewPct >= 0) {
+        const double fw = L.previewPill.w * (double)std::min(vm.previewPct, 100) / 100.0;
+        if (fw > 1.0)
+          ctx.fill_round_rect(BLRoundRect(L.previewPill.x, L.previewPill.y, fw,
+                                          L.previewPill.h, dynui::kRadiusCtrl),
+                              colA(dynui::kAmber, 70));
+      }
+    }
 
     // knobs (shared DrawKnob: arc + indicator + label/value column + editor box)
     for (int i = 0; i < kLimNumParams; ++i)
