@@ -102,7 +102,7 @@ def _apply_on_one_hour(sess, one_hour) -> dict:
     had computed the curve for the current knobs; Apply then recomputed every
     trace point on the main thread (ComputeCompression + the RDP simplify)
     before writing the envelope. The panel is opened first and the 1-h trace
-    left to stream (title "Analysing dynamics... N%"; its time is recorded as
+    left to stream (title "Analyzing dynamics... N%"; its time is recorded as
     t_trace), then the Apply button is clicked: longest main-thread stall
     between the click and the "Applied N points" toast, on REAPER's clock
     (bridge heartbeat) = perf.apply_1h. BEFORE on the b1c97ed control, AFTER
@@ -120,7 +120,7 @@ def _apply_on_one_hour(sess, one_hour) -> dict:
     wall_open = time.monotonic()
     command_sync(sess, CM_APPLY_DYNAMICS, settle=1.0)      # shows the Dynamics panel; the trace starts
     sess.wait_until(lambda: locate_apply_button(sess, shots / "panel.png") is not None, timeout=30)
-    # the trace streams on a worker ("Analysing dynamics... N%" in the title;
+    # the trace streams on a worker ("Analyzing dynamics... N%" in the title;
     # a fast disk finishes the hour before the panel is even located): wait
     # until the title has been plain for 3 s, recording the trace time if seen
     seen_analysing = False
@@ -128,7 +128,7 @@ def _apply_on_one_hour(sess, one_hour) -> dict:
     plain_since = None
     while time.monotonic() - wall_open < 1800:
         title = window_title(sess)
-        if "Analysing" in title:
+        if "Analyzing" in title:
             seen_analysing = True
             plain_since = None
         else:

@@ -134,7 +134,7 @@ def _panel_pixels_changed(sess, cap_a, cap_b, apply_xy) -> int:
 def _wait_title_settled(sess, name: str, timeout: float):
     def done():
         t = window_title(sess)
-        return name in t and "Loading" not in t and "Analysing" not in t
+        return name in t and "Loading" not in t and "Analyzing" not in t
     sess.wait_until(done, timeout=timeout)
 
 

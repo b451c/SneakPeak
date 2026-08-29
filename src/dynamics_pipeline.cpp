@@ -135,7 +135,7 @@ void SneakPeak::StepDynTraceJob()
       if (pct != J.lastPct) {   // title writes are not free - only on change
         J.lastPct = pct;
         char title[128];
-        snprintf(title, sizeof(title), "SneakPeak: Analysing dynamics... %d%%", pct);
+        snprintf(title, sizeof(title), "SneakPeak: Analyzing dynamics... %d%%", pct);
         SetWindowText(m_hwnd, title);
       }
     }

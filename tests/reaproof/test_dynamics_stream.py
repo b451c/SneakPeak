@@ -62,11 +62,11 @@ def _rss_mb(sess) -> float:
 
 
 def _wait_title_settled(sess, name: str, timeout: float):
-    """The trace job retitles 'Analysing dynamics... N%' while it streams;
-    the plain item title (no Loading, no Analysing) means the analysis landed."""
+    """The trace job retitles 'Analyzing dynamics... N%' while it streams;
+    the plain item title (no Loading, no Analyzing) means the analysis landed."""
     def done():
         t = window_title(sess)
-        return name in t and "Loading" not in t and "Analysing" not in t
+        return name in t and "Loading" not in t and "Analyzing" not in t
     sess.wait_until(done, timeout=timeout)
 
 

@@ -1428,7 +1428,7 @@ void SneakPeak::DrawMasterWaveform(HDC hdc)
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, g_theme.emptyText);
     RECT textRect = r;
-    DrawTextUTF8(hdc, "Master Output — play to see waveform", -1, &textRect,
+    DrawTextUTF8(hdc, "Master Output - play to see waveform", -1, &textRect,
              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     return;
   }
