@@ -17,6 +17,11 @@ copied NOTHING - `GetSelectionSampleRange` clamps to the shared buffer's
 sample count, which the multi view never sets (per-layer buffers), so the
 range collapsed to 0 and Copy returned before touching the clipboard (Paste
 then pasted the previous clipboard, or nothing). Control (c2cf074): no clip.
+A6.7 - zero-crossing snap on a long item: the snap searched the working
+buffer, which a long item does not have (lazy, 8g) or holds at a reduced
+rate, so the selection edges did not snap at all (or snapped to the 8 kHz
+grid). The edges are now looked up in a small window read from the source
+at its own rate. Control (7766880): the raw click times.
 """
 from __future__ import annotations
 
@@ -290,9 +295,15 @@ def test_multi_copy_mono_plus_stereo(sess):
     proj_dir = Path(str(sess.eval("return reaper.GetProjectPathEx(0)")))
     before = set(proj_dir.glob("sneakpeak_paste_*.wav"))
     sess.eval("reaper.SelectAllMediaItems(0, true) reaper.UpdateArrange() return true")
-    time.sleep(1.5)
+    time.sleep(1.0)
     wait_main_thread_idle(sess, timeout=60)
-    assert mode_from_capture(sess, SHOTS / "multi.png") == "MULTI"
+    try:   # the selection poll loads the two items in the background
+        sess.wait_until(lambda: mode_from_capture(sess, SHOTS / "multi.png") == "MULTI", timeout=15)
+    except Exception:
+        raise AssertionError(f"the two selected items did not open a Multi-item view (mode "
+                             f"{mode_from_capture(sess, SHOTS / 'multi.png')}, title {window_title(sess)!r}, "
+                             f"selected {sess.eval('return reaper.CountSelectedMediaItems(0)')}, "
+                             f"items {sess.eval('return reaper.CountMediaItems(0)')})")
     drag_client(sess, 500, WAVE_Y, 600, WAVE_Y)      # ~6.6-7.9 s: the second half of both items
     time.sleep(0.5)
     sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
@@ -322,3 +333,78 @@ def test_multi_copy_mono_plus_stereo(sess):
     print(f"[editops] pasted clip {clip.name}: {got.shape[1]} ch, {len(got) / 44100:.3f} s, RMS {rms.round(4).tolist()} (want {want.round(4).tolist()})")
     assert got.shape[1] == 2, f"the pasted clip has {got.shape[1]} channels, expected 2"
     assert np.abs(rms - want).max() < 0.02 * want.max() + 0.005, "the pasted mix does not match mono + stereo per channel"
+
+
+# --- A6.7: zero-crossing snap reads the source on long items ----------------
+CM_SNAP_ZERO = 2029   # edit_view.h ContextMenuID (toggles + writes ExtState SneakPeak/snap_zero)
+
+
+def _sine_long_wav(path: Path, *, minutes: float, hz: float, sr: int = 44100) -> Path:
+    """Stereo sine at `hz`, amplitude 0.5, 16-bit; the zero crossings sit at
+    multiples of 1/(2*hz) s (exact samples when sr/(2*hz) is an integer)."""
+    import numpy as np
+    if path.exists():
+        return path
+    n = int(minutes * 60 * sr)
+    chunk = sr * 10
+    with sf.SoundFile(str(path), "w", samplerate=sr, channels=2, subtype="PCM_16") as f:
+        for start in range(0, n, chunk):
+            t = (np.arange(min(chunk, n - start)) + start) / sr
+            y = 0.5 * np.sin(2 * np.pi * hz * t)
+            f.write(np.stack([y, y], axis=1).astype(np.float32))
+    return path
+
+
+def _snap_edges_check(sess, media: Path, *, what: str):
+    from conftest import assert_no_loading, command_sync
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=30)
+    assert_no_loading(sess, 1.5)
+    was_on = str(sess.eval('return reaper.GetExtState("SneakPeak", "snap_zero")')) == "1"
+    if not was_on:
+        command_sync(sess, CM_SNAP_ZERO, settle=0.3)
+    assert str(sess.eval('return reaper.GetExtState("SneakPeak", "snap_zero")')) == "1", "Snap to Zero did not switch on"
+    sess.eval("reaper.GetSet_LoopTimeRange2(0, true, false, 0, 0, false) return true")   # no stale time selection
+    length = _item_len(sess, 0)
+    try:
+        drag_client(sess, 200, WAVE_Y, 300, WAVE_Y)
+        time.sleep(0.5)
+        s0, s1 = (float(v) for v in sess.eval(
+            "local s, e = reaper.GetSet_LoopTimeRange2(0, false, false, 0, 0, false) return {s, e}"))
+    finally:
+        if not was_on:
+            command_sync(sess, CM_SNAP_ZERO, settle=0.3)
+    period = 1.0 / (2 * 50)                      # a crossing every 10 ms
+    err = [abs(t / period - round(t / period)) * period for t in (s0, s1)]
+    one_sample = 1.0 / 44100
+    # the waveform lane spans ~758 px for the whole item (800x400 window)
+    want0, want1 = length * 200 / 758, length * 300 / 758
+    print(f"\n[editops] snap on {what}: item {length:.1f} s, selection {s0:.6f}-{s1:.6f} s (raw drag ~{want0:.2f}-{want1:.2f}), "
+          f"distance to the nearest crossing {err[0] * 1e6:.1f} / {err[1] * 1e6:.1f} us (one sample = {one_sample * 1e6:.1f} us)")
+    tol = 0.03 * length + 0.1
+    if not (abs(s0 - want0) < tol and abs(s1 - want1) < tol):
+        from conftest import mode_from_capture, window_title
+        raise AssertionError(f"precondition: the drag did not select ~{want0:.1f}-{want1:.1f} s ({s0}-{s1}); mode "
+                             f"{mode_from_capture(sess, SHOTS / 'snap.png')}, title {window_title(sess)!r}")
+    assert max(err) <= 1.5 * one_sample, f"the selection edges did not snap to a zero crossing ({what})"
+
+
+def test_snap_to_zero_on_long_item(sess):
+    """A 5-minute item (no working buffer: lazy) with Snap to Zero on: both
+    edges of a dragged selection must land within one sample of a zero
+    crossing of the 50 Hz sine (every 10 ms, on exact samples). REAPER's
+    time selection, synced on drag end, is the oracle."""
+    from conftest import perf_media_dir
+    media = _sine_long_wav(perf_media_dir() / "sine50_5min_stereo.wav", minutes=5, hz=50)
+    _snap_edges_check(sess, media, what="a 5-min item (lazy)")
+
+
+def test_snap_to_zero_on_short_item(sess):
+    """The same on a 10 s item, which snaps in its full-rate working buffer
+    (the search shared with the long-item path)."""
+    from conftest import perf_media_dir
+    media = _sine_long_wav(perf_media_dir() / "sine50_10s_stereo.wav", minutes=10 / 60, hz=50)
+    _snap_edges_check(sess, media, what="a 10 s item (buffer)")

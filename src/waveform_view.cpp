@@ -859,29 +859,27 @@ void WaveformView::UpdateSelection(double time) { if (m_selecting) m_selection.e
 void WaveformView::EndSelection() {
   m_selecting = false;
   if (m_selection.startTime > m_selection.endTime) std::swap(m_selection.startTime, m_selection.endTime);
-  if (m_snapToZero && m_audioSampleCount > 0 && m_numChannels > 0) {
+  if (m_snapToZero && m_numChannels > 0) {
     m_selection.startTime = SnapToZeroCrossing(m_selection.startTime);
     m_selection.endTime = SnapToZeroCrossing(m_selection.endTime);
   }
 }
 
-double WaveformView::SnapToZeroCrossing(double time) const {
-  if (m_audioData.empty() || m_audioSampleCount < 2 || m_numChannels <= 0 || m_sampleRate <= 0) return time;
-
-  int frame = (int)(time * (double)m_sampleRate);
-  frame = std::max(0, std::min(frame, m_audioSampleCount - 1));
-
-  // Search outward ±ZERO_SNAP_RANGE samples on channel 0 for sign change
+// Nearest sign change on channel 0 within +-ZERO_SNAP_RANGE of `frame`
+// (`frame` itself when there is none).
+static int NearestZeroCrossing(const double* data, int frames, int nch, int frame)
+{
+  frame = std::max(0, std::min(frame, frames - 1));
   int bestDist = ZERO_SNAP_RANGE + 1;
   int bestFrame = frame;
-  int searchRange = std::min(ZERO_SNAP_RANGE, m_audioSampleCount - 1);
+  int searchRange = std::min(ZERO_SNAP_RANGE, frames - 1);
 
   for (int d = 0; d <= searchRange; d++) {
     for (int sign = -1; sign <= 1; sign += 2) {
       int f = frame + sign * d;
-      if (f < 0 || f >= m_audioSampleCount - 1) continue;
-      double s0 = m_audioData[(size_t)f * m_numChannels];
-      double s1 = m_audioData[(size_t)(f + 1) * m_numChannels];
+      if (f < 0 || f >= frames - 1) continue;
+      double s0 = data[(size_t)f * nch];
+      double s1 = data[(size_t)(f + 1) * nch];
       if (s0 * s1 <= 0.0) {  // zero crossing (or exact zero)
         if (d < bestDist) {
           bestDist = d;
@@ -891,8 +889,30 @@ double WaveformView::SnapToZeroCrossing(double time) const {
     }
     if (bestDist <= d) break;  // found closest
   }
+  return bestFrame;
+}
 
-  return (double)bestFrame / (double)m_sampleRate;
+double WaveformView::SnapToZeroCrossing(double time) const {
+  // A long single item has no working buffer (lazy, 8g) or one at a reduced
+  // rate: look the crossing up in a window read from the source at its own
+  // rate instead (A6.7).
+  if (!m_standaloneMode && m_take && !m_multiItemActive && m_segments.size() <= 1 &&
+      m_sourceRate > 0 && (m_audioSampleCount <= 0 || IsItemBufferDownsampled())) {
+    const int span = 2 * ZERO_SNAP_RANGE + 2;
+    // window start on the source's sample grid, so the result is a source sample
+    const double t0 = std::max(0.0, std::floor(time * (double)m_sourceRate - (double)(ZERO_SNAP_RANGE + 1)) /
+                                        (double)m_sourceRate);
+    std::vector<double> win;
+    if (!ReadLiveWindow(t0, span, win) || win.size() < (size_t)span) return time;
+    const int nch = (int)(win.size() / (size_t)span);
+    const int f = NearestZeroCrossing(win.data(), span, nch, (int)((time - t0) * (double)m_sourceRate + 0.5));
+    return t0 + (double)f / (double)m_sourceRate;
+  }
+
+  if (m_audioData.empty() || m_audioSampleCount < 2 || m_numChannels <= 0 || m_sampleRate <= 0) return time;
+  const int f = NearestZeroCrossing(m_audioData.data(), m_audioSampleCount, m_numChannels,
+                                    (int)(time * (double)m_sampleRate));
+  return (double)f / (double)m_sampleRate;
 }
 
 void WaveformView::ClearSelection() { m_selection = {}; m_selecting = false; }
