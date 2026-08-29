@@ -335,8 +335,8 @@ def locate_apply_button(s, out: Path) -> tuple[int, int] | None:
 
 
 def click_client(s, x: int, y: int):
-    from reaproof.observe.input import bridge_click
-    bridge_click(s, WINDOW_TITLE, x, y)
+    """A click on OUR window through SP_WINDOW() (Sends) - see drag_client."""
+    click_sync(s, x, y, settle=0.2)
 
 
 def apply_dynamics(s, shots_dir: Path, *, tries: int = 4, timeout: float = 8.0):
@@ -805,7 +805,9 @@ def mode_from_capture(s, out: Path) -> str:
     cap = capture(s, out)
     cw, ch = client_size(s)
     titlebar = cap.height - ch
-    band = cap.image[titlebar:titlebar + 26, 0:140].astype(float)   # mode bar, left
+    # The mode chip only (x < 60 at scale 1.0): the file tabs to its right carry
+    # their own accents (the active "N ITEMS" tab is blue whatever the mode).
+    band = cap.image[titlebar:titlebar + 26, 0:60].astype(float)
     px = band.reshape(-1, 3)
     sat = px.max(axis=1) - px.min(axis=1)
     px = px[(sat > 60) & (px.max(axis=1) > 90)]                      # coloured pixels only
@@ -821,8 +823,23 @@ def mode_from_capture(s, out: Path) -> str:
 
 
 def drag_client(s, x0: int, y0: int, x1: int, y1: int, steps: int = 30):
-    from reaproof.observe.input import bridge_drag
-    bridge_drag(s, WINDOW_TITLE, (x0, y0), (x1, y1), steps=steps)
+    """In-process drag (Sends) on OUR window. Not bridge_drag: it resolves the
+    window with JS_Window_Find("SneakPeak"), the FIRST match, and once a
+    "SneakPeak"-titled MessageBox (the Standalone overwrite prompt) has been
+    up its hidden leftover window lists first - every later drag then went
+    nowhere (found 2026-08-29; the F9 lore, one function further)."""
+    moves = "\n".join(f'reaper.JS_WindowMessage_Send(h, "WM_MOUSEMOVE", 1, 0, '
+                      f'{int(x0 + (x1 - x0) * i / steps)}, {int(y0 + (y1 - y0) * i / steps)})'
+                      for i in range(1, steps + 1))
+    ok = s.eval(f"""
+      local h = {window_handle_lua()}
+      if not h then return false end
+      reaper.JS_WindowMessage_Send(h, "WM_LBUTTONDOWN", 1, 0, {int(x0)}, {int(y0)})
+      {moves}
+      reaper.JS_WindowMessage_Send(h, "WM_LBUTTONUP", 0, 0, {int(x1)}, {int(y1)})
+      return true""")
+    if not ok:
+        raise RuntimeError("drag_client: SneakPeak window not found")
 
 
 def send_sync(s, msg: str, wparam: int, lo: int = 0, hi: int = 0, settle: float = 0.5):
