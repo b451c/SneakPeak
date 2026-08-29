@@ -2360,6 +2360,21 @@ void SneakPeak::ApplyDynamicsToEnvelope()
   bool anyEnv = false;
 
   if (isMultiSeg) {
+    // The curve's gain at any view time (linear in dB between points, flat
+    // outside). Every segment gets the curve's value at BOTH of its edges:
+    // applyToEnv only rewrites the span its points cover, so a plateau that
+    // crosses a segment boundary used to leave the rest of the take at the
+    // envelope's old value (0 dB) - a step mid-item on every segment (A7.8).
+    auto gainAt = [&](double t) -> double {
+      if (t <= comp.front().time) return comp.front().dbAdjust;
+      if (t >= comp.back().time) return comp.back().dbAdjust;
+      auto hi = std::lower_bound(comp.begin(), comp.end(), t,
+          [](const DynamicsEngine::CompressPoint& p, double tt) { return p.time < tt; });
+      const auto& b = *hi;
+      const auto& a = *(hi - 1);
+      const double span = b.time - a.time;
+      return span > 0.0 ? a.dbAdjust + (b.dbAdjust - a.dbAdjust) * (t - a.time) / span : b.dbAdjust;
+    };
     // Group compression points by segment, convert to segment-relative time
     for (size_t si = 0; si < segs.size(); si++) {
       const auto& seg = segs[si];
@@ -2371,14 +2386,21 @@ void SneakPeak::ApplyDynamicsToEnvelope()
       double segStart = seg.relativeOffset;
       double segEnd = segStart + seg.duration;
       std::vector<DynamicsEngine::CompressPoint> segPts;
+      DynamicsEngine::CompressPoint edge;
+      edge.time = 0.0;
+      edge.dbAdjust = gainAt(segStart);
+      segPts.push_back(edge);
       for (const auto& cp : comp) {
-        if (cp.time >= segStart && cp.time < segEnd) {
+        if (cp.time > segStart && cp.time < segEnd) {
           DynamicsEngine::CompressPoint sp;
           sp.time = (cp.time - segStart) * seg.playrate; // segment-relative take-envelope time
           sp.dbAdjust = cp.dbAdjust;
           segPts.push_back(sp);
         }
       }
+      edge.time = seg.duration * seg.playrate;
+      edge.dbAdjust = gainAt(segEnd);
+      segPts.push_back(edge);
       applyToEnv(env, segPts);
     }
   } else {
