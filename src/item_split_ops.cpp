@@ -4,6 +4,25 @@
 #include <cmath>
 #include <algorithm>
 
+bool ItemLocked(MediaItem* item)
+{
+  return item && g_GetMediaItemInfo_Value && g_GetMediaItemInfo_Value(item, "C_LOCK") != 0.0;
+}
+
+bool AnyItemLocked(MediaTrack* track, double absStart, double absEnd)
+{
+  if (!track || !g_GetTrackNumMediaItems || !g_GetTrackMediaItem || !g_GetMediaItemInfo_Value) return false;
+  int count = g_GetTrackNumMediaItems(track);
+  for (int i = 0; i < count; i++) {
+    MediaItem* mi = g_GetTrackMediaItem(track, i);
+    if (!mi) continue;
+    double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
+    double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
+    if (pos + len > absStart && pos < absEnd && ItemLocked(mi)) return true;
+  }
+  return false;
+}
+
 std::vector<MediaItem*> SplitAndApplyGain(MediaTrack* track, const SplitGainParams& p)
 {
   std::vector<MediaItem*> targets;
@@ -19,6 +38,7 @@ std::vector<MediaItem*> SplitAndApplyGain(MediaTrack* track, const SplitGainPara
     MediaItem* mi = g_GetTrackMediaItem(track, i);
     if (!mi) continue;
     if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, mi, "MediaItem*")) continue;
+    if (ItemLocked(mi)) continue;
     double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
     double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
     if (pos + len > p.absStart && pos < p.absEnd)
@@ -82,6 +102,7 @@ std::vector<MediaItem*> SplitAndApplyGain(MediaTrack* track, const SplitGainPara
 MediaItem* SplitAndApplyGainSingle(MediaItem* item, const SplitGainParams& p)
 {
   if (!item || !g_GetMediaItemInfo_Value || !g_SetMediaItemInfo_Value || !g_SplitMediaItem) return nullptr;
+  if (ItemLocked(item)) return nullptr;
 
   double eps = p.edgeEps;
   double itemPos = g_GetMediaItemInfo_Value(item, "D_POSITION");

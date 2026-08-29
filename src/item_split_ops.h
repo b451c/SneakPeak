@@ -13,7 +13,14 @@ struct SplitGainParams {
   double crossfadeSec = 0.0;  // crossfade overlap at split points (0 = none)
 };
 
+// Locked in REAPER (C_LOCK): REAPER's own edits leave such an item alone and
+// its split API refuses it, but deletes and moves through the API do not (A6.4).
+bool ItemLocked(MediaItem* item);
+// Any locked item overlapping [absStart, absEnd] on the track (for the caller's toast).
+bool AnyItemLocked(MediaTrack* track, double absStart, double absEnd);
+
 // Find overlapping items on track, split at selection edges, apply D_VOL.
+// Locked items are skipped.
 // Returns list of target items that received the gain change.
 std::vector<MediaItem*> SplitAndApplyGain(MediaTrack* track, const SplitGainParams& p);
 

@@ -71,6 +71,10 @@ def test_solo_after_external_delete(sess):
     assert solo != 0, "the solo click did nothing (the dead segment aborted the toggle)"
 
 
+def _item_len(sess, idx: int) -> float:
+    return float(sess.eval(f"return reaper.GetMediaItemInfo_Value(reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), {idx}), 'D_LENGTH')"))
+
+
 def _item_pos(sess, idx: int) -> float:
     return float(sess.eval(f"return reaper.GetMediaItemInfo_Value(reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), {idx}), 'D_POSITION')"))
 
@@ -140,3 +144,43 @@ def test_timeline_follows_reaper_undo(sess):
     mode = mode_from_capture(sess, SHOTS / "after_undo.png")
     print(f"\n[editops] after REAPER undo: {track_item_count(sess)} item, mode {mode}")
     assert mode == "ITEM", f"the view did not follow REAPER's undo (mode {mode}; control: stale segments, a crash on paint)"
+
+
+def test_locked_item_not_deleted(sess):
+    """A6.4: an item locked in REAPER (C_LOCK) must not be split or deleted by
+    SneakPeak's Delete - REAPER's own edits respect the lock, and the API
+    calls SneakPeak makes do not. The item stays whole and a toast says why.
+    Control (c4724b8): the item is split and the middle deleted."""
+    media = burst_fixture("editops_lock_10s.wav", seconds=10, channels=2)
+    clear_project(sess)
+    insert_item_unselected(sess, media)
+    ensure_window(sess)
+    sess.eval(SELECT_ITEM0)
+    wait_audio_loaded(sess, media.stem, timeout=60)
+    sess.eval("reaper.Undo_BeginBlock() local it = reaper.GetTrackMediaItem(reaper.GetTrack(0, 0), 0) "
+              "reaper.SetMediaItemInfo_Value(it, 'C_LOCK', 1) reaper.Undo_EndBlock('spec: lock item', -1) "
+              "reaper.UpdateArrange() return true")
+    sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+    time.sleep(0.5)
+    drag_client(sess, 200, WAVE_Y, 300, WAVE_Y)
+    time.sleep(0.5)
+    key_sync(sess, VK_DELETE)
+    time.sleep(1.5)
+    state = _state(sess)
+    toast = str(sess.eval('return reaper.GetExtState("SneakPeak", "last_toast")'))
+    print(f"\n[editops] locked item after Delete: {state}")
+    assert track_item_count(sess) == 1, "Delete split a locked item"
+    assert abs(_item_len(sess, 0) - 10.0) < 0.01, "Delete shortened a locked item"
+    # whole-item delete (Ctrl+A, Delete): REAPER's split API refuses a locked
+    # item by itself, DeleteTrackMediaItem does not
+    from conftest import command_sync
+    CM_SELECT_ALL = 2007
+    sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+    command_sync(sess, CM_SELECT_ALL, settle=0.3)
+    key_sync(sess, VK_DELETE)
+    time.sleep(1.5)
+    toast2 = str(sess.eval('return reaper.GetExtState("SneakPeak", "last_toast")'))
+    print(f"[editops] locked item after select-all Delete: {_state(sess)}")
+    assert track_item_count(sess) == 1, "Delete removed a locked item whole"
+    assert "locked" in toast.lower(), f"no lock toast after the partial Delete: {toast!r}"
+    assert "locked" in toast2.lower(), f"no lock toast after the whole-item Delete: {toast2!r}"

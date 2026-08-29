@@ -1483,6 +1483,7 @@ void SneakPeak::OnMouseUp(int x, int y)
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
             SplitGainParams p{absStart, absEnd, factor, GAIN_EDGE_EPS_SET, GAIN_XFADE_SEC};
+            if (AnyItemLocked(track, absStart, absEnd)) ShowToast("Item is locked in REAPER - unlock it to edit here");
             SplitAndApplyGain(track, p);
             if (g_UpdateArrange) g_UpdateArrange();
             char desc[64];
@@ -1545,6 +1546,7 @@ void SneakPeak::OnMouseUp(int x, int y)
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
             SplitGainParams p{absStart, absEnd, factor, GAIN_EDGE_EPS, 0.0};
+            if (AnyItemLocked(trk, absStart, absEnd)) ShowToast("Item is locked in REAPER - unlock it to edit here");
             SplitAndApplyGain(trk, p);
             if (g_UpdateArrange) g_UpdateArrange();
             char desc[64];
@@ -1656,6 +1658,7 @@ void SneakPeak::OnMouseUp(int x, int y)
             if (g_PreventUIRefresh) g_PreventUIRefresh(1);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
             SplitGainParams p{absStart, absEnd, factor, GAIN_EDGE_EPS, 0.0};
+            if (ItemLocked(item)) ShowToast("Item is locked in REAPER - unlock it to edit here");
             SplitAndApplyGainSingle(item, p);
 
             // Collect siblings sorted by position

@@ -10,6 +10,7 @@
 #include "edit_view.h"
 #include "audio_engine.h"
 #include "audio_ops.h"
+#include "item_split_ops.h"
 #include "wav_inplace.h"
 #include "audio_stream.h"
 #include "spectral_repair.h"
@@ -748,6 +749,12 @@ void SneakPeak::DoPaste()
     origEnd = origStart + g_GetMediaItemInfo_Value(m_waveform.GetItem(), "D_LENGTH");
   }
 
+  // A locked item under the cursor: nothing is split or moved (A6.4)
+  if (AnyItemLocked(track, absPos - 0.001, absPos + 0.001)) {
+    ShowToast("Item is locked in REAPER - unlock it to edit here");
+    return;
+  }
+
   if (g_PreventUIRefresh) g_PreventUIRefresh(1);
   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
 
@@ -765,10 +772,11 @@ void SneakPeak::DoPaste()
   }
 
   // Ripple: shift all items at or after cursor right by clipboard duration
+  // (locked items stay, as under REAPER's own ripple)
   cnt = g_GetTrackNumMediaItems(track); // re-count after split
   for (int i = cnt - 1; i >= 0; i--) { // reverse to avoid double-shift
     MediaItem* mi = g_GetTrackMediaItem(track, i);
-    if (!mi) continue;
+    if (!mi || ItemLocked(mi)) continue;
     double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
     if (pos >= absPos - 0.0001)
       g_SetMediaItemInfo_Value(mi, "D_POSITION", pos + clipDur);
@@ -996,6 +1004,7 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
 
   MediaTrack* track = nullptr;
   std::vector<MediaItem*> survivors; // surviving items after split+delete (for timeline view)
+  bool lockedSkipped = false;        // A6.4: locked items are left alone, toast once
 
   if (m_waveform.IsTrackView() && m_workingSet.track) {
     // Working set: handle cross-segment selection (may span multiple items)
@@ -1009,8 +1018,10 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
       if (!mi) continue;
       double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
       double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
-      if (pos + len > splitStart && pos < splitEnd)
+      if (pos + len > splitStart && pos < splitEnd) {
+        if (ItemLocked(mi)) { lockedSkipped = true; continue; }
         overlap.push_back(mi);
+      }
     }
 
     for (MediaItem* mi : overlap) {
@@ -1046,8 +1057,10 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
         if (!mi) continue;
         double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
         double len = g_GetMediaItemInfo_Value(mi, "D_LENGTH");
-        if (pos + len > splitStart && pos < splitEnd)
+        if (pos + len > splitStart && pos < splitEnd) {
+          if (ItemLocked(mi)) { lockedSkipped = true; continue; }
           overlap.push_back(mi);
+        }
       }
       for (MediaItem* mi : overlap) {
         double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
@@ -1085,7 +1098,10 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
     bool atStart = (splitStart - itemPos) < 0.0001;
     bool atEnd = (itemEnd - splitEnd) < 0.0001;
 
-    if (atStart && atEnd) {
+    if (ItemLocked(item)) {
+      lockedSkipped = true;
+      deletedDuration = 0.0;   // nothing to ripple
+    } else if (atStart && atEnd) {
       g_DeleteTrackMediaItem(track, item);
     } else if (atStart) {
       MediaItem* right = g_SplitMediaItem(item, splitEnd);
@@ -1111,7 +1127,7 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
     int count = g_GetTrackNumMediaItems(track);
     for (int i = 0; i < count; i++) {
       MediaItem* mi = g_GetTrackMediaItem(track, i);
-      if (!mi) continue;
+      if (!mi || ItemLocked(mi)) continue;
       double pos = g_GetMediaItemInfo_Value(mi, "D_POSITION");
       if (pos >= splitStart) {
         g_SetMediaItemInfo_Value(mi, "D_POSITION", pos - deletedDuration);
@@ -1125,6 +1141,7 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr,
       ripple ? "SneakPeak: Ripple Delete" : "SneakPeak: Delete (non-destructive)", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
+  if (lockedSkipped) ShowToast("Item is locked in REAPER - unlock it to edit here");
 
   m_waveform.ClearSelection();
   m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS; // suppress timeline exit for ~150ms after edit
