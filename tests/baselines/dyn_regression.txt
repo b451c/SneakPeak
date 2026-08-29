@@ -420,7 +420,7 @@ simplified: n=91
 params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0 gx=2.0 ghy=-6.0 gat=2.0 gre=100.0 up=0 mb=8.0 dse=1 dsm=0 dsf=6000 dsq=2.00 dst=-30.0 dsr=4.0 dsx=-10.0 dsa=1.0 dsre=60.0
 avgPeakDb=-28.584292323497841 threshold=-24 avgGR=-2.1481747756620333 makeup=2.1481747756620333
 full: n=7820 hash=5d95ce9e26fec4c9 grhash=33aaeabf189b81fb
-deess: avgDsGR=-1.0928095090118797 dsThresh=-30 bandN=7820 bandhash=87aca97c8067e433
+deess: avgDsGR=-1.0928095090118797 dsThresh=-30 bandN=7820 bandhash=3e0c14fb316438c7
 simplified: n=97
 0 1.9690717831470592
 0.033000000000000002 -3.0399594146109692
@@ -1926,7 +1926,7 @@ simplified: n=15
 params: t=0.0 r=1.0 k=0.0 m=0.0 am=0 a=10.0 re=100.0 la=0.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0 up=0 mb=8.0 dse=1 dsm=0 dsf=6000 dsq=2.00 dst=-30.0 dsr=4.0 dsx=-10.0 dsa=1.0 dsre=60.0
 avgPeakDb=-15.185770624244519 threshold=0 avgGR=0 makeup=0
 full: n=3770 hash=23bd46201b4b46f1 grhash=829754d621adad28
-deess: avgDsGR=-5.4322402046263107 dsThresh=-30 bandN=3770 bandhash=52e9ad93413e19cc
+deess: avgDsGR=-5.4322402046263107 dsThresh=-30 bandN=3770 bandhash=0d9ab67b68bf3161
 simplified: n=29
 0 0
 1.099 0
@@ -1962,7 +1962,7 @@ simplified: n=29
 params: t=0.0 r=1.0 k=0.0 m=0.0 am=0 a=10.0 re=100.0 la=0.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0 up=0 mb=8.0 dse=1 dsm=1 dsf=5000 dsq=2.00 dst=-45.0 dsr=10.0 dsx=-6.0 dsa=0.5 dsre=40.0
 avgPeakDb=-15.185770624244519 threshold=0 avgGR=0 makeup=0
 full: n=3770 hash=3b15fb3a6538f93d grhash=26d22bf40cf2a0da
-deess: avgDsGR=-3.7063271219508285 dsThresh=-45 bandN=3770 bandhash=dbb4595ae182ea48
+deess: avgDsGR=-3.7063271219508285 dsThresh=-45 bandN=3770 bandhash=539e47b73bd1c145
 simplified: n=20
 0 0
 1.099 -2.2836264621743674e-10
@@ -1989,7 +1989,7 @@ simplified: n=20
 params: t=0.0 r=1.0 k=0.0 m=0.0 am=0 a=10.0 re=100.0 la=0.0 rms=0 gt=-100.0 gr=-20.0 gh=50.0 gx=2.0 ghy=0.0 gat=2.0 gre=100.0 up=0 mb=8.0 dse=1 dsm=0 dsf=6000 dsq=3.00 dst=-100.0 dsr=6.0 dsx=-12.0 dsa=1.0 dsre=60.0
 avgPeakDb=-15.185770624244519 threshold=0 avgGR=0 makeup=0
 full: n=3770 hash=ce4e75be377bd555 grhash=44e8a9edff303c22
-deess: avgDsGR=-5.8543653823366899 dsThresh=-27.932239621318541 bandN=3770 bandhash=2134d86547543c9a
+deess: avgDsGR=-5.8543653823366899 dsThresh=-27.932239621318541 bandN=3770 bandhash=109e60d3658315a9
 simplified: n=32
 0 0
 1.099 0
@@ -2028,7 +2028,7 @@ simplified: n=32
 params: t=-24.0 r=4.0 k=6.0 m=0.0 am=1 a=5.0 re=80.0 la=5.0 rms=1 gt=-45.0 gr=-18.0 gh=80.0 gx=2.0 ghy=-6.0 gat=2.0 gre=100.0 up=0 mb=8.0 dse=1 dsm=0 dsf=6000 dsq=2.00 dst=-30.0 dsr=4.0 dsx=-10.0 dsa=1.0 dsre=60.0
 avgPeakDb=-23.992146716255341 threshold=-24 avgGR=-2.8764353538149265 makeup=2.8764353538149265
 full: n=3770 hash=f81c123e098e635e grhash=43320ffddf035b40
-deess: avgDsGR=-5.1401963743201753 dsThresh=-30 bandN=3770 bandhash=52e9ad93413e19cc
+deess: avgDsGR=-5.1401963743201753 dsThresh=-30 bandN=3770 bandhash=0d9ab67b68bf3161
 simplified: n=57
 0 2.6973323612999525
 0.024 -1.1051505508997672
