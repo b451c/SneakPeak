@@ -211,6 +211,41 @@ void SneakPeak::Destroy()
   m_hwnd = nullptr;
 }
 
+void SneakPeak::Invalidate(const RECT* rc)
+{
+  m_sceneValid = false;
+  if (m_hwnd) InvalidateRect(m_hwnd, rc, FALSE);
+}
+
+// Overlay-only repaint: the premium surfaces (panels, meters, toast) are drawn on
+// the real DC after the scene blit, so their animation ticks never need the scene
+// re-rendered - during playback the meters alone used to force a full render
+// every tick (A9.3). The GDI build draws them inside OnPaint: full repaint there.
+void SneakPeak::InvalidateOverlay(const RECT* rc)
+{
+#ifdef SNEAKPEAK_BLEND2D_PANEL
+  if (m_hwnd) InvalidateRect(m_hwnd, rc, FALSE);
+#else
+  Invalidate(rc);
+#endif
+}
+
+void SneakPeak::ReleaseScene()
+{
+  if (!m_sceneDC) return;
+#ifdef _WIN32
+  SelectObject(m_sceneDC, m_sceneOldBmp);
+  DeleteObject(m_sceneBmp);
+  DeleteDC(m_sceneDC);
+  m_sceneBmp = m_sceneOldBmp = nullptr;
+#else
+  SWELL_DeleteGfxContext(m_sceneDC);
+#endif
+  m_sceneDC = nullptr;
+  m_sceneW = m_sceneH = 0;
+  m_sceneValid = false;
+}
+
 void SneakPeak::Toggle()
 {
   if (!m_hwnd) return;
@@ -232,7 +267,7 @@ void SneakPeak::ToggleMasterView()
     m_masterPeakHead = 0;
     m_masterPeakCount = 0;
   }
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::ToggleTrackView()
@@ -321,7 +356,7 @@ void SneakPeak::LoadWorkingSet()
     char title[512];
     snprintf(title, sizeof(title), "SneakPeak [Set - %d items]", itemCount);
     SetWindowText(m_hwnd, title);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }
 
@@ -399,7 +434,7 @@ void SneakPeak::RefreshWorkingSet()
     char title[512];
     snprintf(title, sizeof(title), "SneakPeak [Set - %d items]", itemCount);
     SetWindowText(m_hwnd, title);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }
 
@@ -465,7 +500,7 @@ void SneakPeak::RefreshTimelineView()
     m_waveform.UpdateFadeCache();
     m_gainPanel.Show(items[0]);
     UpdateTitle();
-    if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+    if (m_hwnd) Invalidate();
     return;
   }
 
@@ -486,7 +521,7 @@ void SneakPeak::RefreshTimelineView()
     m_waveform.SetViewDuration(std::min(viewDur, dur));
   }
   m_waveform.Invalidate();
-  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_hwnd) Invalidate();
 }
 
 bool SneakPeak::IsWorkingSetItem(MediaItem* item) const
@@ -561,7 +596,7 @@ void SneakPeak::GroupSetItems()
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
   ShowToast(desc);
-  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_hwnd) Invalidate();
 }
 
 void SneakPeak::UngroupSetItems()
@@ -597,7 +632,7 @@ void SneakPeak::UngroupSetItems()
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
   ShowToast(desc);
-  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_hwnd) Invalidate();
 }
 
 bool SneakPeak::LoadSelectedItemMulti(int count)
@@ -648,7 +683,7 @@ bool SneakPeak::LoadSelectedItemMulti(int count)
     char title[512];
     snprintf(title, sizeof(title), "SneakPeak [%d items]", (int)items.size());
     SetWindowText(m_hwnd, title);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
   DBG("[SneakPeak] Multi-item loaded: segments=%d audioFrames=%d dur=%.3f\n",
       (int)m_waveform.GetSegments().size(), m_waveform.GetAudioSampleCount(),
@@ -716,7 +751,7 @@ void SneakPeak::LoadSelectedItem()
       m_hasUndo = false;
       m_dirty = false;
       UpdateTitle();   // F10: a deleted item left "* SneakPeak: <file>" behind
-      if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+      if (m_hwnd) Invalidate();
     }
     return;
   }
@@ -808,7 +843,7 @@ void SneakPeak::LoadSelectedItem()
 
   if (m_hwnd) {
     UpdateTitle();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   // Restore selection after reload if pending from gain operation
@@ -832,7 +867,7 @@ void SneakPeak::OnTimer()
   double dpr = GetUiDpr();
   if (dpr != m_lastUiDpr) {
     m_lastUiDpr = dpr;
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   ValidateItemPointers();
@@ -851,7 +886,7 @@ void SneakPeak::OnTimer()
   StepDynTraceJob();        // 8f: stream -> trace for item views
   StepDynamicsPipeline();   // phase 2b
   if (m_dynamicsPanel.WantsAnimationFrame())
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    InvalidateOverlay();
 
   // Limiter preview pump (v2.4.0 INC-L1): debounced worker launch + finish repaint.
   LimiterPreviewTick();
@@ -864,12 +899,12 @@ void SneakPeak::OnTimer()
   // loading - the preview waits for it).
   if (m_oneShotPanel.IsVisible() && !SingleItemViewOk()) {
     m_oneShotPanel.Hide();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
   // Loop Lab is standalone-only too: close on mode exit (INC-A5).
   if (m_loopLabPanel.IsVisible() && !m_waveform.IsStandaloneMode()) {
     m_loopLabPanel.Hide();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
   OneShotPreviewTick();
 
@@ -897,7 +932,7 @@ void SneakPeak::OnTimer()
   if (m_spectralVisible) {
     bool loading = m_spectral.IsLoading();
     if (loading || m_spectralWasLoading)
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     m_spectralWasLoading = loading;
   }
 }
@@ -920,7 +955,7 @@ void SneakPeak::ValidateItemPointers()
       !g_ValidatePtr2(nullptr, (void*)m_waveform.GetItem(), "MediaItem*")) {
     m_waveform.ClearItem();
     m_hasUndo = false;
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }
 
@@ -971,7 +1006,7 @@ void SneakPeak::PollProjectState()
     m_waveform.SetCursorTime(std::min(cursor, dur));
   }
   m_waveform.Invalidate();
-  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_hwnd) Invalidate();
 }
 
 bool SneakPeak::SegmentsMatchProject() const
@@ -1021,7 +1056,7 @@ void SneakPeak::UpdateAutoScroll()
       if (factor < 0.0) factor = 1.0; // past edge = max speed
       m_waveform.ScrollH(-scrollSpeed * factor);
       m_waveform.UpdateSelection(m_waveform.XToTime(mx));
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     else if (mx > m_waveformRect.right - SP(DB_SCALE_WIDTH) - edgeZone) {
       // Scroll right
@@ -1030,7 +1065,7 @@ void SneakPeak::UpdateAutoScroll()
       if (factor < 0.0) factor = 1.0;
       m_waveform.ScrollH(scrollSpeed * factor);
       m_waveform.UpdateSelection(m_waveform.XToTime(mx));
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
   }
 }
@@ -1067,7 +1102,7 @@ void SneakPeak::UpdatePlaybackFollow()
               if (trackItem != m_waveform.GetItem()) {
                 m_waveform.SetItem(trackItem);
                 StartItemAudioLoad();
-                InvalidateRect(m_hwnd, nullptr, FALSE);
+                Invalidate();
               }
               break;
             }
@@ -1085,6 +1120,7 @@ void SneakPeak::UpdatePlaybackFollow()
       m_startedPlayback = false;
       m_autoStopped = false;  // reset for next play
     }
+    if (playing != m_wasPlaying) Invalidate();   // the edit cursor changes style with the transport
     m_wasPlaying = playing;
 
     if (playing) {
@@ -1101,6 +1137,8 @@ void SneakPeak::UpdatePlaybackFollow()
           m_waveform.Invalidate();
         }
       }
+      // Playhead only: the cached scene stays valid (WM_PAINT blits it), so a
+      // playback tick does not re-render the waveform (A9.3, deliberately raw).
       InvalidateRect(m_hwnd, nullptr, FALSE);
     }
   }
@@ -1118,24 +1156,24 @@ void SneakPeak::UpdatePlaybackFollow()
       m_waveform.SetViewStart(newStart);
       m_waveform.Invalidate();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   // Keep repainting while RMS meters are decaying after stop
   if (m_levels.IsDecaying()) {
-    InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+    InvalidateOverlay(&m_bottomPanelRect);
   }
 
   // Keep repainting while a toast is alive so its 2s lifetime + 500ms fade
   // actually progress (previously the fade only advanced when something else
   // happened to repaint - an idle window froze the toast mid-air).
   if (m_toastStartTick) {
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    InvalidateOverlay();
   }
 
   // Keep repainting while spectral is computing (progress bar update)
   if (m_spectralVisible && (m_spectral.IsLoading() || (m_spectral.IsReady() && !m_spectralPainted))) {
-    InvalidateRect(m_hwnd, &m_spectralRect, FALSE);
+    Invalidate(&m_spectralRect);
     if (m_spectral.IsReady()) m_spectralPainted = true;
   }
 }
@@ -1146,7 +1184,7 @@ void SneakPeak::UpdateGainPreview()
   if (m_waveform.HasItem() && !m_waveform.IsStandaloneMode()) {
     if (m_waveform.UpdateFadeCache()) {
       // Volume changed in REAPER — repaint waveform + meters
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     // Batch gain: sync knob offset to waveform for visual feedback
     // But NOT when there's a selection (selection uses per-region preview instead)
@@ -1194,7 +1232,7 @@ void SneakPeak::UpdateGainPreview()
     if (m_audioChangeCheckCounter % 30 == 0) {
       if (m_waveform.GetMultiItemView().CheckVolumeChanged()) {
         LoadSelectedItem();  // reloads with new volumes
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
     }
   }
@@ -1233,7 +1271,7 @@ void SneakPeak::UpdateItemState()
           m_waveform.ZoomToFit();
         m_minimap.Invalidate();
       }
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
 
     bool bothActive = m_waveform.IsChannelActive(0) && m_waveform.IsChannelActive(1);
@@ -1247,7 +1285,7 @@ void SneakPeak::UpdateItemState()
         m_waveform.SetItem(item);
         StartItemAudioLoad();
         if (m_gainPanel.IsVisible()) m_gainPanel.Show(item);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
     }
   }
@@ -1267,7 +1305,7 @@ void SneakPeak::UpdateItemState()
         m_spectral.ClearSpectrum();
         m_spectral.Invalidate();
         m_minimap.Invalidate();
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
     }
   }
@@ -1296,7 +1334,7 @@ void SneakPeak::UpdateItemState()
       m_lastEnvExists = hasEnv;
       m_lastEnvPointCount = ptCount;
       m_waveform.Invalidate();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
   }
 
@@ -1322,7 +1360,7 @@ void SneakPeak::UpdateItemState()
         StandaloneCleanupPreview();
       } else {
         m_waveform.SetCursorTime(pos);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
     } else if (g_GetCursorPosition && !m_waveform.IsStandaloneMode()) {
       double curPos = g_GetCursorPosition();
@@ -1332,8 +1370,8 @@ void SneakPeak::UpdateItemState()
       if (relPos > dur) relPos = dur;
       if (std::abs(relPos - m_waveform.GetCursorTime()) > 0.001) {
         m_waveform.SetCursorTime(relPos);
-        InvalidateRect(m_hwnd, &m_waveformRect, FALSE);
-        InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+        Invalidate(&m_waveformRect);
+        Invalidate(&m_bottomPanelRect);
       }
     }
 
@@ -1459,8 +1497,8 @@ void SneakPeak::UpdateItemState()
           m_masterPeakHead = (m_masterPeakHead + 1) % MASTER_ROLLING_SIZE;
           if (m_masterPeakCount < MASTER_ROLLING_SIZE) m_masterPeakCount++;
         }
-        InvalidateRect(m_hwnd, &m_waveformRect, FALSE);
-        InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+        Invalidate(&m_waveformRect);
+        Invalidate(&m_bottomPanelRect);
       }
     }
   }
@@ -1556,25 +1594,32 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         int w = rc.right - rc.left;
         int h = rc.bottom - rc.top;
 
+        if (w > 0 && h > 0 && (!m_sceneDC || w != m_sceneW || h != m_sceneH)) {
+          ReleaseScene();
 #ifdef _WIN32
-        HDC memDC = CreateCompatibleDC(hdc);
-        HBITMAP memBmp = CreateCompatibleBitmap(hdc, w, h);
-        HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
-        OnPaint(memDC);
-        BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
-        SelectObject(memDC, oldBmp);
-        DeleteObject(memBmp);
-        DeleteDC(memDC);
+          m_sceneDC = CreateCompatibleDC(hdc);
+          m_sceneBmp = CreateCompatibleBitmap(hdc, w, h);
+          m_sceneOldBmp = (HBITMAP)SelectObject(m_sceneDC, m_sceneBmp);
 #else
-        HDC memDC = SWELL_CreateMemContext(hdc, w, h);
-        if (memDC) {
-          OnPaint(memDC);
-          BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
-          SWELL_DeleteGfxContext(memDC);
+          m_sceneDC = SWELL_CreateMemContext(hdc, w, h);
+#endif
+          m_sceneW = w;
+          m_sceneH = h;
+          m_sceneValid = false;
+        }
+        if (m_sceneDC) {
+          // A9.3: the scene is re-rendered only when something changed it
+          // (Invalidate(), stale waveform peaks, a resize); a playback tick
+          // reuses it and only the playhead below moves.
+          if (!m_sceneValid || !m_waveform.PeaksValid()) {
+            OnPaint(m_sceneDC);
+            m_sceneValid = true;
+          }
+          BitBlt(hdc, 0, 0, w, h, m_sceneDC, 0, 0, SRCCOPY);
         } else {
           OnPaint(hdc);
         }
-#endif
+        if (!m_masterMode) m_waveform.DrawPlayhead(hdc);
         OnPaintOverlay(hdc);   // HiDPI overlay (premium panel/spike) on the real window DC
       }
       EndPaint(m_hwnd, &ps);
@@ -1633,7 +1678,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       double steps = -(double)delta / 60.0;  // negate to match REAPER arrange direction
       m_waveform.ScrollH(steps * m_waveform.GetViewDuration() * 0.1);
       m_spectral.Invalidate();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       return 1;
     }
 
@@ -1650,7 +1695,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       double centerTime = m_waveform.XToTime(pt.x);
       m_waveform.ZoomHorizontal(factor, centerTime);
       m_spectral.Invalidate();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       return 1;  // consume gesture, prevent propagation to REAPER
     }
 
@@ -1755,7 +1800,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
         RECT cr;
         GetClientRect(m_hwnd, &cr);
         RecalcLayout(cr.right, cr.bottom);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
       return 0;
     }
@@ -1798,6 +1843,7 @@ INT_PTR SneakPeak::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
       }
       if (m_loopFindThread.joinable()) m_loopFindThread.join();
       KillTimer(m_hwnd, TIMER_REFRESH);
+      ReleaseScene();
       return 0;
   }
 
@@ -1964,7 +2010,7 @@ void SneakPeak::ApplyUiScale(double scale)
     RecalcLayout(cr.right, cr.bottom);
     m_waveform.Invalidate();
     m_spectral.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }
 
@@ -2090,7 +2136,7 @@ void SneakPeak::OnSize(int w, int h)
   RecalcLayout(w, h);
   m_waveform.Invalidate();
   m_spectral.Invalidate();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // --- Painting ---
@@ -2158,20 +2204,20 @@ void SneakPeak::LimiterPreviewTick()
                                        m_limPrevResult.maxGainReductionDb,
                                        m_limPrevDraft);
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
   if (!m_limiterPanel.IsVisible()) return;
   // While the full pass crunches a long file, tick the "N%" readout (drafts
   // are too fast to need this; stats-pending only shows on the full path).
   if (m_limPrevComputing.load() && !m_limPrevDraftRunning) {
     m_limiterPanel.SetStatsPending(true, m_limPrevPct.load());
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
   // The limiter needs the single loaded buffer (Standalone or plain ITEM
   // mode, INC-L2): close the panel when the mode stops qualifying.
   if (!SingleBufferModeOk()) {
     m_limiterPanel.Hide();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   // Buffer identity changed under the panel (tab switch, new load): the old
@@ -2366,5 +2412,5 @@ void SneakPeak::OneShotPreviewTick()
     if (OneShotTrimBounds(p, data, nch, sr, s.first, s.second, &a, &b))
       m_osSpans.push_back({ a, b });
   }
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }

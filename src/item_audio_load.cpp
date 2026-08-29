@@ -240,7 +240,7 @@ void SneakPeak::FinishItemAudioLoad()
   m_minimap.Invalidate();
   if (m_spectralVisible) { m_spectral.ClearSpectrum(); m_spectral.Invalidate(); }
   if (m_oneShotPanel.IsVisible()) m_osPreviewDirty = true;   // 8g: the preview waited for this
-  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_hwnd) Invalidate();
 }
 
 bool SneakPeak::ItemAudioReady() const
@@ -286,7 +286,7 @@ void SneakPeak::StepSdkPeaksBuild()
   if (m_sdkPeaksBuildStage < 0) {
     if (g_PCM_Source_BuildPeaks(src, 0) == 0) {
       // Nothing to build - peaks exist; retry the fetch on next paint.
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       return;
     }
     m_sdkPeaksBuildStage = 0;
@@ -297,6 +297,6 @@ void SneakPeak::StepSdkPeaksBuild()
   if (left == 0) {
     g_PCM_Source_BuildPeaks(src, 2);
     m_sdkPeaksBuildStage = -1;
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }

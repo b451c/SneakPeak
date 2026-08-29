@@ -1703,7 +1703,7 @@ void SneakPeak::ShowToast(const char* text)
   // Session-only probe for the ReaProof specs (never persisted): the last
   // toast is the only trace a refused destructive edit leaves behind.
   if (g_SetExtState) g_SetExtState("SneakPeak", "last_toast", m_toastText, false);
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DrawToastPremium(HDC hdc)

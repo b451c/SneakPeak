@@ -33,7 +33,7 @@ void SneakPeak::OnDoubleClick(int x, int y)
 
   // Double-click on gain panel = reset to 0 dB
   if (m_gainPanel.OnDoubleClick(x, y, m_waveformRect)) {
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -44,13 +44,13 @@ void SneakPeak::OnDoubleClick(int x, int y)
   // (Premium only - the GDI panel keeps its prior behaviour for an exact OFF-build match.)
   if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.HitTest(x, y, m_waveformRect)) {
     if (m_dynamicsPanel.OnDoubleClick(x, y, m_waveformRect))
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     return;
   }
   // Limiter panel: same consume-always contract as the dynamics panel above.
   if (m_limiterPanel.IsVisible() && m_limiterPanel.HitTest(x, y, m_waveformRect)) {
     if (m_limiterPanel.OnDoubleClick(x, y, m_waveformRect))
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     return;
   }
 #endif
@@ -72,7 +72,7 @@ void SneakPeak::OnDoubleClick(int x, int y)
           if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
           m_envDragPointIdx = -1;
           if (g_UpdateArrange) g_UpdateArrange();
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
           return;
         }
       }
@@ -81,7 +81,7 @@ void SneakPeak::OnDoubleClick(int x, int y)
     int markerIdx = m_markers.HitTestMarker(x, m_waveform, SPmin(5));
     if (markerIdx >= 0) {
       m_markers.EditMarkerDialog(markerIdx);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       return;
     }
     // Otherwise select all
@@ -93,7 +93,7 @@ void SneakPeak::OnDoubleClick(int x, int y)
       m_waveform.UpdateSelection(m_waveform.GetItemDuration());
       m_waveform.EndSelection();
       SyncSelectionToReaper();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
@@ -103,7 +103,7 @@ void SneakPeak::OnDoubleClick(int x, int y)
     int markerIdx = m_markers.HitTestMarker(x, m_waveform, SPmin(5));
     if (markerIdx >= 0) {
       m_markers.EditMarkerDialog(markerIdx);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       return;
     }
   }
@@ -126,7 +126,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   if (m_dynamicsPanel.IsEditingValue()) {
     if (m_dynamicsPanel.CommitValueEdit())
       ReanalyzeDynamicsAfterEdit();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   // Same commit-on-any-click contract for the limiter panel's inline editor.
@@ -136,7 +136,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       MarkLimiterParamsChanged();
       SaveLimiterParams();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -191,7 +191,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
     } else {
       m_settingsPanel.Hide();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -209,7 +209,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
     if (x >= m_gearRect.left && x < m_gearRect.right &&
         y >= m_gearRect.top && y < m_gearRect.bottom) {
       m_settingsPanel.Show();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       return;
     }
 #endif
@@ -301,7 +301,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
             m_masterPeakHead = 0;
             m_masterPeakCount = 0;
           }
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
         } else if (tab.isReaper) {
           // Switch to REAPER mode
           m_masterMode = false;
@@ -337,7 +337,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
                              m_loopCandidates[(size_t)pin].endFrame);
           if (m_previewActive) StandaloneCleanupPreview();
           StandaloneAuditionLoop();
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
           return;
         }
       }
@@ -370,7 +370,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       m_waveform.SetCursorTime(time);
       if (g_SetEditCurPos)
         g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), true, false);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
@@ -392,7 +392,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
     newStart = std::max(0.0, std::min(m_waveform.GetItemDuration() - m_waveform.GetViewDuration(), newStart));
     m_waveform.ScrollH(newStart - m_waveform.GetViewStart());
     m_waveform.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -413,7 +413,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         bool skip = m_workingSet.active || m_waveform.IsTimelineOrMultiItem() || hasSelPreview;
         m_gainPanel.SetSkipBatchWrite(skip);
       }
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
@@ -434,7 +434,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       }
       if (!m_limiterPanel.IsVisible())        // closed via X: keep session defaults
         SaveLimiterParams();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
@@ -457,7 +457,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         m_osPreviewDirty = true;
         SaveOneShotParams();
       }
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
@@ -495,7 +495,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         m_loopLabPanel.ClearParamsChanged();
         SaveLoopLabParams();
       }
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
@@ -560,7 +560,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
         m_dynamicsPanel.SetLiveUndoOpen(false);
       }
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
@@ -581,7 +581,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
         m_spectralFreqDragChTop = chTop;
         m_spectralFreqDragChH = chH;
         SetCapture(m_hwnd);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
         return;
       }
 
@@ -611,7 +611,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
             m_spectralFreqDragChH = chH;
           }
           SetCapture(m_hwnd);
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
           return;
         }
       }
@@ -636,7 +636,7 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
       }
       m_dragging = true;
       SetCapture(m_hwnd);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
@@ -652,7 +652,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
       // Solo button
       if (ClickSoloButton(x, y)) {
         ToggleTrackSolo();
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
         return;
       }
 
@@ -698,7 +698,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           }
           if (g_UpdateArrange) g_UpdateArrange();
         }
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
         return;
       }
 
@@ -736,7 +736,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           double clickTime = m_waveform.XToTime(x);
           if (clickTime < m_waveform.GetEnvRevealStart() || clickTime > m_waveform.GetEnvRevealEnd()) {
             m_waveform.ClearEnvRevealRange();
-            InvalidateRect(m_hwnd, nullptr, FALSE);
+            Invalidate();
           }
         }
       }
@@ -826,7 +826,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             }
             SetCapture(m_hwnd);
             if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
-            InvalidateRect(m_hwnd, nullptr, FALSE);
+            Invalidate();
             return;
           }
           // Check if click is near the envelope line (within 20px vertically)
@@ -870,7 +870,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
                   m_envTensionDir = (pv >= nv) ? 1 : -1; // drag up bulges the curve up
                   m_envDragEnv = env; // stale-pointer safety: cleared in LoadSelectedItem
                   SetCapture(m_hwnd);
-                  InvalidateRect(m_hwnd, nullptr, FALSE);
+                  Invalidate();
                   return;
                 }
               }
@@ -930,7 +930,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
                   if (g_Undo_BeginBlock2) g_Undo_BeginBlock2(nullptr);
                 }
               }
-              InvalidateRect(m_hwnd, nullptr, FALSE);
+              Invalidate();
               return;
             }
           }
@@ -997,7 +997,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             m_waveform.UpdateSelection(seg.relativeOffset + seg.duration);
             m_waveform.EndSelection();
             SyncSelectionToReaper();
-            InvalidateRect(m_hwnd, nullptr, FALSE);
+            Invalidate();
             return;
           }
         }
@@ -1017,7 +1017,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
           m_waveform.UpdateSelection(time);
           m_dragging = true;
           SetCapture(m_hwnd);
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
           return;
         }
       }
@@ -1084,7 +1084,7 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
       }
       m_dragging = true;
       SetCapture(m_hwnd);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
 }
 
@@ -1233,7 +1233,7 @@ void SneakPeak::OnMouseUp(int x, int y)
           m_waveform.SetEnvRevealRange(tStart, tEnd);
       }
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_dragExportPending) {
@@ -1247,7 +1247,7 @@ void SneakPeak::OnMouseUp(int x, int y)
       g_SetEditCurPos(m_waveform.RelTimeToAbsTime(time), true, false);
     m_waveform.ClearSelection();
     SyncSelectionToReaper();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_spectralFreqDragging) {
@@ -1262,7 +1262,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     if (std::abs(yLo - yHi) < 3) m_spectral.ClearFreqSelection();
     if (!m_dragging) { // Alt+drag: band only
       ReleaseCapture();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       return;
     }
     // Marquee: the m_dragging branch below finishes the time axis.
@@ -1294,7 +1294,7 @@ void SneakPeak::OnMouseUp(int x, int y)
       MarkUiScaleUserSet();
     }
     ReleaseCapture();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_oneShotPanel.IsDragging()) {
@@ -1305,7 +1305,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     }
     SaveOneShotParams();
     ReleaseCapture();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_loopLabPanel.IsDragging()) {
@@ -1316,7 +1316,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     }
     SaveLoopLabParams();
     ReleaseCapture();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_limiterPanel.IsDragging()) {
@@ -1327,7 +1327,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     }
     SaveLimiterParams();                  // knob drags persist session defaults
     ReleaseCapture();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_dynamicsPanel.IsDragging()) {
@@ -1344,7 +1344,7 @@ void SneakPeak::OnMouseUp(int x, int y)
       m_dynamicsPanel.SetLiveUndoOpen(false);
     }
     ReleaseCapture();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_envFreehand) {
@@ -1354,14 +1354,14 @@ void SneakPeak::OnMouseUp(int x, int y)
     if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Freehand envelope drawing", -1);
     if (g_UpdateArrange) g_UpdateArrange();
     m_envDragPointIdx = -1;
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_envTensionDragging) { // T2-1: end of a curvature drag (time untouched - no re-sort)
     m_envTensionDragging = false;
     ReleaseCapture();
     if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Edit envelope curvature", -1);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_envDragging) {
@@ -1371,7 +1371,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     if (m_envDragEnv && g_Envelope_SortPoints) g_Envelope_SortPoints(m_envDragEnv);
     if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Move envelope point", -1);
     if (g_UpdateArrange) g_UpdateArrange();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_slipDragging) {
@@ -1387,7 +1387,7 @@ void SneakPeak::OnMouseUp(int x, int y)
       m_spectral.Invalidate();
       m_minimap.Invalidate();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_fadeDragging != FADE_NONE) {
@@ -1410,7 +1410,7 @@ void SneakPeak::OnMouseUp(int x, int y)
     } else {
       if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Adjust fade", -1);
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_gainPanel.IsDragging()) {
@@ -1724,7 +1724,7 @@ void SneakPeak::OnMouseUp(int x, int y)
       if (deferClearGain) m_waveform.ClearStandaloneGain();
     }
 
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (m_dragging) {
@@ -1732,24 +1732,24 @@ void SneakPeak::OnMouseUp(int x, int y)
     m_dragging = false;
     ReleaseCapture();
     SyncSelectionToReaper();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
   if (m_scrollbarDragging) {
     m_scrollbarDragging = false;
     ReleaseCapture();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
   if (m_markers.IsDragging()) {
     m_markers.EndDrag();
     ReleaseCapture();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
   if (m_loopDrag) {
     m_loopDrag = 0;
     ReleaseCapture();
     // A running audition follows the new region (stop + start = one rebuild).
     RestartLoopAudition();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }
 
@@ -1765,7 +1765,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       RecalcLayout(cr.right, cr.bottom);
       m_waveform.Invalidate();
       m_spectral.Invalidate();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     m_lastMouseX = x;
     m_lastMouseY = y;
@@ -1781,7 +1781,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       m_waveform.ScrollH(dt);
       m_mmbLastX = x;
       m_spectral.Invalidate();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     SetCursor(LoadCursor(nullptr, IDC_SIZEWE));
     m_lastMouseX = x;
@@ -1799,7 +1799,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     if (m_envRectSelecting) {
       m_envRectEndX = x;
       m_envRectEndY = y;
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     m_lastMouseX = x;
     m_lastMouseY = y;
@@ -1839,7 +1839,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     newStart = std::max(0.0, std::min(m_waveform.GetItemDuration() - m_waveform.GetViewDuration(), newStart));
     m_waveform.ScrollH(newStart - m_waveform.GetViewStart());
     m_waveform.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -1855,7 +1855,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       RecalcLayout(cr.right, cr.bottom);
       m_waveform.Invalidate();
       m_minimap.Invalidate();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
@@ -1877,14 +1877,14 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       RecalcLayout(clientRect.right, clientRect.bottom);
       m_waveform.Invalidate();
       m_spectral.Invalidate();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     return;
   }
 
   if (y >= m_toolbarRect.top && y < m_toolbarRect.bottom) {
     m_toolbar.SetHover(m_toolbar.HitTest(x, y));
-    InvalidateRect(m_hwnd, &m_toolbarRect, FALSE);
+    Invalidate(&m_toolbarRect);
   } else {
     m_toolbar.SetHover(-1);
   }
@@ -1920,7 +1920,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         g_InsertEnvelopePointEx(env, -1, time, rawVal, 0, 0.0, false, &noSort);
         g_Envelope_SortPoints(env);
         m_envFreehandLastX = x;
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
     }
     m_lastMouseX = x;
@@ -1943,7 +1943,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     g_SetEnvelopePoint(m_envDragEnv, m_envTensionPtIdx, nullptr, nullptr,
                        &shape5, &t, nullptr, &noSort);
     if (g_UpdateArrange) g_UpdateArrange();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -1999,7 +1999,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
         g_SetEnvelopePoint(env, i, &newTime, &newRawVal, nullptr, nullptr, nullptr, &noSort);
       }
       if (g_UpdateArrange) g_UpdateArrange();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
     m_lastMouseX = x;
     m_lastMouseY = y;
@@ -2027,7 +2027,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       snprintf(msg, sizeof(msg), "Slip: %+.3f s", shifted);
       ShowToast(msg);
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -2100,7 +2100,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       if (g_UpdateTimeline) g_UpdateTimeline();
     }
 
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -2108,7 +2108,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     double freq = m_spectral.YToFreq(y, m_spectralFreqDragChTop, m_spectralFreqDragChH);
     m_spectral.UpdateFreqSelection(freq);
     if (!m_dragging) { // Alt+drag: frequency band only
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       return;
     }
     // Marquee: fall through so the time axis (m_dragging below) updates too.
@@ -2116,7 +2116,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
 
   if (m_gainPanel.IsDragging()) {
     m_gainPanel.OnMouseMove(x, y, m_waveformRect);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   if (m_oneShotPanel.IsDragging()) {
@@ -2125,12 +2125,12 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       m_oneShotPanel.ClearParamsChanged();
       m_osPreviewDirty = true;
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   if (m_loopLabPanel.IsDragging()) {
     m_loopLabPanel.OnMouseMove(x, y, m_waveformRect);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   if (m_limiterPanel.IsDragging()) {
@@ -2139,7 +2139,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       m_limiterPanel.ClearParamsChanged();
       MarkLimiterParamsChanged();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   if (m_dynamicsPanel.IsDragging()) {
@@ -2155,7 +2155,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       if (m_waveform.IsStandaloneMode()) RequestDynamicsAnalysis();
       else m_dynParamsDirty = true;
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   if (m_dragging && m_waveform.HasItem()) {
@@ -2163,12 +2163,12 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     int waveRight = m_waveform.GetRect().right - SP(DB_SCALE_WIDTH);
     int clampedX = std::max((int)m_waveform.GetRect().left, std::min(waveRight, x));
     m_waveform.UpdateSelection(m_waveform.XToTime(clampedX));
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   if (m_markers.IsDragging()) {
     m_markers.UpdateDrag(x, m_waveform);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   if (m_loopDrag && m_waveform.IsStandaloneMode()) {
@@ -2186,7 +2186,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
       else
         m_waveform.SetLoop(m_waveform.GetLoopStart(),
                            std::max(f, m_waveform.GetLoopStart() + kMinLoop));
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
   }
 
@@ -2195,7 +2195,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     if (sw > 0) {
       double deltaTime = ((double)(x - m_lastMouseX) / (double)sw) * m_waveform.GetItemDuration();
       m_waveform.ScrollH(deltaTime);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
     }
   }
 
@@ -2222,7 +2222,7 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
     }
     if (hov != m_modeBarHover) {
       m_modeBarHover = hov;
-      InvalidateRect(m_hwnd, &m_modeBarRect, FALSE);
+      Invalidate(&m_modeBarRect);
     }
     if (hov != MB_HOVER_NONE) {
       SetCursor(LoadCursor(nullptr, IDC_HAND));
@@ -2332,15 +2332,15 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
   // Hover-glow: repaint only when the hovered knob changes (cheap; no per-pixel
   // redraw). Drag paths already repaint, so this just covers free hover.
   if (m_dynamicsPanel.IsVisible() && m_dynamicsPanel.OnHover(x, y, m_waveformRect))
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   if (m_settingsPanel.IsVisible() && m_settingsPanel.OnHover(x, y, m_waveformRect))
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   if (m_limiterPanel.IsVisible() && m_limiterPanel.OnHover(x, y, m_waveformRect))
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   if (m_oneShotPanel.IsVisible() && m_oneShotPanel.OnHover(x, y, m_waveformRect))
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   if (m_loopLabPanel.IsVisible() && m_loopLabPanel.OnHover(x, y, m_waveformRect))
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
 #endif
 
   m_lastMouseX = x;
@@ -2368,7 +2368,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
       m_oneShotPanel.ClearParamsChanged();
       m_osPreviewDirty = true;
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   // Scroll over the weld-ms box = nudge the crossfade length; consume the
@@ -2379,7 +2379,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
       m_loopLabPanel.ClearParamsChanged();
       SaveLoopLabParams();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   // Scroll over a limiter knob = nudge its value; consume the wheel anywhere
@@ -2390,7 +2390,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
       m_limiterPanel.ClearParamsChanged();
       MarkLimiterParamsChanged();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   // Scroll over a dynamics knob = nudge its value (no need to grab tiny targets;
@@ -2405,7 +2405,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
       // undo step (LiveWriteEnvelope), or inside the drag's open block.
       RequestDynamicsAnalysis();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 #endif
@@ -2414,7 +2414,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   if (m_gainPanel.IsVisible() && m_gainPanel.HitTest(x, y, m_waveformRect)) {
     double dbStep = cmd ? 0.1 : 0.5;
     m_gainPanel.AdjustDb(steps * dbStep);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -2443,7 +2443,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
           m_dirty = true;
           UpdateTitle();
           m_waveform.Invalidate();
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
         }
         return;
       }
@@ -2477,7 +2477,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
           g_SetMediaItemInfo_Value(item, hitIn ? "D_FADEINLEN" : "D_FADEOUTLEN", len);
           if (g_UpdateArrange) g_UpdateArrange();
           if (g_UpdateTimeline) g_UpdateTimeline();
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
         }
         return;
       }
@@ -2489,7 +2489,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   if (x >= dbScaleLeft && x <= m_waveformRect.right &&
       y >= m_waveformRect.top && y < m_waveformRect.bottom) {
     m_waveform.ZoomVertical((float)pow(1.15, steps));
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -2507,7 +2507,7 @@ void SneakPeak::OnMouseWheel(int x, int y, int delta, WPARAM wParam)
   }
 
   m_spectral.Invalidate();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // Close a pending wheel-nudge fade undo block (idle timeout in OnTimer, any
@@ -2559,7 +2559,7 @@ void SneakPeak::HandleLimiterEditKey(WPARAM key)
     MarkLimiterParamsChanged();
     SaveLimiterParams();
   }
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::HandleDynamicsEditKey(WPARAM key)
@@ -2568,7 +2568,7 @@ void SneakPeak::HandleDynamicsEditKey(WPARAM key)
   m_dynamicsPanel.OnEditKey((int)key);
   if (m_dynamicsPanel.ParamsChanged())
     ReanalyzeDynamicsAfterEdit();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // A/B bypass: write the envelope ACTIVE state on all segments' envelopes. Shared
@@ -2614,7 +2614,7 @@ void SneakPeak::CloseDynamicsPanel()
     if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
     m_dynamicsPanel.SetLiveUndoOpen(false);
   }
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // Mirrors the gates of OnKeyDown's switch (keep them in step): the accelerator
@@ -2666,14 +2666,14 @@ void SneakPeak::OnKeyDown(WPARAM key)
       if (m_waveform.HasItem()) {
         m_waveform.SetCursorTime(0.0);
         if (g_SetEditCurPos) g_SetEditCurPos(m_waveform.RelTimeToAbsTime(0.0), true, false);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
       break;
     case VK_END:
       if (m_waveform.HasItem()) {
         m_waveform.SetCursorTime(m_waveform.GetItemDuration());
         if (g_SetEditCurPos) g_SetEditCurPos(m_waveform.RelTimeToAbsTime(m_waveform.GetItemDuration()), false, false);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
       break;
     case VK_SPACE: {
@@ -2715,14 +2715,14 @@ void SneakPeak::OnKeyDown(WPARAM key)
         // Inline editor open (fallback WM_KEYDOWN path; the accelerator normally
         // consumes this) - ESC cancels the edit, never closes the panel.
         m_dynamicsPanel.OnEditKey(VK_ESCAPE);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       } else if (m_settingsPanel.IsVisible()) {
         if (m_settingsPanel.IsDragging()) {   // ESC mid-drag: end the drag first (A5.5)
           m_settingsPanel.OnMouseUp();
           ReleaseCapture();
         }
         m_settingsPanel.Hide();
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       } else if (m_dynamicsPanel.IsVisible()) {
         CloseDynamicsPanel();   // #77: ESC closes the dynamics panel
       } else if (m_workingSet.active) {
@@ -2730,7 +2730,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
       } else if (m_waveform.HasSelection()) {
         m_waveform.ClearSelection();
         SyncSelectionToReaper();
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       } else if (g_OnStopButton) {
         g_OnStopButton();
       }
@@ -2792,7 +2792,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
           m_envDragPointIdx = -1;
           m_envDragEnv = nullptr;
           if (g_UpdateArrange) g_UpdateArrange();
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
           break;
         } else if (m_envDragPointIdx >= 0 && m_envDragEnv) {
           // Fallback: delete last-clicked point from its specific envelope
@@ -2805,7 +2805,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
             m_envDragPointIdx = -1;
             m_envDragEnv = nullptr;
             if (g_UpdateArrange) g_UpdateArrange();
-            InvalidateRect(m_hwnd, nullptr, FALSE);
+            Invalidate();
             break;
           }
         }
@@ -2823,7 +2823,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
         m_waveform.UpdateSelection(m_waveform.GetItemDuration());
         m_waveform.EndSelection();
         SyncSelectionToReaper();
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
       break;
     case 'C':
@@ -2925,7 +2925,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
             m_envDragPointIdx = -1;
             m_envDragEnv = nullptr;
             if (g_UpdateArrange) g_UpdateArrange();
-            InvalidateRect(m_hwnd, nullptr, FALSE);
+            Invalidate();
             break;
           }
         }
@@ -2937,17 +2937,17 @@ void SneakPeak::OnKeyDown(WPARAM key)
       bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
       if (shift && m_waveform.HasSelection()) {
         m_markers.AddRegionFromSelection(m_waveform);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       } else if (!ctrl && !shift) {
         m_markers.AddMarkerAtCursor(m_waveform);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
       break;
     }
     case 'G':
       if (!ctrl) {
         m_gainPanel.Toggle(m_waveform.GetItem());
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
       break;
     case 'T':
@@ -2968,7 +2968,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
       if (!m_gainPanel.IsVisible()) break;
       m_gainPanel.AdjustDb(key == VK_UP ? 1.0 : -1.0);
       m_timelineEditGuard = TIMELINE_EDIT_GUARD_TICKS; // suppress reload bounce
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
 
@@ -3043,7 +3043,7 @@ void SneakPeak::OnKeyDown(WPARAM key)
         double maxStart = std::max(0.0, m_waveform.GetItemDuration() - m_waveform.GetViewDuration());
         m_waveform.SetViewStart(std::min(vs, maxStart));
       }
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
   }
@@ -3085,7 +3085,7 @@ void SneakPeak::OnToolbarClick(int button)
     case TB_VZOOM_OUT: m_waveform.ZoomVertical(1.0f / 1.5f); break;
     case TB_VZOOM_RESET: m_waveform.ZoomVertical(1.0f / m_waveform.GetVerticalZoom()); break;
   }
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::ReloadAfterGainChange(double savedViewStart, double savedViewDur,

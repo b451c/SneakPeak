@@ -1060,24 +1060,27 @@ void WaveformView::DrawCursor(HDC hdc)
       SelectObject(hdc, oldPen);
       DeleteObject(dashPen);
     }
-
-    // 2) Playhead — solid red line moving with playback, clamped to item bounds
-    if (g_GetPlayPosition2) {
-      double absPos = g_GetPlayPosition2();
-      double relPos = AbsTimeToRelTime(absPos);
-      // Don't draw playhead outside item bounds
-      if (relPos < 0.0 || relPos > m_itemDuration) relPos = -1.0;
-      int px = TimeToX(relPos);
-      if (relPos >= 0.0 && px >= m_rect.left && px <= waveRight) {
-        HPEN playPen = CreatePen(PS_SOLID, 2, g_theme.playhead);
-        HPEN oldPen = (HPEN)SelectObject(hdc, playPen);
-        MoveToEx(hdc, px, m_rect.top, nullptr);
-        LineTo(hdc, px, m_rect.bottom);
-        SelectObject(hdc, oldPen);
-        DeleteObject(playPen);
-      }
-    }
+    // 2) the playhead is drawn by DrawPlayhead, on top of the cached scene
   }
+}
+
+// Playhead - solid red line moving with playback, clamped to item bounds.
+// Not part of the scene the window caches (A9.3): SneakPeak draws it on the
+// real DC after the scene blit, so a playback tick never re-renders the view.
+void WaveformView::DrawPlayhead(HDC hdc)
+{
+  if (!g_GetPlayState || !(g_GetPlayState() & 1) || !g_GetPlayPosition2) return;
+  int waveRight = m_rect.right - SP(DB_SCALE_WIDTH);
+  double relPos = AbsTimeToRelTime(g_GetPlayPosition2());
+  if (relPos < 0.0 || relPos > m_itemDuration) return;   // outside the item
+  int px = TimeToX(relPos);
+  if (px < m_rect.left || px > waveRight) return;
+  HPEN playPen = CreatePen(PS_SOLID, 2, g_theme.playhead);
+  HPEN oldPen = (HPEN)SelectObject(hdc, playPen);
+  MoveToEx(hdc, px, m_rect.top, nullptr);
+  LineTo(hdc, px, m_rect.bottom);
+  SelectObject(hdc, oldPen);
+  DeleteObject(playPen);
 }
 
 void WaveformView::UpdateFadeCacheMulti()

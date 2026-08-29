@@ -202,7 +202,7 @@ bool SneakPeak::TakeDynamicsResult()
     m_dynApplyPending = false;
     ApplyDynamicsToEnvelope();
   }
-  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_hwnd) Invalidate();
   return true;
 }
 

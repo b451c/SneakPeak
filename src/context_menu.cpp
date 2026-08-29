@@ -544,7 +544,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         m_waveform.UpdateSelection(m_waveform.GetItemDuration());
         m_waveform.EndSelection();
         SyncSelectionToReaper();
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
       break;
     case CM_SPLIT:
@@ -616,7 +616,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         m_waveform.ClearItem();
         m_waveform.SetItem(item);
         if (m_gainPanel.IsVisible()) m_gainPanel.Show(item);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
         DBG("[SneakPeak] DOWNMIX: reload done, numCh=%d\n", m_waveform.GetNumChannels());
       }
       break;
@@ -647,17 +647,17 @@ void SneakPeak::OnContextMenuCommand(int id)
     case CM_RULER_RELATIVE:
       m_rulerMode = RulerMode::Relative;
       if (g_SetExtState) g_SetExtState("SneakPeak", "ruler_mode", "0", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_RULER_ABSOLUTE:
       m_rulerMode = RulerMode::Absolute;
       if (g_SetExtState) g_SetExtState("SneakPeak", "ruler_mode", "1", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_RULER_BARS_BEATS:
       m_rulerMode = RulerMode::BarsBeats;
       if (g_SetExtState) g_SetExtState("SneakPeak", "ruler_mode", "2", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_GROUP_SET: {
       double rs = m_workingSet.startPos, re = m_workingSet.endPos;
@@ -678,25 +678,25 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_waveform.SetMultiItemMode(MultiItemMode::MIX);
       m_waveform.Invalidate();
       if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "mix", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_MULTI_MODE_LAYERED:
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED);
       m_waveform.Invalidate();
       if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "layered", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_MULTI_MODE_LAYERED_TRACKS:
       m_waveform.SetMultiItemMode(MultiItemMode::LAYERED_TRACKS);
       m_waveform.Invalidate();
       if (g_SetExtState) g_SetExtState("SneakPeak", "multi_mode", "layered_tracks", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_SHOW_JOIN_LINES:
       m_waveform.SetShowJoinLines(!m_waveform.GetShowJoinLines());
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_join_lines",
                                         m_waveform.GetShowJoinLines() ? "1" : "0", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_SHOW_VOLUME_ENVELOPE: {
       bool newShow = !m_waveform.GetShowVolumeEnvelope();
@@ -711,14 +711,14 @@ void SneakPeak::OnContextMenuCommand(int id)
       if (m_dynamicsPanel.IsVisible()) m_dynamicsPanel.SetShowEnv(newShow);
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_vol_env",
                                         newShow ? "1" : "0", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
     case CM_SHOW_RMS:
       m_waveform.SetShowRMS(!m_waveform.GetShowRMS());
       if (g_SetExtState) g_SetExtState("SneakPeak", "show_rms",
                                         m_waveform.GetShowRMS() ? "1" : "0", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_SHOW_METERS:
       m_showMeters = !m_showMeters;
@@ -730,7 +730,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         RecalcLayout(cr.right, cr.bottom);
         m_waveform.Invalidate();
       }
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_SHOW_RULER:
       m_showRuler = !m_showRuler;
@@ -742,14 +742,14 @@ void SneakPeak::OnContextMenuCommand(int id)
         RecalcLayout(cr.right, cr.bottom);
         m_waveform.Invalidate();
       }
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_SPECTRAL_NOTES:
       m_spectral.SetNoteScale(!m_spectral.GetNoteScale());
       if (g_SetExtState) g_SetExtState("SneakPeak", "spectral_notes",
                                         m_spectral.GetNoteScale() ? "1" : "0", true);
       m_spectral.Invalidate();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_SHOW_DYNAMICS:
       m_dynamicsVisible = !m_dynamicsVisible;
@@ -757,7 +757,7 @@ void SneakPeak::OnContextMenuCommand(int id)
                                         m_dynamicsVisible ? "1" : "0", true);
       // Run analysis if enabling (item views: delivered by the pipeline)
       if (m_dynamicsVisible && !m_dynamics.HasResults()) RequestDynamicsAnalysis();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_SWITCH_TIMELINE: {
       if (!m_waveform.IsMultiItemActive()) break;
@@ -772,7 +772,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         if (!segItems.empty()) m_gainPanel.ShowBatch(segItems);
       }
       m_waveform.Invalidate();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
     case CM_APPLY_DYNAMICS: {
@@ -789,7 +789,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         m_dynamicsPanel.SetLiveMode(false);   // restored Live is meaningless here
         m_dynamicsVisible = true;
         if (g_SetExtState) g_SetExtState("SneakPeak", "dynamics_visible", "1", true);
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
         break;
       }
       m_dynamicsPanel.SetStandalone(false);
@@ -824,7 +824,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       }
       m_dynamicsVisible = true;
       if (g_SetExtState) g_SetExtState("SneakPeak", "dynamics_visible", "1", true);
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
     case CM_LOOP_FROM_SELECTION: {
@@ -847,7 +847,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       ShowToast(buf);
       // A running audition follows the new region.
       RestartLoopAudition();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
     case CM_AUDITION_LOOP:
@@ -864,13 +864,13 @@ void SneakPeak::OnContextMenuCommand(int id)
       RestoreOneShotParams();
       m_oneShotPanel.Show();
       m_osPreviewDirty = true;   // trim/fade preview from the first frame
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_LOOP_LAB:
       if (!m_waveform.HasItem() || !m_waveform.IsStandaloneMode()) break;
       RestoreLoopLabParams();
       m_loopLabPanel.Show();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_EDIT_COPY_STANDALONE:
       DoEditCopyStandalone();
@@ -894,7 +894,7 @@ void SneakPeak::OnContextMenuCommand(int id)
     case CM_CLEAR_LOOP:
       if (m_previewActive && m_previewLoop) StandaloneCleanupPreview();
       m_waveform.ClearLoop();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     case CM_LOOP_WRITE_SMPL:
       m_writeLoopOnSave = !m_writeLoopOnSave;
@@ -904,7 +904,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       break;
     case CM_LIM_SAVE_PRESET:
       AddLimUserPreset();
-      InvalidateRect(m_hwnd, nullptr, FALSE);   // preset box may show the new name
+      Invalidate();   // preset box may show the new name
       break;
     case CM_APPLY_LIMITER: {
       if (!SingleBufferModeOk()) break;
@@ -915,28 +915,28 @@ void SneakPeak::OnContextMenuCommand(int id)
       m_limiterPanel.SetItemMode(!m_waveform.IsStandaloneMode());
       m_limiterPanel.Show();
       MarkLimiterParamsChanged();   // kick the first preview compute
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
     case CM_METER_PEAK:
       m_levels.SetMode(MeterMode::PEAK);
       if (g_SetExtState) g_SetExtState("SneakPeak", "meter_mode", "peak", true);
-      InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+      Invalidate(&m_bottomPanelRect);
       break;
     case CM_METER_RMS:
       m_levels.SetMode(MeterMode::RMS);
       if (g_SetExtState) g_SetExtState("SneakPeak", "meter_mode", "rms", true);
-      InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+      Invalidate(&m_bottomPanelRect);
       break;
     case CM_METER_VU:
       m_levels.SetMode(MeterMode::VU);
       if (g_SetExtState) g_SetExtState("SneakPeak", "meter_mode", "vu", true);
-      InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+      Invalidate(&m_bottomPanelRect);
       break;
     case CM_METER_SOURCE_MASTER:
       m_meterFromMaster = !m_meterFromMaster;
       if (g_SetExtState) g_SetExtState("SneakPeak", "meter_source", m_meterFromMaster ? "master" : "item", true);
-      InvalidateRect(m_hwnd, &m_bottomPanelRect, FALSE);
+      Invalidate(&m_bottomPanelRect);
       break;
     case CM_TOGGLE_SPECTRAL:
       // 8g: opening starts a lazy item's load and the view fills when it lands
@@ -995,7 +995,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       g_SetEnvelopePoint(env, m_envDragPointIdx, nullptr, nullptr, &newShape, nullptr, nullptr, &noSort);
       if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Change envelope shape", -1);
       if (g_UpdateArrange) g_UpdateArrange();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
     case CM_ENV_RESET_TENSION: {
@@ -1009,7 +1009,7 @@ void SneakPeak::OnContextMenuCommand(int id)
                          nullptr, &noSort);
       if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Reset envelope curvature", -1);
       if (g_UpdateArrange) g_UpdateArrange();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
     case CM_ENV_DELETE_POINT: {
@@ -1023,7 +1023,7 @@ void SneakPeak::OnContextMenuCommand(int id)
       if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Delete envelope point", -1);
       m_envDragPointIdx = -1;
       if (g_UpdateArrange) g_UpdateArrange();
-      InvalidateRect(m_hwnd, nullptr, FALSE);
+      Invalidate();
       break;
     }
     case CM_DYN_SAVE_PRESET:
@@ -1064,14 +1064,14 @@ void SneakPeak::OnContextMenuCommand(int id)
         m_limiterPanel.ClearParamsChanged();
         MarkLimiterParamsChanged();   // debounced preview recompute
         SaveLimiterParams();
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       } else if (id >= CM_LIM_USER_PRESET_BASE &&
                  id < CM_LIM_USER_PRESET_BASE + MAX_USER_PRESETS) {
         if (ApplyLimUserPreset(id - CM_LIM_USER_PRESET_BASE)) {
           m_limiterPanel.ClearParamsChanged();
           MarkLimiterParamsChanged();
           SaveLimiterParams();
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
         }
       } else if (id >= CM_LIM_DEL_PRESET_BASE &&
                  id < CM_LIM_DEL_PRESET_BASE + MAX_USER_PRESETS) {
@@ -1081,7 +1081,7 @@ void SneakPeak::OnContextMenuCommand(int id)
         // Same re-analysis + Live path as a knob drag (pipeline: debounced Live write).
         m_dynamics.SetParams(m_dynamicsPanel.GetParams());
         RequestDynamicsAnalysis();
-        InvalidateRect(m_hwnd, nullptr, FALSE);
+        Invalidate();
       }
       break;
     }
@@ -1132,6 +1132,6 @@ void SneakPeak::OnContextMenuCommand(int id)
         g_SetExtState("SneakPeak", "was_docked", m_isDocked ? "1" : "0", true);
       break;
   }
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 

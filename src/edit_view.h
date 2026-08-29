@@ -256,6 +256,11 @@ private:
   void OnSize(int w, int h);
   void OnPaint(HDC hdc);
   void OnPaintOverlay(HDC hdc);   // HiDPI overlay (premium panel/spike) on the real window DC, post-composite
+  // Every repaint request goes through here: it marks the cached scene stale.
+  // The playback tick alone calls InvalidateRect directly (playhead only).
+  void Invalidate(const RECT* rc = nullptr);
+  void InvalidateOverlay(const RECT* rc = nullptr);   // premium overlay ticks: scene stays cached
+  void ReleaseScene();
   double GetUiDpr() const;        // device-pixel ratio for crisp HiDPI Blend2D rendering
   void OnMouseDown(int x, int y, WPARAM wParam);
   void OnMouseDownWaveform(int x, int y, WPARAM wParam);
@@ -426,6 +431,15 @@ private:
   RECT m_metersRect = {};
 
   HWND m_hwnd = nullptr;
+  // Cached scene (A9.3): OnPaint renders into this persistent buffer only when
+  // Invalidate() ran or the waveform peaks went stale; WM_PAINT blits it and
+  // draws the playhead + overlay on top, so playback ticks cost a blit.
+  HDC m_sceneDC = nullptr;
+  int m_sceneW = 0, m_sceneH = 0;
+  bool m_sceneValid = false;
+#ifdef _WIN32
+  HBITMAP m_sceneBmp = nullptr, m_sceneOldBmp = nullptr;
+#endif
   WaveformView m_waveform;
   Toolbar m_toolbar;
 

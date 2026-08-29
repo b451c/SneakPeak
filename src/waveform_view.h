@@ -117,7 +117,9 @@ public:
 
   // Rendering (GDI)
   void Paint(HDC hdc);
+  void DrawPlayhead(HDC hdc);   // drawn by SneakPeak over the cached scene on every playback tick
   void Invalidate() { m_peaksValid = false; }
+  bool PeaksValid() const { return m_peaksValid; }   // false = the next Paint recomputes (scene cache key)
   void ReloadAudio();  // re-read samples from source (after normalize etc.)
 
   // State setters (for tab restore)

@@ -139,7 +139,7 @@ void SneakPeak::UndoRestore()
     m_waveform.ClearItem();
     LoadSelectedItem();
     ShowToast("Destructive edit undone");
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   // Trigger REAPER's native undo
@@ -156,7 +156,7 @@ void SneakPeak::UndoRestore()
       m_waveform.ClearItem();
       LoadSelectedItem();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }
 
@@ -285,7 +285,7 @@ void SneakPeak::StandaloneFinishRestore(const char* what)
   m_dirty = true;
   m_previewCacheDirty = true;
   UpdateTitle();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
   DBG("[SneakPeak] Standalone %s (undo=%d redo=%d, frames=%d, dur=%.3f)\n",
       what, (int)m_standaloneUndoStack.size(), (int)m_standaloneRedoStack.size(),
       newFrames, newDur);
@@ -329,7 +329,7 @@ void SneakPeak::RedoRestore()
       m_waveform.ClearItem();
       LoadSelectedItem();
     }
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }
 
@@ -368,7 +368,7 @@ void SneakPeak::NavigateToMarker(bool forward)
   if (bestTime >= 0.0) {
     g_SetEditCurPos(bestTime, false, false);
     m_waveform.SetCursorTime(m_waveform.AbsTimeToRelTime(bestTime));
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }
 
@@ -859,7 +859,7 @@ void SneakPeak::DoPaste()
   // Force REAPER to show waveform in pasted item
   if (newItem && g_UpdateItemInProject) g_UpdateItemInProject(newItem);
   if (g_Main_OnCommand) g_Main_OnCommand(40047, 0); // Peaks: Build any missing peaks
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoPasteDestructive()
@@ -886,7 +886,7 @@ void SneakPeak::DoPasteDestructive()
     UpdateTitle();
     m_waveform.Invalidate();
     m_minimap.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (!DestructiveSourceOk()) return;
@@ -923,7 +923,7 @@ void SneakPeak::DoPasteDestructive()
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Paste", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoDelete(bool ripple)
@@ -997,7 +997,7 @@ void SneakPeak::DoDeleteStandalone()
     m_minimap.Invalidate();
     m_dirty = true;
     UpdateTitle();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 }
 
@@ -1275,7 +1275,7 @@ void SneakPeak::DoDeleteNonDestructive(bool ripple)
     }
   }
 
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoSilence()
@@ -1382,7 +1382,7 @@ void SneakPeak::DoSilence()
     m_dirty = true;
     UpdateTitle();
     m_waveform.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -1417,7 +1417,7 @@ void SneakPeak::DoSilence()
 
   m_waveform.ClearItem();
   LoadSelectedItem();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // --- Processing ---
@@ -1438,7 +1438,7 @@ void SneakPeak::DoNormalize()
     m_dirty = true;
     UpdateTitle();
     m_waveform.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -1492,7 +1492,7 @@ void SneakPeak::DoNormalize()
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Normalize (non-destructive)", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoFadeIn()
@@ -1511,7 +1511,7 @@ void SneakPeak::DoFadeIn()
     m_dirty = true;
     UpdateTitle();
     m_waveform.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -1538,7 +1538,7 @@ void SneakPeak::DoFadeIn()
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Fade In", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoFadeOut()
@@ -1557,7 +1557,7 @@ void SneakPeak::DoFadeOut()
     m_dirty = true;
     UpdateTitle();
     m_waveform.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -1585,7 +1585,7 @@ void SneakPeak::DoFadeOut()
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Fade Out", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoReverse()
@@ -1610,7 +1610,7 @@ void SneakPeak::DoReverse()
     m_previewCacheDirty = true;
     UpdateTitle();
     m_waveform.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -1639,7 +1639,7 @@ void SneakPeak::DoReverse()
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Reverse (destructive)", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoGain(double factor)
@@ -1690,7 +1690,7 @@ void SneakPeak::DoGain(double factor)
     m_previewCacheDirty = true;
     UpdateTitle();
     m_waveform.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -1768,7 +1768,7 @@ void SneakPeak::DoGain(double factor)
   }
 
   m_waveform.Invalidate();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoDCRemove()
@@ -1791,7 +1791,7 @@ void SneakPeak::DoDCRemove()
     m_previewCacheDirty = true;
     UpdateTitle();
     m_waveform.Invalidate();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -1820,7 +1820,7 @@ void SneakPeak::DoDCRemove()
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: DC Offset Remove (destructive)", -1);
   if (g_PreventUIRefresh) g_PreventUIRefresh(-1);
 
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoNormalizeLUFS(double targetLufs)
@@ -1855,7 +1855,7 @@ void SneakPeak::DoNormalizeLUFS(double targetLufs)
   snprintf(desc, sizeof(desc), "SneakPeak: Normalize to %.0f LUFS", targetLufs);
   if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, desc, -1);
 
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // --- Spectral Repair (v2.3.0 INC-5): standalone destructive v1 ---
@@ -1914,7 +1914,7 @@ void SneakPeak::DoSpectralHeal(double strength)
   m_waveform.Invalidate();
   m_minimap.Invalidate();
   m_spectral.ClearSpectrum();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // v2.4.0 INC-L1: destructive true-peak hard limit on the standalone buffer.
@@ -1969,7 +1969,7 @@ void SneakPeak::DoApplyLimiter()
   m_limApplyDone.store(false);
   m_limApplyBusy.store(true);
   m_limiterPanel.SetApplyProgress(0);   // Apply button becomes the progress bar
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
   m_limApplyThread = std::thread(&SneakPeak::LimiterApplyThread, this, nch, sr,
                                  s0, s1, ramp);
 }
@@ -2041,7 +2041,7 @@ void SneakPeak::DoApplyDynamicsStandalone()
   m_waveform.Invalidate();
   m_minimap.Invalidate();
   m_spectral.ClearSpectrum();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // INC-L2: ITEM-mode Apply = the Reverse/Normalize destructive-rewrite pattern
@@ -2148,7 +2148,7 @@ void SneakPeak::DoApplyLimiterItem()
   m_minimap.Invalidate();
   m_spectral.ClearSpectrum();
   InvalidateLimiterPreview();   // recompute the GR band for the limited buffer
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::LimiterApplyThread(int nch, int sr, int s0, int s1, int ramp)
@@ -2174,7 +2174,7 @@ void SneakPeak::LimiterApplyTick()
     // Progress where the user is looking: the panel's Apply button. The
     // title is a secondary cue (docked windows have no title bar at all).
     m_limiterPanel.SetApplyProgress(m_limApplyPct.load());
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     if (m_hwnd) {
       char t[64];
       snprintf(t, sizeof(t), "SneakPeak: Limiting... %d%%", m_limApplyPct.load());
@@ -2206,7 +2206,7 @@ void SneakPeak::LimiterApplyTick()
       ShowToast("Nothing above the ceiling - audio unchanged");
     m_limApplyOut = std::vector<double>();
     UpdateTitle();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
 
@@ -2231,7 +2231,7 @@ void SneakPeak::LimiterApplyTick()
   m_minimap.Invalidate();
   m_spectral.ClearSpectrum();
   InvalidateLimiterPreview();   // recompute the GR band for the limited buffer
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::DoRepairClicks()
@@ -2287,7 +2287,7 @@ void SneakPeak::DoRepairClicks()
   m_waveform.Invalidate();
   m_minimap.Invalidate();
   m_spectral.ClearSpectrum();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::ApplyDynamicsToEnvelope()
@@ -2473,7 +2473,7 @@ void SneakPeak::ApplyDynamicsToEnvelope()
       snprintf(toast, sizeof(toast), "Applied %d points (from %d)", (int)comp.size(), rawCount);
     ShowToast(toast);
   }
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 void SneakPeak::SaveDynamicsToItem()
@@ -3167,7 +3167,7 @@ void SneakPeak::EditOneShotPattern()
     return;
   m_oneShotPanel.SetPattern(buf);
   SaveOneShotParams();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // One-Shot session params (os_* keys, x1000-int encoding like lim_*).

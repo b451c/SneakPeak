@@ -116,7 +116,7 @@ void SneakPeak::RestoreStandaloneState(int idx)
     char title[512];
     snprintf(title, sizeof(title), "SneakPeak: %s%s", fs.dirty ? "*" : "", fname);
     SetWindowText(m_hwnd, title);
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   DBG("[SneakPeak] Restored state for tab %d: %s\n", idx, fs.filePath.c_str());
@@ -164,7 +164,7 @@ void SneakPeak::OnModeBarCloseTab(int idx)
         m_dirty = false;
         UpdateTitle();
         if (m_hwnd) {
-          InvalidateRect(m_hwnd, nullptr, FALSE);
+          Invalidate();
         }
       }
     } else {
@@ -174,7 +174,7 @@ void SneakPeak::OnModeBarCloseTab(int idx)
   } else {
     // Adjust index if the removed tab was before the active one
     if (idx < m_activeFileIdx) m_activeFileIdx--;
-    if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+    if (m_hwnd) Invalidate();
   }
 }
 
@@ -226,7 +226,7 @@ void SneakPeak::LoadStandaloneFile(const char* path)
 
   if (m_hwnd) {
     UpdateTitle();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
 
   DBG("[SneakPeak] Loaded standalone file: %s\n", path);
@@ -341,7 +341,7 @@ void SneakPeak::InstallStandaloneTab(const std::string& spath)
   m_standaloneFiles.push_back(std::move(fs));
   m_activeFileIdx = (int)m_standaloneFiles.size() - 1;
 
-  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+  if (m_hwnd) Invalidate();
   DBG("[SneakPeak] Added standalone tab %d: %s\n", m_activeFileIdx, spath.c_str());
 }
 
@@ -433,7 +433,7 @@ void SneakPeak::FinishStandaloneLoad()
   InstallStandaloneTab(spath);
   if (m_hwnd) {
     UpdateTitle();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
   }
   DBG("[SneakPeak] Incremental load installed: %s (%d frames)\n",
       spath.c_str(), info.numFrames);
@@ -847,7 +847,7 @@ void SneakPeak::DoWeldLoop(double crossfadeMs)
   InvalidateLimiterPreview();
   // A running audition replays the welded seam right away.
   RestartLoopAudition();
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // Loop Lab finder (v2.4 INC-A2): score loop-point candidates on a worker
@@ -920,7 +920,7 @@ void SneakPeak::LoopFindTick()
              m_loopCandidates.size() == 1 ? "" : "s");
     ShowToast(buf);
   }
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // Full-buffer copy with the pending non-destructive fades applied - what the
@@ -974,7 +974,7 @@ void SneakPeak::StandaloneAuditionSeam()
 
   if (m_previewActive && m_previewSeam) {   // toggle off
     StandaloneCleanupPreview();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (!m_waveform.HasLoop()) return;
@@ -1029,7 +1029,7 @@ void SneakPeak::StandaloneAuditionSeam()
     m_previewSeamTailT0 = (double)(e - pre) / sr;
     m_previewSeamHeadT0 = (double)s / sr;
   }
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // Re-arm the running audition after a loop edit (bracket drag, weld, new
@@ -1052,7 +1052,7 @@ void SneakPeak::StandaloneAuditionLoop()
 
   if (m_previewActive && m_previewLoop) {   // already auditioning: stop
     StandaloneCleanupPreview();
-    InvalidateRect(m_hwnd, nullptr, FALSE);
+    Invalidate();
     return;
   }
   if (!m_waveform.HasLoop()) return;
@@ -1071,7 +1071,7 @@ void SneakPeak::StandaloneAuditionLoop()
 
   if (!StandaloneWritePreviewFile(s, e)) return;
   StandaloneStartPreviewPlayback(0.0, true, (double)s / (double)sr);
-  InvalidateRect(m_hwnd, nullptr, FALSE);
+  Invalidate();
 }
 
 // --- Replace Source in REAPER Timeline ---
