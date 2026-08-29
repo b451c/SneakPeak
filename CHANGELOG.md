@@ -4,7 +4,7 @@ All notable changes to SneakPeak will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] - v2.5.0 (in development)
+## [2.5.0-rc1] - 2026-08-30
 
 ### Highlights
 - **Items of any length open instantly.** The waveform comes from REAPER's own peak files, and nothing is decoded until an operation actually needs the samples.
