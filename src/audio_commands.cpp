@@ -30,18 +30,22 @@
 
 void SneakPeak::GetSelectionSampleRange(int& startFrame, int& endFrame) const
 {
+  // Multi-item view keeps its samples per layer (no shared buffer, sample
+  // count 0): its range is the timeline span at the view rate.
+  double sr = (double)m_waveform.GetSampleRate();
+  const int total = m_waveform.IsMultiItemActive() ? (int)(m_waveform.GetItemDuration() * sr)
+                                                   : m_waveform.GetAudioSampleCount();
   if (!m_waveform.HasSelection()) {
     startFrame = 0;
-    endFrame = m_waveform.GetAudioSampleCount();
+    endFrame = total;
     return;
   }
   WaveformSelection sel = m_waveform.GetSelection();
-  double sr = (double)m_waveform.GetSampleRate();
   startFrame = std::max(0, (int)(sel.startTime * sr));
-  endFrame = std::min(m_waveform.GetAudioSampleCount(), (int)(sel.endTime * sr));
+  endFrame = std::min(total, (int)(sel.endTime * sr));
   if (endFrame <= startFrame) {
     startFrame = 0;
-    endFrame = m_waveform.GetAudioSampleCount();
+    endFrame = total;
   }
 }
 

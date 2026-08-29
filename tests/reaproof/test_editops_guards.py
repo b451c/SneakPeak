@@ -9,6 +9,14 @@ A6.5 - "Replace source in timeline" swapped the take's source but left the
 item's length alone: after a Standalone edit that shortened the file the item
 ran past its source (looping it, B_LOOPSRC is on by default). Control
 (c2cf074): D_LENGTH unchanged.
+A6.6 / A6.9 - the audit read Multi-item `GetMixedAudio` as striding every
+layer by the view's channel count (a mono layer next to a stereo one would
+read at double speed); the loader upmixes mono layers on install, so the mix
+is right. Writing that spec found the real defect: Copy in Multi-item view
+copied NOTHING - `GetSelectionSampleRange` clamps to the shared buffer's
+sample count, which the multi view never sets (per-layer buffers), so the
+range collapsed to 0 and Copy returned before touching the clipboard (Paste
+then pasted the previous clipboard, or nothing). Control (c2cf074): no clip.
 """
 from __future__ import annotations
 
@@ -18,7 +26,7 @@ from pathlib import Path
 import soundfile as sf
 
 from conftest import (SELECT_ITEM0, VK_DELETE, WAVE_Y, _heartbeat_t, burst_fixture, clear_project,
-                      click_sync, drag_client, ensure_window, insert_item_unselected, key_sync,
+                      click_sync, drag_client, ensure_window, insert_item, insert_item_unselected, key_sync,
                       track_item_count, wait_audio_loaded)
 
 SHOTS = Path("/tmp/sneakpeak-reaproof-shots/editops")
@@ -205,8 +213,12 @@ def test_replace_source_shorter_file(sess):
     "Replace source in timeline" (Save -> overwrite -> P_SOURCE swap). The
     item must end where the new file ends: D_LENGTH == the saved length.
     Control (c2cf074): the item keeps its 10 s over an 8 s source."""
-    from conftest import dismiss_native_modal, mode_from_capture, wait_main_thread_idle
-    media = burst_fixture("editops_replace_10s.wav", seconds=10, channels=2)
+    from conftest import dismiss_native_modal, mode_from_capture, perf_media_dir, wait_main_thread_idle
+    # A Standalone tab outlives the test and a second open of the SAME path
+    # lands in it (saved state, no prompt): every run gets its own file.
+    for old in perf_media_dir().glob("editops_replace_*.wav"):
+        old.unlink()
+    media = _tone_fixture(f"editops_replace_{int(time.time())}.wav", [0.2, 0.2])
     clear_project(sess)
     insert_item_unselected(sess, media)
     ensure_window(sess)
@@ -240,3 +252,73 @@ def test_replace_source_shorter_file(sess):
     assert abs(src_len - new_len) < 0.01, "precondition: the take does not point at the saved file"
     assert "Replaced 1 item" in toast, f"replace toast missing: {toast!r}"
     assert abs(item_len - new_len) < 0.01, f"the item ({item_len:.3f} s) runs past its shortened source ({new_len:.3f} s)"
+
+
+# --- A6.6: Multi-item Copy mixes a mono and a stereo layer correctly ---------
+CM_COPY, CM_PASTE = 2002, 2003
+
+
+def _tone_fixture(name: str, amps: list[float], *, seconds: float = 10.0, sr: int = 44100) -> Path:
+    """One 220 Hz sine per channel at the given amplitudes (same phase everywhere,
+    so the layer sum is exact), 32-bit float, fresh every call."""
+    from conftest import perf_media_dir
+    import numpy as np
+    path = perf_media_dir() / name
+    t = np.arange(int(seconds * sr)) / sr
+    y = np.stack([a * np.sin(2 * np.pi * 220 * t) for a in amps], axis=1)
+    sf.write(str(path), y.astype("float32"), sr, subtype="FLOAT")
+    return path
+
+
+def test_multi_copy_mono_plus_stereo(sess):
+    """A mono item (0.2) on one track and a stereo item (L 0.4, R 0.1) on
+    another, both selected -> Multi-item view. A selection in the second
+    half of the items, Copy, Paste: the pasted clip must be the mix per
+    channel (L 0.6, R 0.3 in amplitude -> RMS 0.424 / 0.212). A mono layer
+    read at the stereo stride would contribute nothing there. Control
+    (c2cf074): Copy copies nothing, no clip is pasted."""
+    from conftest import (click_client, command_sync, mode_from_capture, send_command,
+                          wait_main_thread_idle, window_title)
+    import numpy as np
+    mono = _tone_fixture("multi_mono_10s.wav", [0.2])
+    stereo = _tone_fixture("multi_stereo_10s.wav", [0.4, 0.1])
+    clear_project(sess)
+    insert_item_unselected(sess, mono)
+    insert_item(sess, stereo, position=0.0)          # a new track 0; the mono item is on track 1 now
+    sess.eval("reaper.SelectAllMediaItems(0, false) reaper.UpdateArrange() return true")
+    ensure_window(sess)
+    proj_dir = Path(str(sess.eval("return reaper.GetProjectPathEx(0)")))
+    before = set(proj_dir.glob("sneakpeak_paste_*.wav"))
+    sess.eval("reaper.SelectAllMediaItems(0, true) reaper.UpdateArrange() return true")
+    time.sleep(1.5)
+    wait_main_thread_idle(sess, timeout=60)
+    assert mode_from_capture(sess, SHOTS / "multi.png") == "MULTI"
+    drag_client(sess, 500, WAVE_Y, 600, WAVE_Y)      # ~6.6-7.9 s: the second half of both items
+    time.sleep(0.5)
+    sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+    for _ in range(10):                              # the layers load in the background
+        command_sync(sess, CM_COPY, settle=0.5)
+        toast = str(sess.eval('return reaper.GetExtState("SneakPeak", "last_toast")'))
+        if "loading" not in toast.lower():
+            break
+        sess.eval('reaper.DeleteExtState("SneakPeak", "last_toast", false)')
+        time.sleep(1.0)
+    s0, s1 = sess.eval("local s, e = reaper.GetSet_LoopTimeRange2(0, false, false, 0, 0, false) return {s, e}")
+    print(f"\n[editops] after Copy: toast {toast!r}, title {window_title(sess)!r}, time sel {float(s0):.2f}-{float(s1):.2f} s, "
+          f"items {sess.eval('return reaper.CountMediaItems(0)')}, tracks {sess.eval('return reaper.CountTracks(0)')}")
+    click_client(sess, 300, WAVE_Y)                  # cursor: the paste position
+    time.sleep(0.3)
+    send_command(sess, CM_PASTE)
+    try:
+        sess.wait_until(lambda: len(set(proj_dir.glob("sneakpeak_paste_*.wav")) - before) >= 1, timeout=20)
+    finally:
+        time.sleep(0.5)
+        toast = str(sess.eval('return reaper.GetExtState("SneakPeak", "last_toast")'))
+        print(f"\n[editops] multi copy/paste: toast {toast!r}, clips {sorted(p.name for p in set(proj_dir.glob('sneakpeak_paste_*.wav')) - before)}")
+    clip = max(set(proj_dir.glob("sneakpeak_paste_*.wav")) - before, key=lambda p: p.stat().st_mtime)
+    got = sf.read(str(clip), dtype="float64", always_2d=True)[0]
+    rms = np.sqrt((got ** 2).mean(axis=0))
+    want = np.array([0.6, 0.3]) / np.sqrt(2.0)
+    print(f"[editops] pasted clip {clip.name}: {got.shape[1]} ch, {len(got) / 44100:.3f} s, RMS {rms.round(4).tolist()} (want {want.round(4).tolist()})")
+    assert got.shape[1] == 2, f"the pasted clip has {got.shape[1]} channels, expected 2"
+    assert np.abs(rms - want).max() < 0.02 * want.max() + 0.005, "the pasted mix does not match mono + stereo per channel"
