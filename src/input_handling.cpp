@@ -117,8 +117,9 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
   // A pending wheel-nudge fade undo block must not swallow this click's own edits.
   FlushFadeWheelUndo();
 
-  // Stop standalone preview on click (allows repositioning cursor)
-  if (m_previewActive) StandaloneCleanupPreview();
+  // Stop standalone preview on click (allows repositioning cursor) - except on
+  // a channel badge: solo keeps playing (s20, StandaloneRestartPreviewForSolo).
+  if (m_previewActive && m_waveform.ChannelButtonAt(x, y) < 0) StandaloneCleanupPreview();
 
   // An open inline dynamics value-editor commits on any click anywhere in the window;
   // the click is then swallowed (it just dismisses the editor). Inert unless editing,
@@ -708,6 +709,13 @@ void SneakPeak::OnMouseDownWaveform(int x, int y, WPARAM wParam)
             g_SetEditCurPos(editPos, false, false);              // restore edit cursor
           }
           if (g_UpdateArrange) g_UpdateArrange();
+        }
+        // Standalone has no take: the preview file carries the soloed channel
+        // alone (the other side written silent) and a running preview restarts
+        // at its position with the new mix (s20, user report).
+        if (m_waveform.IsStandaloneMode()) {
+          m_previewCacheDirty = true;
+          StandaloneRestartPreviewForSolo();
         }
         Invalidate();
         return;

@@ -235,6 +235,7 @@ public:
   // Channel active state (solo badges: both on by default; audio = take pan balance, host-side)
   bool IsChannelActive(int ch) const { return m_channelActive[ch]; } // ch: 0=L, 1=R
   void ResetChannelsActive() { m_channelActive[0] = m_channelActive[1] = true; } // re-arm badges (solo is per-take)
+  int  ChannelButtonAt(int x, int y) const; // badge under (x, y): 0 / 1, or -1
   bool ClickChannelButton(int x, int y); // returns true if hit
 
 

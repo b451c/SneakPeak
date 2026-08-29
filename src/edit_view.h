@@ -781,6 +781,7 @@ private:
   bool StandaloneWritePreviewFile(int startFrame, int endFrame);
   bool StandaloneStartPreviewPlayback(double curpos, bool loopFlag, double displayOffset);
   void StandaloneCleanupPreview();
+  void StandaloneRestartPreviewForSolo();   // badge toggle while playing (s20)
   std::string m_savedPath;           // last saved path (empty = never saved)
   bool m_overwriteConfirmed = false; // confirmed overwrite of original WAV
 

@@ -701,6 +701,22 @@ void SneakPeak::StandaloneCleanupPreview()
   m_previewSeam = false;
 }
 
+// A badge toggle while the preview plays (s20): rewrite the file with the new
+// channel mix and pick the playback up where it was (same range, loop flag and
+// display offset - a Loop Lab audition keeps looping).
+void SneakPeak::StandaloneRestartPreviewForSolo()
+{
+  if (!m_previewActive || !m_previewReg) return;
+  auto* reg = (preview_register_t*)m_previewReg;
+  const double curpos = reg->curpos;
+  const bool loop = m_previewLoop;
+  const double offset = m_previewLoopOffset;
+  const int s0 = m_previewCacheStart, s1 = m_previewCacheEnd;
+  StandaloneCleanupPreview();
+  if (StandaloneWritePreviewFile(s0, s1))
+    StandaloneStartPreviewPlayback(curpos, loop, offset);
+}
+
 // Write [startFrame, endFrame) of the current buffer to the preview temp WAV
 // (non-destructive fades applied at their whole-file positions first). The
 // rewrite is skipped when audio, fades AND the requested range are unchanged;
@@ -723,6 +739,14 @@ bool SneakPeak::StandaloneWritePreviewFile(int startFrame, int endFrame)
 
   std::vector<double> previewData = StandaloneFadedCopy();
   if (previewData.empty()) return false;
+
+  // Channel solo (s20): the soloed channel plays alone - the other side is
+  // written silent so the file keeps its layout (the badge owns the display,
+  // this owns the audio; Standalone has no take pan to lean on).
+  for (int c = 0; c < nch && c < 2; c++) {
+    if (m_waveform.IsChannelActive(c)) continue;
+    for (size_t i = (size_t)c; i < previewData.size(); i += (size_t)nch) previewData[i] = 0.0;
+  }
 
   // Slice the requested range (whole file = no-op)
   if (startFrame > 0 || endFrame < frames) {

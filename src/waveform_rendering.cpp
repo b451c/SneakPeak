@@ -1187,13 +1187,13 @@ void WaveformView::SetFadeDragInfo(int dragType, int shape)
   m_fadeDragShape = shape;
 }
 
-bool WaveformView::ClickChannelButton(int x, int y)
+int WaveformView::ChannelButtonAt(int x, int y) const
 {
-  if (m_numChannels < 2) return false;
-  if (m_multiItemActive && m_multiItem.GetMode() == MultiItemMode::LANES) return false;  // no badge in Lanes
+  if (m_numChannels < 2) return -1;
+  if (m_multiItemActive && m_multiItem.GetMode() == MultiItemMode::LANES) return -1;  // no badge in Lanes
 
   int scaleLeft = m_rect.right - SP(DB_SCALE_WIDTH);
-  if (x < scaleLeft || x > m_rect.right) return false;
+  if (x < scaleLeft || x > m_rect.right) return -1;
 
   int btnW = SP(CHAN_BTN_WIDTH), btnH = SP(CHAN_BTN_HEIGHT);
   int btnX = scaleLeft + (SP(DB_SCALE_WIDTH) - btnW) / 2;
@@ -1203,18 +1203,22 @@ bool WaveformView::ClickChannelButton(int x, int y)
     int chH = GetChannelHeight();
     int centerY = chTop + chH / 2;
     int btnY = centerY - btnH / 2;
-
-    if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
-      // Toggle this channel — but don't allow both off
-      bool newState = !m_channelActive[ch];
-      int other = 1 - ch;
-      if (!newState && !m_channelActive[other])
-        return false; // would mute both — disallow
-      m_channelActive[ch] = newState;
-      return true;
-    }
+    if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) return ch;
   }
-  return false;
+  return -1;
+}
+
+bool WaveformView::ClickChannelButton(int x, int y)
+{
+  const int ch = ChannelButtonAt(x, y);
+  if (ch < 0) return false;
+  // Toggle this channel — but don't allow both off
+  bool newState = !m_channelActive[ch];
+  int other = 1 - ch;
+  if (!newState && !m_channelActive[other])
+    return false; // would mute both — disallow
+  m_channelActive[ch] = newState;
+  return true;
 }
 
 void WaveformView::DrawFadeBackground(HDC hdc)
