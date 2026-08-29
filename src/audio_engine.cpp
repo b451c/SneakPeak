@@ -179,6 +179,10 @@ bool AudioEngine::ReadWavFile(const std::string& path, WavInfo& info,
     std::vector<int16_t> buf(totalSamples);
     size_t read = fread(buf.data(), sizeof(int16_t), totalSamples, f);
     for (size_t i = 0; i < read; i++) samples[i] = (double)buf[i] / 32768.0;
+  } else if (info.bitsPerSample == 32) {   // 32-bit integer PCM (field recorders)
+    std::vector<int32_t> buf(totalSamples);
+    size_t read = fread(buf.data(), sizeof(int32_t), totalSamples, f);
+    for (size_t i = 0; i < read; i++) samples[i] = (double)buf[i] / 2147483648.0;
   } else if (info.bitsPerSample == 24) {
     std::vector<uint8_t> buf(totalSamples * 3);
     size_t bytesRead = fread(buf.data(), 1, totalSamples * 3, f);
@@ -355,6 +359,44 @@ bool AudioEngine::ProbeSource(const std::string& path, int* nch, int* sr, int64_
   *frames = (int64_t)(src->GetLength() * (double)*sr);
   delete src;
   return *nch > 0 && *sr > 0 && *frames > 0;
+}
+
+bool AudioEngine::OpenSourceReader(const std::string& path, SourceReader& r)
+{
+  CloseSourceReader(r);
+  if (!g_PCM_Source_CreateFromFile) return false;
+  PCM_source* src = g_PCM_Source_CreateFromFile(path.c_str());
+  if (!src) return false;
+  const int nch = src->GetNumChannels();
+  const int sr = (int)src->GetSampleRate();
+  const int64_t frames = (int64_t)(src->GetLength() * (double)sr);
+  if (nch <= 0 || sr <= 0 || frames <= 0) { delete src; return false; }
+  r.src = src; r.nch = nch; r.sr = sr; r.frames = frames; r.pos = 0;
+  return true;
+}
+
+int AudioEngine::ReadSourceChunk(SourceReader& r, double* out, int maxFrames)
+{
+  if (!r.src || r.pos >= r.frames || maxFrames <= 0) return 0;
+  const int n = (int)std::min<int64_t>(maxFrames, r.frames - r.pos);
+  PCM_source_transfer_t transfer = {};
+  transfer.time_s = (double)r.pos / (double)r.sr;
+  transfer.length = n;
+  transfer.nch = r.nch;
+  transfer.samplerate = r.sr;
+  transfer.samples = out;
+  r.src->GetSamples(&transfer);
+  const int got = transfer.samples_out;
+  if (got <= 0) { r.pos = r.frames; return 0; }   // decoder end: done with what decoded
+  r.pos += got;
+  return got;
+}
+
+void AudioEngine::CloseSourceReader(SourceReader& r)
+{
+  if (r.src) { delete r.src; r.src = nullptr; }
+  r.nch = r.sr = 0;
+  r.frames = r.pos = 0;
 }
 
 bool AudioEngine::BeginStream(const std::string& path, StreamLoad& s)

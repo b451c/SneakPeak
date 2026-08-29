@@ -200,6 +200,7 @@ void SneakPeak::Destroy()
   AudioEngine::AbortStream(m_stdLoad);
   AbortItemAudioLoad(); // releases the background item-load accessor
   AbortExportPump();
+  AbortConvertJob(nullptr);   // the destination never existed
   JoinDynamicsWorker(true);
   // Save floating window position/size
   if (!m_isDocked && g_SetExtState) {
@@ -905,6 +906,7 @@ void SneakPeak::OnTimer()
   // Background limiter apply: title progress + result swap on completion.
   LimiterApplyTick();
   StepDestructiveJob();     // F5: in-place file edit on the worker - title progress + finalize
+  StepConvertJob();         // Convert & go: decode slices, then the swap + the edit
   // Loop finder: publish finished candidates (INC-A2).
   LoopFindTick();
   // One-Shot Prep needs a single-item view (Standalone or plain ITEM mode,
@@ -2219,11 +2221,23 @@ void SneakPeak::InvalidateLimiterPreview()
 // specs. A few take queries per tick; the panel and the mirror only on change.
 void SneakPeak::SyncLimiterApplyStatus(bool force)
 {
-  const std::string reason = m_waveform.IsStandaloneMode() ? std::string() : LimiterTargetReason();
-  if (!force && reason == m_limApplyStatus) return;
-  m_limApplyStatus = reason;
-  m_limiterPanel.SetApplyStatus(reason.c_str());
-  if (g_SetExtState) g_SetExtState("SneakPeak", "lim_apply_status", reason.c_str(), false);
+  std::string reason, note;
+  if (!m_waveform.IsStandaloneMode()) {
+    reason = LimiterTargetReason();
+    if (!reason.empty()) {
+      note = reason;
+    } else {
+      const std::string ext = DestructiveConvertExt();   // Convert & go: Apply runs, the note says so
+      if (!ext.empty()) note = "APPLY CONVERTS THE " + ext + " TO WAV, THEN LIMITS IT";
+    }
+  }
+  if (!force && note == m_limApplyStatus) return;
+  m_limApplyStatus = note;
+  m_limiterPanel.SetFooter(note.c_str(), reason.empty());
+  if (g_SetExtState) {
+    g_SetExtState("SneakPeak", "lim_apply_status", reason.c_str(), false);
+    g_SetExtState("SneakPeak", "lim_footer_note", note.c_str(), false);
+  }
   Invalidate();
 }
 

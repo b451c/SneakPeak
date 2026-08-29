@@ -417,20 +417,32 @@ std::string SneakPeak::DestructiveTargetReason() const
 {
   if (m_waveform.IsMultiItem()) return "not available in Multi-item view";
   if (m_destructiveJob.active) return m_destructiveJob.verb + " in progress - wait or press Esc";
+  if (m_convertJob.active) return "converting to WAV - wait or press Esc";
   MediaItem_Take* take = m_waveform.GetTake();
   if (!m_waveform.HasItem() || !take) return "no item loaded";
   if (AudioEngine::IsSectionSource(take)) return "the take plays a section or reversed source";
   const std::string path = AudioEngine::GetSourceFilePath(take);
   if (path.empty()) return "the source has no file on disk";
-  std::string ext;
-  const size_t dot = path.find_last_of('.');
-  if (dot != std::string::npos) ext = path.substr(dot + 1);
-  for (auto& c : ext) c = (char)tolower((unsigned char)c);
-  if (ext != "wav" && ext != "wave") {
-    for (auto& c : ext) c = (char)toupper((unsigned char)c);
-    return "the source is " + ext + " - WAV only (use Edit Copy)";
+  if (!DestructiveConvertExt().empty()) return std::string();   // Convert & go decodes it to a WAV first
+  // A WAV the in-place editor cannot rewrite (8-bit, ADPCM, ...) is refused
+  // from the header, before the prompt. Cached per path: the limiter panel
+  // asks every tick.
+  if (path != m_wavCheckPath) {
+    m_wavCheckPath = path;
+    m_wavCheckReason.clear();
+    WavInfo info;
+    if (!AudioEngine::ReadWavHeader(path, info)) {
+      m_wavCheckReason = "the WAV header could not be read";
+    } else if (!((info.audioFormat == 1 && (info.bitsPerSample == 16 || info.bitsPerSample == 24 ||
+                                            info.bitsPerSample == 32)) ||
+                 (info.audioFormat == 3 && info.bitsPerSample == 32))) {
+      char buf[96];
+      snprintf(buf, sizeof(buf), "the source is %d-bit %s WAV - 16/24/32-bit PCM or 32-bit float only",
+               info.bitsPerSample, info.audioFormat == 1 ? "PCM" : "non-PCM");
+      m_wavCheckReason = buf;
+    }
   }
-  return std::string();
+  return m_wavCheckReason;
 }
 
 bool SneakPeak::DestructiveTargetOk()
@@ -1530,7 +1542,7 @@ void SneakPeak::DoFadeOut()
   Invalidate();
 }
 
-void SneakPeak::DoReverse()
+void SneakPeak::DoReverse(bool afterConvert)
 {
   // Destructive — no REAPER non-destructive reverse available. Needs no
   // samples: the file is edited in place (8b); the buffer edit below is
@@ -1554,10 +1566,14 @@ void SneakPeak::DoReverse()
   }
 
   if (!DestructiveTargetOk()) return;
-  int ret = MessageBox(m_hwnd,
-    "Reverse modifies the audio file on disk. Continue?",
-    "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
-  if (ret != IDYES) return;
+  if (!afterConvert && !DestructiveConvertExt().empty()) {   // Convert & go: its prompt covers the edit
+    StartConvertToWav("reverse it", [this]() { DoReverse(true); });
+    return;
+  }
+  if (!afterConvert &&
+      MessageBox(m_hwnd, "Reverse modifies the audio file on disk. Continue?",
+                 "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING) != IDYES)
+    return;
 
   int startF, endF;
   GetSelectionSampleRange(startF, endF);
@@ -1575,7 +1591,7 @@ void SneakPeak::DoReverse()
     });
 }
 
-void SneakPeak::DoGain(double factor)
+void SneakPeak::DoGain(double factor, bool afterConvert)
 {
   if (!m_waveform.HasItem()) return;
 
@@ -1634,13 +1650,19 @@ void SneakPeak::DoGain(double factor)
   if (m_waveform.HasSelection()) {
     // Partial selection: destructive gain on selection only
     if (!DestructiveTargetOk()) return;   // Multi-item view is one of its reasons
+    if (!afterConvert && !DestructiveConvertExt().empty()) {   // Convert & go: its prompt covers the edit
+      char verb[64];
+      snprintf(verb, sizeof(verb), "apply %+.1f dB to the selection", 20.0 * log10(factor));
+      StartConvertToWav(verb, [this, factor]() { DoGain(factor, true); });
+      return;
+    }
     // F1 (UX audit 2026-08-29): the only destructive command that did not ask.
     char prompt[96];
     snprintf(prompt, sizeof(prompt),
              "Gain %+.1f dB on the selection modifies the audio file on disk. Continue?",
              20.0 * log10(factor));
-    if (MessageBox(m_hwnd, prompt, "SneakPeak - Destructive Operation",
-                   MB_YESNO | MB_ICONWARNING) != IDYES) return;
+    if (!afterConvert && MessageBox(m_hwnd, prompt, "SneakPeak - Destructive Operation",
+                                    MB_YESNO | MB_ICONWARNING) != IDYES) return;
 
     int startF, endF;
     GetSelectionSampleRange(startF, endF);
@@ -1701,7 +1723,7 @@ void SneakPeak::DoGain(double factor)
   Invalidate();
 }
 
-void SneakPeak::DoDCRemove()
+void SneakPeak::DoDCRemove(bool afterConvert)
 {
   // Destructive — edits the file in place (8b); no samples needed (8g)
   if (!m_waveform.HasItem()) return;
@@ -1723,10 +1745,14 @@ void SneakPeak::DoDCRemove()
   }
 
   if (!DestructiveTargetOk()) return;
-  int ret = MessageBox(m_hwnd,
-    "DC Offset Remove modifies the audio file on disk. Continue?",
-    "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
-  if (ret != IDYES) return;
+  if (!afterConvert && !DestructiveConvertExt().empty()) {   // Convert & go: its prompt covers the edit
+    StartConvertToWav("remove its DC offset", [this]() { DoDCRemove(true); });
+    return;
+  }
+  if (!afterConvert &&
+      MessageBox(m_hwnd, "DC Offset Remove modifies the audio file on disk. Continue?",
+                 "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING) != IDYES)
+    return;
 
   int startF, endF;
   GetSelectionSampleRange(startF, endF);
@@ -1992,7 +2018,7 @@ void SneakPeak::DoApplyDynamicsStandalone()
 // are the panel's greyed-Apply reasons (LimiterTargetReason), re-checked
 // here; the confirm is the only dialog. Nothing above the ceiling with 0 dB
 // gain leaves the file, the undo slot and REAPER's undo history alone.
-void SneakPeak::DoApplyLimiterItem()
+void SneakPeak::DoApplyLimiterItem(bool afterConvert)
 {
   if (m_waveform.IsStandaloneMode()) return;
   {
@@ -2004,6 +2030,10 @@ void SneakPeak::DoApplyLimiterItem()
       return;
     }
   }
+  if (!afterConvert && !DestructiveConvertExt().empty()) {   // Convert & go: its prompt covers the edit
+    StartConvertToWav("limit it", [this]() { DoApplyLimiterItem(true); });
+    return;
+  }
   int64_t s0, s1;
   GetSelectionSourceRange(s0, s1);
   if (s1 - s0 < 64) {
@@ -2012,10 +2042,10 @@ void SneakPeak::DoApplyLimiterItem()
   }
   const int ramp = (int)(0.020 * m_waveform.GetSourceSampleRate() + 0.5);   // handoff into the untouched file
 
-  int ret = MessageBox(m_hwnd,
-    "Hard Limiter modifies the audio file on disk. Continue?",
-    "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING);
-  if (ret != IDYES) return;
+  if (!afterConvert &&
+      MessageBox(m_hwnd, "Hard Limiter modifies the audio file on disk. Continue?",
+                 "SneakPeak - Destructive Operation", MB_YESNO | MB_ICONWARNING) != IDYES)
+    return;
 
   // The display: a full-rate buffer that maps 1:1 onto the range takes the
   // worker's processed samples; otherwise (lazy, downsampled, folded or

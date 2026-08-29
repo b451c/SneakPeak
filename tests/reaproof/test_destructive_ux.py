@@ -8,19 +8,15 @@ the control: the user never answers Yes and gets refused by a second box.
 F3 - the Hard Limiter on an item limits the item's window of the file in place
 (trimmed items, downsampled buffers), like Reverse/Gain/DC, instead of
 demanding the whole file.
-Real-voice fixtures (memory feedback_real_voice_fixtures): the refusals run on
-a copy of the 22-minute 22 kHz mono MP3 (a lazy item: no buffer at all), the
-limiter on a copy of the 1.9-minute 48 kHz voice WAV.
-Control 2328139: Gain writes without asking; Reverse/DC prompt Yes/No and then
-pop the "WAV only" box; Gain on the MP3 pops the box at once; the limiter on a
-trimmed WAV refuses ("needs the whole file"), on a 5-minute item refuses
-("too long"), and its panel never opens on the lazy MP3.
+Real-voice fixture (memory feedback_real_voice_fixtures): the limiter on a copy of
+the 1.9-minute 48 kHz voice WAV. Non-WAV sources: test_destructive_convert.py.
+Control 2328139: Gain writes without asking; the limiter on a trimmed WAV
+refuses ("needs the whole file"), on a 5-minute item refuses ("too long").
 """
 from __future__ import annotations
 
 import hashlib
-import itertools
-import shutil
+
 import time
 from pathlib import Path
 
@@ -30,7 +26,7 @@ import soundfile as sf
 
 from conftest import (SELECT_ITEM0, burst_fixture, capture, clear_project, dismiss_native_modal,
                       ensure_window, insert_item_unselected, locate_apply_button, perf_media_dir,
-                      send_command, wait_audio_loaded, wait_destructive_job, wait_loaded, wait_main_thread_idle)
+                      send_command, wait_audio_loaded, wait_destructive_job, wait_loaded)
 
 # edit_view.h enum ContextMenuID (compiled 2026-08-29: CM_LAST 2264)
 CM_SELECT_ALL, CM_REVERSE, CM_GAIN_UP, CM_DC_REMOVE, CM_APPLY_LIMITER = 2007, 2012, 2013, 2015, 2176
@@ -77,9 +73,6 @@ def _load(sess, media: Path, *, lazy=False, trim_s: float | None = None):
     _clear_toast(sess)
 
 
-_N = itertools.count(1)
-
-
 def _corpus(original: Path) -> Path:
     """The corpus file: the dev Mac's volume, else a copy under
     perf_media_dir()/corpus (the VM legs), else the test is skipped."""
@@ -89,14 +82,6 @@ def _corpus(original: Path) -> Path:
     if alt.exists():
         return alt
     pytest.skip(f"real-voice corpus file missing: {original.name}")
-
-
-def _real_mp3() -> Path:
-    """A fresh copy per call: Windows keeps the previous test's copy open in
-    REAPER's decoder pool, and copying over it is a sharing violation."""
-    mp3 = perf_media_dir() / f"ux_real_zachlebem_64kb_{next(_N)}.mp3"
-    shutil.copy(_corpus(MP3), mp3)
-    return mp3
 
 
 def _real_wav_hot(name: str) -> Path:
@@ -127,34 +112,6 @@ def test_gain_on_a_selection_asks_before_rewriting_the_file(sess):
 
 
 # --- F2: refusals come before any prompt -----------------------------------------
-
-@pytest.mark.parametrize("name, cmd, select", [
-    ("Reverse", CM_REVERSE, False),
-    ("DC Offset Remove", CM_DC_REMOVE, False),
-    ("Gain on selection", CM_GAIN_UP, True),
-])
-def test_destructive_edit_on_an_mp3_item_is_refused_before_any_prompt(sess, name, cmd, select):
-    """The 22-minute MP3 (lazy: no buffer). Control: Reverse/DC ask Yes/No and
-    THEN pop the 'WAV only' box; Gain pops the box at once. Fixed: one toast
-    naming the format and the way out (Edit Copy), no dialog, bytes untouched."""
-    mp3 = _real_mp3()
-    _load(sess, mp3, lazy=True)
-    sha0 = _sha(mp3)
-    if select:
-        send_command(sess, CM_SELECT_ALL)
-        time.sleep(0.3)
-
-    sess.eval(_fire(cmd))
-    modal = dismiss_native_modal(sess, timeout=4)
-    try:
-        assert not modal, f"{name}: a dialog appeared - the refusal must come first, on the control"
-        toast = _last_toast(sess)
-        assert "MP3" in toast and "Edit Copy" in toast, f"{name}: refusal toast missing: {toast!r}"
-        assert _sha(mp3) == sha0, f"{name}: the MP3's bytes changed"
-    finally:
-        dismiss_native_modal(sess, timeout=3)   # a control's second box would block the next test
-        wait_main_thread_idle(sess, timeout=60)
-
 
 # --- F3: the Hard Limiter works on the item's window -------------------------------
 
@@ -247,30 +204,3 @@ def test_limiter_on_a_downsampled_item_limits_the_file_at_its_own_rate(sess):
            (info0.samplerate, info0.channels, info0.subtype, info0.frames), f"format changed: {info0} -> {info1}"
     pk1 = _peak_db(media, 0.4, 1.6)
     assert pk1 <= -0.95, f"the burst still peaks at {pk1:.2f} dBFS (ceiling -1 dBTP)"
-
-
-def test_limiter_panel_on_an_mp3_item_shows_the_reason_instead_of_a_box(sess):
-    """A 60 s item of the MP3 (lazy). Control: the panel never opens (a silent
-    no-op) - or, once a buffer exists, Apply pops the 'WAV only' box. Fixed:
-    the panel opens, its Apply is greyed with the reason in the footer (the
-    footer status is mirrored in ExtState SneakPeak/lim_apply_status), and the
-    press yields the same reason as a toast - no dialog, bytes untouched."""
-    mp3 = _real_mp3()
-    _load(sess, mp3, lazy=True, trim_s=60.0)
-    sha0 = _sha(mp3)
-    sess.eval('reaper.DeleteExtState("SneakPeak", "lim_apply_status", false)')
-    SHOTS.mkdir(parents=True, exist_ok=True)
-
-    send_command(sess, CM_APPLY_LIMITER)
-    status = lambda: str(sess.eval('return reaper.GetExtState("SneakPeak", "lim_apply_status")'))
-    try:
-        sess.wait_until(lambda: "MP3" in status(), timeout=10)
-    except Exception:
-        toast = _last_toast(sess)
-        raise AssertionError(f"the panel did not open with the reason (status {status()!r}, toast {toast!r})")
-    time.sleep(0.5)
-    assert locate_apply_button(sess, SHOTS / "mp3_1_panel.png") is None, "Apply is still lit amber"
-    assert "Edit Copy" in status(), status()
-    modal = dismiss_native_modal(sess, timeout=3)
-    assert not modal, "a dialog appeared"
-    assert _sha(mp3) == sha0, "the MP3's bytes changed"

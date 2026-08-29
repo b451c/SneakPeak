@@ -2723,6 +2723,8 @@ void SneakPeak::OnKeyDown(WPARAM key)
     case VK_ESCAPE:
       if (m_destructiveJob.active) {
         m_destructiveJob.cancel.store(true);   // F5: the worker stops and rolls the file back
+      } else if (m_convertJob.active) {
+        AbortConvertJob("Conversion cancelled - nothing changed");
       } else if (m_dynamicsPanel.IsEditingValue()) {
         // Inline editor open (fallback WM_KEYDOWN path; the accelerator normally
         // consumes this) - ESC cancels the edit, never closes the panel.

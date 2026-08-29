@@ -503,9 +503,9 @@ void LimiterPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.outText = m_outText;
   vm.grText = m_grText;
   vm.applyPct = m_applyPct;
-  vm.applyEnabled = m_applyStatus.empty();
+  vm.applyEnabled = m_applyEnabled;
   vm.footerNote = !m_itemMode ? nullptr
-                  : vm.applyEnabled ? "APPLY REWRITES THE SOURCE FILE" : m_applyStatus.c_str();
+                  : m_footerNote.empty() ? "APPLY REWRITES THE SOURCE FILE" : m_footerNote.c_str();
 
   m_canvas.RenderLimiterPanel(hdc, pr.left, pr.top, pr.right - pr.left,
                               pr.bottom - pr.top, dpr, vm);

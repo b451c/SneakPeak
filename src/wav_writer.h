@@ -26,7 +26,7 @@ class WavWriter {
 public:
   ~WavWriter();   // Abort() when still open
 
-  // Unsupported depths fall back to 16-bit PCM (WriteWavFile parity).
+  // Unsupported depths (not 16/24/32-bit PCM or 32-bit float) fall back to 16-bit PCM.
   bool Begin(const std::string& path, int numChannels, int sampleRate,
              int bitsPerSample, int audioFormat);
   // False (and the tmp removed) on I/O failure or past the RIFF 4 GB limit.

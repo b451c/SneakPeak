@@ -66,6 +66,18 @@ public:
   };
   // False when PCM_Source is unavailable or the file is unreadable - the
   // caller falls back to the synchronous ReadAudioFile path.
+  // Chunked decode of ANY file REAPER can open (v2.5 Convert & go): no whole-
+  // file buffer - the conversion pump reads a chunk per tick and writes it
+  // out. Interleaved doubles at the source's own rate and channel count.
+  struct SourceReader {
+    PCM_source* src = nullptr;
+    int nch = 0, sr = 0;
+    int64_t frames = 0, pos = 0;
+  };
+  static bool OpenSourceReader(const std::string& path, SourceReader& r);
+  static int ReadSourceChunk(SourceReader& r, double* out, int maxFrames);   // 0 = done
+  static void CloseSourceReader(SourceReader& r);
+
   static bool BeginStream(const std::string& path, StreamLoad& s);
   // True while more audio remains; false = finished (info.numFrames trimmed
   // to what actually decoded, source closed).

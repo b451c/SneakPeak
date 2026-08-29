@@ -47,7 +47,7 @@ bool WavWriter::Begin(const std::string& path, int numChannels, int sampleRate,
   if (numChannels <= 0 || sampleRate <= 0) return false;
   // Force unsupported bit depths to 16-bit PCM for consistency
   if (!(audioFormat == 3 && bitsPerSample == 32) &&
-      bitsPerSample != 16 && bitsPerSample != 24) {
+      bitsPerSample != 16 && bitsPerSample != 24 && bitsPerSample != 32) {
     bitsPerSample = 16;
     audioFormat = 1;
   }
@@ -96,6 +96,11 @@ bool WavWriter::Write(const double* samples, int numFrames)
     for (size_t i = 0; i < total; i++) {
       const int16_t v = doubleToS16(samples[i]);
       memcpy(p + i * 2, &v, 2);
+    }
+  } else if (m_bits == 32) {   // 32-bit integer PCM (field recorders): kept, never folded to 16
+    for (size_t i = 0; i < total; i++) {
+      const int32_t v = (int32_t)std::max(-2147483648.0, std::min(2147483647.0, std::nearbyint(samples[i] * 2147483648.0)));
+      memcpy(p + i * 4, &v, 4);
     }
   } else {   // 24
     for (size_t i = 0; i < total; i++) doubleToS24(samples[i], p + i * 3);

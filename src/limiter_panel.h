@@ -78,9 +78,14 @@ public:
   // panel shows a footer note so the destructive reality is visible BEFORE
   // the Apply confirm prompt.
   void SetItemMode(bool item) { m_itemMode = item; }
-  // F2: ITEM mode - why Apply is greyed ("" = enabled), drawn in the footer
-  // instead of the standing note. A press still reaches the host (its toast).
-  void SetApplyStatus(const char* reason) { m_applyStatus = reason ? reason : ""; }
+  // F2: ITEM mode - the footer line ("" = the standing "APPLY REWRITES..."
+  // note) and whether Apply is enabled (a greyed Apply's press still reaches
+  // the host, whose toast repeats the reason).
+  void SetFooter(const char* note, bool applyEnabled)
+  {
+    m_footerNote = note ? note : "";
+    m_applyEnabled = applyEnabled;
+  }
   void SetPanelOffset(int ox, int oy) { m_offsetX = ox; m_offsetY = oy; }
   int  GetPanelOffsetX() const { return m_offsetX; }
   int  GetPanelOffsetY() const { return m_offsetY; }
@@ -114,7 +119,8 @@ private:
   char m_userName[64] = { 0 };   // loaded user-preset name (valid when idx == -2)
   bool m_mono = false;
   bool m_itemMode = false;       // INC-L2: destructive-apply footer note
-  std::string m_applyStatus;     // F2: greyed-Apply reason (ITEM mode)
+  std::string m_footerNote;      // F2: footer line (ITEM mode; "" = the standing note)
+  bool m_applyEnabled = true;
 
   int  m_offsetX = 0, m_offsetY = 0;   // panel-drag offsets (persisted by host)
   int  m_dragKnob = -1, m_dragLastY = 0;

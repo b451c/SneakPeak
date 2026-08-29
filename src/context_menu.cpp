@@ -259,6 +259,11 @@ void SneakPeak::OnRightClick(int x, int y)
   // items is the non-destructive insert (DoPaste): no label, no greying.
   const std::string rewriteReason = hasReaperItem ? DestructiveTargetReason() : std::string();
   const bool canRewrite = hasReaperItem && rewriteReason.empty();
+  // Convert & go: a non-WAV source is decoded to a WAV first - the rows say so.
+  const std::string convExt = hasReaperItem ? DestructiveConvertExt() : std::string();
+  const std::string rwSfx = convExt.empty() ? " (rewrites file)" : " (converts " + convExt + " to WAV)";
+  const std::string gainUpLbl = "Gain +3 dB on selection" + rwSfx, gainDownLbl = "Gain -3 dB on selection" + rwSfx;
+  const std::string revLbl = "Reverse" + rwSfx, dcLbl = "DC Offset Remove" + rwSfx, limLbl = "Hard Limiter..." + rwSfx;
   MenuAppend(editMenu, (hasItem && hasClip) ? MF_STRING : MF_GRAYED, CM_PASTE,
              isStandalone ? "Paste (destructive)\tCtrl+V" : "Paste\tCtrl+V");
   MenuAppend(editMenu, (hasItem && hasSel) ? MF_STRING : MF_GRAYED, CM_DELETE, "Delete\tDel");
@@ -286,10 +291,8 @@ void SneakPeak::OnRightClick(int x, int y)
   // Gain
   const bool gainRewrites = hasReaperItem && hasSel;
   const UINT gainFlags = (hasItem && (!gainRewrites || canRewrite)) ? MF_STRING : MF_GRAYED;
-  MenuAppend(procMenu, gainFlags, CM_GAIN_UP,
-             gainRewrites ? "Gain +3 dB on selection (rewrites file)" : "Gain +3 dB");
-  MenuAppend(procMenu, gainFlags, CM_GAIN_DOWN,
-             gainRewrites ? "Gain -3 dB on selection (rewrites file)" : "Gain -3 dB");
+  MenuAppend(procMenu, gainFlags, CM_GAIN_UP, gainRewrites ? gainUpLbl.c_str() : "Gain +3 dB");
+  MenuAppend(procMenu, gainFlags, CM_GAIN_DOWN, gainRewrites ? gainDownLbl.c_str() : "Gain -3 dB");
   MenuAppend(procMenu, hasItem ? MF_STRING : MF_GRAYED, CM_GAIN_PANEL, "Gain Control...\tG");
   MenuAppendSeparator(procMenu);
 
@@ -300,15 +303,14 @@ void SneakPeak::OnRightClick(int x, int y)
 
   // Rewrites of the source file (ITEM mode; Standalone edits its buffer)
   const UINT rwFlags = (hasReaperItem ? canRewrite : hasItem) ? MF_STRING : MF_GRAYED;
-  MenuAppend(procMenu, rwFlags, CM_REVERSE, hasReaperItem ? "Reverse (rewrites file)" : "Reverse");
-  MenuAppend(procMenu, rwFlags, CM_DC_REMOVE,
-             hasReaperItem ? "DC Offset Remove (rewrites file)" : "DC Offset Remove");
+  MenuAppend(procMenu, rwFlags, CM_REVERSE, hasReaperItem ? revLbl.c_str() : "Reverse");
+  MenuAppend(procMenu, rwFlags, CM_DC_REMOVE, hasReaperItem ? dcLbl.c_str() : "DC Offset Remove");
   const std::string limReason = hasReaperItem ? LimiterTargetReason() : std::string();
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   // True-peak hard limiter (v2.4.0 INC-L1 + L2): destructive, Standalone or
   // plain ITEM mode. Grayed (not hidden) elsewhere for discoverability.
   MenuAppend(procMenu, (hasReaperItem ? limReason.empty() : SingleBufferModeOk()) ? MF_STRING : MF_GRAYED,
-             CM_APPLY_LIMITER, hasReaperItem ? "Hard Limiter... (rewrites file)" : "Hard Limiter...");
+             CM_APPLY_LIMITER, hasReaperItem ? limLbl.c_str() : "Hard Limiter...");
 #endif
   if (hasReaperItem && !canRewrite)
     MenuAppend(procMenu, MF_STRING | MF_GRAYED, 0, ("Cannot rewrite the file: " + rewriteReason).c_str());

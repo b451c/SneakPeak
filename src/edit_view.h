@@ -354,14 +354,16 @@ private:
   void DoNormalize();
   void DoFadeIn();
   void DoFadeOut();
-  void DoReverse();
-  void DoGain(double factor);
-  void DoDCRemove();
+  // afterConvert: run by the Convert & go job after the source swap - the
+  // conversion prompt already covered the edit, no second question.
+  void DoReverse(bool afterConvert = false);
+  void DoGain(double factor, bool afterConvert = false);
+  void DoDCRemove(bool afterConvert = false);
   void DoNormalizeLUFS(double targetLufs = -14.0);
   void DoSpectralHeal(double strength);  // v2.3.0 INC-5: STFT heal of time x freq selection
   void DoRepairClicks();                 // v2.3.0 INC-5: AR click repair on time selection
   void DoApplyLimiter();                 // v2.4.0 INC-L1: true-peak hard limiter apply
-  void DoApplyLimiterItem();             // INC-L2 / F3: ITEM mode, in-place rewrite of the item's window
+  void DoApplyLimiterItem(bool afterConvert = false);   // INC-L2 / F3: ITEM mode, in-place rewrite of the item's window
   // F2/F3: the limiter's greyed-Apply reason on top of DestructiveTargetReason
   // ("" = Apply can run): the view shape and the in-memory range cap.
   std::string LimiterTargetReason() const;
@@ -424,6 +426,30 @@ private:
   // now ("" = it can) - evaluated BEFORE any prompt and shown on the control.
   std::string DestructiveTargetReason() const;
   bool DestructiveTargetOk();   // toast the reason + false; never a dialog
+  mutable std::string m_wavCheckPath, m_wavCheckReason;   // header check, cached per source path
+
+  // v2.5 Convert & go (convert_job.cpp): a destructive edit on a non-WAV item
+  // decodes the source to a WAV next to it in OnTimer slices, points every
+  // take that used the file at the WAV (ReplaceSourceInTimeline) and then
+  // runs the edit it was asked for - one prompt, the original untouched.
+  struct ConvertJob {
+    AudioEngine::SourceReader reader;
+    WavWriter writer;
+    std::vector<double> chunk;
+    std::string srcPath, outPath, verb;
+    std::function<void()> then;        // the edit, after the swap (no second prompt)
+    WaveformSelection sel;             // the selection the edit was asked on
+    double viewStart = 0.0, viewDur = 0.0;
+    unsigned generation = 0;           // abort when the view moves on
+    int lastPct = -1;
+    bool active = false;
+  };
+  ConvertJob m_convertJob;
+  std::string DestructiveConvertExt() const;   // "MP3" when the source needs a WAV first, "" for a WAV
+  bool StartConvertToWav(const char* verb, std::function<void()> then);
+  void StepConvertJob();               // OnTimer: decode + write slices, title progress
+  void AbortConvertJob(const char* toast);
+  void FinishConvertJob();             // swap the source, reload, run the edit
   void FinishDestructiveWrite(bool written, bool restored);   // the refresh / failure report
   std::string UndoSnapshotPath() const;     // the free undo slot's file (a/b alternate)
   void GetSelectionSourceRange(int64_t& startFrame, int64_t& endFrame) const;

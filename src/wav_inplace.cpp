@@ -72,7 +72,7 @@ bool Open(const std::string& path, WavFile& w)
       w.fmt = fmt; w.nch = nch; w.bits = bits; w.rate = (int)rate;
       haveFmt = true;
     } else if (memcmp(id, "data", 4) == 0) {
-      const bool pcm = w.fmt == 1 && (w.bits == 16 || w.bits == 24);
+      const bool pcm = w.fmt == 1 && (w.bits == 16 || w.bits == 24 || w.bits == 32);
       const bool f32 = w.fmt == 3 && w.bits == 32;
       w.bpf = (w.bits / 8) * w.nch;
       if (!haveFmt || !(pcm || f32) || w.bpf <= 0) {
@@ -117,6 +117,8 @@ void Decode(const WavFile& w, const uint8_t* in, size_t n, double* out)
     for (size_t i = 0; i < n; i++) { float v; memcpy(&v, in + i * 4, 4); out[i] = (double)v; }
   } else if (w.bits == 16) {
     for (size_t i = 0; i < n; i++) { int16_t v; memcpy(&v, in + i * 2, 2); out[i] = (double)v / 32768.0; }
+  } else if (w.bits == 32) {
+    for (size_t i = 0; i < n; i++) { int32_t v; memcpy(&v, in + i * 4, 4); out[i] = (double)v / 2147483648.0; }
   } else {
     for (size_t i = 0; i < n; i++) {
       int32_t v = (int32_t)in[i * 3] | ((int32_t)in[i * 3 + 1] << 8) | ((int32_t)in[i * 3 + 2] << 16);
@@ -138,6 +140,9 @@ void Encode(const WavFile& w, const double* in, size_t n, uint8_t* out)
     if (w.bits == 16) {
       const int16_t s = (int16_t)std::max(-32768.0, std::min(32767.0, (double)std::lrint(in[i] * 32768.0)));
       memcpy(out + i * 2, &s, 2);
+    } else if (w.bits == 32) {
+      const int32_t s = (int32_t)std::max(-2147483648.0, std::min(2147483647.0, std::nearbyint(in[i] * 2147483648.0)));
+      memcpy(out + i * 4, &s, 4);
     } else {
       const int32_t s = (int32_t)std::max(-8388608.0, std::min(8388607.0, (double)std::lrint(in[i] * 8388608.0)));
       out[i * 3] = (uint8_t)(s & 0xFF);

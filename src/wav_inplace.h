@@ -5,7 +5,7 @@
 // truncated the file, F12). These ops stream through the file itself instead:
 // same inode (REAPER's pooled decoders see the edit at once - F7), every other
 // chunk untouched, O(chunk) memory. Ranges are [startFrame, endFrame) in FILE
-// frames and are clamped to the data chunk. PCM 16/24-bit and 32-bit float,
+// frames and are clamped to the data chunk. PCM 16/24/32-bit and 32-bit float,
 // the formats the rest of SneakPeak reads and writes. Pure stdio, no REAPER deps.
 #pragma once
 
