@@ -20,7 +20,7 @@ from pathlib import Path
 
 from conftest import (SELECT_ITEM0, assert_no_loading, burst_fixture, clear_project,
                       CM_TRACK_VIEW, db, dismiss_native_modal, ensure_window,
-                      insert_item_unselected, measure_after, mode_from_capture,
+                      insert_item_unselected, measure_after, measure_after_modal, mode_from_capture,
                       perf_media_dir, rss_mb, track_rms_windows, wait_audio_loaded,
                       wait_main_thread_idle, write_long_wav)
 
@@ -91,9 +91,11 @@ def test_reverse_on_a_lazy_item_edits_in_place_without_a_load(sess):
     wait_audio_loaded(sess, media.stem, timeout=30)
     assert_no_loading(sess, 2.0)          # lazy: nothing decodes on select
 
-    sess.eval('reaper.defer(function() reaper.Main_OnCommand(reaper.NamedCommandLookup("_SneakPeak_Reverse"), 0) end) return true')
-    assert dismiss_native_modal(sess), "the destructive confirmation never appeared"
-    wait_main_thread_idle(sess, timeout=240)   # the 20-min rewrite blocks REAPER for a while
+    # F5: the rewrite runs on a worker (the main thread is idle at once and the
+    # item is offline on Windows meanwhile) - wait for the job's title to clear.
+    m = measure_after_modal(sess, 'reaper.defer(function() reaper.Main_OnCommand(reaper.NamedCommandLookup("_SneakPeak_Reverse"), 0) end) return true',
+                            idle_marker=media.stem, progress_marker="Reversing", max_wait=240)
+    print(f"\n[lazy] reverse 20-min mono: {m}")
     sess.wait_until(lambda: (lambda h, t: db(t) > db(h) + 20)(*track_rms_windows(sess, [w_head, w_tail])),
                     timeout=60)
     head2, tail2 = track_rms_windows(sess, [w_head, w_tail])

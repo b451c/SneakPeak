@@ -68,7 +68,7 @@ def test_layered_paints_a_loading_layer_at_full_width(sess):
                                 f"the fixtures are too short to observe the loading paint")
     assert n_loading >= 0.9 * w, (f"a loading layer paints {n_loading} of {w} columns in Layered mode - "
                                   f"its .reapeaks peaks should cover the item")
-    wait_audio_loaded(sess, "long", timeout=180)
+    wait_audio_loaded(sess, "long", timeout=600)   # 46 min of stereo decode eagerly: > 180 s on the emulated Windows VM
     wait_main_thread_idle(sess, timeout=60)
     n_loaded, w2, title2 = _layer_columns(sess, SHOTS / "layered_loaded.png")
     print(f"[loading] loaded ({title2!r}): {n_loaded} of {w2} columns")
