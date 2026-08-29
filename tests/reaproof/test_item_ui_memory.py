@@ -52,8 +52,7 @@ def test_spectral_and_zoom_come_back_on_reselect(sess):
         send_command(sess, CM_ZOOM_IN)
         send_command(sess, CM_ZOOM_IN)
         time.sleep(0.5)
-        view_a = _view(sess)
-        assert 0.0 < view_a[1] < 14.0, f"zoom in did not narrow the view: {view_a}"
+        view_a = _view(sess)   # the control has no view= mirror: the spectral check below is its RED
 
         sess.eval(SELECT_B)
         wait_audio_loaded(sess, b.stem, timeout=60)
@@ -64,6 +63,7 @@ def test_spectral_and_zoom_come_back_on_reselect(sess):
         wait_audio_loaded(sess, a.stem, timeout=60)
         time.sleep(0.8)
         assert _ui(sess).get("spectral") == "1", "the spectral view did not come back on the item that had it"
+        assert 0.0 < view_a[1] < 14.0, f"zoom in did not narrow the view: {view_a}"
         view_a2 = _view(sess)
         assert abs(view_a2[0] - view_a[0]) < 0.01 and abs(view_a2[1] - view_a[1]) < 0.01, \
             f"the zoom did not come back: {view_a} -> {view_a2}"
