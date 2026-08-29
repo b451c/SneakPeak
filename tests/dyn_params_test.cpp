@@ -71,6 +71,7 @@ int main()
   lo.dsRangeDb = kDynParamRanges[19].lo; hi.dsRangeDb = kDynParamRanges[19].hi;
   lo.dsAttackMs = kDynParamRanges[20].lo; hi.dsAttackMs = kDynParamRanges[20].hi;
   lo.dsReleaseMs = kDynParamRanges[21].lo; hi.dsReleaseMs = kDynParamRanges[21].hi;
+  hi.dsSplit = true;
   RoundTrips(lo, "every field at its range minimum round-trips");
   RoundTrips(hi, "every field at its range maximum round-trips");
 
@@ -78,7 +79,7 @@ int main()
   DynamicsParams g;
   DynamicsParamsFromString("t=abc r=nan k=-5 a=99999 re=-1 m=1e9 la=inf gt=-100 gr=5 gh=-3 "
                            "gx=0 ghy=7 gat=-2 gre=1 up=7 mb=-4 dse=1 dsm=3 dsf=10 dsq=100 "
-                           "dst=-100 dsr=0 dsx=3 dsa=0 dsre=9999", g);
+                           "dst=-100 dsr=0 dsx=3 dsa=0 dsre=9999 dsb=1", g);
   Check(g.threshold == d.threshold, "t=abc keeps the default threshold");
   Check(g.ratio == d.ratio, "r=nan keeps the default ratio");
   Check(g.kneeDb == kDynParamRanges[2].lo, "k=-5 clamps to the knee minimum");
@@ -103,6 +104,7 @@ int main()
   Check(g.dsRangeDb == kDynParamRanges[19].hi, "dsx=3 clamps to the de-ess range maximum (0)");
   Check(g.dsAttackMs == kDynParamRanges[20].lo, "dsa=0 clamps to the de-ess attack minimum");
   Check(g.dsReleaseMs == kDynParamRanges[21].hi, "dsre=9999 clamps to the de-ess release maximum");
+  Check(g.dsSplit, "dsb=1 turns split-band on");
 
   // A near-sentinel value below the knob range is the sentinel, not the minimum.
   DynamicsParams n;

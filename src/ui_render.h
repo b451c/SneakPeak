@@ -95,6 +95,7 @@ struct DynPanelVM {
   int   dsMode   = 0;               // De-Ess detector: 0 = BP, 1 = HP (segmented pill)
   bool  dsEnable = false;           // De-Ess stage on (power dot in the DE-ESS pill)
   bool  dsListen = false;           // Listen: tint sibilant spans on the waveform
+  bool  dsSplit  = false;           // De-Ess apply mode: WIDE / SPLIT (Standalone only)
   int   dragHandle = -1;            // curve handle being dragged (-1 none, 0 knee, 1 gate) -> glow
   int   hoverHandle = -1;           // curve handle under the cursor -> lights its accent colour
   // Motion pass: the panel computes these from its animation clock; the renderer is a
@@ -125,6 +126,7 @@ struct DynLayout {
   URect rms[2];      // Peak / RMS segmented halves (Compressor tab; empty otherwise)
   URect dsMode[2];   // BP / HP detector segmented halves (De-Ess tab; empty otherwise)
   URect dsListen;    // Listen pill (De-Ess tab; empty otherwise)
+  URect dsSplit[2];  // WIDE / SPLIT apply-mode halves (De-Ess tab footer gap; empty otherwise)
   URect viewToggle[5]; // Dyn / Env / GR / Live / A-B pills (View tab; empty otherwise)
   URect meterScale[4]; // plot/GR-meter dB-floor selector segments (View tab; empty otherwise)
   URect compactToggle; // Compact-mode pill (View tab; empty otherwise)

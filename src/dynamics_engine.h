@@ -76,6 +76,12 @@ struct DynamicsParams {
   double dsRangeDb = -10.0;  // max reduction clamp, dB (0..-24)
   double dsAttackMs = 1.0;   // 0.5-10 ms
   double dsReleaseMs = 60.0; // 20-200 ms (shorter than comp: spare the next vowel)
+  // Split-band apply (v2.5.0 row 15): Standalone only - Apply cuts ONLY the
+  // detected band (y = x - (1 - g) * B(x), deess_engine DeEssApplySplit)
+  // instead of ducking the whole signal. Item views ignore it (the take
+  // envelope cannot split). Serialized last as "dsb=" (collision analysis at
+  // ToString); not part of the detector key.
+  bool dsSplit = false;
 };
 
 enum { COMP_MODE_DOWN = 0, COMP_MODE_UP = 1, COMP_MODE_BOTH = 2 };

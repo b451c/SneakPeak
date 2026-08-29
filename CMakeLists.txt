@@ -394,3 +394,27 @@ else()
     -fsigned-char
   )
 endif()
+
+# --- v2.5 row 15: split-band de-ess apply check ---
+# Pure-DSP test binary: DeEssApplySplit must be sample-exact where the band
+# gain is 1, cut the detector band by the band gain and leave the rest alone.
+# Machine-independent (exact compares + dB tolerances). Run via
+# tests/run_deess_split_test.sh.
+add_executable(deess_split_test
+  tests/deess_split_test.cpp
+  src/deess_engine.cpp
+)
+target_include_directories(deess_split_test PRIVATE src)
+target_compile_definitions(deess_split_test PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+)
+if(MSVC)
+  target_compile_options(deess_split_test PRIVATE /W3)
+else()
+  target_compile_options(deess_split_test PRIVATE
+    -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
+    -Wshadow
+    -Wconversion -Wno-sign-conversion
+    -fsigned-char
+  )
+endif()

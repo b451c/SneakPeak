@@ -52,17 +52,19 @@ void DynamicsParamsToString(const DynamicsParams& p, char* buf, int bufSize)
   // parser and old binaries reading new strings (graceful ignore). Within the
   // ds family no key's "X=" pattern occurs inside another ds key ("dsre="
   // contains "dsr"+"e", never "dsr="), so ds-vs-ds order is also safe.
+  // "dsb=" (v2.5.0 split-band, last): its only "X=" substrings are "b=" and
+  // "sb=", neither a key.
   snprintf(buf, bufSize,
     "t=%.1f r=%.1f k=%.1f m=%.1f am=%d a=%.1f re=%.1f la=%.1f rms=%d "
     "gt=%.1f gr=%.1f gh=%.1f gx=%.1f ghy=%.1f gat=%.1f gre=%.1f up=%d mb=%.1f "
-    "dse=%d dsm=%d dsf=%.0f dsq=%.2f dst=%.1f dsr=%.1f dsx=%.1f dsa=%.1f dsre=%.1f",
+    "dse=%d dsm=%d dsf=%.0f dsq=%.2f dst=%.1f dsr=%.1f dsx=%.1f dsa=%.1f dsre=%.1f dsb=%d",
     p.threshold, p.ratio, p.kneeDb, p.makeupDb, p.autoMakeup ? 1 : 0,
     p.attackMs, p.releaseMs, p.lookaheadMs, p.rmsMode ? 1 : 0,
     p.gateThreshDb, p.gateRangeDb, p.gateHoldMs,
     p.gateRatio, p.gateHystDb, p.gateAttackMs, p.gateReleaseMs,
     p.compMode, p.maxBoostDb,
     p.dsEnable ? 1 : 0, p.dsMode, p.dsFreqHz, p.dsQ, p.dsThreshDb,
-    p.dsRatio, p.dsRangeDb, p.dsAttackMs, p.dsReleaseMs);
+    p.dsRatio, p.dsRangeDb, p.dsAttackMs, p.dsReleaseMs, p.dsSplit ? 1 : 0);
 }
 
 bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
@@ -120,6 +122,9 @@ bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
   readKey("dsx", out.dsRangeDb);
   readKey("dsa", out.dsAttackMs);
   readKey("dsre", out.dsReleaseMs);
+  // v2.5.0 split-band switch - absent in old strings -> off (wideband).
+  double dsb = 0.0;
+  readKey("dsb", dsb); out.dsSplit = (dsb > 0.5);
   ClampDynamicsParams(out);
   return true;
 }

@@ -105,6 +105,7 @@ Right-click > Process > Dynamics Panel. SneakPeak auto-activates the take volume
 - **Extended ratio** (new in v2.4) - 1:1 through Inf:1 (true limiting, with a detent) and into over-compression (negative ratios).
 - **Noise gate** - a full downward expander (reworked in v2.4): ratio 1-10:1, hysteresis band against chatter, exposed attack/release, floors down to -90 dB threshold / -80 dB range, an Off detent.
 - **Wideband de-esser** (new in v2.4) - DE-ESS tab with a band-pass / high-pass detector driving a third gain-reduction stage, a hard reduction cap, and a LISTEN lane that paints every span the de-esser bites.
+- **Split-band de-esser in Standalone** (new in v2.5) - the WIDE / SPLIT switch on the DE-ESS tab makes Apply cut only the detector band during a sibilant (zero-phase, never boosts, untouched where idle) while the compressor, gate and makeup still apply wideband in the same pass.
 - **Per-stage bypass** (new in v2.4) - power dots on the COMP and GATE tabs audition each stage in real time, alongside the whole-chain A/B.
 - **Lookahead** - 0-20ms transient detection without latency cost.
 - **Tabbed control panel** - anti-aliased COMP / GATE / DE-ESS / View tabs with knobs, transfer plot and GR meter; every change updates the curves on the waveform in real time, and double-clicking a knob lets you type an exact value.

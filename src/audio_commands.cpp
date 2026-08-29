@@ -1987,24 +1987,40 @@ void SneakPeak::DoApplyDynamicsStandalone()
     return;
   }
 
-  // Per-point linear gains, then a per-sample lerp between neighbours.
-  std::vector<double> gains(pts.size());
-  for (size_t i = 0; i < pts.size(); i++)
-    gains[i] = pow(10.0, pts[i].dbAdjust / 20.0);
-
   std::vector<double> out(data.size());
-  size_t k = 0;
-  for (int i = 0; i < frames; i++) {
-    const double t = (double)i / (double)sr;
-    while (k + 1 < pts.size() && pts[k + 1].time <= t) k++;
-    double g = gains[k];
-    if (k + 1 < pts.size() && pts[k + 1].time > pts[k].time) {
-      double a = (t - pts[k].time) / (pts[k + 1].time - pts[k].time);
-      if (a < 0.0) a = 0.0;
-      if (a > 1.0) a = 1.0;
-      g += (gains[k + 1] - gains[k]) * a;
+  const DynamicsParams& p = m_dynamics.GetParams();
+  const std::vector<double>& dsGRs = m_dynamics.GetDeEssGRs();
+  const bool split = p.dsEnable && p.dsSplit && dsGRs.size() == pts.size();
+  if (split) {
+    // Split-band (v2.5.0 row 15): the de-ess share of the curve cuts only the
+    // detector band; comp + gate + makeup stay a wideband gain. Both lanes
+    // share the analysis grid (one point per step).
+    std::vector<double> gWide(pts.size()), gBand(pts.size());
+    for (size_t i = 0; i < pts.size(); i++) {
+      gWide[i] = pow(10.0, (pts[i].dbAdjust - dsGRs[i]) / 20.0);
+      gBand[i] = pow(10.0, dsGRs[i] / 20.0);
     }
-    for (int c = 0; c < nch; c++) out[(size_t)i * nch + c] = data[(size_t)i * nch + c] * g;
+    DeEssApplySplit(data.data(), out.data(), frames, nch, (double)sr, p.dsMode,
+                    p.dsFreqHz, p.dsQ, gWide, gBand, m_dynamics.GetTrace()->samplesPerStep);
+  } else {
+    // Per-point linear gains, then a per-sample lerp between neighbours.
+    std::vector<double> gains(pts.size());
+    for (size_t i = 0; i < pts.size(); i++)
+      gains[i] = pow(10.0, pts[i].dbAdjust / 20.0);
+
+    size_t k = 0;
+    for (int i = 0; i < frames; i++) {
+      const double t = (double)i / (double)sr;
+      while (k + 1 < pts.size() && pts[k + 1].time <= t) k++;
+      double g = gains[k];
+      if (k + 1 < pts.size() && pts[k + 1].time > pts[k].time) {
+        double a = (t - pts[k].time) / (pts[k + 1].time - pts[k].time);
+        if (a < 0.0) a = 0.0;
+        if (a > 1.0) a = 1.0;
+        g += (gains[k + 1] - gains[k]) * a;
+      }
+      for (int c = 0; c < nch; c++) out[(size_t)i * nch + c] = data[(size_t)i * nch + c] * g;
+    }
   }
 
   const double avgGr = m_dynamics.GetAvgGainReduction();
@@ -2012,7 +2028,9 @@ void SneakPeak::DoApplyDynamicsStandalone()
   data = std::move(out);
 
   char buf[96];
-  snprintf(buf, sizeof(buf), "Dynamics applied (avg GR %.1f dB)", avgGr);
+  snprintf(buf, sizeof(buf),
+           split ? "Dynamics applied (avg GR %.1f dB, de-ess split-band)"
+                 : "Dynamics applied (avg GR %.1f dB)", avgGr);
   ShowToast(buf);
   m_dirty = true;
   UpdateTitle();

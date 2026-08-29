@@ -12,6 +12,8 @@
 // from the specification. Double-precision Direct Form 1.
 #pragma once
 
+#include <vector>
+
 // One RBJ biquad section, Direct Form 1, double precision.
 struct DeEssBiquad {
   double b0 = 1.0, b1 = 0.0, b2 = 0.0; // normalized by a0
@@ -49,3 +51,30 @@ constexpr double DEESS_BUTTERWORTH4_Q2 = 1.30656296487637653;
 // cascade of two sections with the Qs above, q ignored. f0 is clamped to
 // [200 Hz, 0.45 * sampleRate]. Filters start at zero state (first ~1-2 ms read
 // low — attenuation-safe).
+
+// The detector chain for nch channels, filt[ch * nStages + s]: BP = one RBJ
+// band-pass at (f0, q); HP = the Butterworth pair at f0 (q ignored). f0 is
+// clamped to [200 Hz, 0.45 * fs], q to [0.1, 16]. Returns nStages. Shared by
+// DynTraceBuilder (the band lane) and DeEssApplySplit, so the band that is
+// measured is exactly the band that is cut.
+int DeEssSetupChain(std::vector<DeEssBiquad>& filt, int nch, double fs, int mode,
+                    double f0, double q);
+
+// Split-band apply (v2.5.0 row 15, Standalone Apply): per sample
+//   y = (x - (1 - gBand) * b) * gWide,   b = the band signal
+// b is the INPUT run through the detector chain forward AND backward (zero
+// phase, magnitude |B|^2 - the buffer is whole, so this offline luxury is
+// free). Zero phase is load-bearing: subtracting a causal band signal boosts
+// wherever its phase nears 180 deg (the Butterworth HP pair sits at 180 deg
+// exactly at f0: x - c * HP4(x) came out +3.4 dB there), while with a real,
+// non-negative |B|^2 the output magnitude is 1 - c * |B|^2 in [gBand, 1] -
+// a dynamic EQ cut in the detector's band that can never boost. Pre-ringing
+// is a fraction of a millisecond at de-ess frequencies. gBand / gWide are
+// linear gains on the analysis grid (step k covers frames [k * stepFrames,
+// (k + 1) * stepFrames)), interpolated linearly between steps exactly like
+// the wideband Standalone apply. gBand == 1 -> x untouched (0 * b == 0), so
+// wherever the de-esser is idle the output equals the wideband path. `out`
+// doubles as the band buffer (no third buffer on a 1 GB Standalone file).
+void DeEssApplySplit(const double* in, double* out, int frames, int nch, double fs,
+                     int mode, double f0, double q, const std::vector<double>& gWide,
+                     const std::vector<double>& gBand, int stepFrames);

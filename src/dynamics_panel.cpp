@@ -628,6 +628,16 @@ bool DynamicsPanel::OnMouseDownPremium(int x, int y, RECT pr)
     if (wantRms != m_params.rmsMode) { m_params.rmsMode = wantRms; m_paramsChanged = true; }
     return true;
   }
+  // WIDE / SPLIT de-ess apply mode (De-Ess tab, v2.5.0): a persisted param that
+  // only Apply reads - the curves do not change, so no re-analysis. Item views
+  // render it disabled and ignore the click (the envelope cannot split).
+  if (L.dsSplit[0].contains(lx, ly) || L.dsSplit[1].contains(lx, ly)) {
+    if (m_standalone) {
+      const bool wantSplit = L.dsSplit[1].contains(lx, ly);
+      if (wantSplit != m_params.dsSplit) { m_params.dsSplit = wantSplit; m_presetIdx = -1; }
+    }
+    return true;
+  }
 
   // View-tab state toggles (independent). Each flips exactly the member its GDI
   // counterpart does, so the host's existing polls fire unchanged: m_showDyn/Env/GR
@@ -1523,6 +1533,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
   vm.dsMode   = m_params.dsMode;
   vm.dsEnable = m_params.dsEnable;
   vm.dsListen = m_dsListen;
+  vm.dsSplit  = m_params.dsSplit;
   vm.meterFloorSel = m_meterFloorSel;
   vm.compact  = m_compactMode;
   vm.dragHandle = m_dragHandle;

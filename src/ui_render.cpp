@@ -857,13 +857,17 @@ DynLayout ComputeDynLayout(double w, double h, int activeTab, bool compact)
   // Peak/RMS detection pill (v2.3.0: moved here from the knob grid so M.Boost
   // could take that cell): centred in the footer gap between Apply and the tab
   // pill. Compressor tab only - detection mode pairs with the comp controls.
-  if (activeTab == 0) {
-    const double rmsSegW = 44.0, rmsH = 24.0;
+  // The De-Ess tab puts its WIDE/SPLIT apply-mode switch (v2.5.0) in the same
+  // slot - the knob cell there already holds BP/HP + LISTEN.
+  auto footerPair = [&](URect out[2]) {
+    const double segW = 44.0, segH = 24.0;
     const double gapL = L.apply.x + L.apply.w, gapR = pillX;
-    const double rx = gapL + ((gapR - gapL) - 2.0 * rmsSegW - 2.0) * 0.5;
-    L.rms[0] = { rx,                  fMid - rmsH * 0.5, rmsSegW, rmsH };
-    L.rms[1] = { rx + rmsSegW + 2.0,  fMid - rmsH * 0.5, rmsSegW, rmsH };
-  }
+    const double x0 = gapL + ((gapR - gapL) - 2.0 * segW - 2.0) * 0.5;
+    out[0] = { x0,              fMid - segH * 0.5, segW, segH };
+    out[1] = { x0 + segW + 2.0, fMid - segH * 0.5, segW, segH };
+  };
+  if (activeTab == 0) footerPair(L.rms);
+  if (activeTab == 2) footerPair(L.dsSplit);
 
   // Free-resize grip: bottom-right corner. Sits in the right pad margin, just past
   // the tab pill's right edge (w - pad), so it never overlaps the VIEW segment.
@@ -1182,7 +1186,7 @@ uint64_t UiCanvas::HashPanelVM(const DynPanelVM& vm, int devW, int devH)
   }
   b(vm.showDyn); b(vm.showEnv); b(vm.showGR); b(vm.liveMode); b(vm.bypassed); b(vm.standalone);
   b(vm.rmsMode); i(vm.mode); b(vm.compBypass); b(vm.gateBypass); i(vm.meterFloorSel); b(vm.compact);
-  i(vm.dsMode); b(vm.dsEnable); b(vm.dsListen); i(vm.dragHandle); i(vm.hoverHandle);
+  i(vm.dsMode); b(vm.dsEnable); b(vm.dsListen); b(vm.dsSplit); i(vm.dragHandle); i(vm.hoverHandle);
   i(vm.tabFrom); d(vm.tabSlideT); d(vm.livePulse);
   i(devW); i(devH);
   return hsh ? hsh : 1;   // 0 is "no raster"
@@ -1259,6 +1263,19 @@ void UiCanvas::RenderPanel(HDC hdc, int x, int y, int w, int h, double dpr,
                    vm.dsMode == 1);
     DrawTogglePill(ctx, *m_gfx, L.dsListen, "LISTEN", vm.dsListen,
                    dynui::kAmber, false, 0.0);
+    // De-Ess apply mode (footer gap): WIDE ducks everything through the
+    // envelope/buffer, SPLIT cuts only the detector band - a Standalone buffer
+    // edit, so item views render it disabled (the LIVE treatment; clicks no-op).
+    if (vm.standalone) {
+      DrawSegmented2(ctx, *m_gfx, L.dsSplit[0], L.dsSplit[1], "WIDE", "SPLIT", vm.dsSplit);
+    } else if (L.dsSplit[0].w >= 1.0) {
+      static const char* const kSplitLabels[2] = { "WIDE", "SPLIT" };
+      for (int s = 0; s < 2; ++s) {
+        FillURound(ctx, L.dsSplit[s], dynui::kRadiusCtrl, dynui::kSurface2);
+        if (m_gfx->fontsReady)
+          TextCentered(ctx, m_gfx->fLabel, L.dsSplit[s], kSplitLabels[s], dynui::kInkDisabled);
+      }
+    }
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[0], "DYN",  vm.showDyn,  dynui::kAmber,   false, 0.0);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[1], "ENV",  vm.showEnv,  dynui::kEnvCyan, false, 0.0);
     DrawTogglePill(ctx, *m_gfx, L.viewToggle[2], "GR",   vm.showGR,   dynui::kGrRed,   false, 0.0);

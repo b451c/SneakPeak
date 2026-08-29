@@ -32,19 +32,8 @@ void DynTraceBuilder::Begin(const DynTraceKey& key)
   m_nStages = 0;
   m_filt.clear();
   if (key.dsEnable) {
-    const double fs = (double)key.sampleRate;
-    const double f0 = std::max(200.0, std::min(0.45 * fs, key.dsFreqHz));
-    const double q = std::max(0.1, std::min(16.0, key.dsQ));
-    m_nStages = (key.dsMode == DEESS_MODE_HIGHPASS) ? 2 : 1;
-    m_filt.resize((size_t)m_nch * (size_t)m_nStages);
-    for (int ch = 0; ch < m_nch; ch++) {
-      if (key.dsMode == DEESS_MODE_HIGHPASS) {
-        m_filt[(size_t)ch * 2 + 0].SetHighpass(fs, f0, DEESS_BUTTERWORTH4_Q1);
-        m_filt[(size_t)ch * 2 + 1].SetHighpass(fs, f0, DEESS_BUTTERWORTH4_Q2);
-      } else {
-        m_filt[(size_t)ch].SetBandpass(fs, f0, q);
-      }
-    }
+    m_nStages = DeEssSetupChain(m_filt, m_nch, (double)key.sampleRate, key.dsMode,
+                                key.dsFreqHz, key.dsQ);
     T.band.reserve(steps);
   }
 }

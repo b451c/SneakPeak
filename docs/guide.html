@@ -191,6 +191,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <a href="#dynamics-panel" class="nav-link">Dynamics Panel</a>
     <a href="#dynamics-live" class="nav-link">Live Mode</a>
     <a href="#dynamics-gate" class="nav-link">Gate</a>
+    <a href="#dynamics-deess" class="nav-link">De-Esser</a>
     <a href="#dynamics-presets" class="nav-link">Presets</a>
     <a href="#dynamics-ab" class="nav-link">A/B Bypass</a>
   </div>
@@ -755,7 +756,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>SneakPeak includes a built-in dynamics processor that analyzes your audio and writes volume envelope points to achieve compression and gating. Instead of real-time DSP, it works offline - analyzing the audio and generating precise envelope automation. This means zero CPU cost during playback. Since v2.5 the analysis streams the item's source at its full sample rate on a background thread: full detector fidelity on items of any length (an hour-long file is analyzed at 44.1 kHz, not through a reduced buffer), the title shows "Analyzing dynamics... N%" while the first pass runs, knob changes recompute from the finished analysis in milliseconds, and only detector changes (Peak/RMS, RMS window, de-ess band) re-stream the file.</p>
 
-<p><strong>In Standalone mode</strong> the same panel works destructively, like a classic offline compressor: there is no envelope, so Apply multiplies the computed gain curve (compressor + gate + de-esser) directly into the audio, with one undo step. Live mode and A/B are envelope concepts and render disabled there; the preview curves stay fully live. Together with the Hard Limiter this completes the standalone "podcast chain": Dynamics &gt; Hard Limiter &gt; Save.</p>
+<p><strong>In Standalone mode</strong> the same panel works destructively, like a classic offline compressor: there is no envelope, so Apply multiplies the computed gain curve (compressor + gate + de-esser) directly into the audio, with one undo step. Live mode and A/B are envelope concepts and render disabled there; the preview curves stay fully live. Standalone also unlocks the <a href="#dynamics-deess">split-band de-esser</a> (the WIDE / SPLIT switch on the DE-ESS tab). Together with the Hard Limiter this completes the standalone "podcast chain": Dynamics &gt; Hard Limiter &gt; Save.</p>
 
 <p>The dynamics engine visualizes two curves on the waveform:</p>
 <ul>
@@ -844,9 +845,13 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p><strong>LISTEN</strong> paints an amber lane along the top of the waveform over every span the de-esser is reducing by more than 1 dB - the offline equivalent of a sidechain-listen switch, and the quickest way to spot false triggers (cymbals, bright vowels) before applying.</p>
 
+<h3 id="dynamics-deess-split">WIDE / SPLIT (Standalone)</h3>
+
+<p>In Standalone mode the DE-ESS tab shows a <strong>WIDE / SPLIT</strong> switch in the footer (where the Compressor tab keeps PEAK / RMS). <strong>WIDE</strong> is the classic broadband behavior described above, applied to the buffer. <strong>SPLIT</strong> turns Apply into a split-band de-esser: during a sibilant only the detector band is cut, by the amount the gain-reduction curve shows, and everything outside the band passes untouched - a dynamic EQ cut rather than a duck. The band is exactly the one the detector listens to: band-pass at <strong>Freq</strong> with <strong>Width</strong>, or everything above <strong>Freq</strong> in HP mode (there the cut is -3 dB at Freq itself, as with any filter corner, and full an octave above). The cut is applied with zero phase, so it can never boost and leaves the signal bit-for-bit untouched wherever the de-esser is idle; pre-ringing at de-ess frequencies is a fraction of a millisecond. The compressor, gate and makeup still apply as a wideband gain in the same pass, and there is one undo step for the whole Apply. The switch is saved with the panel settings; on items it renders disabled because a take envelope can only duck the whole signal.</p>
+
 <div class="warning">
-  <strong>Wideband topology</strong>
-  Because the reduction is written to the take volume envelope, the WHOLE signal ducks briefly during a sibilant - the classic broadband de-esser design, not a dynamic EQ. With the default -10 dB range this is the proven de-esser sound for voice work; a split-band mode (only the band ducks) is on the roadmap as a destructive edit.
+  <strong>Wideband topology on items</strong>
+  Because the reduction is written to the take volume envelope, on items the WHOLE signal ducks briefly during a sibilant - the classic broadband de-esser design, not a dynamic EQ. With the default -10 dB range this is the proven de-esser sound for voice work. For a band-only cut, open the file in Standalone (Edit Copy in Standalone brings an item over) and use SPLIT.
 </div>
 
 <h2 id="dynamics-presets">Presets</h2>
