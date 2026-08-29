@@ -272,6 +272,8 @@ private:
   void OnDoubleClick(int x, int y);
   bool HandlePendingClose();
   void ValidateItemPointers();
+  void PollProjectState();          // A6.2: follow edits made outside SneakPeak
+  bool SegmentsMatchProject() const; // every segment/layer still describes its item
   void UpdateAutoScroll();
   void UpdatePlaybackFollow();
   void UpdateGainPreview();
@@ -431,6 +433,7 @@ private:
   bool m_isDocked = false;
   bool m_hasFocus = false;
   int m_timelineEditGuard = 0; // ticks to suppress timeline exit after edit operation
+  int m_lastProjectState = -1;  // GetProjectStateChangeCount seen by PollProjectState
   WaveformSelection m_pendingSelRestore = {}; // selection to restore after guarded reload
   bool m_dragging = false;
   bool m_inMouseUp = false;         // re-entrancy guard: ReleaseCapture() inside OnMouseUp raises WM_CAPTURECHANGED

@@ -846,6 +846,9 @@ void SneakPeak::ToggleTrackSolo()
   if (segs.size() > 1) {
     for (const auto& seg : segs) {
       if (!seg.item) continue;
+      // A segment whose item REAPER deleted meanwhile (arrange edit, script,
+      // undo) is skipped, not dereferenced (audit A6.1).
+      if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)seg.item, "MediaItem*")) continue;
       MediaTrack* tr = g_GetMediaItem_Track(seg.item);
       if (!tr) continue;
       bool found = false;
@@ -855,6 +858,7 @@ void SneakPeak::ToggleTrackSolo()
   } else {
     MediaItem* item = m_waveform.GetItem();
     if (!item) return;
+    if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)item, "MediaItem*")) return;
     MediaTrack* tr = g_GetMediaItem_Track(item);
     if (tr) tracks.push_back(tr);
   }

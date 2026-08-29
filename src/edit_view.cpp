@@ -444,6 +444,17 @@ void SneakPeak::RefreshTimelineView()
     LoadSelectedItem();
     return;
   }
+  if (items.size() == 1) {
+    // One survivor (REAPER's undo of our split, the other items deleted in the
+    // arrange): a plain item view, as the delete path shows one survivor (A6.2).
+    m_waveform.ClearItem();
+    m_waveform.SetItem(items[0]);
+    m_waveform.UpdateFadeCache();
+    m_gainPanel.Show(items[0]);
+    UpdateTitle();
+    if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+    return;
+  }
 
   double viewStart = m_waveform.GetViewStart();
   double viewDur = m_waveform.GetViewDuration();
@@ -812,6 +823,7 @@ void SneakPeak::OnTimer()
   }
 
   ValidateItemPointers();
+  PollProjectState();
   UpdateAutoScroll();
   UpdatePlaybackFollow();
   UpdateGainPreview();
@@ -897,6 +909,82 @@ void SneakPeak::ValidateItemPointers()
     m_hasUndo = false;
     InvalidateRect(m_hwnd, nullptr, FALSE);
   }
+}
+
+// A6.2: a multi-segment view (Timeline, SET, Multi-item) caches item pointers
+// and positions. An edit made outside SneakPeak - a drag in the arrange, a
+// script, REAPER's own undo - left them stale: a deleted item's segment was
+// still painted (a crash once its memory was reused; GetTakeEnvelopeByName on
+// the dead take), a moved item put clicks and pastes where it used to be.
+// REAPER's project-state counter costs one int per tick; the view is rebuilt
+// only when a segment no longer describes its item, so our own edits never
+// trigger it: they refresh the view themselves under the edit guard, or leave
+// the geometry alone (envelope points, fades, volume).
+void SneakPeak::PollProjectState()
+{
+  if (!g_GetProjectStateChangeCount) return;
+  const int state = g_GetProjectStateChangeCount(nullptr);
+  if (state == m_lastProjectState) return;
+  if (m_timelineEditGuard > 0 || AnyDragActive()) return;   // ours in flight: look again when it settles
+  m_lastProjectState = state;
+  if (!m_waveform.HasItem() || m_waveform.IsStandaloneMode()) return;
+  const bool timeline = m_waveform.IsTimelineView();
+  const bool set = m_waveform.IsTrackView();
+  const bool multi = m_waveform.IsMultiItemActive();
+  if (!timeline && !set && !multi) return;   // a single item: UpdateItemState polls it
+  if (SegmentsMatchProject()) return;
+
+  // Rebuild from the project, keeping what the user had on screen.
+  const double viewStart = m_waveform.GetViewStart();
+  const double viewDur = m_waveform.GetViewDuration();
+  const WaveformSelection sel = m_waveform.GetSelection();
+  const double cursor = m_waveform.GetCursorTime();
+  if (timeline) RefreshTimelineView();
+  else if (set) RefreshWorkingSet();
+  else {
+    const int n = g_CountSelectedMediaItems ? g_CountSelectedMediaItems(nullptr) : 0;
+    if (n <= 1 || !LoadSelectedItemMulti(n)) { m_waveform.ClearItem(); LoadSelectedItem(); }
+  }
+  const double dur = m_waveform.HasItem() ? m_waveform.GetItemDuration() : 0.0;
+  if (dur > 0.0) {
+    m_waveform.SetViewStart(std::min(viewStart, std::max(0.0, dur - viewDur)));
+    m_waveform.SetViewDuration(std::min(viewDur, dur));
+    if (sel.active && std::min(sel.startTime, sel.endTime) < dur) {
+      WaveformSelection kept = sel;
+      kept.startTime = std::min(kept.startTime, dur);
+      kept.endTime = std::min(kept.endTime, dur);
+      m_waveform.SetSelection(kept);
+    }
+    m_waveform.SetCursorTime(std::min(cursor, dur));
+  }
+  m_waveform.Invalidate();
+  if (m_hwnd) InvalidateRect(m_hwnd, nullptr, FALSE);
+}
+
+bool SneakPeak::SegmentsMatchProject() const
+{
+  if (!g_GetMediaItemInfo_Value) return true;
+  auto same = [](double a, double b) { return std::fabs(a - b) < 1e-6; };
+  // Alive, same start, and the same end - a segment cut short by the next
+  // item (overlap) ends where that item starts instead.
+  auto matches = [&](MediaItem* item, double segStart, double segEnd, double nextStart) {
+    if (!item) return true;
+    if (g_ValidatePtr2 && !g_ValidatePtr2(nullptr, (void*)item, "MediaItem*")) return false;
+    const double pos = g_GetMediaItemInfo_Value(item, "D_POSITION");
+    const double end = pos + g_GetMediaItemInfo_Value(item, "D_LENGTH");
+    return same(segStart, pos) && (same(segEnd, end) || (nextStart >= 0.0 && same(segEnd, nextStart)));
+  };
+  if (m_waveform.IsMultiItemActive()) {
+    for (const auto& layer : m_waveform.GetMultiItemView().GetLayers())
+      if (!matches(layer.item, layer.position, layer.position + layer.duration, -1.0)) return false;
+    return true;
+  }
+  const auto& segs = m_waveform.GetSegments();
+  for (size_t i = 0; i < segs.size(); i++) {
+    const double next = i + 1 < segs.size() ? segs[i + 1].position : -1.0;
+    if (!matches(segs[i].item, segs[i].position, segs[i].position + segs[i].duration, next)) return false;
+  }
+  return true;
 }
 
 void SneakPeak::UpdateAutoScroll()

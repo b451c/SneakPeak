@@ -21,6 +21,7 @@ void (*g_SetMediaItemSelected)(MediaItem*, bool) = nullptr;
 MediaItem_Take* (*g_GetActiveTake)(MediaItem*) = nullptr;
 PCM_source* (*g_GetMediaItemTake_Source)(MediaItem_Take*) = nullptr;
 PCM_source* (*g_GetMediaSourceParent)(PCM_source*) = nullptr;
+int (*g_GetProjectStateChangeCount)(ReaProject*) = nullptr;
 double (*g_GetMediaItemInfo_Value)(MediaItem*, const char*) = nullptr;
 void* (*g_GetSetMediaItemTakeInfo)(MediaItem_Take*, const char*, void*) = nullptr;
 bool (*g_GetSetMediaItemTakeInfo_String)(MediaItem_Take*, const char*, char*, bool) = nullptr;

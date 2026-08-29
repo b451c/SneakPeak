@@ -50,6 +50,7 @@ extern void (*g_SetMediaItemSelected)(MediaItem* item, bool selected);
 extern MediaItem_Take* (*g_GetActiveTake)(MediaItem* item);
 extern PCM_source* (*g_GetMediaItemTake_Source)(MediaItem_Take* take);
 extern PCM_source* (*g_GetMediaSourceParent)(PCM_source* src);
+extern int (*g_GetProjectStateChangeCount)(ReaProject* proj);   // A6.2: project-edit poll
 extern double (*g_GetMediaItemInfo_Value)(MediaItem* item, const char* parmname);
 extern void* (*g_GetSetMediaItemTakeInfo)(MediaItem_Take* tk, const char* parmname, void* setNewValue);
 extern bool (*g_GetSetMediaItemTakeInfo_String)(MediaItem_Take* tk, const char* parmname, char* stringNeedBig, bool setNewValue);
