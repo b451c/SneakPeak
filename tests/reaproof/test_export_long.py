@@ -410,6 +410,7 @@ def test_one_shot_silence_slices_of_a_long_item_land_on_the_burst_edges(sess):
     edges land from the true burst edges (bursts at 0.5-1.5 s of every 10 s
     block, -20 dB threshold, no trim/pad). Reported in ms; the assertion is
     the 1 ms bar from the audit plan."""
+    clear_project(sess)                     # Windows: the previous item holds the file open
     media = _silent_burst_wav("long5min_silentbursts.wav", 300)
     clear_project(sess)
     for p in media.parent.glob(f"{media.stem}_0*.wav"):

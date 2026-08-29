@@ -660,11 +660,20 @@ def dismiss_native_modal(s, *, timeout: float = 15.0):
         import ctypes
         u32 = ctypes.windll.user32
         t0 = _t.monotonic()
+        buf = ctypes.create_unicode_buffer(256)
         while _t.monotonic() - t0 < timeout:
-            h = u32.FindWindowW(None, "SneakPeak - Destructive Operation")
-            if h:
-                u32.PostMessageW(h, 0x0111, 6, 0)   # WM_COMMAND, IDYES
-                return True
+            # every SneakPeak MessageBox (#32770): the destructive confirm, the
+            # "Overwrite original file?" question, the error boxes. Our own
+            # dialog window has no IDYES/IDOK control, so it never matches.
+            h = u32.FindWindowExW(None, None, "#32770", None)
+            while h:
+                u32.GetWindowTextW(h, buf, 256)
+                if buf.value.startswith("SneakPeak"):
+                    for cmd in (6, 1):                      # IDYES, then IDOK
+                        if u32.GetDlgItem(h, cmd):
+                            u32.PostMessageW(h, 0x0111, cmd, 0)   # WM_COMMAND
+                            return True
+                h = u32.FindWindowExW(None, h, "#32770", None)
             _t.sleep(0.02)
         return False
     import Quartz
@@ -759,7 +768,10 @@ def write_long_aac(path: Path, *, minutes: float, sr: int = 48000):
     samplerate different from the 44.1k project -> decode + resample on load."""
     if path.exists():
         return path
+    import shutil
     import subprocess
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not installed - the AAC fixture cannot be encoded here")
     tmp = path.with_suffix(".src.wav")
     write_long_wav(tmp, minutes=minutes, sr=sr, channels=2)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp),

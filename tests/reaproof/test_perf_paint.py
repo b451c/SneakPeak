@@ -25,6 +25,9 @@ import re
 import subprocess
 import threading
 import time
+import sys as _sys
+import pytest as _pytest
+pytestmark = _pytest.mark.skipif(_sys.platform != "darwin", reason="CGWindowList (Quartz) + the sample profiler - macOS leg")
 from pathlib import Path
 
 import numpy as np

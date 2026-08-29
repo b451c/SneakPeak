@@ -34,8 +34,8 @@ def _record(name: str, m: dict):
 
 
 def _rss_mb(sess) -> float:
-    out = subprocess.check_output(["ps", "-o", "rss=", "-p", str(sess.handle.pid)])
-    return int(out.strip()) / 1024.0
+    from conftest import rss_mb          # ps on macOS/Linux, GetProcessMemoryInfo on Windows
+    return rss_mb(sess)
 
 
 def _action(*names: str) -> str:
