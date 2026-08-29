@@ -430,6 +430,7 @@ private:
   void DiscardItemUndo();
   void SyncSelectionToReaper();
   void UpdateTitle();
+  void CacheFileSize(const std::string& path);   // info line: item source / Standalone file
   bool UndoSave();   // false = no pre-edit copy: the caller must not touch the file (A1.3)
   void UndoRestore();
   void RedoRestore();

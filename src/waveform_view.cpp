@@ -578,6 +578,8 @@ bool WaveformView::LoadFromFile(const std::string& path)
   m_numChannels = info.numChannels;
   if (m_numChannels < 1) m_numChannels = 1;
   if (m_numChannels > 2) m_numChannels = 2;
+  m_sourceRate = m_sampleRate;       // the buffer IS the file: the info line reads these,
+  m_srcChannels = m_numChannels;     // never the last item's (stale otherwise)
   m_audioSampleCount = info.numFrames;
   m_itemDuration = (double)info.numFrames / (double)m_sampleRate;
   m_itemPosition = 0.0;
@@ -605,6 +607,8 @@ void WaveformView::RestoreFromMemory(const std::string& path, std::vector<double
   m_numChannels = nch;
   if (m_numChannels < 1) m_numChannels = 1;
   if (m_numChannels > 2) m_numChannels = 2;
+  m_sourceRate = m_sampleRate;
+  m_srcChannels = m_numChannels;
   m_audioSampleCount = frames;
   m_audioData = std::move(audio);
   m_itemDuration = dur;

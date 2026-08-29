@@ -697,6 +697,16 @@ bool SneakPeak::LoadSelectedItemMulti(int count)
   return true;
 }
 
+// The info line's file size: the item's source, or the Standalone tab's file
+// (an open / tab switch used to leave the last item's size and rate on screen).
+void SneakPeak::CacheFileSize(const std::string& path)
+{
+  m_cachedFileSizeMB = 0.0;
+  struct stat st;
+  if (!path.empty() && stat(path.c_str(), &st) == 0)
+    m_cachedFileSizeMB = static_cast<double>(st.st_size) / (1024.0 * 1024.0);
+}
+
 void SneakPeak::LoadSelectedItem()
 {
   if (m_destructiveJob.active) return;   // F5: the view is pinned until the write lands (the job re-syncs)
@@ -813,21 +823,16 @@ void SneakPeak::LoadSelectedItem()
   m_gainPanel.Show(item);
 
   // Read WAV format info for write-back + cache file size
-  m_cachedFileSizeMB = 0.0;
   MediaItem_Take* take = m_waveform.GetTake();
-  if (take) {
-    std::string path = AudioEngine::GetSourceFilePath(take);
-    if (!path.empty()) {
-      WavInfo info;
-      if (AudioEngine::ReadWavHeader(path, info)) {
-        m_wavBitsPerSample = info.bitsPerSample;
-        m_wavAudioFormat = info.audioFormat;
-      }
-      struct stat st;
-      if (stat(path.c_str(), &st) == 0)
-        m_cachedFileSizeMB = static_cast<double>(st.st_size) / (1024.0 * 1024.0);
+  const std::string srcPath = take ? AudioEngine::GetSourceFilePath(take) : std::string();
+  if (!srcPath.empty()) {
+    WavInfo info;
+    if (AudioEngine::ReadWavHeader(srcPath, info)) {
+      m_wavBitsPerSample = info.bitsPerSample;
+      m_wavAudioFormat = info.audioFormat;
     }
   }
+  CacheFileSize(srcPath);
 
   // Channel solo is per-take monitoring state: when the displayed take changes,
   // restore the saved pan on the previous take (validated - it may be gone) and

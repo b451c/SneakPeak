@@ -100,6 +100,7 @@ void SneakPeak::RestoreStandaloneState(int idx)
   m_hasUndo = !m_standaloneUndoStack.empty();
   m_wavBitsPerSample = fs.bitsPerSample;
   m_wavAudioFormat = fs.audioFormat;
+  CacheFileSize(m_waveform.GetStandaloneFilePath());
   m_savedPath = fs.savedPath;
   m_overwriteConfirmed = fs.overwriteConfirmed;
   m_activeFileIdx = idx;
@@ -200,6 +201,7 @@ void SneakPeak::LoadStandaloneFile(const char* path)
 
   m_wavBitsPerSample = m_waveform.GetStandaloneBitsPerSample();
   m_wavAudioFormat = m_waveform.GetStandaloneAudioFormat();
+  CacheFileSize(spath);
   m_hasUndo = false;
   m_dirty = false;
   m_savedPath.clear();
@@ -407,6 +409,7 @@ void SneakPeak::FinishStandaloneLoad()
 
   m_wavBitsPerSample = info.bitsPerSample;
   m_wavAudioFormat = info.audioFormat;
+  CacheFileSize(spath);
   m_hasUndo = false;
   m_dirty = false;
   m_savedPath.clear();
