@@ -179,6 +179,7 @@ void SneakPeak::JoinDynamicsWorker(bool discardResult)
   m_dynTrace.reset();
   m_dynamics.Clear();
   m_dynApplyPending = false;
+  m_dynLiveWriteDue = 0;   // a debounced Live write of the discarded result must not fire (A7.5)
 }
 
 // Swap a finished worker engine in (main thread). Returns true when a result landed.

@@ -183,6 +183,30 @@ else()
   )
 endif()
 
+# --- v2.5.0 A7.5: DynamicsParams string round trip + range clamp ---
+# Pure test binary (no REAPER/SWELL/Blend2D deps), machine-independent (exit
+# code). Run via tests/run_dyn_params_test.sh.
+add_executable(dyn_params_test
+  tests/dyn_params_test.cpp
+  src/dynamics_engine.cpp
+  src/dyn_trace.cpp
+  src/deess_engine.cpp
+)
+target_include_directories(dyn_params_test PRIVATE src)
+target_compile_definitions(dyn_params_test PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+)
+if(MSVC)
+  target_compile_options(dyn_params_test PRIVATE /W3)
+else()
+  target_compile_options(dyn_params_test PRIVATE
+    -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
+    -Wshadow
+    -Wconversion -Wno-sign-conversion
+    -fsigned-char
+  )
+endif()
+
 # --- v2.3.0 INC-5: offline spectral-repair correctness harness ---
 # Pure-DSP test binary (no REAPER/SWELL/Blend2D deps). Synthetic click/beep
 # scenarios through spectral_repair with SNR-improvement assertions (exit

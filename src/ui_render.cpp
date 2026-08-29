@@ -640,10 +640,11 @@ static void DrawKnob(BLContext& ctx, const Gfx& gfx, const URect& cell, const Kn
       // showInf (Ratio at the Inf:1 sentinel) renders "Inf:1".
       char num[24];
       if (k.showOff) std::snprintf(num, sizeof(num), "Off");
+      else if (k.showAutoThr) std::snprintf(num, sizeof(num), "Auto");
       else if (k.showInf) std::snprintf(num, sizeof(num), "Inf");
       else std::snprintf(num, sizeof(num), k.precision == 1 ? "%.1f" : "%.0f", k.value);
       ctx.fill_utf8_text(BLPoint(tx, vy), gfx.fValue, num, SIZE_MAX, col(dynui::kInkPrimary));
-      const char* unit = k.showOff ? "" : (k.showAuto ? "auto" : (k.unit ? k.unit : ""));
+      const char* unit = (k.showOff || k.showAutoThr) ? "" : (k.showAuto ? "auto" : (k.unit ? k.unit : ""));
       if (*unit) {
         const bool abut = (unit[0] == ':');   // ratio ":1" sits flush against the number
         const double ux = tx + TextWidth(gfx.fValue, num) + (abut ? 1.0 : 4.0);

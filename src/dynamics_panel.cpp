@@ -1,5 +1,6 @@
 // dynamics_panel.cpp — Professional dynamics control panel
 #include "dynamics_panel.h"
+#include "dynamics_ranges.h"
 #include "theme.h"
 #include "config.h"
 #include "globals.h"
@@ -13,30 +14,32 @@
 // Slider/knob definitions: label, min, max, unit, precision, defaultVal.
 // defaultVal feeds the knob default-tick + Cmd-reset (Inc 4); it mirrors the
 // DynamicsParams defaults. -100 on Thresh = "use the analysed average peak".
+#define R(i) kDynParamRanges[i]
 const DynamicsPanel::SliderDef DynamicsPanel::SLIDER_DEFS[NUM_SLIDERS] = {
-  { "Thresh",  -60.0,    0.0, "dB",  1, -100.0 },  // 0: operating-point default
-  { "Ratio",   -20.0,  100.0, ":1",  1,    4.0 },  // 1: extended encoding (>=1 classic, 0=Inf, <0=over-comp); knob uses a piecewise norm mapping
-  { "Knee",      0.0,   24.0, "dB",  0,    6.0 },  // 2
-  { "Attack",    0.0,  500.0, "ms",  0,    5.0 },  // 3
-  { "Release",   0.0, 1000.0, "ms",  0,  100.0 },  // 4
-  { "Makeup",  -24.0,   24.0, "dB",  1,    0.0 },  // 5: bipolar since v2.3.0 (negative = trim; the useful direction in Up mode)
-  { "L.ahead",   0.0,   20.0, "ms",  1,    0.0 },  // 6
-  { "G.Thr",   -90.0,    0.0, "dB",  1, -100.0 },  // 7: gate threshold (-100 = off; hard-left detent snaps to it)
-  { "G.Range", -80.0,    0.0, "dB",  0,  -20.0 },  // 8: gate max reduction
-  { "G.Hold",    0.0,  500.0, "ms",  0,   50.0 },  // 9: gate hold time
-  { "G.Ratio",   1.0,   10.0, ":1",  1,    2.0 },  // 10: expander ratio (2.0 = legacy slope)
-  { "G.Hyst",  -24.0,    0.0, "dB",  0,    0.0 },  // 11: close threshold relative to G.Thr
-  { "G.Att",     0.0,   50.0, "ms",  1,    2.0 },  // 12: gate open speed
-  { "G.Rel",    10.0, 1000.0, "ms",  0,  100.0 },  // 13: gate close speed
-  { "M.Boost",   0.0,   24.0, "dB",  1,    8.0 },  // 14: Up-mode boost cap (premium: shown only in Up)
-  { "Freq",   2000.0, 16000.0, "Hz", 0, 6000.0 },  // 15: de-ess detector center/corner (log-mapped knob)
-  { "Width",     0.5,    8.0, "Q",   2,    2.0 },  // 16: BP width (ignored in HP mode)
-  { "D.Thr",   -60.0,    0.0, "dB",  1,  -30.0 },  // 17: band-level threshold
-  { "D.Ratio",   1.0,   20.0, ":1",  1,    4.0 },  // 18
-  { "D.Range", -24.0,    0.0, "dB",  1,  -10.0 },  // 19: max reduction clamp (wideband stays polite)
-  { "D.Att",     0.5,   10.0, "ms",  1,    1.0 },  // 20
-  { "D.Rel",    20.0,  200.0, "ms",  0,   60.0 },  // 21
+  { "Thresh",  R(0).lo, R(0).hi, "dB",  1, -100.0 },  // 0: operating-point default
+  { "Ratio",   R(1).lo, R(1).hi, ":1",  1,    4.0 },  // 1: extended encoding (>=1 classic, 0=Inf, <0=over-comp); knob uses a piecewise norm mapping
+  { "Knee",      R(2).lo, R(2).hi, "dB",  0,    6.0 },  // 2
+  { "Attack",    R(3).lo, R(3).hi, "ms",  0,    5.0 },  // 3
+  { "Release",   R(4).lo, R(4).hi, "ms",  0,  100.0 },  // 4
+  { "Makeup",  R(5).lo, R(5).hi, "dB",  1,    0.0 },  // 5: bipolar since v2.3.0 (negative = trim; the useful direction in Up mode)
+  { "L.ahead",   R(6).lo, R(6).hi, "ms",  1,    0.0 },  // 6
+  { "G.Thr",   R(7).lo, R(7).hi, "dB",  1, -100.0 },  // 7: gate threshold (-100 = off; hard-left detent snaps to it)
+  { "G.Range", R(8).lo, R(8).hi, "dB",  0,  -20.0 },  // 8: gate max reduction
+  { "G.Hold",    R(9).lo, R(9).hi, "ms",  0,   50.0 },  // 9: gate hold time
+  { "G.Ratio",   R(10).lo, R(10).hi, ":1",  1,    2.0 },  // 10: expander ratio (2.0 = legacy slope)
+  { "G.Hyst",  R(11).lo, R(11).hi, "dB",  0,    0.0 },  // 11: close threshold relative to G.Thr
+  { "G.Att",     R(12).lo, R(12).hi, "ms",  1,    2.0 },  // 12: gate open speed
+  { "G.Rel",    R(13).lo, R(13).hi, "ms",  0,  100.0 },  // 13: gate close speed
+  { "M.Boost",   R(14).lo, R(14).hi, "dB",  1,    8.0 },  // 14: Up-mode boost cap (premium: shown only in Up)
+  { "Freq",   R(15).lo, R(15).hi, "Hz", 0, 6000.0 },  // 15: de-ess detector center/corner (log-mapped knob)
+  { "Width",     R(16).lo, R(16).hi, "Q",   2,    2.0 },  // 16: BP width (ignored in HP mode)
+  { "D.Thr",   R(17).lo, R(17).hi, "dB",  1,  -30.0 },  // 17: band-level threshold (-100 = Auto; hard-left detent snaps to it, A7.5)
+  { "D.Ratio",   R(18).lo, R(18).hi, ":1",  1,    4.0 },  // 18
+  { "D.Range", R(19).lo, R(19).hi, "dB",  1,  -10.0 },  // 19: max reduction clamp (wideband stays polite)
+  { "D.Att",     R(20).lo, R(20).hi, "ms",  1,    1.0 },  // 20
+  { "D.Rel",    R(21).lo, R(21).hi, "ms",  0,   60.0 },  // 21
 };
+#undef R
 
 // --- Ratio knob piecewise norm mapping (v2.3.0 extended ratio) ---------------
 // Knob travel: [0, 0.70] = 1..20:1 linear (legacy feel), (0.70, ~0.74) = the
@@ -179,7 +182,11 @@ void DynamicsPanel::SetSliderValue(int idx, double val)
     case 14: m_params.maxBoostDb = val; break;
     case 15: m_params.dsFreqHz = val; break;
     case 16: m_params.dsQ = val; break;
-    case 17: m_params.dsThreshDb = val; break;
+    case 17:
+      // Hard-left detent like G.Thr: the knob bottom snaps to the engine's Auto
+      // sentinel (-100 = the band's average level; readout "Auto") - A7.5.
+      m_params.dsThreshDb = (val <= def.minVal + 0.05) ? -100.0 : val;
+      break;
     case 18: m_params.dsRatio = val; break;
     case 19: m_params.dsRangeDb = val; break;
     case 20: m_params.dsAttackMs = val; break;
@@ -196,7 +203,7 @@ void DynamicsPanel::SetSliderValue(int idx, double val)
 double DynamicsPanel::DragSeedValue(int idx) const
 {
   const double v = GetSliderValue(idx);
-  if (idx == 7 && v <= -99.0) return SLIDER_DEFS[7].minVal;
+  if ((idx == 7 || idx == 17) && v <= -99.0) return SLIDER_DEFS[idx].minVal;
   return v;
 }
 
@@ -1050,6 +1057,7 @@ static char MapEditChar(int vk)
   if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD0 + 9) return (char)('0' + (vk - VK_NUMPAD0));
   if (vk == '.' || vk == VK_DECIMAL  || vk == 0xBE) return '.'; // 0xBE = Win VK_OEM_PERIOD
   if (vk == '-' || vk == VK_SUBTRACT || vk == 0xBD) return '-'; // 0xBD = Win VK_OEM_MINUS
+  if (vk == ',' || vk == 0xBC) return '.';                      // comma-decimal keyboards; 0xBC = Win VK_OEM_COMMA
   if (vk == ':') return ':';                                    // mac ratio "4:1" (optional, parse ignores it)
   return 0;
 }
@@ -1333,6 +1341,8 @@ void DynamicsPanel::Draw(HDC hdc, RECT wr)
         snprintf(text, sizeof(text), "%.1f auto", (m_avgGR == 0.0) ? 0.0 : -m_avgGR);
       } else if (i == 7 && val <= -99.0) {
         snprintf(text, sizeof(text), "Off");
+      } else if (i == 17 && val <= -99.0) {
+        snprintf(text, sizeof(text), "Auto");
       } else if (i == 1 && val == 0.0) {
         snprintf(text, sizeof(text), "Inf %s", def.unit);
       } else if (def.precision == 1) {
@@ -1543,6 +1553,7 @@ void DynamicsPanel::DrawPremium(HDC hdc, RECT wr, double dpr)
     k.isGate      = (i >= 7 && i < kDynParamMaxBoost);  // gate knobs violet; M.Boost + ds knobs amber
     k.showAuto    = (i == 5 && m_params.autoMakeup);
     k.showOff     = (i == 7 && k.value <= -99.0);   // G.Thr sentinel -> "Off" readout
+    k.showAutoThr = (i == 17 && k.value <= -99.0);  // D.Thr sentinel -> "Auto" readout (A7.5)
     k.showInf     = (i == 1 && k.value == 0.0);     // Ratio Inf:1 sentinel -> "Inf" readout
     if (k.showAuto) { k.value = (m_avgGR == 0.0) ? 0.0 : -m_avgGR; targetN = norm(k.value); }  // signed trim; avoid "-0.0"
 

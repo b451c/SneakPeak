@@ -122,6 +122,8 @@ static constexpr const char* PEXT_DYNAMICS_KEY = "P_EXT:SneakPeak_Dynamics";
 // Serialize/deserialize DynamicsParams to/from compact string
 void DynamicsParamsToString(const DynamicsParams& p, char* buf, int bufSize);
 bool DynamicsParamsFromString(const char* str, DynamicsParams& out);
+// Clamp every field to its knob range (dynamics_ranges.h); sentinels (<= -99) pass. FromString calls it.
+void ClampDynamicsParams(DynamicsParams& p);
 
 // The engine analyses a DynTrace (dyn_trace.h): the 1 ms detector lanes built
 // either from a sample buffer here (Standalone, the regression harness) or

@@ -1,6 +1,8 @@
 // dynamics_engine.cpp — Professional dynamics processor
 // Standard compressor: threshold + ratio + soft knee + attack/release + makeup
 #include "dynamics_engine.h"
+#include "dynamics_ranges.h"
+#include <cmath>
 #include <algorithm>
 #include <cstring>
 #include <cstdlib>
@@ -67,11 +69,16 @@ bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
 {
   if (!str || !str[0]) return false;
   out = DynamicsParams{}; // start with defaults
+  // A key whose value is not a finite number ("t=abc", "r=nan") keeps the
+  // default instead of atof's silent 0 (A7.5).
   auto readKey = [&](const char* key, double& val) {
     char search[16];
     snprintf(search, sizeof(search), "%s=", key);
     const char* p = strstr(str, search);
-    if (p) val = atof(p + strlen(search));
+    if (!p) return;
+    char* end = nullptr;
+    const double v = strtod(p + strlen(search), &end);
+    if (end != p + strlen(search) && std::isfinite(v)) val = v;
   };
   double am = 1.0, rms = 0.0;
   readKey("t", out.threshold);
@@ -113,7 +120,42 @@ bool DynamicsParamsFromString(const char* str, DynamicsParams& out)
   readKey("dsx", out.dsRangeDb);
   readKey("dsa", out.dsAttackMs);
   readKey("dsre", out.dsReleaseMs);
+  ClampDynamicsParams(out);
   return true;
+}
+
+// Every numeric field inside its knob range (dynamics_ranges.h); the three
+// sentinels (Thresh operating point, G.Thr off, D.Thr Auto: <= -99) pass.
+void ClampDynamicsParams(DynamicsParams& p)
+{
+  auto clamp = [](double& v, int idx, bool sentinel = false) {
+    if (sentinel && v <= -99.0) { v = -100.0; return; }
+    const DynParamRange& r = kDynParamRanges[idx];
+    if (v < r.lo) v = r.lo;
+    if (v > r.hi) v = r.hi;
+  };
+  clamp(p.threshold, 0, true);
+  clamp(p.ratio, 1);
+  clamp(p.kneeDb, 2);
+  clamp(p.attackMs, 3);
+  clamp(p.releaseMs, 4);
+  clamp(p.makeupDb, 5);
+  clamp(p.lookaheadMs, 6);
+  clamp(p.gateThreshDb, 7, true);
+  clamp(p.gateRangeDb, 8);
+  clamp(p.gateHoldMs, 9);
+  clamp(p.gateRatio, 10);
+  clamp(p.gateHystDb, 11);
+  clamp(p.gateAttackMs, 12);
+  clamp(p.gateReleaseMs, 13);
+  clamp(p.maxBoostDb, 14);
+  clamp(p.dsFreqHz, 15);
+  clamp(p.dsQ, 16);
+  clamp(p.dsThreshDb, 17, true);
+  clamp(p.dsRatio, 18);
+  clamp(p.dsRangeDb, 19);
+  clamp(p.dsAttackMs, 20);
+  clamp(p.dsReleaseMs, 21);
 }
 
 DynTraceKey DynamicsEngine::TraceKeyFor(const DynamicsParams& p, int sampleRate,

@@ -61,6 +61,7 @@ struct KnobVM {
   bool   isGate      = false; // violet fill (gate params) vs amber (compressor)
   bool   showAuto    = false; // Makeup in auto mode -> "<n> auto" readout
   bool   showOff     = false; // sentinel value -> "Off" readout (G.Thr detent)
+  bool   showAutoThr = false; // D.Thr at the Auto sentinel -> "Auto" readout (A7.5)
   bool   showInf     = false; // Ratio at the Inf:1 sentinel (0.0) -> "Inf" readout
   bool   hover       = false; // cursor over (or dragging) this knob -> glow + cap tint
   bool   editing     = false; // inline type-value editor open on this knob (Inc 8)
