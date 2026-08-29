@@ -14,6 +14,7 @@ retired with the gate.)
 """
 from __future__ import annotations
 
+import time
 import json
 from pathlib import Path
 
@@ -52,9 +53,19 @@ def test_working_set_view_loads_in_background(sess):
       reaper.UpdateArrange()
       return true""")
     ensure_window(sess)
+    # Two selected items open the eager Multi-item view first; let its decode
+    # finish (title without "Loading" for a second) so that the measurement
+    # below sees ONLY the SET transition - the one that must not decode (8g).
+    # (A one-tick race read the Multi-item "Loading" as the SET view's, s12.)
+    from conftest import window_title
+    sess.wait_until(lambda: "Loading" not in (window_title(sess) or ""), timeout=240)
+    time.sleep(1.0)
+    # The SET view titles itself "SneakPeak [Set - N items]" (no file name), so
+    # the settle markers are the SET title - the old file-name marker was only
+    # ever satisfied by the Multi-item title flashing after the command.
     m = measure_after(sess, f"local h = SP_WINDOW() "
                             f'reaper.JS_WindowMessage_Post(h, "WM_COMMAND", {CM_TRACK_VIEW}, 0, 0, 0) return true',
-                      loaded_marker=media.stem, max_wait=120, quiet=1.0)
+                      loaded_marker="[Set - 2 items]", first_marker="SneakPeak [Set", max_wait=120, quiet=1.0)
     _record("set.enter", m)
     mode = mode_from_capture(sess, SHOTS / "set.png")
     assert mode == "SET", f"expected SET view, got {mode}"
