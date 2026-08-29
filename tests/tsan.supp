@@ -1,11 +1,13 @@
 # ThreadSanitizer suppressions for the A8.3 evidence runs (macOS only).
-# REAPER's own threads and the frameworks are not instrumented and report
+# REAPER's own code and the system frameworks are not instrumented and report
 # nothing meaningful; only frames inside reaper_sneakpeak.dylib count.
-called_from_lib:REAPER
-called_from_lib:libswell
-called_from_lib:AppKit
-called_from_lib:CoreAudio
-called_from_lib:CoreFoundation
-called_from_lib:Foundation
-called_from_lib:libsystem
+# called_from_lib matches the FULL module path and must match exactly ONE
+# loaded library, or the runtime aborts the process ("matched against 2
+# libraries") - hence the anchored paths (a bare "CoreAudio" also hits
+# CoreAudioOrchestration and IsolatedCoreAudioClient).
+called_from_lib:/Contents/MacOS/REAPER$
+called_from_lib:^/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit$
+called_from_lib:^/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio$
+called_from_lib:^/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation$
+called_from_lib:^/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation$
 race:^objc_
