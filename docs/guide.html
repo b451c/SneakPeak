@@ -886,7 +886,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Toggle the spectrogram via right-click > View > Spectral View. A resizable pane appears below the waveform showing a time-frequency representation of the audio using the magma color scheme (dark = silence, bright = energy).</p>
 
-<p>The spectrogram is computed asynchronously (2048-point FFT) when an item loads. A progress overlay shows computation status. After computation completes, the display updates instantly.</p>
+<p>The spectrogram is computed asynchronously when an item loads, with the FFT size chosen in Settings &gt; View: <strong>FFT 512 / 1024 / 2048 / 4096</strong> (default 2048). A larger size resolves close partials and hum harmonics in frequency (4096 is about 11 Hz per bin at 44.1 kHz), a smaller one keeps clicks and transients sharp in time (512 is about 3 ms per column); the overlap stays at 75% at every size, so the cost does not change with it. The setting is remembered, and a change recomputes the open spectrogram. A progress overlay shows computation status; after computation completes, the display updates instantly.</p>
 
 <p>Click and drag on the spectrogram to select a <strong>time x frequency rectangle</strong> (a dashed marquee with a frosted interior) - the standard spectral-editor selection and the target for Spectral Repair. The time axis stays in sync with the waveform selection. Grab any edge or corner of the rectangle to fine-tune it (the cursor shows resize arrows over the grab zones). Hold <kbd>Alt</kbd> and drag vertically to select a full-width frequency band instead, and <kbd>Shift</kbd>+click to extend the time range.</p>
 
@@ -1097,7 +1097,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Ruler</strong> - Relative / Absolute / Bars &amp; Beats.</li>
   <li><strong>Meters</strong> - Peak / RMS / VU ballistics, plus the Master Output source toggle.</li>
-  <li><strong>View</strong> - Meters, Ruler (hide for extra waveform height; markers fall back onto the waveform), Snap to Zero-Crossing, Minimap, the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor), the <strong>Waveform style</strong> (Detailed = peak + RMS band, Simple = single-color peaks), and the <strong>Spectral scale</strong> (Hz or note names).</li>
+  <li><strong>View</strong> - Meters, Ruler (hide for extra waveform height; markers fall back onto the waveform), Snap to Zero-Crossing, Minimap, the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor), the <strong>Waveform style</strong> (Detailed = peak + RMS band, Simple = single-color peaks), the <strong>Spectral scale</strong> (Hz or note names), and the spectrogram <strong>FFT size</strong> (512 / 1024 / 2048 / 4096 - larger is finer in frequency, smaller is sharper in time).</li>
 </ul>
 
 <p>The Dynamics panel follows the global scale too, multiplied by its own corner resize grip, so it grows with the rest of the UI while staying independently adjustable.</p>

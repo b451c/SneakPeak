@@ -304,6 +304,10 @@ enum SettingsHit {
   SET_HIT_VIEW_WAVE1   = 20,  // waveform style: Simple (single colour, #83)
   SET_HIT_VIEW_SPEC0   = 21,  // spectral scale: Hz
   SET_HIT_VIEW_SPEC1   = 22,  // spectral scale: note names (forum #88)
+  SET_HIT_VIEW_FFT0    = 23,  // spectrogram FFT size 512 / 1024 / 2048 / 4096 (FFT0 + i)
+  SET_HIT_VIEW_FFT1    = 24,
+  SET_HIT_VIEW_FFT2    = 25,
+  SET_HIT_VIEW_FFT3    = 26,
 };
 
 // Current preference values, filled by the host each paint (it owns this state).
@@ -318,6 +322,7 @@ struct SettingsPrefs {
   bool minimap = false;
   bool zoomOnCursor = false;   // wheel zoom centers on the edit cursor (default: mouse)
   bool spectralNotes = false;  // spectral scale/grid in note names instead of Hz (#88)
+  int  spectralFft = 2;        // SpectralView::kFftSizes index (512 / 1024 / 2048 / 4096)
 };
 
 // View-model for RenderSettingsPanel - pure data, built by SettingsPanel each paint.
@@ -379,6 +384,7 @@ struct SettingsLayout {
   URect zoomSeg[2];                              // VIEW: wheel-zoom center Mouse / Cursor
   URect waveSeg[2];                              // VIEW: waveform style Detailed / Simple
   URect specSeg[2];                              // VIEW: spectral scale Hz / Notes
+  URect fftSeg[4];                               // VIEW: spectrogram FFT 512 / 1024 / 2048 / 4096
 };
 SettingsLayout ComputeSettingsLayout(double w, double h);
 

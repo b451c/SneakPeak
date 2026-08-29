@@ -1393,7 +1393,11 @@ SettingsLayout ComputeSettingsLayout(double w, double h)
   y += 32.0;
   L.specSeg[0] = { pad, y, pillW, 26.0 };                     // SPECTRAL: HZ
   L.specSeg[1] = { pad + pillW + 8.0, y, pillW, 26.0 };       // SPECTRAL: NOTES
-  // final y + 26 + 16 bottom pad == kSettingsH (538) - keep in sync with ui_theme.h
+  y += 32.0;
+  const double fftW = (w - 2.0 * pad - 18.0) / 4.0;
+  for (int i = 0; i < 4; ++i)
+    L.fftSeg[i] = { pad + i * (fftW + 6.0), y, fftW, 26.0 };  // FFT 512 .. 4096
+  // final y + 26 + 16 bottom pad == kSettingsH (570) - keep in sync with ui_theme.h
   return L;
 }
 
@@ -1539,6 +1543,11 @@ void UiCanvas::RenderSettingsPanel(HDC hdc, int x, int y, int w, int h, double d
     // horizontal grid lines follow the active scale.
     DrawSegmented2(ctx, gfx, L.specSeg[0], L.specSeg[1], "SPECTRAL: HZ",
                    "SPECTRAL: NOTES", vm.prefs.spectralNotes);
+    // Spectrogram FFT size (row 15 #3): finer frequency (4096) vs sharper time (512).
+    {
+      static const char* const kFftLabels[4] = { "FFT 512", "FFT 1024", "FFT 2048", "FFT 4096" };
+      DrawSegmentedN(ctx, gfx, L.fftSeg, kFftLabels, 4, vm.prefs.spectralFft);
+    }
 
     if (ctx.end() != BL_SUCCESS) return;
   }

@@ -13,17 +13,6 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-static float s_hann[SpectralView::FFT_SIZE];
-static std::once_flag s_hannFlag;
-
-static void InitHann()
-{
-  std::call_once(s_hannFlag, []() {
-    for (int i = 0; i < SpectralView::FFT_SIZE; i++)
-      s_hann[i] = (float)(0.5 * (1.0 - cos(2.0 * M_PI * i / (SpectralView::FFT_SIZE - 1))));
-  });
-}
-
 static void DoFFT(float* re, float* im, int N)
 {
   for (int i = 1, j = 0; i < N; i++) {
@@ -58,7 +47,14 @@ SpectralView::SpectralView()
     m_colorLUT[i] = MagmaColor((float)i / 255.0f);
     m_colorLUT_Native[i] = (unsigned int)m_colorLUT[i];
   }
-  InitHann();
+}
+
+void SpectralView::SetFftSize(int n)
+{
+  n = kFftSizes[FftIndex(n)];
+  if (n == m_fftSize) return;
+  m_fftSize = n;
+  ClearSpectrum();   // the next Paint recomputes with the new size (pane visible)
 }
 
 SpectralView::~SpectralView()
@@ -133,11 +129,20 @@ void SpectralView::PrecomputeSpectrum(const WaveformView& waveform)
 
   if (nch < 1 || sr <= 0 || audio.empty()) return;
 
-  // Store metadata (safe — thread not running yet)
+  // Store metadata (safe — thread not running yet). The FFT geometry is
+  // snapshotted here: the worker and RenderView read m_specN/Half/Hop only.
   m_specNch = nch;
   m_specSr = sr;
   m_specDuration = (double)totalFrames / (double)sr;
-  m_specCols = (totalFrames + HOP_SIZE - 1) / HOP_SIZE;
+  m_specN = m_fftSize;
+  m_specHalf = m_specN / 2;
+  m_specHop = m_specN / 4;
+  if ((int)m_hann.size() != m_specN) {
+    m_hann.resize((size_t)m_specN);
+    for (int i = 0; i < m_specN; i++)
+      m_hann[(size_t)i] = (float)(0.5 * (1.0 - cos(2.0 * M_PI * i / (m_specN - 1))));
+  }
+  m_specCols = (totalFrames + m_specHop - 1) / m_specHop;
   if (m_specCols < 1) return;
 
   // Copy audio data for the thread (avoid referencing waveform from thread)
@@ -159,32 +164,34 @@ void SpectralView::PrecomputeSpectrum(const WaveformView& waveform)
 void SpectralView::ComputeThreadFunc(std::vector<double> audio, int nch, int sr, int totalFrames)
 {
   (void)sr;
-  int specCols = (totalFrames + HOP_SIZE - 1) / HOP_SIZE;
+  const int N = m_specN, half = m_specHalf, hop = m_specHop;
+  const float* hann = m_hann.data();
+  int specCols = (totalFrames + hop - 1) / hop;
 
   // Allocate result buffer locally; workers write disjoint column ranges.
-  std::vector<unsigned char> specData((size_t)specCols * (size_t)nch * FFT_HALF, 0);
+  std::vector<unsigned char> specData((size_t)specCols * (size_t)nch * (size_t)half, 0);
 
   std::atomic<int> colsDone{0};
 
   auto worker = [&](int c0, int c1) {
-    std::vector<float> re((size_t)FFT_SIZE), im((size_t)FFT_SIZE);
+    std::vector<float> re((size_t)N), im((size_t)N);
     for (int fc = c0; fc < c1; fc++) {
       if (m_cancelRequested.load()) return;
-      int centerFrame = fc * HOP_SIZE;
+      int centerFrame = fc * hop;
 
       auto gather = [&](int ch, float* dst) { // windowed frame of one channel
-        for (int i = 0; i < FFT_SIZE; i++) {
-          int frame = centerFrame - FFT_SIZE / 2 + i;
+        for (int i = 0; i < N; i++) {
+          int frame = centerFrame - N / 2 + i;
           dst[i] = (frame >= 0 && frame < totalFrames)
-            ? (float)audio[(size_t)frame * (size_t)nch + (size_t)ch] * s_hann[i]
+            ? (float)audio[(size_t)frame * (size_t)nch + (size_t)ch] * hann[i]
             : 0.0f;
         }
       };
       auto writeMag = [&](int ch, int bin, float xr, float xi) {
         float m = sqrtf(xr * xr + xi * xi);
-        float db = 20.0f * log10f(m / (float)FFT_SIZE + 1e-10f);
+        float db = 20.0f * log10f(m / (float)N + 1e-10f);
         float norm = (db + 90.0f) / 90.0f;
-        specData[((size_t)fc * (size_t)nch + (size_t)ch) * FFT_HALF + (size_t)bin] =
+        specData[((size_t)fc * (size_t)nch + (size_t)ch) * (size_t)half + (size_t)bin] =
           (unsigned char)(std::max(0.0f, std::min(1.0f, norm)) * 255.0f);
       };
 
@@ -192,9 +199,9 @@ void SpectralView::ComputeThreadFunc(std::vector<double> audio, int nch, int sr,
         if (ch + 1 < nch) {
           gather(ch, re.data());
           gather(ch + 1, im.data());
-          DoFFT(re.data(), im.data(), FFT_SIZE);
-          for (int bin = 0; bin < FFT_HALF; bin++) {
-            int mirror = bin == 0 ? 0 : FFT_SIZE - bin;
+          DoFFT(re.data(), im.data(), N);
+          for (int bin = 0; bin < half; bin++) {
+            int mirror = bin == 0 ? 0 : N - bin;
             float a = re[bin], b = im[bin];
             float c = re[mirror], d = im[mirror];
             writeMag(ch,     bin, 0.5f * (a + c), 0.5f * (b - d));
@@ -203,8 +210,8 @@ void SpectralView::ComputeThreadFunc(std::vector<double> audio, int nch, int sr,
         } else { // odd channel count: plain real-in-re transform for the tail
           gather(ch, re.data());
           std::fill(im.begin(), im.end(), 0.0f);
-          DoFFT(re.data(), im.data(), FFT_SIZE);
-          for (int bin = 0; bin < FFT_HALF; bin++)
+          DoFFT(re.data(), im.data(), N);
+          for (int bin = 0; bin < half; bin++)
             writeMag(ch, bin, re[bin], im[bin]);
         }
       }
@@ -274,7 +281,7 @@ void SpectralView::RenderView(const WaveformView& waveform)
     int chSep = (nch > 1) ? SP(CHANNEL_SEPARATOR_HEIGHT) : 0;
     int chH = (nch > 1) ? (height - chSep) / 2 : height;
 
-    double colTime = (double)HOP_SIZE / (double)m_specSr;
+    double colTime = (double)m_specHop / (double)m_specSr;
     double nyquist = (double)m_specSr / 2.0;
     double fMin = std::min(FREQ_MIN, nyquist * 0.5);
     double fMax = std::min(FREQ_MAX, nyquist);
@@ -291,15 +298,15 @@ void SpectralView::RenderView(const WaveformView& waveform)
     for (int py = 0; py < chH; py++) {
       double pyFrac = (double)py / (double)chH;
       double freq = fMin * pow(logRatio, pyFrac);
-      float binF = (float)(freq / nyquist * (double)(FFT_HALF - 1));
+      float binF = (float)(freq / nyquist * (double)(m_specHalf - 1));
       binLow[py] = (int)binF;
-      binHigh[py] = std::min(binLow[py] + 1, FFT_HALF - 1);
+      binHigh[py] = std::min(binLow[py] + 1, m_specHalf - 1);
       binFrac[py] = binF - (float)binLow[py];
     }
     for (int py = 0; py <= chH; py++) {
       double pyFrac = (double)py / (double)chH;
       double freq = fMin * pow(logRatio, pyFrac);
-      binEdge[(size_t)py] = (float)(freq / nyquist * (double)(FFT_HALF - 1));
+      binEdge[(size_t)py] = (float)(freq / nyquist * (double)(m_specHalf - 1));
     }
 
     for (int px = 0; px < width; px++) {
@@ -314,15 +321,15 @@ void SpectralView::RenderView(const WaveformView& waveform)
 
       for (int ch = 0; ch < nch; ch++) {
         int chTop = ch * (chH + chSep);
-        const unsigned char* col0 = &m_specData[((size_t)sc0 * (size_t)nch + (size_t)ch) * FFT_HALF];
-        const unsigned char* col1 = &m_specData[((size_t)sc1 * (size_t)nch + (size_t)ch) * FFT_HALF];
+        const unsigned char* col0 = &m_specData[((size_t)sc0 * (size_t)nch + (size_t)ch) * m_specHalf];
+        const unsigned char* col1 = &m_specData[((size_t)sc1 * (size_t)nch + (size_t)ch) * m_specHalf];
 
         for (int py = 0; py < chH; py++) {
           int screenY = chTop + chH - 1 - py;
           if (screenY < 0 || screenY >= height) continue;
 
           int b0 = binLow[py], b1 = binHigh[py];
-          int bSpanEnd = std::min(FFT_HALF - 1, (int)binEdge[(size_t)py + 1]);
+          int bSpanEnd = std::min(m_specHalf - 1, (int)binEdge[(size_t)py + 1]);
           bool freqDown = (bSpanEnd - b0) >= 2; // row spans 2+ bins
 
           float val;
@@ -334,7 +341,7 @@ void SpectralView::RenderView(const WaveformView& waveform)
             int bHi = std::max(b0, bSpanEnd);
             for (int c = sc0; c <= scEnd; c++) {
               const unsigned char* colp =
-                &m_specData[((size_t)c * (size_t)nch + (size_t)ch) * FFT_HALF];
+                &m_specData[((size_t)c * (size_t)nch + (size_t)ch) * m_specHalf];
               for (int b = b0; b <= bHi; b++) mx = std::max(mx, colp[b]);
             }
             val = (float)mx;

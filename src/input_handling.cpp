@@ -185,6 +185,10 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           // Spectral scale (#88): Hz vs note names, same 2-way pattern.
           case SET_HIT_VIEW_SPEC0:   if (m_spectral.GetNoteScale())  cmd = CM_SPECTRAL_NOTES; break;
           case SET_HIT_VIEW_SPEC1:   if (!m_spectral.GetNoteScale()) cmd = CM_SPECTRAL_NOTES; break;
+          // Spectrogram FFT size: a 4-way selector, one command id per size.
+          case SET_HIT_VIEW_FFT0: case SET_HIT_VIEW_FFT1:
+          case SET_HIT_VIEW_FFT2: case SET_HIT_VIEW_FFT3:
+            cmd = CM_SPECTRAL_FFT_BASE + (pref - SET_HIT_VIEW_FFT0); break;
         }
         if (cmd) OnContextMenuCommand(cmd);
       }

@@ -84,6 +84,8 @@ int SettingsPanel::HitId(double lx, double ly) const
   if (L.waveSeg[1].contains(lx, ly))    return SET_HIT_VIEW_WAVE1;
   if (L.specSeg[0].contains(lx, ly))    return SET_HIT_VIEW_SPEC0;
   if (L.specSeg[1].contains(lx, ly))    return SET_HIT_VIEW_SPEC1;
+  for (int i = 0; i < 4; ++i)
+    if (L.fftSeg[i].contains(lx, ly)) return SET_HIT_VIEW_FFT0 + i;
   return SET_HIT_NONE;
 }
 
@@ -138,7 +140,7 @@ bool SettingsPanel::OnMouseDown(int x, int y, RECT wr)
   // Migrated preferences: report the control id; the host runs its CM_* handler
   // (single behavior path for the panel and the OFF-build menu).
   const int hit = HitId(lx, ly);
-  if (hit >= SET_HIT_RULER0 && hit <= SET_HIT_VIEW_SPEC1) {
+  if (hit >= SET_HIT_RULER0 && hit <= SET_HIT_VIEW_FFT3) {
     m_prefClicked = hit;
     return true;
   }

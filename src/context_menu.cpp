@@ -389,6 +389,12 @@ void SneakPeak::OnRightClick(int x, int y)
   MenuAppend(viewMenu, MF_STRING, CM_SPECTRAL_NOTES,
              m_spectral.GetNoteScale() ? "Spectral Scale: Notes  \xE2\x9C\x93"
                                        : "Spectral Scale: Notes");
+  for (int i = 0; i < 4; ++i) {
+    char buf[40];
+    snprintf(buf, sizeof(buf), "Spectral FFT: %d%s", SpectralView::kFftSizes[i],
+             m_spectral.GetFftSize() == SpectralView::kFftSizes[i] ? "  \xE2\x9C\x93" : "");
+    MenuAppend(viewMenu, MF_STRING, CM_SPECTRAL_FFT_BASE + (unsigned)i, buf);
+  }
 #endif
 #ifndef SNEAKPEAK_BLEND2D_PANEL
   // UI Scale submenu - the OFF-build (GDI) fallback control only. The premium build
@@ -1067,6 +1073,18 @@ void SneakPeak::OnContextMenuCommand(int id)
         MarkUiScaleUserSet();
       } else if (id >= CM_SPECTRAL_HEAL_BASE && id < CM_SPECTRAL_HEAL_BASE + kHealStrengthCount) {
         DoSpectralHeal(kHealStrengths[id - CM_SPECTRAL_HEAL_BASE]);
+      } else if (id >= CM_SPECTRAL_FFT_BASE && id <= CM_SPECTRAL_FFT_LAST) {
+        // Spectrogram FFT size (row 15 #3): drops the spectrum; the visible pane recomputes.
+        // A short item recomputes faster than one timer tick, so the "was loading" pump
+        // never fires - the ready-but-unpainted pump (m_spectralPainted) paints the result.
+        m_spectral.SetFftSize(SpectralView::kFftSizes[id - CM_SPECTRAL_FFT_BASE]);
+        m_spectralPainted = false;
+        if (g_SetExtState) {
+          char buf[8];
+          snprintf(buf, sizeof(buf), "%d", m_spectral.GetFftSize());
+          g_SetExtState("SneakPeak", "spectral_fft", buf, true);
+        }
+        Invalidate();
       } else if (id >= CM_LIM_PRESET_BASE && id < CM_LIM_PRESET_BASE + kLimPresetCount) {
         m_limiterPanel.ApplyPreset(id - CM_LIM_PRESET_BASE);
         m_limiterPanel.ClearParamsChanged();

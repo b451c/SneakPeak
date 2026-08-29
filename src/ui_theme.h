@@ -99,7 +99,7 @@ constexpr int    kLoopPanelH = 352;  // == ComputeLoopLabLayout's footer bottom 
 
 // --- Settings panel (premium Settings overlay, v2.2.0) ---
 constexpr int    kSettingsW = 320;   // base size, logical px (scales with g_uiScale)
-constexpr int    kSettingsH = 538;   // == ComputeSettingsLayout's final y + bottom pad (keep in sync)
+constexpr int    kSettingsH = 570;   // == ComputeSettingsLayout's final y + bottom pad (keep in sync)
 // Density presets: friendly absolute UI scales (Compact / Comfortable / Spacious).
 // Shared by the renderer (active-segment detection) and the panel (click apply).
 constexpr double kDensityScale[3] = { 0.9, 1.0, 1.25 };

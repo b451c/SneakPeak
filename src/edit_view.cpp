@@ -137,6 +137,8 @@ void SneakPeak::Create()
     if (showRuler && showRuler[0] == '0') m_showRuler = false;
     const char* specNotes = g_GetExtState("SneakPeak", "spectral_notes");
     if (specNotes && specNotes[0] == '1') m_spectral.SetNoteScale(true);
+    const char* specFft = g_GetExtState("SneakPeak", "spectral_fft");
+    if (specFft && specFft[0]) m_spectral.SetFftSize(atoi(specFft));
     const char* zc = g_GetExtState("SneakPeak", "zoom_center");
     if (zc && zc[0] == '1') m_zoomOnEditCursor = true;
   }

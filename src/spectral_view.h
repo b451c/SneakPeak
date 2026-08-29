@@ -29,10 +29,16 @@ public:
   float GetProgress() const { return m_progress.load(); }
 
 
-  // FFT parameters
-  static const int FFT_SIZE = 2048;
-  static const int FFT_HALF = FFT_SIZE / 2;
-  static const int HOP_SIZE = 512;
+  // FFT size preference (row 15 #3): 512 / 1024 / 2048 / 4096, hop = N/4 (75 %
+  // overlap at every size, so columns x bytes per column - memory and compute -
+  // stay constant). A change drops the spectrum; the next Paint recomputes.
+  static constexpr int kFftSizes[4] = { 512, 1024, 2048, 4096 };
+  static int FftIndex(int n) {          // size -> kFftSizes index (unknown -> 2048)
+    for (int i = 0; i < 4; i++) if (kFftSizes[i] == n) return i;
+    return 2;
+  }
+  void SetFftSize(int n);
+  int  GetFftSize() const { return m_fftSize; }
 
   // Display frequency range (Hz)
   static constexpr double FREQ_MIN = 20.0;
@@ -77,8 +83,13 @@ private:
   COLORREF m_colorLUT[256];
   unsigned int m_colorLUT_Native[256];
 
-  // Pre-computed full spectrogram
+  // Pre-computed full spectrogram. m_specN/Half/Hop are the geometry the DATA was
+  // computed with (snapshot of the preference at launch) - the worker and
+  // RenderView read these, never m_fftSize, so render always matches the data.
   std::vector<unsigned char> m_specData;
+  int m_fftSize = 2048;
+  int m_specN = 2048, m_specHalf = 1024, m_specHop = 512;
+  std::vector<float> m_hann;   // window of m_specN taps, rebuilt while no worker runs
   int m_specCols = 0;
   int m_specNch = 0;
   int m_specSr = 0;
