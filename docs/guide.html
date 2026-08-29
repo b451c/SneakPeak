@@ -447,7 +447,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p><strong>Paste</strong> is non-destructive: it writes the clipboard to a new WAV file in the project's recording folder (so the clip is saved with the project, like a recording), splits the item at the cursor position, shifts subsequent items right, and inserts the new audio in the gap. The pasted region is automatically selected. Works in single-item, timeline, and SET modes.</p>
 
-<p><strong>Ripple Delete</strong> removes the selection and shifts all subsequent items left to close the gap. Standard Delete preserves gaps. Cut (<kbd>Cmd</kbd>+<kbd>X</kbd>) uses ripple delete by default, matching standard waveform editor behavior.</p>
+<p><strong>Ripple Delete</strong> removes the selection and shifts the subsequent items on the edited track left to close the gap (markers, regions, envelopes and other tracks are not moved - SneakPeak is an item tool, not REAPER's ripple-edit mode). Standard Delete preserves gaps. Cut (<kbd>Cmd</kbd>+<kbd>X</kbd>) uses ripple delete by default, matching standard waveform editor behavior.</p>
 
 <p>Additional processing is available from the right-click context menu: LUFS normalization (-14 / -16), reverse, DC offset removal, and silence.</p>
 
