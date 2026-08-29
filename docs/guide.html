@@ -80,7 +80,7 @@ td:first-child{white-space:nowrap;color:#fff;font-weight:500}
 .mode-all{background:rgba(224,224,229,.08);color:var(--text-muted);border:1px solid var(--border)}
 
 /* Shortcut grid */
-.shortcut-grid{display:grid;grid-template-columns:140px 1fr;gap:0;margin:12px 0 24px}
+.shortcut-grid{display:grid;grid-template-columns:200px 1fr;gap:0;margin:12px 0 24px}
 .shortcut-grid .key{padding:6px 0;border-bottom:1px solid var(--border);display:flex;align-items:center}
 .shortcut-grid .desc{padding:6px 0 6px 16px;border-bottom:1px solid var(--border);color:var(--text-muted);font-size:.88rem}
 
@@ -139,7 +139,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   </div>
 
   <div class="nav-group">
-    <div class="nav-group-title">REAPER Mode</div>
+    <div class="nav-group-title">ITEM Mode</div>
     <a href="#reaper-basics" class="nav-link">Basics</a>
     <a href="#waveform-display" class="nav-link">Waveform Display</a>
     <a href="#selection" class="nav-link">Selection</a>
@@ -229,7 +229,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <img src="images/sneakpeak-hero.png" alt="SneakPeak" style="width:100%;border-radius:var(--radius);margin:0 0 32px;border:1px solid var(--border)">
 
-<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. v2.0 added volume envelope editing, dynamics processing, and multiplatform support. v2.1 polished the release with automatic envelope activation, source replacement back into the timeline, hide RMS/meter toggles and an update checker. v2.2 scales the whole interface from 80% to 200% (Settings panel with DPI auto-detection), adds truthful clip indication, meters that reflect fades and envelopes, and a round of workflow polish. v2.4 is the biggest release yet: the full Dynamics Suite rework (upward compression and BOTH leveling, a complete noise-gate redo, a wideband de-esser, Spectral Repair, curved envelopes), the Game Audio Suite (Loop Lab, One-Shot Factory, True-Peak Hard Limiter), and the two worlds joined up - the Factory and the limiter work directly on timeline items, Dynamics applies destructively on standalone files, Edit Copy bridges an item into every standalone tool, and destructive item edits are finally undoable. v2.5 makes long files first-class: selecting, editing and analysing multi-minute (even hour-long) items is instant - the waveform draws from REAPER's own peak files, exports, Copy and the Dynamics analysis stream the source at its full sample rate, destructive edits rewrite the file in place (with a file-snapshot undo), and a set of Windows-only bugs is gone: silent Standalone playback, drag and drop that never landed, a UI that stayed tiny on scaled displays, and a failing destructive undo.</p>
+<p>SneakPeak is a native C++ extension that adds a dedicated waveform editor to REAPER. Select an item on the timeline and SneakPeak shows you a detailed, editable waveform in a resizable floating window (dockable via right-click menu). Three editing modes cover everything from quick item inspection to multi-item track assembly, plus a Timeline View that preserves visual context after cuts. v2.0 added volume envelope editing, dynamics processing, and multiplatform support. v2.1 polished the release with automatic envelope activation, source replacement back into the timeline, hide RMS/meter toggles and an update checker. v2.2 scales the whole interface from 80% to 200% (Settings panel with DPI auto-detection), adds truthful clip indication, meters that reflect fades and envelopes, and a round of workflow polish. v2.4 is the biggest release yet: the full Dynamics Suite rework (upward compression and BOTH leveling, a complete noise-gate redo, a wideband de-esser, Spectral Repair, curved envelopes), the Game Audio Suite (Loop Lab, One-Shot Factory, True-Peak Hard Limiter), and the two worlds joined up - the Factory and the limiter work directly on timeline items, Dynamics applies destructively on standalone files, Edit Copy bridges an item into every standalone tool, and destructive item edits are finally undoable. v2.5 makes long files first-class: selecting, editing and analyzing multi-minute (even hour-long) items is instant - the waveform draws from REAPER's own peak files, exports, Copy and the Dynamics analysis stream the source at its full sample rate, destructive edits rewrite the file in place (with a file-snapshot undo), and a set of Windows-only bugs is gone: silent Standalone playback, drag and drop that never landed, a UI that stayed tiny on scaled displays, and a failing destructive undo.</p>
 
 <div class="hero-modes">
   <div class="hero-mode">
@@ -314,7 +314,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h3>ITEM Mode (formerly REAPER)</h3>
 <div class="modes"><span class="mode mode-reaper">ITEM</span></div>
-<p>The default mode. Click an item on the timeline and SneakPeak shows its waveform. All editing goes through the REAPER API - nothing is destructive. Split, gain changes, fade adjustments, and normalization all create REAPER undo points that you can reverse with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+<p>The default mode. Click an item on the timeline and SneakPeak shows its waveform. All editing goes through the REAPER API - nothing is destructive. Split, gain changes, fade adjustments, and normalization all create REAPER undo points that you can reverse with <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
 <p>When you cut a section from an item, SneakPeak automatically enters <strong>Timeline View</strong> - showing all surviving fragments with gaps preserved, so you can continue editing without losing context. See the <a href="#timeline-overview">Timeline View</a> section for details.</p>
 
 <h3>SET Mode (Working Set)</h3>
@@ -336,7 +336,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Non-destructive (default):</strong> everything you do in ITEM / SET / Timeline modes - splits, gain, fades, envelopes, Dynamics - goes through the REAPER API and lands in REAPER's undo history. Your audio files are never touched.</li>
   <li><strong>Destructive on a REAPER item:</strong> the processing entries in the right-click menu (Reverse, DC Remove, Hard Limiter, ...) rewrite the item's source WAV on disk after a confirmation prompt. Since v2.5 they edit the file <em>in place</em> - the same file identity, exactly the item's window of it (trimmed, offset and rate-changed items stay safe), streamed at the file's own sample rate so items of any length work without waiting for anything to load - and can be undone: <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> copies the pre-edit snapshot back (one level). WAV sources only; for MP3/FLAC items use <strong>Edit Copy in Standalone</strong> instead.</li>
-  <li><strong>Destructive standalone editor:</strong> drag a file from Finder/Explorer (or any file browser) and drop it ONTO the SneakPeak window - the mode bar switches to the orange STANDALONE tab. Cut, paste, silence, process and draw freely; nothing happens to any file until you Save (<kbd>Ctrl</kbd>+<kbd>S</kbd>) or use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a>. Standalone has its own 20-level undo, independent of REAPER's.</li>
+  <li><strong>Destructive standalone editor:</strong> drag a file from Finder/Explorer (or any file browser) and drop it ONTO the SneakPeak window - the mode bar switches to the orange STANDALONE tab. Cut, paste, silence, process and draw freely; nothing happens to any file until you Save (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd>) or use <a href="#standalone-replace-source">Replace Source in REAPER Timeline</a>. Standalone has its own 20-level undo, independent of REAPER's.</li>
 </ul>
 
 <div class="tip">
@@ -346,7 +346,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <hr>
 
-<!-- REAPER Mode Details -->
+<!-- ITEM Mode Details -->
 <h2 id="reaper-basics">ITEM Mode - Basics</h2>
 <div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 
@@ -380,7 +380,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="key"><kbd>Click</kbd> + <kbd>Drag</kbd></div><div class="desc">Create a new selection</div>
   <div class="key"><kbd>Shift</kbd> + <kbd>Click</kbd></div><div class="desc">Extend selection to clicked position</div>
   <div class="key">Drag selection edge</div><div class="desc">Resize the selection - hover an edge to get the resize cursor, then drag</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>A</kbd></div><div class="desc">Select the entire item</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>A</kbd></div><div class="desc">Select the entire item</div>
   <div class="key"><kbd>Double-click</kbd></div><div class="desc">Select all</div>
   <div class="key"><kbd>Escape</kbd></div><div class="desc">Clear selection</div>
 </div>
@@ -404,7 +404,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h4>Horizontal pan</h4>
 <div class="shortcut-grid">
-  <div class="key"><kbd>Cmd</kbd> + <kbd>Scroll</kbd></div><div class="desc">Pan left/right (mouse wheel)</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + <kbd>Scroll</kbd></div><div class="desc">Pan left/right (mouse wheel)</div>
   <div class="key">Middle-mouse drag</div><div class="desc">Pan left/right by dragging (waveform and spectral areas)</div>
   <div class="key">Trackpad horizontal swipe</div><div class="desc">Pan left/right (two-finger swipe)</div>
 </div>
@@ -429,25 +429,25 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>The toolbar also has Zoom In, Zoom Out, Zoom to Fit, and Zoom to Selection buttons.</p>
 
-<h2 id="editing-reaper">Editing (REAPER Mode)</h2>
+<h2 id="editing-reaper">Editing (ITEM Mode)</h2>
 <div class="modes"><span class="mode mode-reaper">ITEM</span></div>
 
 <p>Editing in ITEM mode is non-destructive. Operations go through the REAPER API and create undo points.</p>
 
 <div class="shortcut-grid">
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>X</kbd></div><div class="desc">Cut selection (copy + ripple delete)</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>C</kbd></div><div class="desc">Copy selection to clipboard</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>V</kbd></div><div class="desc">Paste at cursor (non-destructive insert)</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>X</kbd></div><div class="desc">Cut selection (copy + ripple delete)</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>C</kbd></div><div class="desc">Copy selection to clipboard</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd></div><div class="desc">Paste at cursor (non-destructive insert)</div>
   <div class="key"><kbd>Delete</kbd> / <kbd>E</kbd></div><div class="desc">Delete selection (gap preserved)</div>
   <div class="key"><kbd>Shift</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>E</kbd></div><div class="desc">Ripple Delete (closes gap)</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>N</kbd></div><div class="desc">Normalize to 0 dB peak</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>Z</kbd></div><div class="desc">Undo (REAPER undo)</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></div><div class="desc">Redo</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>N</kbd></div><div class="desc">Normalize to 0 dB peak</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd></div><div class="desc">Undo (REAPER undo)</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Y</kbd></div><div class="desc">Redo</div>
 </div>
 
 <p><strong>Paste</strong> is non-destructive: it writes the clipboard to a new WAV file in the project's recording folder (so the clip is saved with the project, like a recording), splits the item at the cursor position, shifts subsequent items right, and inserts the new audio in the gap. The pasted region is automatically selected. Works in single-item, timeline, and SET modes.</p>
 
-<p><strong>Ripple Delete</strong> removes the selection and shifts the subsequent items on the edited track left to close the gap (markers, regions, envelopes and other tracks are not moved - SneakPeak is an item tool, not REAPER's ripple-edit mode). Standard Delete preserves gaps. Cut (<kbd>Cmd</kbd>+<kbd>X</kbd>) uses ripple delete by default, matching standard waveform editor behavior.</p>
+<p><strong>Ripple Delete</strong> removes the selection and shifts the subsequent items on the edited track left to close the gap (markers, regions, envelopes and other tracks are not moved - SneakPeak is an item tool, not REAPER's ripple-edit mode). Standard Delete preserves gaps. Cut (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>X</kbd>) uses ripple delete by default, matching standard waveform editor behavior.</p>
 
 <p>Additional processing is available from the right-click context menu: LUFS normalization (-14 / -16), reverse, DC offset removal, and silence.</p>
 
@@ -466,7 +466,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Drag left/right</strong> - adjust fade length</li>
   <li><strong>Drag up/down</strong> - adjust curve shape (curvature from -1 to +1, matching REAPER's native D_FADEINDIR/D_FADEOUTDIR)</li>
   <li><strong>Hold Shift while dragging</strong> - fine mode: the length moves at 1/4 of the cursor speed for precise trims. Press or release Shift mid-drag - the fade never jumps.</li>
-  <li><strong>Scroll on a handle</strong> - nudge the fade length by 5% of the item per notch, or hold <kbd>Cmd</kbd> for 1 ms steps. No need to aim a drag at the small handle.</li>
+  <li><strong>Scroll on a handle</strong> - nudge the fade length by 5% of the item per notch, or hold <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> for 1 ms steps. No need to aim a drag at the small handle.</li>
 </ul>
 
 <p>Fade-in and fade-out block each other - neither can be dragged past the other's position. In multi-item and SET views, fade-in targets the first item and fade-out targets the last item, each clamped to its segment's duration.</p>
@@ -476,9 +476,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="gain">Gain Control</h2>
 <div class="modes"><span class="mode mode-all">ALL MODES</span></div>
 
-<p>Press <kbd>G</kbd> to open the floating gain panel. A rotary knob controls volume from -60 dB to +24 dB. Hold <kbd>Cmd</kbd> while dragging for fine adjustment (0.1 dB per pixel instead of 0.5 dB). Double-click the knob to reset to 0 dB.</p>
+<p>Press <kbd>G</kbd> to open the floating gain panel. A rotary knob controls volume from -60 dB to +24 dB. Hold <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> while dragging for fine adjustment (0.1 dB per pixel instead of 0.5 dB). Double-click the knob to reset to 0 dB.</p>
 
-<p>Use <kbd>Up</kbd>/<kbd>Down</kbd> arrow keys for quick +/-1 dB adjustments without the mouse. You can also scroll the mouse wheel on the gain knob for +/-0.5 dB per notch (<kbd>Cmd</kbd>+scroll for +/-0.1 dB fine mode). The waveform updates in real-time.</p>
+<p>Use <kbd>Up</kbd>/<kbd>Down</kbd> arrow keys for quick +/-1 dB adjustments without the mouse. You can also scroll the mouse wheel on the gain knob for +/-0.5 dB per notch (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+scroll for +/-0.1 dB fine mode). The waveform updates in real-time.</p>
 
 <p>In batch mode (SET, timeline, multi-item), the knob label turns gold and shows <strong>"+0.0 dB rel"</strong> to indicate that the value is a relative offset applied to all items, not an absolute level.</p>
 
@@ -539,7 +539,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Press <kbd>S</kbd> to split at the cursor position. The set refreshes to show the new item structure.</p>
 
 <h3>Undo</h3>
-<p>Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo. The working set refreshes to reflect the undone state. You stay in SET mode throughout.</p>
+<p>Press <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo. The working set refreshes to reflect the undone state. You stay in SET mode throughout.</p>
 
 <h2 id="set-gain">Gain on Selection (SET Mode)</h2>
 
@@ -592,7 +592,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Selection</strong> - click and drag to select across any fragment, including spanning gaps</li>
   <li><strong>Delete</strong> (<kbd>E</kbd>) - removes the selected region from any overlapping fragment</li>
   <li><strong>Split</strong> (<kbd>S</kbd>) - splits fragments at the cursor position</li>
-  <li><strong>Undo</strong> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) - reverses the last operation and refreshes the view</li>
+  <li><strong>Undo</strong> (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd>) - reverses the last operation and refreshes the view</li>
 </ul>
 
 <p>Items locked in REAPER are left alone by every edit (Delete, ripple, Paste, gain on a selection) - a short message says so. Unlock the item in REAPER to edit it here.</p>
@@ -645,7 +645,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="standalone-editing">Editing (Standalone)</h2>
 
-<p>All the same shortcuts work: <kbd>Ctrl</kbd>+<kbd>X</kbd>/<kbd>C</kbd>/<kbd>V</kbd> for clipboard, <kbd>Delete</kbd> for removing audio, <kbd>Ctrl</kbd>+<kbd>N</kbd> for normalize. The difference is that these operations modify the audio data directly.</p>
+<p>All the same shortcuts work: <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>X</kbd>/<kbd>C</kbd>/<kbd>V</kbd> for clipboard, <kbd>Delete</kbd> for removing audio, <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>N</kbd> for normalize. The difference is that these operations modify the audio data directly.</p>
 
 <p>Delete in standalone mode removes the selected samples and splices the audio together with a short crossfade at the join point to avoid clicks.</p>
 
@@ -654,8 +654,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="standalone-save">Save Workflow</h2>
 
 <div class="shortcut-grid">
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>S</kbd></div><div class="desc">Save (Smart Save)</div>
-  <div class="key"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></div><div class="desc">Save As (choose location)</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd></div><div class="desc">Save (Smart Save)</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></div><div class="desc">Save As (choose location)</div>
 </div>
 
 <p><strong>Smart Save</strong> behavior:</p>
@@ -666,7 +666,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Metadata kept</strong> - a WAV original's bext (Broadcast WAV), iXML, LIST/INFO, cue and any other chunk are written back unchanged after the audio; the loop points (smpl) reflect SneakPeak's own loop state. Cue points are copied as they were, so a shortened file may keep cue points past its end.</li>
 </ul>
 
-<p>Any pending fade previews are baked into the audio data at save time. Scripts can save the active file with the action <em>SneakPeak: Save file (Standalone)</em> - the same Smart Save as <kbd>Ctrl</kbd>+<kbd>S</kbd>.</p>
+<p>Any pending fade previews are baked into the audio data at save time. Scripts can save the active file with the action <em>SneakPeak: Save file (Standalone)</em> - the same Smart Save as <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd>.</p>
 
 <h2 id="standalone-replace-source">Replace Source in REAPER Timeline</h2>
 
@@ -676,7 +676,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>Multiple references</strong> - if the same file is used on several tracks, all matching takes are updated in one pass.</li>
   <li><strong>Shorter file</strong> - when the saved file is shorter than the original, every matching item is shortened to end where the new file ends (at the take's playrate); an item that showed only audio past the new end restarts from the file's start.</li>
   <li><strong>Case-insensitive</strong> path match on Windows and macOS; exact match on Linux.</li>
-  <li><strong>Single undo</strong> - <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Z</kbd> reverts every replaced take at once.</li>
+  <li><strong>Single undo</strong> - <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> reverts every replaced take at once.</li>
   <li><strong>No references</strong> - toast reports "No items in timeline reference this file" (e.g. when the standalone file was dragged from outside the project).</li>
 </ul>
 
@@ -728,24 +728,24 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="key"><kbd>Double-click</kbd> point</div><div class="desc">Delete point</div>
   <div class="key"><kbd>Delete</kbd> / <kbd>E</kbd></div><div class="desc">Delete all selected points</div>
   <div class="key"><kbd>Right-click</kbd> point</div><div class="desc">Curve shape menu (6 shapes), reset curvature, delete option</div>
-  <div class="key"><kbd>Alt</kbd>+<kbd>Drag</kbd> on segment</div><div class="desc">Edit the segment's curvature (bezier tension; Cmd = fine mode)</div>
+  <div class="key"><kbd>Alt</kbd>+<kbd>Drag</kbd> on segment</div><div class="desc">Edit the segment's curvature (bezier tension; Cmd/Ctrl = fine mode)</div>
 </div>
 
 <p>Available curve shapes: Linear, Square, Slow start/end, Fast start, Fast end, Bezier. The shape controls interpolation between the clicked point and the next point.</p>
 
-<p><strong>Curvature editing:</strong> hold <kbd>Alt</kbd> and drag vertically on a segment to bend it - from "fast then gentle" to "hold then dive" (tension -1..+1, live readout at the cursor, <kbd>Cmd</kbd> for fine control). A linear segment becomes Bezier automatically on the first curvature drag. Right-click the segment's left point and choose <em>Reset curvature</em> to return to the neutral curve. Curves render identically in SneakPeak and the REAPER arrange view.</p>
+<p><strong>Curvature editing:</strong> hold <kbd>Alt</kbd> and drag vertically on a segment to bend it - from "fast then gentle" to "hold then dive" (tension -1..+1, live readout at the cursor, <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> for fine control). A linear segment becomes Bezier automatically on the first curvature drag. Right-click the segment's left point and choose <em>Reset curvature</em> to return to the neutral curve. Curves render identically in SneakPeak and the REAPER arrange view.</p>
 
 <h2 id="envelope-freehand">Freehand Drawing</h2>
 
-<p>Hold <kbd>Cmd</kbd> and drag on the envelope line to draw points freehand. Points are created every 4 pixels along your mouse path, and any existing points in the drawn range are automatically removed to prevent glitches. This is ideal for quickly sculpting envelope shapes.</p>
+<p>Hold <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> and drag on the envelope line to draw points freehand. Points are created every 4 pixels along your mouse path, and any existing points in the drawn range are automatically removed to prevent glitches. This is ideal for quickly sculpting envelope shapes.</p>
 
 <h2 id="envelope-multiselect">Multi-Select & Dense Points</h2>
 
 <p><kbd>Shift</kbd>+click on a point to toggle its selection (add to or remove from multi-selection). Drag any selected point to move all selected points together. <kbd>Delete</kbd> or <kbd>E</kbd> removes all selected points at once.</p>
 
-<p><strong>Selection rectangle:</strong> <kbd>Cmd</kbd>+drag on an empty area (not on the envelope line) to draw a selection rectangle - a frosted translucent overlay with a cyan border. All points inside are selected. <kbd>Shift</kbd>+rectangle adds to the existing selection.</p>
+<p><strong>Selection rectangle:</strong> <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+drag on an empty area (not on the envelope line) to draw a selection rectangle - a frosted translucent overlay with a cyan border. All points inside are selected. <kbd>Shift</kbd>+rectangle adds to the existing selection.</p>
 
-<p><strong>Dense point interaction:</strong> After Apply Dynamics creates many envelope points (>100), individual points are hidden for performance. Use <kbd>Cmd</kbd>+drag to draw a reveal rectangle - points within become visible and fully interactive. The reveal range is time-based and survives zoom/scroll. Click outside the revealed zone to clear it.</p>
+<p><strong>Dense point interaction:</strong> After Apply Dynamics creates many envelope points (>100), individual points are hidden for performance. Use <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+drag to draw a reveal rectangle - points within become visible and fully interactive. The reveal range is time-based and survives zoom/scroll. Click outside the revealed zone to clear it.</p>
 
 <hr>
 
@@ -753,7 +753,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <h2 id="dynamics-overview">Dynamics Processing</h2>
 <div class="modes"><span class="mode mode-reaper">ITEM</span><span class="mode mode-set">SET</span><span class="mode mode-standalone">STANDALONE</span></div>
 
-<p>SneakPeak includes a built-in dynamics processor that analyzes your audio and writes volume envelope points to achieve compression and gating. Instead of real-time DSP, it works offline - analyzing the audio and generating precise envelope automation. This means zero CPU cost during playback. Since v2.5 the analysis streams the item's source at its full sample rate on a background thread: full detector fidelity on items of any length (an hour-long file is analysed at 44.1 kHz, not through a reduced buffer), the title shows "Analysing dynamics... N%" while the first pass runs, knob changes recompute from the finished analysis in milliseconds, and only detector changes (Peak/RMS, RMS window, de-ess band) re-stream the file.</p>
+<p>SneakPeak includes a built-in dynamics processor that analyzes your audio and writes volume envelope points to achieve compression and gating. Instead of real-time DSP, it works offline - analyzing the audio and generating precise envelope automation. This means zero CPU cost during playback. Since v2.5 the analysis streams the item's source at its full sample rate on a background thread: full detector fidelity on items of any length (an hour-long file is analyzed at 44.1 kHz, not through a reduced buffer), the title shows "Analyzing dynamics... N%" while the first pass runs, knob changes recompute from the finished analysis in milliseconds, and only detector changes (Peak/RMS, RMS window, de-ess band) re-stream the file.</p>
 
 <p><strong>In Standalone mode</strong> the same panel works destructively, like a classic offline compressor: there is no envelope, so Apply multiplies the computed gain curve (compressor + gate + de-esser) directly into the audio, with one undo step. Live mode and A/B are envelope concepts and render disabled there; the preview curves stay fully live. Together with the Hard Limiter this completes the standalone "podcast chain": Dynamics &gt; Hard Limiter &gt; Save.</p>
 
@@ -817,7 +817,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Click the <strong>[Live]</strong> toggle (green when active) to enable real-time envelope writing. In Live mode, every slider change immediately writes envelope points to REAPER - the waveform updates in real-time as you drag. No need to click Apply.</p>
 
-<p>A single undo block wraps each drag gesture, so <kbd>Cmd</kbd>+<kbd>Z</kbd> reverts the entire adjustment. When Live is active, the Apply button is grayed out (it would be redundant).</p>
+<p>A single undo block wraps each drag gesture, so <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd> reverts the entire adjustment. When Live is active, the Apply button is grayed out (it would be redundant).</p>
 
 <img src="images/dynamics-live-mode.png" alt="SneakPeak Live mode with envelope points" style="width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
@@ -834,7 +834,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>The gate threshold is shown as a dim red horizontal line on the waveform. GR shading and the purple compression curve include gate reduction. If you drag G.Thr below the current transfer-plot floor, the plot scale expands automatically so the gate node stays visible (floor selectable down to -96 dB in the VIEW tab).</p>
 
-<p><strong>Per-stage bypass:</strong> the small power dots inside the COMP and GATE tab buttons switch each stage off for auditioning (amber = active, grey = bypassed) - with Live mode on you hear the change immediately. Bypassing the compressor also mutes its makeup gain. Bypasses are audition controls like A/B: they are never saved into items or presets and reset when the panel opens.</p>
+<p><strong>Per-stage bypass:</strong> the small power dots inside the COMP and GATE tab buttons switch each stage off for auditioning (amber = active, gray = bypassed) - with Live mode on you hear the change immediately. Bypassing the compressor also mutes its makeup gain. Bypasses are audition controls like A/B: they are never saved into items or presets and reset when the panel opens.</p>
 
 <h2 id="dynamics-deess">De-Esser</h2>
 
@@ -939,7 +939,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>TRIM</strong> - drop silence below the threshold (default -60 dBFS), keeping a small padding (default 10 ms) around the sound.</li>
   <li><strong>Fade In / Fade Out</strong> - edge micro-fades (defaults 5 ms / 20 ms, the industry click-killers).</li>
   <li><strong>Normalize</strong> - OFF, <strong>PEAK</strong> (dBFS), <strong>LUFS</strong> (integrated, custom target, measured by REAPER's own engine) or <strong>TP SAFE</strong> (the Hard Limiter at your dBTP ceiling - the game-asset default).</li>
-  <li><strong>SLICE</strong> - <strong>WHOLE</strong> exports the file as one asset; <strong>REGIONS</strong> makes each region a variation (with no regions, markers act as split points); <strong>SILENCE</strong> auto-splits on gaps longer than 150 ms below the trim threshold (slices under 50 ms are dropped, and each slice keeps its padding without bleeding into a neighbour). Record ten footsteps in one take, add nothing, and SILENCE finds the ten slices.</li>
+  <li><strong>SLICE</strong> - <strong>WHOLE</strong> exports the file as one asset; <strong>REGIONS</strong> makes each region a variation (with no regions, markers act as split points); <strong>SILENCE</strong> auto-splits on gaps longer than 150 ms below the trim threshold (slices under 50 ms are dropped, and each slice keeps its padding without bleeding into a neighbor). Record ten footsteps in one take, add nothing, and SILENCE finds the ten slices.</li>
   <li><strong>NAME</strong> - the naming pattern for the written files: <code>{name}</code> = source basename, <code>{nn}</code> = 01-based zero-padded number; default <code>{name}_{nn}</code>. Any digit token works too: <code>{01}</code> numbers from 01, <code>{001}</code> pads to three digits, <code>{5}</code> starts at 5. Click the box to edit.</li>
 </ul>
 
@@ -963,7 +963,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li><strong>LINK</strong> - on (default) applies one shared gain to all channels (keeps the stereo image); off limits each channel independently (hidden for mono files).</li>
 </ul>
 
-<p>While the panel is open, a red band along the top of the waveform previews the <strong>gain reduction over time</strong> (deeper = more limiting; full band depth = 12 dB), and the readouts show the input peak, the predicted output peak and the maximum reduction. The preview recomputes as you turn knobs. Knobs work like the Dynamics panel: drag vertically, scroll to nudge (Cmd = fine), double-click to type a value, Cmd/Ctrl-click to reset.</p>
+<p>While the panel is open, a red band along the top of the waveform previews the <strong>gain reduction over time</strong> (deeper = more limiting; full band depth = 12 dB), and the readouts show the input peak, the predicted output peak and the maximum reduction. The preview recomputes as you turn knobs. Knobs work like the Dynamics panel: drag vertically, scroll to nudge (Cmd/Ctrl = fine), double-click to type a value, Cmd/Ctrl-click to reset.</p>
 
 <p>The preset box holds four factory starting points - <strong>Game Asset -1 dBTP</strong> (the defaults), <strong>Master -0.3 dBTP</strong>, <strong>Brickwall 0 dBFS</strong> (sample-peak mode) and <strong>Loud + Proud</strong> (+8 dB push) - plus your own: <strong>Save preset as...</strong> stores the current knobs under a name (saving to an existing name overwrites it), saved presets appear in the same dropdown and can be removed via <strong>Delete preset</strong>. <strong>Apply</strong> is a destructive edit with full undo: whole file, or just the time selection (with short handoff ramps at the selection edges). On long material (podcasts, live recordings) Apply runs in the background - the title bar shows "Limiting... N%" and the window stays fully responsive; if you edit the audio before it finishes, your edit wins and the limiter result is discarded with a note. The toast reports the achieved output peak and the maximum gain reduction.</p>
 
@@ -1013,7 +1013,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p>Two Settings panel controls (VIEW section) let you simplify the display when you want more waveform area:</p>
 
 <ul>
-  <li><strong>Waveform style</strong> - <strong>Detailed</strong> (default) draws the peak waveform with a darker RMS band inside it; <strong>Simple</strong> draws a single-colour waveform (peaks only). Useful on dense stereo material where the RMS fill obscures detail, or if the two-tone look is not to your taste. Red/amber clip marking is drawn in both styles.</li>
+  <li><strong>Waveform style</strong> - <strong>Detailed</strong> (default) draws the peak waveform with a darker RMS band inside it; <strong>Simple</strong> draws a single-color waveform (peaks only). Useful on dense stereo material where the RMS fill obscures detail, or if the two-tone look is not to your taste. Red/amber clip marking is drawn in both styles.</li>
   <li><strong>Meters</strong> (default on) - when off, the entire bottom panel (meters + info) collapses to zero height and the waveform expands into that space. The scrollbar stays at the bottom.</li>
 </ul>
 
@@ -1089,7 +1089,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Ruler</strong> - Relative / Absolute / Bars &amp; Beats.</li>
   <li><strong>Meters</strong> - Peak / RMS / VU ballistics, plus the Master Output source toggle.</li>
-  <li><strong>View</strong> - Meters, Ruler (hide for extra waveform height; markers fall back onto the waveform), Snap to Zero-Crossing, Minimap, the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor), the <strong>Waveform style</strong> (Detailed = peak + RMS band, Simple = single-colour peaks), and the <strong>Spectral scale</strong> (Hz or note names).</li>
+  <li><strong>View</strong> - Meters, Ruler (hide for extra waveform height; markers fall back onto the waveform), Snap to Zero-Crossing, Minimap, the wheel-zoom anchor (<strong>Zoom: Mouse</strong> or <strong>Zoom: Edit Cursor</strong> - whether scroll zoom centers on the mouse position or the edit cursor), the <strong>Waveform style</strong> (Detailed = peak + RMS band, Simple = single-color peaks), and the <strong>Spectral scale</strong> (Hz or note names).</li>
 </ul>
 
 <p>The Dynamics panel follows the global scale too, multiplied by its own corner resize grip, so it grows with the rest of the UI while staying independently adjustable.</p>
@@ -1119,11 +1119,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Destructive editing lives in two places</strong> - the right-click processing entries rewrite an item's source file (after a confirmation, undoable with <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd>), and dropping an audio file onto the SneakPeak window opens the fully destructive <a href="#standalone-overview">Standalone editor</a>. The <a href="#destructive">orientation section</a> has the full map.</li>
   <li><strong>Press <kbd>D</kbd></strong> to open the Dynamics panel, and <kbd>ESC</kbd> to close any panel.</li>
-  <li><strong>Scroll on knobs.</strong> The gain knob and every dynamics knob respond to the mouse wheel (<kbd>Cmd</kbd> = fine steps), and double-clicking a dynamics knob lets you type an exact value.</li>
-  <li><strong>Fade handles take the wheel too</strong> - scroll to nudge a fade length (<kbd>Cmd</kbd> = 1 ms steps), or hold <kbd>Shift</kbd> while dragging for a 1/4-speed fine trim.</li>
+  <li><strong>Scroll on knobs.</strong> The gain knob and every dynamics knob respond to the mouse wheel (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd> = fine steps), and double-clicking a dynamics knob lets you type an exact value.</li>
+  <li><strong>Fade handles take the wheel too</strong> - scroll to nudge a fade length (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd> = 1 ms steps), or hold <kbd>Shift</kbd> while dragging for a 1/4-speed fine trim.</li>
   <li><strong><kbd>Option</kbd>/<kbd>Alt</kbd>+drag does four jobs</strong> - on the envelope line it bends the curve, inside a selection it starts a drag export, outside a selection (ITEM mode) it <a href="#editing-reaper">slips the item contents</a>, and in SET/Timeline/Multi-item it snaps the selection to a segment.</li>
   <li><strong>Middle-mouse drag pans the view</strong>, and a selection can be resized by grabbing its edge (the cursor shows when you are on it).</li>
-  <li><strong>The window is yours to declutter</strong> - Settings &gt; View can hide the ruler and the meters, switch the waveform to a single-colour Simple style, and choose whether wheel zoom centers on the mouse or the edit cursor.</li>
+  <li><strong>The window is yours to declutter</strong> - Settings &gt; View can hide the ruler and the meters, switch the waveform to a single-color Simple style, and choose whether wheel zoom centers on the mouse or the edit cursor.</li>
   <li><strong>Every toolbar command is a REAPER action</strong> - search "SneakPeak" in the Action List and bind any shortcut you like.</li>
   <li><strong><kbd>M</kbd> drops a marker, <kbd>Shift</kbd>+<kbd>M</kbd> makes a region</strong> from the selection - and you can drag a selection out of the window to export it as a file.</li>
   <li><strong>Click the version label</strong> in the mode bar to check for updates.</li>
@@ -1133,7 +1133,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <h2 id="shortcuts">All Keyboard Shortcuts</h2>
 
-<p><strong>Keyboard focus.</strong> SneakPeak takes a key only when it has something to do with it in the current state; any other key (a bare arrow, Ctrl+S outside Standalone, Alt+letter combinations, REAPER's own shortcuts) goes to REAPER as if the editor were not open. While the window is docked, a key also counts as SneakPeak's when the mouse pointer is over the editor - docked panes do not always report keyboard focus reliably - so move the pointer out of the editor if a key should go to REAPER instead.</p>
+<p>Shortcuts are written <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>: use Cmd on macOS, Ctrl on Windows and Linux.</p>
+
+<p><strong>Keyboard focus.</strong> SneakPeak takes a key only when it has something to do with it in the current state; any other key (a bare arrow, Cmd/Ctrl+S outside Standalone, Alt+letter combinations, REAPER's own shortcuts) goes to REAPER as if the editor were not open. While the window is docked, a key also counts as SneakPeak's when the mouse pointer is over the editor - docked panes do not always report keyboard focus reliably - so move the pointer out of the editor if a key should go to REAPER instead.</p>
 
 <table>
   <thead><tr><th>Shortcut</th><th>Action</th><th>Mode</th></tr></thead>
@@ -1149,7 +1151,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>Shift</kbd>+<kbd>E</kbd></td><td>Ripple Delete (closes gap)</td><td>ITEM, SET, Timeline</td></tr>
     <tr><td><kbd>Delete</kbd></td><td>Delete selection (gap preserved)</td><td>All</td></tr>
     <tr><td><kbd>Shift</kbd>+<kbd>Delete</kbd></td><td>Ripple Delete (closes gap)</td><td>ITEM, SET, Timeline</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>Delete</kbd></td><td>Silence selection</td><td>All</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Delete</kbd></td><td>Silence selection</td><td>All</td></tr>
     <tr><td><kbd>Up</kbd></td><td>Gain +1 dB</td><td>All</td></tr>
     <tr><td><kbd>Down</kbd></td><td>Gain -1 dB</td><td>All</td></tr>
     <tr><td><kbd>Option</kbd>+<kbd>Right</kbd></td><td>Next segment (select + scroll)</td><td>SET, Timeline, Multi</td></tr>
@@ -1159,18 +1161,18 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>End</kbd></td><td>Go to item end</td><td>All</td></tr>
     <tr><td><kbd>Tab</kbd></td><td>Next marker</td><td>ITEM</td></tr>
     <tr><td><kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Previous marker</td><td>ITEM</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Select all</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Cut (copy + ripple delete)</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Copy</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Paste (non-destructive insert)</td><td>ITEM, SET, Timeline</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Redo</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Normalize (peak)</td><td>All</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save</td><td>Standalone</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save As</td><td>Standalone</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Select all</td><td>All</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Cut (copy + ripple delete)</td><td>All</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Copy</td><td>All</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Paste (non-destructive insert)</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td><td>All</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Redo</td><td>All</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Normalize (peak)</td><td>All</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save</td><td>Standalone</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save As</td><td>Standalone</td></tr>
     <tr><td>Click on envelope line</td><td>Add envelope point</td><td>ITEM, SET, Timeline</td></tr>
-    <tr><td><kbd>Cmd</kbd> + Drag on line</td><td>Freehand envelope drawing</td><td>ITEM, SET, Timeline</td></tr>
-    <tr><td><kbd>Cmd</kbd> + Drag on empty</td><td>Envelope selection rectangle</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + Drag on line</td><td>Freehand envelope drawing</td><td>ITEM, SET, Timeline</td></tr>
+    <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd> + Drag on empty</td><td>Envelope selection rectangle</td><td>ITEM, SET, Timeline</td></tr>
     <tr><td><kbd>Shift</kbd> + Click point</td><td>Toggle envelope point selection</td><td>ITEM, SET, Timeline</td></tr>
     <tr><td>Double-click point</td><td>Delete envelope point</td><td>ITEM, SET, Timeline</td></tr>
     <tr><td>Right-click point</td><td>Curve shape menu</td><td>ITEM, SET, Timeline</td></tr>
@@ -1193,14 +1195,14 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Right-click</td><td>Waveform</td><td>Context menu</td></tr>
     <tr><td>Right-click</td><td>Meter panel</td><td>Meter mode menu</td></tr>
     <tr><td>Scroll</td><td>Waveform</td><td>Horizontal zoom</td></tr>
-    <tr><td>Cmd + Scroll</td><td>Waveform</td><td>Pan left/right</td></tr>
+    <tr><td>Cmd/Ctrl + Scroll</td><td>Waveform</td><td>Pan left/right</td></tr>
     <tr><td>Option + Scroll</td><td>Waveform</td><td>Vertical zoom</td></tr>
     <tr><td>Scroll</td><td>dB scale</td><td>Vertical zoom</td></tr>
     <tr><td>Trackpad horizontal swipe</td><td>Waveform</td><td>Pan left/right</td></tr>
     <tr><td>Trackpad pinch</td><td>Waveform</td><td>Horizontal zoom (dampened)</td></tr>
     <tr><td>Drag fade handle</td><td>Top corners</td><td>Adjust fade length (H) and curve (V)</td></tr>
     <tr><td>Shift + Drag fade handle</td><td>Top corners</td><td>Fine fade length (1/4 speed)</td></tr>
-    <tr><td>Scroll</td><td>Fade handle</td><td>Nudge fade length (5%/notch, Cmd = 1 ms)</td></tr>
+    <tr><td>Scroll</td><td>Fade handle</td><td>Nudge fade length (5%/notch, Cmd/Ctrl = 1 ms)</td></tr>
     <tr><td>Option + Drag</td><td>Waveform, outside selection (ITEM mode)</td><td>Slip content (move source under item)</td></tr>
     <tr><td>Click</td><td>Minimap</td><td>Center view</td></tr>
     <tr><td>Drag</td><td>Minimap</td><td>Scroll view</td></tr>
@@ -1214,9 +1216,9 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Shift + Click</td><td>Envelope point</td><td>Toggle point selection</td></tr>
     <tr><td>Double-click</td><td>Envelope point</td><td>Delete point</td></tr>
     <tr><td>Right-click</td><td>Envelope point</td><td>Curve shape menu (6 shapes)</td></tr>
-    <tr><td>Cmd + Drag</td><td>Envelope line</td><td>Freehand draw points</td></tr>
-    <tr><td>Cmd + Drag</td><td>Empty waveform area</td><td>Envelope selection rectangle / dense reveal</td></tr>
-    <tr><td>Drag slider</td><td>Dynamics panel</td><td>Adjust parameter (Cmd for fine mode)</td></tr>
+    <tr><td>Cmd/Ctrl + Drag</td><td>Envelope line</td><td>Freehand draw points</td></tr>
+    <tr><td>Cmd/Ctrl + Drag</td><td>Empty waveform area</td><td>Envelope selection rectangle / dense reveal</td></tr>
+    <tr><td>Drag slider</td><td>Dynamics panel</td><td>Adjust parameter (Cmd/Ctrl for fine mode)</td></tr>
     <tr><td>Click</td><td>MULTI label</td><td>Mode dropdown (Mix/Layered/Timeline View)</td></tr>
   </tbody>
 </table>

@@ -77,7 +77,7 @@ SneakPeak has five viewing modes: **ITEM** (default - click any item), **Timelin
 
 ### Waveform Display
 - **Precision waveform rendering** - Peak + RMS display with dB scale and zero-crossing line.
-- **Waveform style: Detailed / Simple** (new in v2.4) - Detailed keeps the darker RMS band inside the peak waveform; Simple draws single-colour peaks only. Clip marking is drawn in both styles.
+- **Waveform style: Detailed / Simple** (new in v2.4) - Detailed keeps the darker RMS band inside the peak waveform; Simple draws single-color peaks only. Clip marking is drawn in both styles.
 - **Truthful clip display** - red marks real clipping (source flat-tops, or over-0dB in destructive Standalone mode); amber marks over-0dB warnings in REAPER's float contexts where nothing has clipped yet. A dark-red 0dB reference line appears when zoomed out vertically.
 - **Deep zoom** - Horizontal and vertical zoom with scroll wheel, toolbar buttons, and keyboard. Zoom to fit, zoom to selection. Zoom anchors on the mouse position or the edit cursor (Settings > View).
 - **Minimap** - Resizable overview bar showing the full item waveform. Click to navigate, drag to scroll.
@@ -202,7 +202,7 @@ Drag any audio file (WAV, MP3, FLAC) into the SneakPeak window to enter. Fully d
 - **REAPER markers** - Full integration with REAPER's project markers.
 - **Persistent settings** - All preferences (meter mode, view mode, minimap, snap, dock state, RMS/meter visibility) survive REAPER restarts.
 - **Check for updates** - Click the version label in the mode bar to query the latest release on GitHub.
-- **Declutter toggles** - Settings > View can hide the ruler and the meters, and switch the waveform to the single-colour Simple style, giving the waveform the full window.
+- **Declutter toggles** - Settings > View can hide the ruler and the meters, and switch the waveform to the single-color Simple style, giving the waveform the full window.
 
 ---
 
