@@ -111,6 +111,26 @@ def _locate_apply(sess, out: Path) -> tuple[int, int] | None:
     return int(xs.mean() / scale), int(ys.mean() / scale - (img.shape[0] / scale - ch))
 
 
+def _panel_pixels_changed(sess, cap_a, cap_b, apply_xy) -> int:
+    """Pixels that differ inside the Dynamics panel rect between two captures
+    (the panel geometry of test_perf_slider, positioned from the Apply button).
+    The panel is a pure function of its view-model, so a paint that blits the
+    cached raster (A9.4) must show exactly what a fresh render showed."""
+    from test_perf_slider import APPLY_CENTER, PANEL_H, PANEL_W
+    a, b = cap_a.image.astype(int), cap_b.image.astype(int)
+    if a.shape != b.shape or apply_xy is None:
+        return -1
+    cw, ch = client_size(sess)
+    scale = a.shape[1] / cw if cw else 1.0
+    top = a.shape[0] - int(ch * scale)                     # capture rows above the client area
+    x0 = int((apply_xy[0] - APPLY_CENTER[0]) * scale)
+    y0 = top + int((apply_xy[1] - APPLY_CENTER[1]) * scale)
+    x1, y1 = x0 + int(PANEL_W * scale), y0 + int(PANEL_H * scale)
+    x0, y0 = max(x0, 0), max(y0, 0)
+    ra, rb = a[y0:y1, x0:x1], b[y0:y1, x0:x1]
+    return int(np.any(ra != rb, axis=2).sum())
+
+
 def _wait_title_settled(sess, name: str, timeout: float):
     def done():
         t = window_title(sess)
@@ -184,7 +204,8 @@ def test_playback_paint_profile_20min_dense_envelope(sess):
     sess.wait_until(lambda: len(take_envelope_points(sess)) > 4, timeout=120)
     wait_main_thread_idle(sess, timeout=60)
     points = len(take_envelope_points(sess))
-    capture(sess, SHOTS / "applied.png")
+    cap_idle = capture(sess, SHOTS / "applied.png")
+    apply_xy = _locate_apply(sess, SHOTS / "panel.png")
 
     hb = sess.bridge.heartbeat
     samples: list[tuple[int, float]] = []
@@ -212,11 +233,13 @@ def test_playback_paint_profile_20min_dense_envelope(sess):
     sampler = subprocess.Popen(["sample", str(sess.handle.pid), str(int(PLAY_SECONDS)), "-mayDie",
                                 "-file", str(profile)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(PLAY_SECONDS + 0.5)
+    cap_play = capture(sess, SHOTS / "playing.png")      # panel blitted from its cache (A9.4)
     t_stop = float(sess.eval(f"reaper.Main_OnCommand({STOP}, 0) return reaper.time_precise()"))
     stop.set()
     th.join(timeout=2)
     sampler.wait(timeout=120)
     playing_state = int(sess.eval("return reaper.GetPlayState()"))
+    panel_diff = _panel_pixels_changed(sess, cap_idle, cap_play, apply_xy)
 
     gaps = []
     for (k0, t0), (k1, t1) in zip(samples, samples[1:]):
@@ -228,12 +251,14 @@ def test_playback_paint_profile_20min_dense_envelope(sess):
          "mean_gap": round(sum(gaps) / len(gaps), 4) if gaps else None,
          "ticks": len(gaps) + 1, "play_s": round(t_stop - t_play, 2),
          "dpr": dpr, "window": [WINDOW_W, WINDOW_H], "points": points,
+         "panel_pixels_changed": panel_diff,
          "sample_total": prof.get("total"), "shares": prof.get("shares"),
          "top_onpaint": prof.get("top_onpaint"), "top_dylib": prof.get("top_dylib"),
          "profile": str(profile)}
     _record(f"paint.playback_20min.{LABEL}", m)
 
     assert playing_state == 0, "transport did not stop"
+    assert panel_diff == 0, f"the cached panel raster differs from the freshly rendered one: {m}"
     assert points > 1000, f"the envelope is not dense enough to profile: {m}"
     assert len(gaps) >= 20, f"REAPER's main loop barely ticked during playback: {m}"
     assert prof.get("total"), f"sample produced no main-thread call graph: {m}"

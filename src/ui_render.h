@@ -431,6 +431,11 @@ private:
   bool ensure(HDC hdc, int devW, int devH);   // (re)create offscreen surface
   bool prepareSurface(HDC hdc, int devW, int devH);              // surface + cached image/fonts
   void presentSurface(HDC hdc, int x, int y, int w, int h, int devW, int devH); // copy + scaled blit
+  // A9.4: the Dynamics panel is a pure function of its view-model, so a repaint
+  // whose VM (and device size) hashes like the last one only re-blits the surface
+  // still holding that raster - every playback tick used to re-rasterize it.
+  static uint64_t HashPanelVM(const DynPanelVM& vm, int devW, int devH);
+  uint64_t m_panelKey = 0;   // hash of the raster in the surface (0 = none)
 
   HDC m_memDC = nullptr;
 #ifdef _WIN32
