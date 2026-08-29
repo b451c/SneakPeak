@@ -519,56 +519,96 @@ def _cg_window_title(pid: int) -> str:
     return name or ""
 
 
-def measure_after(s, action_lua: str, *, loaded_marker: str, first_marker: str = "SneakPeak: ",
-                  max_wait: float = 120.0, quiet: float = 1.5) -> dict:
-    """Run `action_lua` and measure how REAPER's main thread behaves afterwards.
-
-    A probe THREAD samples two bridge-free observables every few ms:
+class MainThreadProbe:
+    """Samples two bridge-free observables from a thread every few ms:
       - heartbeat.json (tick, t): written by the bridge's defer loop at the
         top of every REAPER main-loop tick, `t` = reaper.time_precise()
-      - the SneakPeak window title via CGWindowList
-    The action itself returns reaper.time_precise() so everything is placed
-    on REAPER's own clock (a bridge round trip costs ~0.5 s and would
-    otherwise pollute the numbers). Returns:
+      - the SneakPeak window title via CGWindowList / EnumWindows
+    Nothing here touches REAPER, so the numbers describe REAPER, not the probe.
+    `to_reaper` places a wall-clock moment on REAPER's own clock through the
+    nearest earlier heartbeat (a bridge round trip costs ~0.5 s and would
+    otherwise pollute every number)."""
+
+    def __init__(self, s):
+        import threading
+        self.hb_path = s.bridge.heartbeat
+        self.pid = s.handle.pid
+        self.samples: list[tuple[float, int, float]] = []     # (wall, tick, t)
+        self.titles: list[tuple[float, str]] = []              # (wall, title) on change
+        self._stop = threading.Event()
+        self._th = threading.Thread(target=self._run, daemon=True)
+
+    def start(self, settle: float = 0.2):
+        import time as _t
+        self._th.start()
+        _t.sleep(settle)                                  # a few idle ticks first
+        return self
+
+    def stop(self):
+        self._stop.set()
+        self._th.join(timeout=2)
+
+    def _run(self):
+        import json as _json
+        import time as _t
+        last_tick = None
+        last_title = None
+        n = 0
+        while not self._stop.is_set():
+            try:
+                d = _json.loads(self.hb_path.read_text(encoding="utf-8", errors="replace"))
+                tick, t = int(d["tick"]), float(d["t"])
+                if tick != last_tick:
+                    self.samples.append((_t.monotonic(), tick, t))
+                    last_tick = tick
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+            n += 1
+            if n % 4 == 0:                                # ~every 12 ms
+                title = _cg_window_title(self.pid)
+                if title != last_title:
+                    self.titles.append((_t.monotonic(), title))
+                    last_title = title
+            _t.sleep(0.003)
+
+    def to_reaper(self, wall: float):
+        best = None
+        for w, _, t in self.samples:
+            if w <= wall:
+                best = t + (wall - w)
+            else:
+                break
+        return best
+
+    def max_stall(self, after_t: float) -> float:
+        """Longest gap between consecutive heartbeat ticks that ends after
+        `after_t` (REAPER clock), the part before `after_t` clipped off - so a
+        stall the caller caused on purpose (a modal it then answered) does
+        not count, only what followed it."""
+        worst = 0.0
+        for (w0, k0, t0), (w1, k1, t1) in zip(self.samples, self.samples[1:]):
+            if t1 <= after_t or k1 <= k0:
+                continue
+            gap = (t1 - max(t0, after_t)) / (k1 - k0)     # per missed-sample fairness
+            if gap > worst:
+                worst = gap
+        return worst
+
+
+def measure_after(s, action_lua: str, *, loaded_marker: str, first_marker: str = "SneakPeak: ",
+                  max_wait: float = 120.0, quiet: float = 1.5) -> dict:
+    """Run `action_lua` and measure how REAPER's main thread behaves afterwards
+    (MainThreadProbe). The action itself returns reaper.time_precise() so
+    everything is placed on REAPER's own clock. Returns:
       max_stall  longest gap between consecutive heartbeat ticks after the
                  action (s) = longest main-thread freeze
       t_first    action -> title left idle ("SneakPeak: ..." incl. Loading)
       t_loaded   action -> title shows the source name with no "Loading"
     """
-    import threading
     import time as _t
-    import json as _json
 
-    hb_path = s.bridge.heartbeat
-    pid = s.handle.pid
-    samples: list[tuple[float, int, float]] = []     # (wall, tick, t)
-    titles: list[tuple[float, str]] = []              # (wall, title) on change
-    stop = threading.Event()
-
-    def probe():
-        last_tick = None
-        last_title = None
-        n = 0
-        while not stop.is_set():
-            try:
-                d = _json.loads(hb_path.read_text(encoding="utf-8", errors="replace"))
-                tick, t = int(d["tick"]), float(d["t"])
-                if tick != last_tick:
-                    samples.append((_t.monotonic(), tick, t))
-                    last_tick = tick
-            except (OSError, ValueError, KeyError, TypeError):
-                pass
-            n += 1
-            if n % 4 == 0:                            # ~every 12 ms
-                title = _cg_window_title(pid)
-                if title != last_title:
-                    titles.append((_t.monotonic(), title))
-                    last_title = title
-            _t.sleep(0.003)
-
-    th = threading.Thread(target=probe, daemon=True)
-    th.start()
-    _t.sleep(0.2)                                     # settle: a few idle ticks
+    probe = MainThreadProbe(s).start()
+    titles = probe.titles
     wall0 = _t.monotonic()
     action_t = float(s.eval(action_lua.replace("return true", "return reaper.time_precise()"),
                             hang_timeout=120))
@@ -581,31 +621,12 @@ def measure_after(s, action_lua: str, *, loaded_marker: str, first_marker: str =
             elif _t.monotonic() - t_end > quiet:
                 break
         _t.sleep(0.02)
-    stop.set()
-    th.join(timeout=2)
-
-    # wall -> REAPER clock via the nearest heartbeat before the event
-    def to_reaper(wall):
-        best = None
-        for w, _, t in samples:
-            if w <= wall:
-                best = t + (wall - w)
-            else:
-                break
-        return best
-
-    max_stall = 0.0
-    for (w0, k0, t0), (w1, k1, t1) in zip(samples, samples[1:]):
-        if t1 <= action_t or k1 <= k0:
-            continue
-        gap = (t1 - t0) / (k1 - k0)                   # per missed-sample fairness
-        if gap > max_stall:
-            max_stall = gap
+    probe.stop()
 
     t_first = t_loaded = None
     seen_loading = False
     for w, title in titles:
-        tr = to_reaper(w)
+        tr = probe.to_reaper(w)
         if tr is None or tr < action_t:
             continue
         if t_first is None and first_marker in title:
@@ -617,11 +638,94 @@ def measure_after(s, action_lua: str, *, loaded_marker: str, first_marker: str =
             t_loaded = tr - action_t
     # the loader only retitles once it has ticked; a plain-name title with no
     # "Loading" ever seen means the view loaded synchronously (short file)
-    return {"max_stall": round(max_stall, 3),
+    return {"max_stall": round(probe.max_stall(action_t), 3),
             "t_first": None if t_first is None else round(t_first, 3),
             "t_loaded": None if t_loaded is None else round(t_loaded, 3),
             "seen_loading": seen_loading,
-            "ticks": len(samples)}
+            "ticks": len(probe.samples)}
+
+
+def measure_after_modal(s, fire_lua: str, *, idle_marker: str, progress_marker: str,
+                        on_progress_lua: str | None = None, max_wait: float = 600.0,
+                        quiet: float = 1.5) -> dict:
+    """Fire a command that asks a native confirmation (`fire_lua` must run it
+    from INSIDE the defer loop - see test_destructive_long), answer it, and
+    measure REAPER's main thread from the moment the modal closes: the modal
+    stalls the defer loop by design (dismiss_native_modal keys on that), so the
+    stall that matters is what FOLLOWS the Return. Done = the heartbeat has
+    ticked regularly for `quiet` s AND the title is back on `idle_marker` with
+    no `progress_marker` (a synchronous edit never retitles, so the heartbeat
+    alone decides there). `on_progress_lua` runs ONCE, from a reaper.defer
+    watcher on REAPER's own main loop, on the first tick whose title carries
+    `progress_marker` and a percent - the moment to press Esc or change the
+    selection; a bridge round trip (~0.5 s) would land after a fast disk has
+    finished the whole edit. `h` is our window handle inside that snippet.
+    Returns:
+      max_stall   longest main-thread freeze after the modal (s)
+      progress    the distinct progress titles seen, in order ([] = none)
+      fired       the watcher ran on_progress_lua (False when never asked)
+      t_idle      modal closed -> the title's last change (s, wall clock)
+    """
+    import time as _t
+
+    if on_progress_lua is not None:
+        s.eval(f"""
+          SP_PROGRESS_FIRED = false
+          local deadline = reaper.time_precise() + {max_wait}
+          local function watch()
+            local h = SP_WINDOW()
+            if h then
+              local t = reaper.JS_Window_GetTitle(h)
+              if t:find({progress_marker!r}, 1, true) and t:find("%", 1, true) then   -- plain find: no escaping
+                SP_PROGRESS_FIRED = true
+                {on_progress_lua}
+                return
+              end
+            end
+            if reaper.time_precise() < deadline then reaper.defer(watch) end
+          end
+          reaper.defer(watch)
+          return true""", hang_timeout=120)
+    probe = MainThreadProbe(s).start()
+    s.eval(fire_lua, hang_timeout=120)
+    assert dismiss_native_modal(s), "the destructive confirmation never appeared"
+    wall_dismiss = _t.monotonic()
+    t_dismiss = probe.to_reaper(wall_dismiss)
+    assert t_dismiss is not None, "no heartbeat before the modal"
+
+    progress: list[str] = []
+    last_hb = None
+    regular_since = None
+    last_change = _t.monotonic()
+    t_done = None
+    while _t.monotonic() - wall_dismiss < max_wait:
+        now = _t.monotonic()
+        for _, title in list(probe.titles):
+            if progress_marker in title and title not in progress:
+                progress.append(title)
+        hb = _heartbeat_t(s)
+        if hb is not None and hb != last_hb:      # a tick just landed (silence never counts)
+            last_hb = hb
+            if regular_since is None or now - last_change > 0.2:
+                regular_since = now          # (re)start the quiet window after any gap
+            last_change = now
+            title_idle = probe.titles and idle_marker in probe.titles[-1][1] and \
+                progress_marker not in probe.titles[-1][1]
+            if now - regular_since >= quiet and title_idle:
+                t_done = regular_since - wall_dismiss
+                break
+        _t.sleep(0.02)
+    probe.stop()
+    assert t_done is not None, f"REAPER did not settle within {max_wait} s (titles: {probe.titles[-3:]})"
+    fired = False
+    if on_progress_lua is not None:
+        fired = bool(s.eval("return SP_PROGRESS_FIRED == true", hang_timeout=120))
+    t_idle = probe.titles[-1][0] - wall_dismiss if probe.titles and probe.titles[-1][0] > wall_dismiss else 0.0
+    return {"max_stall": round(probe.max_stall(t_dismiss), 3),
+            "progress": progress,
+            "fired": fired,
+            "t_idle": round(t_idle, 3),
+            "ticks": len(probe.samples)}
 
 
 def wait_main_thread_idle(s, timeout: float = 120.0, quiet: float = 0.5):
