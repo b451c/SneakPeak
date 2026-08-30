@@ -40,6 +40,27 @@
 ]]></description>
       </metadata>
 
+      <version name="2.5.0-rc1" author="b451c" time="2026-08-30T09:35:29Z">
+        <changelog><![CDATA[RELEASE CANDIDATE (pre-release, opt-in) - v2.5.0 test round
+
+v2.4 added tools; v2.5 makes them hold up on real material - long files above all - plus a full audit of the editor and the Windows fixes you reported. Highlights:
+- Long items open instantly at any length; exports, Copy, Normalize and the Dynamics analysis stream the source at its full sample rate
+- Reverse, DC Remove, Gain on a selection and the Hard Limiter rewrite exactly the item's window of its file in place, in the background, with a one-step undo; MP3/FLAC/AAC items convert to WAV first after one question
+- Every destructive command checks before it asks and shows the reason on the control
+- Hard Limiter: live preview optional on audio over 5 minutes (PREVIEW pill); Standalone: split-band de-esser, channel solo keeps the preview playing, the spectrogram follows edits and the gain knob
+- Multi-item view: Lanes (per Track) with per-track zoom; spectral view: FFT size 512-4096, colours follow the item volume; what you had open on an item comes back when you return to it
+- Settings panel stays open and can be moved; Minimap in the View menu
+- Windows: silent Standalone playback, drag and drop, the tiny UI on scaled displays and destructive undo fixed; envelopes on items with a playrate other than 1.0 land at the right time; keys SneakPeak does not use reach REAPER again
+
+Full changelog: https://github.com/b451c/SneakPeak/blob/main/CHANGELOG.md
+Feedback -> https://forum.cockos.com/showthread.php?t=307499
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.5.0-rc1/reaper_sneakpeak-arm64.dylib</source>
+        <source platform="darwin64" file="reaper_sneakpeak-x86_64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.5.0-rc1/reaper_sneakpeak-x86_64.dylib</source>
+        <source platform="win64" file="reaper_sneakpeak-x64.dll">https://github.com/b451c/SneakPeak/releases/download/v2.5.0-rc1/reaper_sneakpeak-x64.dll</source>
+        <source platform="linux64" file="reaper_sneakpeak-x86_64.so">https://github.com/b451c/SneakPeak/releases/download/v2.5.0-rc1/reaper_sneakpeak-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_sneakpeak-aarch64.so">https://github.com/b451c/SneakPeak/releases/download/v2.5.0-rc1/reaper_sneakpeak-aarch64.so</source>
+      </version>
       <version name="2.4.0" author="b451c" time="2026-07-10T08:53:55Z">
         <changelog><![CDATA[Game Audio Suite + Dynamics Suite rework + Spectral Repair
 
