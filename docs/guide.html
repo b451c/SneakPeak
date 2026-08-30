@@ -174,6 +174,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <a href="#standalone-files" class="nav-link">File Management</a>
     <a href="#standalone-editing" class="nav-link">Editing</a>
     <a href="#standalone-save" class="nav-link">Save Workflow</a>
+    <a href="#standalone-replace-source" class="nav-link">Replace Source</a>
     <a href="#standalone-export" class="nav-link">Drag Export</a>
   </div>
 
@@ -289,6 +290,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- First Launch -->
 <h2 id="first-launch">First Launch</h2>
+<p class="note"><strong>Shortcut notation:</strong> this guide mixes Mac and Windows key names where a section calls for it - on Windows/Linux read <kbd>Cmd</kbd> as <kbd>Ctrl</kbd> and <kbd>Option</kbd> as <kbd>Alt</kbd>.</p>
 <p>After installing, open SneakPeak from REAPER's action list:</p>
 <ol>
   <li>Open <strong>Actions > Show action list</strong></li>
@@ -312,6 +314,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <!-- Three Modes -->
 <h2 id="three-modes">Three Editing Modes</h2>
+<p>Every mode carries its own accent color in the mode bar and view chrome: <strong>ITEM</strong> blue, <strong>SET</strong> green, <strong>STANDALONE</strong> orange, <strong>TIMELINE</strong> lavender, <strong>MULTI</strong> magenta and <strong>MASTER</strong> red - a glance at the top-left badge always tells you which mode you are in.</p>
 
 <p>SneakPeak has three distinct modes, shown in the mode bar at the top of the window. Each mode serves a different workflow.</p>
 
@@ -443,7 +446,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd></div><div class="desc">Paste at cursor (non-destructive insert)</div>
   <div class="key"><kbd>Delete</kbd> / <kbd>E</kbd></div><div class="desc">Delete selection (gap preserved)</div>
   <div class="key"><kbd>Shift</kbd>+<kbd>Delete</kbd> / <kbd>Shift</kbd>+<kbd>E</kbd></div><div class="desc">Ripple Delete (closes gap)</div>
-  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>N</kbd></div><div class="desc">Normalize to 0 dB peak</div>
+  <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>N</kbd></div><div class="desc">Normalize to -0.1 dBFS peak</div>
   <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Z</kbd></div><div class="desc">Undo (REAPER undo)</div>
   <div class="key"><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> / <kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Y</kbd></div><div class="desc">Redo</div>
 </div>
@@ -481,7 +484,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Press <kbd>G</kbd> to open the floating gain panel. A rotary knob controls volume from -60 dB to +24 dB. Hold <kbd>Cmd</kbd>/<kbd>Ctrl</kbd> while dragging for fine adjustment (0.1 dB per pixel instead of 0.5 dB). Double-click the knob to reset to 0 dB.</p>
 
-<p>Use <kbd>Up</kbd>/<kbd>Down</kbd> arrow keys for quick +/-1 dB adjustments without the mouse. You can also scroll the mouse wheel on the gain knob for +/-0.5 dB per notch (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+scroll for +/-0.1 dB fine mode). The waveform updates in real-time.</p>
+<p>With the gain panel open, use <kbd>Up</kbd>/<kbd>Down</kbd> arrow keys for quick +/-1 dB adjustments without the mouse. You can also scroll the mouse wheel on the gain knob for +/-0.5 dB per notch (<kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+scroll for +/-0.1 dB fine mode). The waveform updates in real-time.</p>
 
 <p>In batch mode (SET, timeline, multi-item), the knob label turns gold and shows <strong>"+0.0 dB rel"</strong> to indicate that the value is a relative offset applied to all items, not an absolute level.</p>
 
@@ -493,7 +496,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>ITEM</td><td>Splits at selection edges, applies D_VOL to fragment</td><td>Changes D_VOL on whole item</td></tr>
     <tr><td>Timeline View</td><td>Splits at edges, applies D_VOL to fragment</td><td>Applies D_VOL to all fragments</td></tr>
     <tr><td>Multi-item</td><td>Splits at edges, applies D_VOL across segments</td><td>Applies D_VOL to all items</td></tr>
-    <tr><td>SET</td><td>Splits at edges, applies D_VOL with 10ms crossfade</td><td>Applies D_VOL to all set items</td></tr>
+    <tr><td>SET</td><td>Splits at edges, applies D_VOL with 10 ms crossfade</td><td>Applies D_VOL to all set items</td></tr>
     <tr><td>Standalone</td><td>Destructive gain with crossfade at edges</td><td>Destructive gain on entire file</td></tr>
   </tbody>
 </table>
@@ -554,7 +557,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <li>While you drag the knob, you see a visual preview on the waveform (only the selected region changes)</li>
   <li>When you release the knob, SneakPeak splits the items at the selection edges</li>
   <li>The isolated fragment gets the new volume (D_VOL)</li>
-  <li>A 10ms overlap is created with neighboring items so REAPER generates an automatic crossfade</li>
+  <li>A 10 ms overlap is created with neighboring items so REAPER generates an automatic crossfade</li>
   <li>The working set reloads to reflect the change</li>
 </ol>
 
@@ -819,6 +822,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <p class="subtitle" style="margin-top:-16px;font-size:13px">The GATE tab taming breaths between dialogue phrases: yellow threshold and gate lines on the waveform, the computed envelope (cyan) and detector curves drawn live, gain reduction read-out in the panel header.</p>
 
 <h2 id="dynamics-live">Live Mode</h2>
+<p><strong>Envelope ceiling:</strong> take volume envelopes top out at +6 dB by default (REAPER's envelope range). If an UP or BOTH boost would exceed it, SneakPeak clamps the written points at the ceiling and a toast reports how many points were clamped - what you hear always matches the curve that was actually written.</p>
 
 <p>Click the <strong>LIVE</strong> pill on the VIEW tab (amber when armed) to enable real-time envelope writing. In Live mode, every slider change immediately writes envelope points to REAPER - the waveform updates in real-time as you drag. No need to click Apply.</p>
 
@@ -869,12 +873,12 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <tbody>
     <tr><td>Default</td><td>Flat - no processing (all sliders at neutral)</td></tr>
     <tr><td>Gentle Leveling</td><td>Light 2:1 compression with wide knee and RMS detection</td></tr>
-    <tr><td>Voice/Podcast</td><td>4:1 compression with gate at -45 dB for speech cleanup</td></tr>
-    <tr><td>Broadcast</td><td>6:1 aggressive compression with fast attack and strong gate</td></tr>
-    <tr><td>De-breath</td><td>Light compression + aggressive gate targeting breath removal</td></tr>
+    <tr><td>Voice / Podcast</td><td>4:1 compression with gate at -45 dB for speech cleanup; ships with a -6 dB gate hysteresis band</td></tr>
+    <tr><td>Broadcast</td><td>6:1 aggressive compression with fast attack and strong gate; -6 dB gate hysteresis</td></tr>
+    <tr><td>De-breath</td><td>Light compression + aggressive gate targeting breath removal; -6 dB gate hysteresis</td></tr>
     <tr><td>Music Bus</td><td>2:1 slow attack for mix bus glue</td></tr>
     <tr><td>Upward Leveling</td><td>Up mode: gentle 2:1 RMS lift of quiet passages, gate on so the noise floor stays down</td></tr>
-    <tr><td>De-Ess Vocal</td><td>Voice/Podcast compression + wideband de-esser at 6 kHz, 4:1, -10 dB range</td></tr>
+    <tr><td>De-Ess Vocal</td><td>Voice / Podcast compression + wideband de-esser at 6 kHz, 4:1, -10 dB range</td></tr>
   </tbody>
 </table>
 
@@ -1036,7 +1040,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
   <thead><tr><th>Mode</th><th>Behavior</th></tr></thead>
   <tbody>
     <tr><td>Peak (PPM)</td><td>True peak metering. Instant attack, slow decay. Peak hold marks.</td></tr>
-    <tr><td>RMS (AES/EBU)</td><td>RMS loudness with 300ms integration window per AES/EBU standard.</td></tr>
+    <tr><td>RMS (AES/EBU)</td><td>RMS loudness with 300 ms integration window per AES/EBU standard.</td></tr>
     <tr><td>VU</td><td>Classic VU-meter ballistics. Slow attack, slow decay.</td></tr>
   </tbody>
 </table>
@@ -1110,7 +1114,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 
 <p>Click the <strong>gear icon</strong> in the mode bar (or right-click &gt; Settings...) to open the Settings panel - the home for SneakPeak's interface preferences. It stays open while you work (a click outside it goes to whatever is under it) and can be dragged anywhere over the waveform and spectral panes - its place is remembered; the gear, its X or <kbd>Escape</kbd> closes it.</p>
 
-<img src="images/settings-panel.png" alt="SneakPeak Settings panel - UI scale, density presets, ruler, meters and view preferences" style="width:325px;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
+<img src="images/settings-panel.png" alt="SneakPeak Settings panel - UI scale, density presets, ruler, meters and view preferences" style="width:325px;max-width:100%;border-radius:var(--radius);margin:16px 0 24px;border:1px solid var(--border)">
 
 <h4>UI Scale</h4>
 <p>The whole interface - fonts, toolbar, ruler, meters, panels and every click target - scales between <strong>80% and 200%</strong> from a single slider, with a live preview while you drag. Quick options:</p>
@@ -1187,8 +1191,8 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td><kbd>Delete</kbd></td><td>Delete selection (gap preserved)</td><td>All</td></tr>
     <tr><td><kbd>Shift</kbd>+<kbd>Delete</kbd></td><td>Ripple Delete (closes gap)</td><td>ITEM, SET, Timeline</td></tr>
     <tr><td><kbd>Cmd</kbd>/<kbd>Ctrl</kbd>+<kbd>Delete</kbd></td><td>Silence selection</td><td>All</td></tr>
-    <tr><td><kbd>Up</kbd></td><td>Gain +1 dB</td><td>All</td></tr>
-    <tr><td><kbd>Down</kbd></td><td>Gain -1 dB</td><td>All</td></tr>
+    <tr><td><kbd>Up</kbd></td><td>Gain +1 dB (gain panel open)</td><td>All</td></tr>
+    <tr><td><kbd>Down</kbd></td><td>Gain -1 dB (gain panel open)</td><td>All</td></tr>
     <tr><td><kbd>Option</kbd>+<kbd>Right</kbd></td><td>Next segment (select + scroll)</td><td>SET, Timeline, Multi</td></tr>
     <tr><td><kbd>Option</kbd>+<kbd>Left</kbd></td><td>Previous segment</td><td>SET, Timeline, Multi</td></tr>
     <tr><td><kbd>Escape</kbd></td><td>Close a panel / cancel a running destructive edit / exit working set / clear selection / stop</td><td>All</td></tr>
@@ -1265,10 +1269,11 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
 <ul>
   <li><strong>Edit</strong> - Undo, Redo, Cut, Copy, Paste, Delete, Ripple Delete, Silence, Select All, Split at Cursor (S)</li>
   <li><strong>Process</strong> - Normalize (Peak, LUFS -14, LUFS -16), Gain (+3/-3 dB, panel), Fade In/Out, Reverse, DC Remove, Hard Limiter, Dynamics Panel, Mono Downmix. On an item the rows that rewrite the source file are labeled "(rewrites file)"; when the file cannot be rewritten they grey out and a row underneath says why.</li>
-  <li><strong>View</strong> - Zoom controls, Spectral View, Show Volume Envelope, Show Dynamics Curve, Show RMS, Show Meters, Snap to Zero-Crossing, Minimap, Ruler mode (Relative/Absolute/Bars & Beats), Working Set toggle, Group, Switch to Timeline View</li>
+  <li><strong>View</strong> - Zoom controls, Spectral View, Minimap, Show Volume Envelope, Show Dynamics Curve, Working Set toggle, Group, Switch to Timeline View. Display preferences (ruler mode, snap to zero, waveform style, meters) live in the Settings panel (gear icon)</li>
+  <li><strong>One-Shot Factory... / Edit Copy in Standalone</strong> - top-level entries (see their sections)</li>
   <li><strong>Multi-Item</strong> - Mix/Layered/Lanes modes, Show Join Lines, Switch to Timeline View (when multiple items are loaded)</li>
   <li><strong>Markers</strong> - Add Marker, Add Region, Edit, Delete, Show/Hide</li>
-  <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal, GitHub</li>
+  <li><strong>Support</strong> - Links to Ko-fi, Buy Me a Coffee, PayPal (the GitHub link lives in the mode-bar Support popup)</li>
   <li><strong>Replace Source in REAPER Timeline</strong> - standalone mode only; see Replace Source section</li>
   <li><strong>Dock SneakPeak in Docker / Undock SneakPeak</strong> - toggle between floating and docked window</li>
 </ul>
@@ -1296,7 +1301,7 @@ hr{border:none;border-top:1px solid var(--border);margin:48px 0}
     <tr><td>Zoom Selection</td><td>Zoom to fit current selection</td></tr>
     <tr><td>Play</td><td>Start playback from cursor</td></tr>
     <tr><td>Stop</td><td>Stop playback</td></tr>
-    <tr><td>Normalize</td><td>Normalize selection to 0 dB</td></tr>
+    <tr><td>Normalize</td><td>Normalize selection to -0.1 dBFS</td></tr>
     <tr><td>Fade In</td><td>Apply fade in to selection</td></tr>
     <tr><td>Fade Out</td><td>Apply fade out to selection</td></tr>
     <tr><td>Reverse</td><td>Reverse audio</td></tr>
