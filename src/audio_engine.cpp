@@ -269,13 +269,20 @@ bool AudioEngine::CopyFileInto(const std::string& src, const std::string& dst)
     if (in) fclose(in);
     return false;
   }
+  DBG("[AudioEngine] CopyFileInto: %s -> %s opened (t=%lu)\n", src.c_str(), dst.c_str(),
+      (unsigned long)GetTickCount());
   std::vector<char> buf(1 << 20);
   bool ok = true;
   size_t n;
   while (ok && (n = fread(buf.data(), 1, buf.size(), in)) > 0)
     ok = fwrite(buf.data(), 1, n, out) == n;
+  DBG("[AudioEngine] CopyFileInto: loop done ok=%d bytes=%ld (t=%lu)\n", ok ? 1 : 0, ftell(out),
+      (unsigned long)GetTickCount());
   fclose(in);
-  return (fclose(out) == 0) && ok;
+  DBG("[AudioEngine] CopyFileInto: in closed (t=%lu)\n", (unsigned long)GetTickCount());
+  const bool closed = fclose(out) == 0;
+  DBG("[AudioEngine] CopyFileInto: out closed=%d (t=%lu)\n", closed ? 1 : 0, (unsigned long)GetTickCount());
+  return closed && ok;
 }
 
 bool AudioEngine::ReadAudioFile(const std::string& path, WavInfo& info,

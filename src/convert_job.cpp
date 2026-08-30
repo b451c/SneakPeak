@@ -222,6 +222,8 @@ void SneakPeak::RunConvertedEdit()
     ShowToast("Converted to WAV - select the item again and repeat the edit");
     return;
   }
+  DBG("[SneakPeak] convert: the take plays %s - running the edit (t=%lu)\n", now.c_str(),
+      (unsigned long)GetTickCount());
   std::function<void()> then = std::move(J.then);
   J.then = nullptr;
   J.active = false;

@@ -59,13 +59,19 @@ void SneakPeak::StartDestructiveJob(const char* verb, const char* doing, const c
   J.lastTitle.clear();
   J.active = true;
   J.thread = std::thread(&SneakPeak::DestructiveJobThread, this);
+  DBG("[SneakPeak] destructive job %s started on %s (t=%lu)\n", J.verb.c_str(), J.path.c_str(),
+      (unsigned long)GetTickCount());
 }
 
 // Worker: pure file I/O, no REAPER calls.
 void SneakPeak::DestructiveJobThread()
 {
   DestructiveJob& J = m_destructiveJob;
+  DBG("[SneakPeak] destructive job worker: snapshot %s -> %s (t=%lu)\n", J.path.c_str(), J.snapshot.c_str(),
+      (unsigned long)GetTickCount());
   J.snapshotOk = AudioEngine::CopyFileInto(J.path, J.snapshot);
+  DBG("[SneakPeak] destructive job worker: snapshot ok=%d (t=%lu)\n", J.snapshotOk ? 1 : 0,
+      (unsigned long)GetTickCount());
   if (J.snapshotOk) {
     J.phase.store(1);
     WavInplace::Progress prog;
@@ -76,11 +82,13 @@ void SneakPeak::DestructiveJobThread()
       return !j->cancel.load();
     };
     J.ok = J.op(J.path, J.s0, J.s1, &prog);
+    DBG("[SneakPeak] destructive job worker: op ok=%d (t=%lu)\n", J.ok ? 1 : 0, (unsigned long)GetTickCount());
     // Rollback (audit A1.4) on the worker too: a failed or cancelled edit
     // leaves the chunks already written; the snapshot goes back over them.
     if (!J.ok) J.restored = AudioEngine::CopyFileInto(J.snapshot, J.path);
   }
   J.done.store(true);
+  DBG("[SneakPeak] destructive job worker: done (t=%lu)\n", (unsigned long)GetTickCount());
 }
 
 // OnTimer: progress in the title while the worker runs; finalize on completion.
@@ -89,6 +97,14 @@ void SneakPeak::StepDestructiveJob()
   DestructiveJob& J = m_destructiveJob;
   if (!J.active) return;
   if (!J.done.load()) {
+#ifdef SNEAKPEAK_DEBUG
+    static DWORD s_lastLog = 0;   // heartbeat: is the main thread still ticking the job?
+    if (GetTickCount() - s_lastLog > 2000) {
+      s_lastLog = GetTickCount();
+      DBG("[SneakPeak] destructive job tick: phase=%d pct=%d (t=%lu)\n", J.phase.load(), J.pct.load(),
+          (unsigned long)s_lastLog);
+    }
+#endif
     if (!m_hwnd) return;
     char title[128];
     if (J.phase.load() == 0)

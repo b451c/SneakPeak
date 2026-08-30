@@ -494,7 +494,9 @@ bool SneakPeak::BeginDestructiveWrite(std::string& path)
   // (a background write lets the selection move meanwhile). macOS and Linux
   // overwrite an open file fine, so this is Windows-only. The item we edit
   // is REAPER's selected item in ITEM mode (the selection poll loads it).
+  DBG("[SneakPeak] BeginDestructiveWrite: taking the selection offline (t=%lu)\n", (unsigned long)GetTickCount());
   TakeSelectionOffline();
+  DBG("[SneakPeak] BeginDestructiveWrite: offline (t=%lu)\n", (unsigned long)GetTickCount());
 #endif
   return true;
 }
