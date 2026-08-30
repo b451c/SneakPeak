@@ -31,8 +31,8 @@ import soundfile as sf
 
 from conftest import (SELECT_ITEM0, clear_project, db, dismiss_native_modal, ensure_window,
                       insert_item_unselected, locate_apply_button, perf_media_dir, send_command,
-                      track_rms_windows, wait_audio_loaded, wait_destructive_job, wait_loaded,
-                      wait_main_thread_idle, window_title)
+                      sneakpeak_message_box, track_rms_windows, wait_audio_loaded, wait_destructive_job,
+                      wait_loaded, wait_main_thread_idle, window_title)
 
 # edit_view.h enum ContextMenuID (compiled 2026-08-29: CM_LAST 2264)
 CM_SELECT_ALL, CM_REVERSE, CM_GAIN_UP, CM_DC_REMOVE, CM_APPLY_LIMITER = 2007, 2012, 2013, 2015, 2176
@@ -154,7 +154,12 @@ def _wait_edit_job(sess, timeout=600):
     pump reloads the long WAV's buffer afterwards ("Loading... N%"), minutes on
     the VM (leg 7 timed out on that, the edit long done)."""
     seen: list[str] = []
+    box = None
     def job_running():
+        nonlocal box
+        box = box or sneakpeak_message_box()   # an error box nobody answers: the s20 "stall"
+        if box:
+            return False
         t = window_title(sess)
         if not seen or seen[-1] != t:
             seen.append(t)
@@ -168,6 +173,8 @@ def _wait_edit_job(sess, timeout=600):
     except Exception:
         raise AssertionError(f"the edit job did not finish in {timeout}s: title {window_title(sess)!r}, "
                              f"convert_state {_convert_state(sess)!r}, toast {_last_toast(sess)!r}, titles seen {seen}")
+    if box:
+        raise AssertionError(f"a SneakPeak message box came up during the edit: {box} (titles seen {seen})")
     time.sleep(1.5)
     print(f"\n[convert] titles seen while waiting for the edit job: {seen}; toast {_last_toast(sess)!r}")
 

@@ -752,11 +752,19 @@ def wait_destructive_job(s, timeout: float = 240.0):
     tick to retitle; a job that finished within one bridge round trip never
     shows it), then to clear, then for a quiet main thread. On Windows the
     edited item is offline until the job lands."""
+    box = None
+
+    def running():
+        nonlocal box
+        box = box or sneakpeak_message_box()
+        return box is None and "..." in window_title(s)
     try:
-        s.wait_until(lambda: "..." in window_title(s), timeout=5)
+        s.wait_until(running, timeout=5)
     except Exception:
         pass
-    s.wait_until(lambda: "..." not in window_title(s), timeout=timeout)
+    s.wait_until(lambda: not running(), timeout=timeout)
+    if box:
+        raise AssertionError(f"a SneakPeak message box came up during the job: {box}")
     wait_main_thread_idle(s, timeout=timeout)
     time.sleep(1.0)
 
@@ -782,6 +790,40 @@ def wait_main_thread_idle(s, timeout: float = 120.0, quiet: float = 0.5):
                 return
         _t.sleep(0.01)
     raise TimeoutError("REAPER main thread did not come back")
+
+
+def sneakpeak_message_box() -> str | None:
+    """Windows: the caption + text of a SneakPeak MessageBox nobody answers (an
+    error box on the VM's window station kept a job's title on screen for the
+    whole 900 s wait, s20 - REAPER's defer loop runs on inside a modal, so the
+    bridge never noticed). The box is closed on the way out. None when none;
+    None on macOS/Linux (a modal there stalls the defer loop = BridgeHang)."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    u32 = ctypes.windll.user32
+    buf = ctypes.create_unicode_buffer(1024)
+    h = u32.FindWindowExW(None, None, "#32770", None)
+    while h:
+        u32.GetWindowTextW(h, buf, 1024)
+        if buf.value.startswith("SneakPeak"):
+            caption, lines = buf.value, []
+            proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+            def collect(child, _):
+                cls = ctypes.create_unicode_buffer(64)
+                u32.GetClassNameW(child, cls, 64)
+                if cls.value == "Static":
+                    text = ctypes.create_unicode_buffer(1024)
+                    u32.GetWindowTextW(child, text, 1024)
+                    if text.value:
+                        lines.append(text.value.replace("\n", " | "))
+                return True
+            u32.EnumChildWindows(h, proc(collect), None)
+            u32.PostMessageW(h, 0x0010, 0, 0)   # WM_CLOSE
+            return f"{caption}: {' '.join(lines)}"
+        h = u32.FindWindowExW(None, h, "#32770", None)
+    return None
 
 
 def dismiss_native_modal(s, *, timeout: float = 15.0):
