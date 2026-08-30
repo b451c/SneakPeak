@@ -806,7 +806,10 @@ def sneakpeak_message_box() -> str | None:
     h = u32.FindWindowExW(None, None, "#32770", None)
     while h:
         u32.GetWindowTextW(h, buf, 1024)
-        if buf.value.startswith("SneakPeak"):
+        # a button (IDOK / IDCANCEL / IDYES) tells a MessageBox from SneakPeak's own
+        # dialog window, which is a #32770 titled "SneakPeak: Limiting..." too
+        if buf.value.startswith("SneakPeak") and (u32.GetDlgItem(h, 1) or u32.GetDlgItem(h, 2) or
+                                                  u32.GetDlgItem(h, 6)):
             caption, lines = buf.value, []
             proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
 
