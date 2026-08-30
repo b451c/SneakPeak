@@ -730,11 +730,11 @@ private:
     std::thread thread;
     std::atomic<bool> cancel{false};
     std::atomic<bool> done{false};
-    std::atomic<int> phase{0};         // 0 = pre-edit copy, 1 = the op
+    std::atomic<int> phase{0};         // 0 = pre-edit copy, 1 = the op, 2 = waiting for the file (Windows)
     std::atomic<int> pct{0};
     bool snapshotOk = false, ok = false, restored = false;   // worker -> main, read after the join
     bool unchanged = false;            // worker -> main: the op found nothing to change, file untouched
-    bool inUse = false;                // worker -> main: the file stayed locked (Windows), never written
+    bool inUse = false;                // worker -> main: cancelled while REAPER held the file (Windows), never written
     std::string path, snapshot;        // the source file, its pre-edit copy (free undo slot)
     int64_t s0 = 0, s1 = 0;            // the selection in FILE frames
     std::string verb, doing, undoLabel;   // "Reverse", "Reversing", REAPER's undo label

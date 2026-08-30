@@ -30,21 +30,24 @@
 // reads it (40047 after a source swap, a fresh insert) and for a moment after
 // the item went online - offline bracket or not, an in-place open right then
 // fails with a sharing violation (Convert & go -> Hard Limiter, s21 trace: the
-// pre-edit copy passed, "r+b" got EACCES, the .reapeaks landed a second later).
-// Wait for the file; Esc cancels; false = still held after 15 s. Any other
-// open error is the op's to report. macOS/Linux overwrite an open file fine.
-static bool WaitForUpdateAccess(const std::string& path, const std::atomic<bool>& cancel)
+// pre-edit copy passed, "r+b" got EACCES; the .reapeaks of that 22-min WAV
+// landed 16 s later on a cold disk). Wait for the file - the title says so
+// (phase 2) - until Esc; false = cancelled. Any other open error is the op's
+// to report. macOS/Linux overwrite an open file fine.
+static bool WaitForUpdateAccess(const std::string& path, std::atomic<int>& phase,
+                                const std::atomic<bool>& cancel)
 {
 #ifdef _WIN32
-  for (int i = 0; i < 300 && !cancel.load(); i++) {
+  while (!cancel.load()) {
     FILE* f = fopen(path.c_str(), "r+b");
     if (f) { fclose(f); return true; }
     if (errno != EACCES) return true;
+    phase.store(2);
     Sleep(50);
   }
   return false;
 #else
-  (void)path; (void)cancel;
+  (void)path; (void)phase; (void)cancel;
   return true;
 #endif
 }
@@ -96,12 +99,13 @@ void SneakPeak::DestructiveJobThread()
   J.snapshotOk = AudioEngine::CopyFileInto(J.path, J.snapshot);
   DBG("[SneakPeak] destructive job worker: snapshot ok=%d (t=%lu)\n", J.snapshotOk ? 1 : 0,
       (unsigned long)GetTickCount());
-  if (J.snapshotOk) J.phase.store(1);   // the title shows "0% (Esc cancels)" through the wait
-  if (J.snapshotOk && !WaitForUpdateAccess(J.path, J.cancel)) {
+  if (J.snapshotOk && !WaitForUpdateAccess(J.path, J.phase, J.cancel)) {
     J.restored = true;   // nothing was written: the file IS the pre-edit copy
-    J.inUse = !J.cancel.load();
-    DBG("[SneakPeak] destructive job worker: the file stayed locked (t=%lu)\n", (unsigned long)GetTickCount());
+    J.inUse = true;
+    DBG("[SneakPeak] destructive job worker: cancelled while the file was held (t=%lu)\n",
+        (unsigned long)GetTickCount());
   } else if (J.snapshotOk) {
+    J.phase.store(1);
     DBG("[SneakPeak] destructive job worker: update access (t=%lu)\n", (unsigned long)GetTickCount());
     WavInplace::Progress prog;
     prog.user = &J;
@@ -138,6 +142,9 @@ void SneakPeak::StepDestructiveJob()
     char title[128];
     if (J.phase.load() == 0)
       snprintf(title, sizeof(title), "SneakPeak: %s... saving the pre-edit copy", J.doing.c_str());
+    else if (J.phase.load() == 2)
+      snprintf(title, sizeof(title), "SneakPeak: %s... waiting for REAPER to release the file (Esc cancels)",
+               J.doing.c_str());
     else
       snprintf(title, sizeof(title), "SneakPeak: %s... %d%% (Esc cancels)", J.doing.c_str(), J.pct.load());
     if (J.lastTitle != title) {   // title writes are not free - only on change
@@ -198,10 +205,10 @@ void SneakPeak::FinalizeDestructiveJob()
     FinishDestructiveWrite(false, J.restored);
     if (J.restored && J.cancel.load()) {
       char msg[sizeof(m_toastText)];
-      snprintf(msg, sizeof(msg), "%s cancelled - the file was restored from the pre-edit copy", J.verb.c_str());
+      snprintf(msg, sizeof(msg), "%s cancelled - %s", J.verb.c_str(),
+               J.inUse ? "REAPER or another program still held the file"
+                       : "the file was restored from the pre-edit copy");
       ShowToast(msg);
-    } else if (J.inUse) {
-      ShowToast("Write failed - REAPER or another program still holds the file, try again");
     }
   }
   }
