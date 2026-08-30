@@ -19,6 +19,7 @@ WavInplace::Open ("Write failed - restored"); an 8-bit WAV prompts first.
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 import time
@@ -36,7 +37,8 @@ from conftest import (SELECT_ITEM0, clear_project, db, dismiss_native_modal, ens
 # edit_view.h enum ContextMenuID (compiled 2026-08-29: CM_LAST 2264)
 CM_SELECT_ALL, CM_REVERSE, CM_GAIN_UP, CM_DC_REMOVE, CM_APPLY_LIMITER = 2007, 2012, 2013, 2015, 2176
 SHOTS = Path("/tmp/sneakpeak-reaproof-shots/destructive_convert")
-MP3 = Path("/Volumes/@Basic/PRODUKCJA/SONDA_corpus/mined_PL_2026-07/zachlebem_01_64kb.mp3")
+# Real-voice corpus (not in the repo): SNEAKPEAK_CORPUS/<name>, else perf_media_dir()/corpus, else skip.
+MP3 = Path(os.environ.get("SNEAKPEAK_CORPUS", "")) / "zachlebem_01_64kb.mp3"
 SR = 44100
 
 

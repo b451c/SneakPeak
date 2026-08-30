@@ -35,8 +35,8 @@ session by borrowing a session client's env - ReDockIT lore).
 ```
 # host: sync the branch (the VM has feat/v250 checked out -> fetch + ff)
 git bundle create /tmp/v250.bundle <vm-head>..feat/v250
-scp /tmp/v250.bundle basic@192.168.64.4:/tmp/
-ssh basic@192.168.64.4 'cd ~/dev/SneakPeak && git fetch /tmp/v250.bundle feat/v250 && git merge --ff-only FETCH_HEAD && cmake --build build -j8'
+scp /tmp/v250.bundle <user>@<vm-host>:/tmp/
+ssh <user>@<vm-host> 'cd ~/dev/SneakPeak && git fetch /tmp/v250.bundle feat/v250 && git merge --ff-only FETCH_HEAD && cmake --build build -j8'
 # VM: install (fresh inode), deploy the bridge, run, REMOVE the bridge
 rm -f ~/.config/REAPER/UserPlugins/reaper_sneakpeak-aarch64.so
 cp ~/dev/SneakPeak/build/reaper_sneakpeak.so ~/.config/REAPER/UserPlugins/reaper_sneakpeak-aarch64.so

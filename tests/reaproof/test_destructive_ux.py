@@ -16,6 +16,7 @@ refuses ("needs the whole file"), on a 5-minute item refuses ("too long").
 from __future__ import annotations
 
 import hashlib
+import os
 
 import time
 from pathlib import Path
@@ -31,8 +32,11 @@ from conftest import (SELECT_ITEM0, burst_fixture, capture, clear_project, dismi
 # edit_view.h enum ContextMenuID (compiled 2026-08-29: CM_LAST 2264)
 CM_SELECT_ALL, CM_REVERSE, CM_GAIN_UP, CM_DC_REMOVE, CM_APPLY_LIMITER = 2007, 2012, 2013, 2015, 2176
 SHOTS = Path("/tmp/sneakpeak-reaproof-shots/destructive_ux")
-MP3 = Path("/Volumes/@Basic/PRODUKCJA/SONDA_corpus/mined_PL_2026-07/zachlebem_01_64kb.mp3")
-WAV = Path("/Volumes/@Basic/PRODUKCJA/SONDA_corpus/qa_PL_2026-07/Sesja-pyt-rezysera/Media/01-260728_0159.wav")
+# Real-voice corpus (not in the repo): a directory named by SNEAKPEAK_CORPUS holding
+# these two files, else perf_media_dir()/corpus (the VM legs), else the test skips.
+_CORPUS = Path(os.environ.get("SNEAKPEAK_CORPUS", ""))
+MP3 = _CORPUS / "zachlebem_01_64kb.mp3"
+WAV = _CORPUS / "01-260728_0159.wav"
 
 
 def _fire(cmd: int) -> str:
