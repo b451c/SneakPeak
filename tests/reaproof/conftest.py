@@ -806,10 +806,12 @@ def sneakpeak_message_box() -> str | None:
     h = u32.FindWindowExW(None, None, "#32770", None)
     while h:
         u32.GetWindowTextW(h, buf, 1024)
-        # a button (IDOK / IDCANCEL / IDYES) tells a MessageBox from SneakPeak's own
-        # dialog window, which is a #32770 titled "SneakPeak: Limiting..." too
-        if buf.value.startswith("SneakPeak") and (u32.GetDlgItem(h, 1) or u32.GetDlgItem(h, 2) or
-                                                  u32.GetDlgItem(h, 6)):
+        # an OK box only: IDOK / IDCANCEL without IDYES. A Yes/No question is the
+        # confirm dismiss_native_modal has just answered (its IDYES is posted, the
+        # box lingers a tick), and SneakPeak's own dialog window - a #32770 titled
+        # "SneakPeak: Limiting..." too - has no such button at all.
+        if buf.value.startswith("SneakPeak") and not u32.GetDlgItem(h, 6) and \
+                (u32.GetDlgItem(h, 1) or u32.GetDlgItem(h, 2)):
             caption, lines = buf.value, []
             proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
 
