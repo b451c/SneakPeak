@@ -153,8 +153,11 @@ def _wait_edit_job(sess, timeout=600):
     """The edit's job by ITS titles, not by any "...": with the panel open the
     pump reloads the long WAV's buffer afterwards ("Loading... N%"), minutes on
     the VM (leg 7 timed out on that, the edit long done)."""
+    seen: list[str] = []
     def job_running():
         t = window_title(sess)
+        if not seen or seen[-1] != t:
+            seen.append(t)
         return any(m in t for m in JOB_TITLES)
     try:
         sess.wait_until(job_running, timeout=8)
@@ -164,8 +167,9 @@ def _wait_edit_job(sess, timeout=600):
         sess.wait_until(lambda: not job_running(), timeout=timeout)
     except Exception:
         raise AssertionError(f"the edit job did not finish in {timeout}s: title {window_title(sess)!r}, "
-                             f"convert_state {_convert_state(sess)!r}, toast {_last_toast(sess)!r}")
+                             f"convert_state {_convert_state(sess)!r}, toast {_last_toast(sess)!r}, titles seen {seen}")
     time.sleep(1.5)
+    print(f"\n[convert] titles seen while waiting for the edit job: {seen}; toast {_last_toast(sess)!r}")
 
 
 # --- non-WAV items convert first -----------------------------------------------------
