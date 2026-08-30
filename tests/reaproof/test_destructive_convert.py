@@ -160,7 +160,11 @@ def _wait_edit_job(sess, timeout=600):
         sess.wait_until(job_running, timeout=8)
     except Exception:
         pass   # finished within one round trip
-    sess.wait_until(lambda: not job_running(), timeout=timeout)
+    try:
+        sess.wait_until(lambda: not job_running(), timeout=timeout)
+    except Exception:
+        raise AssertionError(f"the edit job did not finish in {timeout}s: title {window_title(sess)!r}, "
+                             f"convert_state {_convert_state(sess)!r}, toast {_last_toast(sess)!r}")
     time.sleep(1.5)
 
 
