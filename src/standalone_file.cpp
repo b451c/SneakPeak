@@ -1207,12 +1207,12 @@ void SneakPeak::TakeSelectionOffline()
 #endif
 }
 
-void SneakPeak::BringOfflineItemsBackOnline()
-{
 #ifdef _WIN32
-  std::vector<MediaItem*> offline;
-  offline.swap(m_offlineItems);
-  if (offline.empty() || !g_Main_OnCommand || !g_CountSelectedMediaItems || !g_GetSelectedMediaItem ||
+// A selection command (40439 / 40440) on exactly `items`, the selection left as
+// found; an item deleted meanwhile is skipped.
+static void CommandOnItems(const std::vector<MediaItem*>& items, int cmd)
+{
+  if (items.empty() || !g_Main_OnCommand || !g_CountSelectedMediaItems || !g_GetSelectedMediaItem ||
       !g_SetMediaItemSelected)
     return;
   std::vector<MediaItem*> cur;
@@ -1221,14 +1221,35 @@ void SneakPeak::BringOfflineItemsBackOnline()
     if (MediaItem* s = g_GetSelectedMediaItem(nullptr, i)) cur.push_back(s);
   for (MediaItem* s : cur) g_SetMediaItemSelected(s, false);
   int selected = 0;
-  for (MediaItem* it : offline)   // an item deleted during the write has nothing to bring back
+  for (MediaItem* it : items)
     if (!g_ValidatePtr2 || g_ValidatePtr2(nullptr, it, "MediaItem*")) { g_SetMediaItemSelected(it, true); selected++; }
-  if (selected > 0) g_Main_OnCommand(40439, 0);  // Item: set selected media online
-  for (MediaItem* it : offline)
+  if (selected > 0) g_Main_OnCommand(cmd, 0);
+  for (MediaItem* it : items)
     if (!g_ValidatePtr2 || g_ValidatePtr2(nullptr, it, "MediaItem*")) g_SetMediaItemSelected(it, false);
   for (MediaItem* s : cur) g_SetMediaItemSelected(s, true);
+}
+#endif
+
+void SneakPeak::BringOfflineItemsBackOnline()
+{
+#ifdef _WIN32
+  std::vector<MediaItem*> offline;
+  offline.swap(m_offlineItems);
+  CommandOnItems(offline, 40439);  // Item: set selected media online
 #else
   m_offlineItems.clear();
+#endif
+}
+
+// Windows: 40440 again on the items a write in flight took offline. REAPER
+// brings media online on a later tick (a source swapped moments ago - Convert
+// & go -, a fresh insert), and the reader it opens then outlives the first
+// call: the worker cannot open the file for as long as the item plays it
+// (s21: reaper.exe held the WAV and its .reapeaks through a 15-min wait).
+void SneakPeak::RetakeOfflineItems()
+{
+#ifdef _WIN32
+  CommandOnItems(m_offlineItems, 40440);  // Item: set selected media offline
 #endif
 }
 

@@ -84,6 +84,7 @@ void SneakPeak::StartDestructiveJob(const char* verb, const char* doing, const c
   J.pct.store(0);
   J.snapshotOk = J.ok = J.restored = J.unchanged = J.inUse = false;
   J.lastTitle.clear();
+  J.retakeTick = GetTickCount();
   J.active = true;
   J.thread = std::thread(&SneakPeak::DestructiveJobThread, this);
   DBG("[SneakPeak] destructive job %s started on %s (t=%lu)\n", J.verb.c_str(), J.path.c_str(),
@@ -136,6 +137,21 @@ void SneakPeak::StepDestructiveJob()
       s_lastLog = GetTickCount();
       DBG("[SneakPeak] destructive job tick: phase=%d pct=%d (t=%lu)\n", J.phase.load(), J.pct.load(),
           (unsigned long)s_lastLog);
+    }
+#endif
+#ifdef _WIN32
+    // The worker sees the file held (phase 2): REAPER brought the item online
+    // after BeginDestructiveWrite's 40440 - take it offline again, once a second,
+    // until the open succeeds (RetakeOfflineItems).
+    if (J.phase.load() == 2 && GetTickCount() - J.retakeTick > 1000) {
+      J.retakeTick = GetTickCount();
+#ifdef SNEAKPEAK_DEBUG
+      PCM_source* src = m_waveform.GetTake() && g_GetMediaItemTake_Source
+                            ? g_GetMediaItemTake_Source(m_waveform.GetTake()) : nullptr;
+      DBG("[SneakPeak] destructive job: file held, source available=%d - 40440 again (t=%lu)\n",
+          src ? (src->IsAvailable() ? 1 : 0) : -1, (unsigned long)J.retakeTick);
+#endif
+      RetakeOfflineItems();
     }
 #endif
     if (!m_hwnd) return;

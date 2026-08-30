@@ -333,6 +333,7 @@ private:
   // selection may move meanwhile (F5 background job). No-ops elsewhere.
   void TakeSelectionOffline();
   void BringOfflineItemsBackOnline();
+  void RetakeOfflineItems();       // Windows: 40440 again while the worker waits for the file
   int ReplaceSourceInTimeline(const std::string& oldPath, const std::string& newPath);
   void DoReplaceSourceInTimeline();
 
@@ -743,6 +744,7 @@ private:
     MediaItem* selItem = nullptr;      // REAPER's selection at start: re-sync on finish
     int selCount = 0;
     std::string lastTitle;
+    DWORD retakeTick = 0;              // Windows: last 40440 re-issue while the worker waits (phase 2)
     bool active = false;
   };
   DestructiveJob m_destructiveJob;
