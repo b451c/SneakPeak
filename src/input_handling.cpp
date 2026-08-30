@@ -31,12 +31,6 @@ void SneakPeak::OnDoubleClick(int x, int y)
   if (m_settingsPanel.IsVisible() && m_settingsPanel.HitTest(x, y, SettingsPanelArea()))
     return;
 
-  // Double-click on gain panel = reset to 0 dB
-  if (m_gainPanel.OnDoubleClick(x, y, m_waveformRect)) {
-    Invalidate();
-    return;
-  }
-
 #ifdef SNEAKPEAK_BLEND2D_PANEL
   // Double-click on the premium dynamics panel = open the inline type-value editor on
   // the knob/curve-handle under the cursor. Consume it regardless of whether a control
@@ -54,6 +48,12 @@ void SneakPeak::OnDoubleClick(int x, int y)
     return;
   }
 #endif
+
+  // Double-click on gain panel = reset to 0 dB (under the panels, s20)
+  if (m_gainPanel.OnDoubleClick(x, y, m_waveformRect)) {
+    Invalidate();
+    return;
+  }
 
   // Double-click on waveform area
   if (y >= m_waveformRect.top && y < m_waveformRect.bottom) {
@@ -412,22 +412,6 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
     return;
   }
 
-  // Gain panel interaction
-  if (m_gainPanel.IsVisible() && m_gainPanel.HitTest(x, y, m_waveformRect)) {
-    if (m_gainPanel.OnMouseDown(x, y, m_waveformRect)) {
-      if (m_gainPanel.IsDragging()) {
-        SetCapture(m_hwnd);
-        // Immediately set skipBatchWrite for selection/SET/timeline preview
-        // (don't wait for timer — prevents first-frame D_VOL write to whole item)
-        bool hasSelPreview = m_waveform.HasSelection();
-        bool skip = m_workingSet.active || m_waveform.IsTimelineOrMultiItem() || hasSelPreview;
-        m_gainPanel.SetSkipBatchWrite(skip);
-      }
-      Invalidate();
-    }
-    return;
-  }
-
   // Hard Limiter panel interaction (v2.4.0 INC-L1)
   if (m_limiterPanel.IsVisible() && m_limiterPanel.HitTest(x, y, m_waveformRect)) {
     if (m_limiterPanel.OnMouseDown(x, y, m_waveformRect)) {
@@ -571,6 +555,22 @@ void SneakPeak::OnMouseDown(int x, int y, WPARAM wParam)
           (!m_dynamicsPanel.IsVisible() || !m_dynamicsPanel.IsLive())) {
         if (g_Undo_EndBlock2) g_Undo_EndBlock2(nullptr, "SneakPeak: Live Dynamics", -1);
         m_dynamicsPanel.SetLiveUndoOpen(false);
+      }
+      Invalidate();
+    }
+    return;
+  }
+
+  // Gain panel interaction - after every premium panel: the knob sits under them (s20)
+  if (m_gainPanel.IsVisible() && m_gainPanel.HitTest(x, y, m_waveformRect)) {
+    if (m_gainPanel.OnMouseDown(x, y, m_waveformRect)) {
+      if (m_gainPanel.IsDragging()) {
+        SetCapture(m_hwnd);
+        // Immediately set skipBatchWrite for selection/SET/timeline preview
+        // (don't wait for timer — prevents first-frame D_VOL write to whole item)
+        bool hasSelPreview = m_waveform.HasSelection();
+        bool skip = m_workingSet.active || m_waveform.IsTimelineOrMultiItem() || hasSelPreview;
+        m_gainPanel.SetSkipBatchWrite(skip);
       }
       Invalidate();
     }
@@ -2282,10 +2282,6 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
                x >= m_waveformRect.right - SP(DB_SCALE_WIDTH)) {
         cur = LoadCursor(nullptr, IDC_HAND);
       }
-      // Gain panel
-      else if (m_gainPanel.IsVisible() && m_gainPanel.HitTest(x, y, m_waveformRect)) {
-        cur = LoadCursor(nullptr, IDC_HAND);
-      }
 #ifdef SNEAKPEAK_BLEND2D_PANEL
       // Settings panel (topmost): hand over the body.
       else if (m_settingsPanel.IsVisible() && m_settingsPanel.HitTest(x, y, SettingsPanelArea())) {
@@ -2297,6 +2293,10 @@ void SneakPeak::OnMouseMove(int x, int y, WPARAM wParam)
                 ? LoadCursor(nullptr, IDC_SIZENWSE) : LoadCursor(nullptr, IDC_HAND);
       }
 #endif
+      // Gain panel (under the panels, s20)
+      else if (m_gainPanel.IsVisible() && m_gainPanel.HitTest(x, y, m_waveformRect)) {
+        cur = LoadCursor(nullptr, IDC_HAND);
+      }
       // Fade handles (near item edges)
       else if (m_fadeDragging != FADE_NONE) {
         cur = LoadCursor(nullptr, IDC_SIZEWE);

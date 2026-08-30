@@ -46,6 +46,11 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
 {
   if (!hdc) return;
 #ifdef SNEAKPEAK_BLEND2D_PANEL
+  // Premium gain knob FIRST: it floats over the waveform and under every panel
+  // (user s20: it used to sit on top of the Hard Limiter's header). Same
+  // HasItem gate as the GDI path had in OnPaint.
+  if (m_waveform.HasItem())
+    m_gainPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), m_waveform.HasSelection());
   m_dynamicsPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
   // Premium HARD LIMITER panel (v2.4.0 INC-L1) - same layer as dynamics.
   m_limiterPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr());
@@ -82,10 +87,6 @@ void SneakPeak::OnPaintOverlay(HDC hdc)
     }
     m_loopLabPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), st);
   }
-  // Premium gain knob (above dynamics, below settings/toast per the z-order spec).
-  // Same HasItem gate as the GDI path had in OnPaint.
-  if (m_waveform.HasItem())
-    m_gainPanel.DrawPremium(hdc, m_waveformRect, GetUiDpr(), m_waveform.HasSelection());
   // Premium L/R meters into the bottom-panel meters rect (computed by
   // DrawBottomPanel earlier in this same paint; bg/divider/info stay GDI).
   if (m_showMeters && m_metersRect.right > m_metersRect.left) {
