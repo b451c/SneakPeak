@@ -40,6 +40,53 @@
 ]]></description>
       </metadata>
 
+      <version name="2.4.0" author="b451c" time="2026-07-10T08:53:55Z">
+        <changelog><![CDATA[Game Audio Suite + Dynamics Suite rework + Spectral Repair
+
+New features:
+- Game Audio Suite: Loop Lab (loop region with ruler brackets and zero-cross snap, gapless loop + seam-only auditions, automatic loop-point finder with a texture fallback for stochastic ambiences, equal-power Weld, smpl loop points written on save / adopted on load, one panel with a clickable candidate list), One-Shot Factory (trim/fade/normalize exporter with live prep preview, slicing to variations by whole file / regions-markers / silence, naming pattern with counter tokens, collision-safe numbering, OPEN FOLDER; works on Standalone files and directly on timeline items), True-Peak Hard Limiter (hard dBTP ceiling with 8x-oversampled detection and an offline refinement pass, live GR preview, background Apply for long files, factory + user presets incl. Game Asset -1 dBTP; Standalone and directly on items)
+- Dynamics Suite: upward compression (DOWN/UP/BOTH leveler modes with Max Boost cap), ratio extended to Inf:1 and into over-compression, bipolar makeup (-24..+24 dB), complete noise-gate rework (ratio 1-10:1, hysteresis, exposed attack/release, floors to -90 dB, Off detent), wideband de-esser (DE-ESS tab with BP/HP detector and LISTEN lane), per-stage bypass dots, 7th factory preset (Upward Leveling), and destructive apply on Standalone files with undo
+- Spectral Repair (Standalone): heal a time x frequency selection on the spectrogram, sample-accurate click repair on a time selection
+- Edit Copy in Standalone: copy any timeline item into the standalone editor with one right-click command
+- Redo (Ctrl+Shift+Z / Ctrl+Y) in Standalone and REAPER-native passthrough
+- Curved envelopes: Alt+drag bends segment curvature with a live readout
+- Spectral view: frequency grid with Hz/Notes scale, threaded spectrogram (~10x faster on stereo)
+- Waveform style Detailed / Simple, hide-ruler option, slip content (Alt+drag), fade wheel-nudge, bindable toolbar actions, Did You Know tips
+
+Bug fixes:
+- Destructive item edits (Reverse, DC Remove, limiter, destructive gain/paste) are now undoable: Cmd/Ctrl+Z restores the original source file
+- Dynamics sliders no longer stutter on multi-minute items (full-file peak scan now cached across knob moves; reported by BogdanS); very long items (15+ min) can still feel heavy - tracked for the next release
+- Long standalone files load incrementally without freezing the UI; bounded edits snapshot only the touched range
+- Windows drag-export now completes the OS drag (drop to timeline or Explorer)
+- Standalone no longer bounces back to ITEM mode with an item still selected; crash fixed when re-selecting the same item from Standalone
+- Mode-bar tabs show take names with type markers
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.4.0/reaper_sneakpeak-arm64.dylib</source>
+        <source platform="darwin64" file="reaper_sneakpeak-x86_64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.4.0/reaper_sneakpeak-x86_64.dylib</source>
+        <source platform="win64" file="reaper_sneakpeak-x64.dll">https://github.com/b451c/SneakPeak/releases/download/v2.4.0/reaper_sneakpeak-x64.dll</source>
+        <source platform="linux64" file="reaper_sneakpeak-x86_64.so">https://github.com/b451c/SneakPeak/releases/download/v2.4.0/reaper_sneakpeak-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_sneakpeak-aarch64.so">https://github.com/b451c/SneakPeak/releases/download/v2.4.0/reaper_sneakpeak-aarch64.so</source>
+      </version>
+
+      <version name="2.4.0-rc1" author="b451c" time="2026-07-02T18:04:26Z">
+        <changelog><![CDATA[RELEASE CANDIDATE (pre-release, opt-in) - v2.4.0 test round
+
+The biggest update so far. Full notes land with the final release; highlights:
+- Game Audio Suite: Loop Lab (loop region, gapless loop/seam auditions, automatic loop-point finder with texture fallback, equal-power Weld, smpl loop points on save, all in one panel), One-Shot Factory (trim/fade/normalize exporter with live preview, slicing to variations by regions/markers/silence, {name}_{nn} naming, OPEN FOLDER), True-Peak Hard Limiter (hard dBTP ceiling, 8x-oversampled detection, live GR band, Game Asset -1 dBTP preset)
+- Dynamics Suite rework: upward compression (DOWN/UP/BOTH), ratio to Inf:1 and beyond, complete noise-gate redo (ratio, hysteresis, attack/release, -90 dB floors), wideband de-esser with LISTEN, per-stage bypass; Dynamics now also applies destructively on Standalone files
+- Spectral Repair (Standalone): heal a time x frequency selection, sample-accurate click repair
+- Bridges: One-Shot Factory + Hard Limiter work directly on timeline items (destructive source rewrite with confirm + undo), Edit Copy in Standalone, destructive item edits now undoable (Cmd/Ctrl+Z)
+- Plus: curved envelopes, redo, spectral frequency grid (Hz/Notes), ~10x faster spectrogram, responsive long-file loading, Windows drag-export, and many fixes
+
+Feedback -> https://forum.cockos.com/showthread.php?t=307499
+]]></changelog>
+        <source platform="darwin-arm64" file="reaper_sneakpeak-arm64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-arm64.dylib</source>
+        <source platform="darwin64" file="reaper_sneakpeak-x86_64.dylib">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-x86_64.dylib</source>
+        <source platform="win64" file="reaper_sneakpeak-x64.dll">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-x64.dll</source>
+        <source platform="linux64" file="reaper_sneakpeak-x86_64.so">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-x86_64.so</source>
+        <source platform="linux-aarch64" file="reaper_sneakpeak-aarch64.so">https://github.com/b451c/SneakPeak/releases/download/v2.4.0-rc1/reaper_sneakpeak-aarch64.so</source>
+      </version>
+
       <version name="2.2.0" author="b451c" time="2026-06-17T09:55:47Z">
         <changelog><![CDATA[UI Scaling Release - Global UI Scale, Settings Panel, Premium Rendering, Truthful Clipping
 
